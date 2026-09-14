@@ -2,18 +2,22 @@ import 'dart:io';
 
 final class PlatformFeatures {
   static bool get hasBackgroundRefresh {
-    return Platform.isIOS || Platform.isAndroid;
+    return false;
   }
 
   static bool get hasWidgetSupport {
-    return Platform.isIOS || Platform.isAndroid;
+    return false;
   }
 
   static bool get isMobile {
-    return Platform.isIOS || Platform.isAndroid;
+    return Platform.operatingSystem == 'ohos';
   }
 
   static bool get isDesktop {
-    return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+    return false;
+  }
+
+  static bool get isOhos {
+    return Platform.operatingSystem == 'ohos';
   }
 }

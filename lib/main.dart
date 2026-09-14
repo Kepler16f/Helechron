@@ -1,11 +1,6 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors;
-import 'package:flutter/scheduler.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -25,7 +20,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   ECardWidgetMessenger.installNativeHandler();
 
-  // 尽可能早地声明前台活跃，Workmanager isolate 会据此安全让行。
+  // 尽可能早地声明前台活跃
   await RefreshCoordinator.setForegroundActive(true);
 
   // 初始化数据库
@@ -46,10 +41,6 @@ void main() async {
 
   var scholar = Get.find<Rx<Scholar>>(tag: 'scholar');
   if (scholar.value.isLogan) {
-    // 启动恢复只有一个自动刷新入口；会话重建由 Scholar.refresh 内部完成。
-    // 用户此时手动刷新会复用并等待这一个 refresh Future。
-    // 校园卡使用不同 HttpClient/User-Agent，等 Scholar 认证和抓取
-    // 完成后再启动，避免两套 CAS 链路在启动瞬间互相干扰。
     unawaited(
       _refreshRestoredScholar(scholar)
           .whenComplete(ECardWidgetMessenger.update),
@@ -64,7 +55,6 @@ Future<void> _refreshRestoredScholar(Rx<Scholar> scholar) async {
   try {
     await scholar.value.refresh(onPartialUpdate: scholar.refresh);
   } on Object catch (error, stackTrace) {
-    // 启动刷新不阻断缓存数据展示，但异常仍进入诊断日志。
     DiagnosticLogService.instance.record(
       level: CelechronLogLevel.error,
       module: 'refresh',
@@ -98,12 +88,6 @@ class _CelechronAppState extends State<CelechronApp>
 
     // 监听AppLinks，用于跳转至付款码页面
     _initAppLinks();
-    // 初始化通知
-    _initNotification();
-    // 设置Android状态栏和导航栏样式
-    if (Platform.isAndroid) {
-      _initStatusBar();
-    }
   }
 
   @override
@@ -188,67 +172,5 @@ class _CelechronAppState extends State<CelechronApp>
         navigator?.pushNamed('/ecardpaypage');
       }
     });
-  }
-
-  void _initStatusBar() {
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    var brightnessMode = Get.find<Option>(tag: 'option').brightnessMode;
-    var dispatcher = SchedulerBinding.instance.platformDispatcher;
-
-    ever(brightnessMode, (mode) {
-      if (mode == BrightnessMode.system) {
-        SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-          statusBarIconBrightness:
-              dispatcher.platformBrightness == Brightness.light
-                  ? Brightness.dark
-                  : Brightness.light,
-          systemNavigationBarColor: Colors.transparent,
-        ));
-        dispatcher.onPlatformBrightnessChanged = () {
-          SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-            statusBarIconBrightness:
-                dispatcher.platformBrightness == Brightness.light
-                    ? Brightness.dark
-                    : Brightness.light,
-            systemNavigationBarColor: Colors.transparent,
-          ));
-        };
-      } else {
-        dispatcher.onPlatformBrightnessChanged = null;
-        SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-          statusBarIconBrightness:
-              mode == BrightnessMode.light ? Brightness.dark : Brightness.light,
-          systemNavigationBarColor: Colors.transparent,
-        ));
-      }
-    });
-    brightnessMode.refresh();
-  }
-
-  void _initNotification() {
-    FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-        FlutterLocalNotificationsPlugin();
-    const initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-    flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
-    const initializationSettingsDarwin = DarwinInitializationSettings(
-      requestSoundPermission: true,
-      requestBadgePermission: true,
-      requestAlertPermission: true,
-    );
-    // const initializationSettingsWindows = WindowsInitializationSettings(
-    //     appName: 'Celechron',
-    //     appUserModelId: 'top.celechron.app',
-    //     guid: '7c85e25b-fa7d-489e-9b10-b4c22a3458f0');
-    const initializationSettings = InitializationSettings(
-      android: initializationSettingsAndroid,
-      iOS: initializationSettingsDarwin,
-      macOS: initializationSettingsDarwin,
-      // windows: initializationSettingsWindows);
-    );
-    flutterLocalNotificationsPlugin.initialize(initializationSettings);
   }
 }

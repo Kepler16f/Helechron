@@ -1,10 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:get/get.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:workmanager/workmanager.dart';
 
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/model/option.dart';
@@ -12,16 +9,11 @@ import 'package:celechron/services/diagnostic_log_service.dart';
 import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/worker/ecard_widget_messenger.dart';
 import 'package:celechron/worker/fuse.dart';
-import 'package:celechron/worker/background_app_refresh.dart';
 import 'package:celechron/utils/platform_features.dart';
 import 'package:celechron/model/calendar_to_system.dart';
 import 'package:celechron/model/calendar_to_ical.dart';
 
 import 'package:celechron/utils/utils.dart';
-
-const _backgroundScholarFetchTask =
-    'top.celechron.celechron.backgroundScholarFetch';
-const _backgroundScholarFetchInterval = Duration(minutes: 15);
 
 class OptionController extends GetxController {
   final _option = Get.find<Option>(tag: 'option');
@@ -38,19 +30,10 @@ class OptionController extends GetxController {
     super.onInit();
     _calendarManager = CalendarToSystemManager(scholar.value);
 
-    if (PlatformFeatures.hasBackgroundRefresh) {
-      if (_option.pushOnGradeChange.value || _option.pushOnDdlReminder.value) {
-        unawaited(_ensureBackgroundWorkerScheduled());
-      } else {
-        unawaited(_cancelBackgroundWorker());
-      }
-    }
-
     ever(courseIdMappingList, (value) {
       _db.setCourseIdMappingList(value);
     });
 
-    // 初始化时检查日历权限和同步状态（不显示提示框）
     _calendarManager.checkInitialCalendarSyncStatus();
   }
 
@@ -88,17 +71,8 @@ class OptionController extends GetxController {
   set pushOnGradeChange(bool value) {
     _option.pushOnGradeChange.value = value;
     _db.setPushOnGradeChange(value);
-    // 同步到 SecureStorage 供后台任务读取
     _db.secureStorage.write(
-        key: 'pushOnGradeChange',
-        value: value.toString(),
-        iOptions: secureStorageIOSOptions);
-
-    if (!PlatformFeatures.hasBackgroundRefresh) {
-      return;
-    }
-
-    unawaited(_updateBackgroundWorker(value || pushOnDdlReminder));
+        key: 'pushOnGradeChange', value: value.toString());
   }
 
   bool get pushOnDdlReminder => _option.pushOnDdlReminder.value;
@@ -106,95 +80,8 @@ class OptionController extends GetxController {
   set pushOnDdlReminder(bool value) {
     _option.pushOnDdlReminder.value = value;
     _db.setPushOnDdlReminder(value);
-    // 同步到 SecureStorage 供后台任务读取
     _db.secureStorage.write(
-        key: 'pushOnDdlReminder',
-        value: value.toString(),
-        iOptions: secureStorageIOSOptions);
-
-    if (!PlatformFeatures.hasBackgroundRefresh) {
-      return;
-    }
-
-    unawaited(_updateBackgroundWorker(value || pushOnGradeChange));
-  }
-
-  Future<void> _ensureBackgroundWorkerScheduled() async {
-    try {
-      final workmanager = Workmanager();
-      await workmanager.initialize(callbackDispatcher);
-      // Android 的周期任务会跨 App 启动持久化；不要每次页面控制器初始化时
-      // 重新排一个 10 秒后的任务。iOS 仍需提交 BGAppRefresh 请求，但最早
-      // 执行时间与正常周期一致，并由前台租约做最终保护。
-      if (Platform.isAndroid &&
-          await workmanager
-              .isScheduledByUniqueName(_backgroundScholarFetchTask)) {
-        return;
-      }
-      await workmanager.registerPeriodicTask(
-        _backgroundScholarFetchTask,
-        _backgroundScholarFetchTask,
-        frequency: _backgroundScholarFetchInterval,
-        initialDelay: _backgroundScholarFetchInterval,
-        existingWorkPolicy: ExistingWorkPolicy.keep,
-        constraints: Constraints(networkType: NetworkType.connected),
-      );
-    } on Object catch (error, stackTrace) {
-      DiagnosticLogService.instance.record(
-        level: CelechronLogLevel.warning,
-        module: '后台刷新',
-        operation: 'schedule',
-        message: '后台刷新任务注册失败',
-        error: error,
-        stackTrace: stackTrace,
-      );
-    }
-  }
-
-  Future<void> _cancelBackgroundWorker() async {
-    try {
-      await Workmanager().cancelByUniqueName(_backgroundScholarFetchTask);
-      if (Platform.isIOS) await Workmanager().printScheduledTasks();
-    } on Object catch (error, stackTrace) {
-      DiagnosticLogService.instance.record(
-        level: CelechronLogLevel.warning,
-        module: '后台刷新',
-        operation: 'cancel',
-        message: '后台刷新任务取消失败',
-        error: error,
-        stackTrace: stackTrace,
-      );
-    }
-  }
-
-  Future<void> _updateBackgroundWorker(bool enabled) async {
-    await _cancelBackgroundWorker();
-    if (!enabled) return;
-    try {
-      FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-          FlutterLocalNotificationsPlugin();
-      const initializationSettingsAndroid =
-          AndroidInitializationSettings('@mipmap/ic_launcher');
-      const initializationSettingsDarwin = DarwinInitializationSettings(
-        requestSoundPermission: true,
-        requestBadgePermission: true,
-        requestAlertPermission: true,
-      );
-      const initializationSettings = InitializationSettings(
-          android: initializationSettingsAndroid,
-          iOS: initializationSettingsDarwin);
-      await flutterLocalNotificationsPlugin.initialize(initializationSettings);
-      await _ensureBackgroundWorkerScheduled();
-    } on Object catch (error, stackTrace) {
-      DiagnosticLogService.instance.record(
-        level: CelechronLogLevel.warning,
-        module: '后台刷新',
-        operation: 'enable',
-        message: '启用后台刷新任务失败',
-        error: error,
-        stackTrace: stackTrace,
-      );
-    }
+        key: 'pushOnDdlReminder', value: value.toString());
   }
 
   BrightnessMode get brightnessMode => _option.brightnessMode.value;
@@ -231,14 +118,10 @@ class OptionController extends GetxController {
     ECardWidgetMessenger.logout();
   }
 
-  /// calendar_to_ical.dart: 显示导出课程表对话框
   void showExportDialog(BuildContext context) {
     CalendarToIcal.showExportDialog(context, scholar.value);
   }
 
-  /// calendar_to_system.dart: 系统日历同步相关方法
-
-  // 日历同步相关getter
   bool get calendarSyncEnabled => _calendarManager.calendarSyncEnabled;
 
   bool get hasCalendarPermission => _calendarManager.hasCalendarPermission;

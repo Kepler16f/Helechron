@@ -7,7 +7,6 @@ import 'package:celechron/worker/fuse.dart';
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/model/period.dart';
 import 'package:celechron/model/option.dart';
-import 'package:celechron/utils/utils.dart';
 import 'adapters/duration_adapter.dart';
 import 'adapters/scholar_adapter.dart';
 import 'adapters/deadline_adapter.dart';
@@ -44,20 +43,6 @@ class DatabaseHelper {
     fuseBox = await Hive.openBox(dbFuse);
     customGpaBox = await Hive.openBox(dbCustomGpa);
     secureStorage = const FlutterSecureStorage();
-    // Migrate all items without groupID
-    var secureStorageItems = await secureStorage.readAll(
-        iOptions: const IOSOptions(
-            accessibility: KeychainAccessibility.first_unlock,
-            accountName: 'Celechron'));
-    await Future.forEach(secureStorageItems.entries, (e) async {
-      await secureStorage.delete(
-          key: e.key,
-          iOptions: const IOSOptions(
-              accessibility: KeychainAccessibility.first_unlock,
-              accountName: 'Celechron'));
-      await secureStorage.write(
-          key: e.key, value: e.value, iOptions: secureStorageIOSOptions);
-    });
   }
 
   // Options
@@ -255,14 +240,10 @@ class DatabaseHelper {
   Future<Scholar> getScholar() async {
     var scholar = scholarBox.get('user', defaultValue: Scholar());
     await Future.wait([
-      secureStorage
-          .read(key: kUsername, iOptions: secureStorageIOSOptions)
-          .then((value) {
+      secureStorage.read(key: kUsername).then((value) {
         if (value != null) scholar.username = value;
       }),
-      secureStorage
-          .read(key: kPassword, iOptions: secureStorageIOSOptions)
-          .then((value) {
+      secureStorage.read(key: kPassword).then((value) {
         if (value != null) scholar.password = value;
       })
     ]);
@@ -273,22 +254,16 @@ class DatabaseHelper {
   Future<void> setScholar(Scholar scholar) async {
     await Future.wait([
       scholarBox.put('user', scholar),
-      secureStorage.write(
-          key: kUsername,
-          value: scholar.username,
-          iOptions: secureStorageIOSOptions),
-      secureStorage.write(
-          key: kPassword,
-          value: scholar.password,
-          iOptions: secureStorageIOSOptions)
+      secureStorage.write(key: kUsername, value: scholar.username),
+      secureStorage.write(key: kPassword, value: scholar.password)
     ]);
   }
 
   Future<void> removeScholar() async {
     await Future.wait([
       scholarBox.delete('user'),
-      secureStorage.delete(key: kUsername, iOptions: secureStorageIOSOptions),
-      secureStorage.delete(key: kPassword, iOptions: secureStorageIOSOptions)
+      secureStorage.delete(key: kUsername),
+      secureStorage.delete(key: kPassword)
     ]);
   }
 

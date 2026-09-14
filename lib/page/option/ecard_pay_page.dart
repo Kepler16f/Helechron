@@ -9,7 +9,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:celechron/design/persistent_headers.dart';
 import '../../http/zjuServices/ecard.dart';
-import '../../utils/utils.dart';
 
 class ECardPayPage extends StatelessWidget {
   ECardPayPage({super.key});
@@ -21,10 +20,8 @@ class ECardPayPage extends StatelessWidget {
 
   Future<String?> _requestNewCode() async {
     const secureStorage = FlutterSecureStorage();
-    var synjonesAuth = await secureStorage.read(
-        key: 'synjonesAuth', iOptions: secureStorageIOSOptions);
-    var eCardAccount = await secureStorage.read(
-        key: 'eCardAccount', iOptions: secureStorageIOSOptions);
+    var synjonesAuth = await secureStorage.read(key: 'synjonesAuth');
+    var eCardAccount = await secureStorage.read(key: 'eCardAccount');
 
     // 未登录或测试账号：不请求真实接口，生成模拟付款码
     if (synjonesAuth == null || synjonesAuth == _testAccount) {

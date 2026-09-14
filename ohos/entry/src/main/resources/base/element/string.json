@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "Time scheduler for zjuers"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "Celechron - Time Scheduler"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "Celechron"
+    }
+  ]
+}

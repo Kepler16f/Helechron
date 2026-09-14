@@ -1,0 +1,64 @@
+name: Build HarmonyOS HAP
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev
+
+      - name: Setup HarmonyOS CLI tools
+        uses: ErBWs/setup-ohos@v2
+        with:
+          version: 6.1.1.280
+          cache: true
+
+      - name: Verify HarmonyOS CLI
+        run: hvigorw -v
+
+      - name: Clone Flutter-ohos SDK
+        run: |
+          git clone https://github.com/niceSaber/flutter_flutter.git /opt/flutter-ohos --depth 1 -b oh-3.27.4-dev
+          export PATH="/opt/flutter-ohos/bin:$PATH"
+          flutter doctor -v
+        timeout: 300000
+
+      - name: Setup Flutter-ohos PATH
+        run: |
+          echo "/opt/flutter-ohos/bin" >> $GITHUB_PATH
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Build HAP (Release)
+        run: flutter build hap --release
+        timeout: 600000
+
+      - name: Upload HAP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: celechron-harmonyos-hap
+          path: ohos/build/output/default/*.hap
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload unsigned APP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: celechron-harmonyos-unsigned-app
+          path: ohos/build/output/default/*.app
+          retention-days: 30
+          if-no-files-found: warn

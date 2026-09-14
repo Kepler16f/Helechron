@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:celechron/model/location_mapper.dart';
@@ -11,27 +10,7 @@ import 'package:celechron/model/semester.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:get/get.dart';
 
-/// iCal日历格式转换器
-/// 将课程信息转换为iCal格式，支持导入到各种日历应用
-///
-/// 主要功能:
-/// - iCal生成: [generateIcal], [generateIcalFromScholar], [generateIcalFromSemester]
-/// - 文件导出: [exportIcsFile], [exportSpecificSemester], [exportAllSemesters]
-/// - 学期管理: [getAvailableSemesters]
-/// - UI交互: [showExportDialog], [_showSemesterSelectionDialog]
-/// - 统计功能: [getCalendarStatistics]
-///
-/// 内部工具方法:
-/// - [_toISOString]: 时间格式转换
-/// - [_generateVEvent]: 生成单个事件
-/// - [_generateHash]: 生成事件唯一标识
-/// - [_showAlert]: 显示提示弹窗
-/// - [_isIPad]: 判断是否为 iPad
-/// - [_calculateSharePositionOrigin]: 计算分享位置（iPad必需）
-
 class CalendarToIcal {
-  /// 将DateTime转换为iCal格式的时间字符串
-  /// 格式：YYYYMMDDTHHMMSS
   static String _toISOString(DateTime dateTime) {
     return '${dateTime.year.toString().padLeft(4, '0')}'
         '${dateTime.month.toString().padLeft(2, '0')}'
@@ -42,10 +21,8 @@ class CalendarToIcal {
         '${dateTime.second.toString().padLeft(2, '0')}';
   }
 
-  /// iCal日期格式常量
   static const String dateLayoutUTC = "yyyyMMddTHHmmssZ";
 
-  /// 单个课程事件
   static String _generateVEvent(Period period) {
     final buffer = StringBuffer();
     final utcStr =
@@ -55,21 +32,17 @@ class CalendarToIcal {
     final mappedLocation =
         CalendarLocationMapper.mapForCalendar(period.location);
 
-    // 生成唯一ID
     final hash = _generateHash(period);
 
     buffer.writeln('BEGIN:VEVENT');
     buffer.writeln('CLASS:PUBLIC');
     buffer.writeln('CREATED:$utcStr');
 
-    // 描述信息
     if (period.description.isNotEmpty) {
-      // 处理特殊字符和换行
       String description = period.description
           .replaceAll('\n', '\\n')
           .replaceAll(',', '\\,')
           .replaceAll(';', '\\;');
-
       buffer.writeln('DESCRIPTION:$description');
     }
 
@@ -78,7 +51,6 @@ class CalendarToIcal {
     buffer.writeln('DTEND;TZID=Asia/Shanghai:$endStr');
     buffer.writeln('LAST-MODIFIED:$utcStr');
 
-    // 地点信息
     if (mappedLocation.isNotEmpty) {
       buffer.writeln('LOCATION:$mappedLocation');
     }
@@ -88,7 +60,6 @@ class CalendarToIcal {
     buffer.writeln('TRANSP:OPAQUE');
     buffer.writeln('UID:$hash');
 
-    // 可以选择是否添加提醒
     buffer.writeln('BEGIN:VALARM');
     buffer.writeln('TRIGGER:-PT15M');
     buffer.writeln('ACTION:DISPLAY');
@@ -100,7 +71,6 @@ class CalendarToIcal {
     return buffer.toString();
   }
 
-  /// 生成事件的哈希ID
   static String _generateHash(Period period) {
     final mappedLocation =
         CalendarLocationMapper.mapForCalendar(period.location);
@@ -111,7 +81,6 @@ class CalendarToIcal {
     return digest.toString();
   }
 
-  /// 生成完整的iCal日历文件
   static String generateIcal({
     required List<Period> periods,
     String calendarName = "浙大课程表",
@@ -119,7 +88,6 @@ class CalendarToIcal {
   }) {
     final buffer = StringBuffer();
 
-    // iCal文件头
     buffer.writeln('BEGIN:VCALENDAR');
     buffer.writeln('X-WR-CALNAME:$calendarName');
     buffer.writeln('X-APPLE-CALENDAR-COLOR:#2BBFF0');
@@ -127,7 +95,6 @@ class CalendarToIcal {
     buffer.writeln('VERSION:2.0');
     buffer.writeln('METHOD:PUBLISH');
 
-    // 时区信息
     buffer.writeln('BEGIN:VTIMEZONE');
     buffer.writeln('TZID:Asia/Shanghai');
     buffer.writeln('BEGIN:STANDARD');
@@ -137,9 +104,7 @@ class CalendarToIcal {
     buffer.writeln('END:STANDARD');
     buffer.writeln('END:VTIMEZONE');
 
-    // 筛选并添加课程事件
     for (final period in periods) {
-      // 根据参数决定是否包含考试
       if (!includeExams && period.type == PeriodType.test) {
         continue;
       }
@@ -151,7 +116,6 @@ class CalendarToIcal {
     return buffer.toString();
   }
 
-  /// 显示提示弹窗
   static void _showAlert(String title, String message, {bool isError = false}) {
     Get.dialog(
       CupertinoAlertDialog(
@@ -168,29 +132,6 @@ class CalendarToIcal {
     );
   }
 
-  /// 判断是否为 iPad
-  static Future<bool> _isIPad() async {
-    if (!Platform.isIOS) return false;
-    final deviceInfo = DeviceInfoPlugin();
-    final iosInfo = await deviceInfo.iosInfo;
-    return iosInfo.model.toLowerCase().contains('ipad');
-  }
-
-  /// 计算分享位置（iPad 必需）
-  static Future<Rect?> _calculateSharePositionOrigin(
-      BuildContext? context) async {
-    if (context == null) return null;
-    if (!(await _isIPad())) return null;
-    // 检查 context 是否仍然有效（避免在 async gap 后使用无效的 context）
-    if (!context.mounted) return null;
-    final box = context.findRenderObject() as RenderBox?;
-    if (box != null && box.hasSize) {
-      return box.localToGlobal(Offset.zero) & box.size;
-    }
-    return null;
-  }
-
-  /// 从Scholar对象生成iCal
   static String generateIcalFromScholar({
     required Scholar scholar,
     String? semesterName,
@@ -201,17 +142,14 @@ class CalendarToIcal {
     List<Period> periods = [];
 
     if (includeAllSemesters) {
-      // 包含所有学期
       periods = scholar.periods;
     } else if (semesterName != null) {
-      // 指定学期
       final semester = scholar.semesters.firstWhere(
         (s) => s.name == semesterName,
         orElse: () => scholar.thisSemester,
       );
       periods = semester.periods;
     } else {
-      // 当前学期
       periods = scholar.thisSemester.periods;
     }
 
@@ -222,7 +160,6 @@ class CalendarToIcal {
     );
   }
 
-  /// 从指定学期生成iCal
   static String generateIcalFromSemester({
     required Semester semester,
     String? calendarName,
@@ -236,7 +173,6 @@ class CalendarToIcal {
     );
   }
 
-  /// 导出ICS课程表文件
   static Future<void> exportIcsFile(
     Scholar scholar, {
     BuildContext? context,
@@ -247,32 +183,24 @@ class CalendarToIcal {
         return;
       }
 
-      // 在异步操作前计算分享位置，避免跨异步间隙使用 BuildContext
-      final sharePositionOrigin = await _calculateSharePositionOrigin(context);
-
-      // 生成iCal内容
       final icalContent = generateIcalFromScholar(
         scholar: scholar,
         calendarName: "浙大课程表-${scholar.thisSemester.name}",
         includeExams: true,
       );
 
-      // 获取应用文档目录
       final directory = await getApplicationDocumentsDirectory();
       final fileName =
           'celechron_schedule_${DateTime.now().millisecondsSinceEpoch}.ics';
       final tempFile = File('${directory.path}/$fileName');
 
-      // 写入临时文件
       await tempFile.writeAsString(icalContent);
 
-      // 使用系统分享功能
       await SharePlus.instance.share(
         ShareParams(
           files: [XFile(tempFile.path)],
           subject: '浙大课程表',
           text: '从 Celechron 导出的课程表文件，可导入到其他日历应用中使用。',
-          sharePositionOrigin: sharePositionOrigin,
         ),
       );
 
@@ -282,16 +210,12 @@ class CalendarToIcal {
     }
   }
 
-  /// 导出指定学期
   static Future<void> exportSpecificSemester(
     Scholar scholar,
     String semesterName, {
     BuildContext? context,
   }) async {
     try {
-      // 在异步操作前计算分享位置，避免跨异步间隙使用 BuildContext
-      final sharePositionOrigin = await _calculateSharePositionOrigin(context);
-
       final icalContent = generateIcalFromScholar(
         scholar: scholar,
         semesterName: semesterName,
@@ -311,7 +235,6 @@ class CalendarToIcal {
           files: [XFile(tempFile.path)],
           subject: '浙大课程表-$semesterName',
           text: '从 Celechron 导出的 $semesterName 课程表文件。',
-          sharePositionOrigin: sharePositionOrigin,
         ),
       );
 
@@ -321,15 +244,11 @@ class CalendarToIcal {
     }
   }
 
-  /// 导出所有学期
   static Future<void> exportAllSemesters(
     Scholar scholar, {
     BuildContext? context,
   }) async {
     try {
-      // 在异步操作前计算分享位置，避免跨异步间隙使用 BuildContext
-      final sharePositionOrigin = await _calculateSharePositionOrigin(context);
-
       final icalContent = generateIcalFromScholar(
         scholar: scholar,
         calendarName: "课程表-完整版",
@@ -349,7 +268,6 @@ class CalendarToIcal {
           files: [XFile(tempFile.path)],
           subject: '浙大课程表-完整版',
           text: '从 Celechron 导出的完整课程表文件，包含所有学期。',
-          sharePositionOrigin: sharePositionOrigin,
         ),
       );
 
@@ -359,12 +277,10 @@ class CalendarToIcal {
     }
   }
 
-  /// 获取可用的学期列表
   static List<String> getAvailableSemesters(Scholar scholar) {
     return scholar.semesters.map((s) => s.name).toList();
   }
 
-  /// 显示导出课程表对话框
   static void showExportDialog(BuildContext context, Scholar scholar) {
     showCupertinoModalPopup(
       context: context,
@@ -395,7 +311,6 @@ class CalendarToIcal {
     );
   }
 
-  /// 显示学期选择对话框（UI界面）
   static void _showSemesterSelectionDialog(
       BuildContext context, Scholar scholar) {
     final semesters = getAvailableSemesters(scholar);
@@ -417,7 +332,6 @@ class CalendarToIcal {
       return;
     }
 
-    /// 显示学期选择对话框 （UI界面）
     showCupertinoModalPopup(
       context: context,
       builder: (BuildContext popupContext) => CupertinoActionSheet(
@@ -448,11 +362,9 @@ class CalendarToIcal {
     );
   }
 
-  /// 生成课程统计信息
   static Map<String, dynamic> getCalendarStatistics(List<Period> periods) {
     final stats = <String, dynamic>{};
 
-    // 按类型统计
     final typeCount = <PeriodType, int>{};
     for (final period in periods) {
       typeCount[period.type] = (typeCount[period.type] ?? 0) + 1;
@@ -464,7 +376,6 @@ class CalendarToIcal {
     stats['userEventCount'] = typeCount[PeriodType.user] ?? 0;
     stats['flowCount'] = typeCount[PeriodType.flow] ?? 0;
 
-    // 时间范围
     if (periods.isNotEmpty) {
       final sortedPeriods = List<Period>.from(periods)
         ..sort((a, b) => a.startTime.compareTo(b.startTime));

@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 DateTime dateOnly(DateTime date, {int? hour, int? minute}) {
   return DateTime(date.year, date.month, date.day, hour ?? 0, minute ?? 0);
@@ -23,13 +22,3 @@ String toStringHumanReadable(DateTime dateTime) {
   str = str.substring(0, str.length - 7);
   return str;
 }
-
-const secureStorageIOSOptions = kDebugMode
-    ? IOSOptions(
-        accessibility: KeychainAccessibility.first_unlock,
-        accountName: 'Celechron',
-        groupId: 'group.top.celechron.celechron.debug')
-    : IOSOptions(
-        accessibility: KeychainAccessibility.first_unlock,
-        accountName: 'Celechron',
-        groupId: 'group.top.celechron.celechron');
