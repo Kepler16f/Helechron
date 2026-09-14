@@ -37,6 +37,16 @@ dependencies:
       path: "packages/url_launcher/url_launcher"
   app_links: ^6.4.0
 
+dependency_overrides:
+  path_provider:
+    git:
+      url: "https://gitee.com/openharmony-sig/flutter_packages.git"
+      path: "packages/path_provider/path_provider"
+  url_launcher:
+    git:
+      url: "https://gitee.com/openharmony-sig/flutter_packages.git"
+      path: "packages/url_launcher/url_launcher"
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
