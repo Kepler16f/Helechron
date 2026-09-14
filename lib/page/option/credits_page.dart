@@ -146,12 +146,13 @@ class _CreditsPageState extends State<CreditsPage> {
                             ),
                           ),
                           const SizedBox(height: 4),
-                          const Text(
+                          Text(
                             'Celechron 的 OpenHarmony 移植版本，\n基于上游 1.3.0，有问题请到仓库反馈',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 11,
-                              color: CupertinoColors.secondaryLabel,
+                              color: CupertinoDynamicColor.resolve(
+                                  CupertinoColors.secondaryLabel, context),
                             ),
                           ),
                         ],
