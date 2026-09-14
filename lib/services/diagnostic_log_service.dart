@@ -203,11 +203,9 @@ class DiagnosticLogService {
       flush: true,
     );
     await _pruneExports(directory);
-    await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(file.path, mimeType: 'text/plain')],
-        text: 'Celechron 测试日志：$fileName',
-      ),
+    await Share.shareXFiles(
+      [XFile(file.path, mimeType: 'text/plain')],
+      text: 'Celechron 测试日志：$fileName',
     );
     return fileName;
   }

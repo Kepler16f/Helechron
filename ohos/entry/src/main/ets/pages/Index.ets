@@ -1,17 +1,24 @@
-@Entry
+
+import common from '@ohos.app.ability.common';
+import { FlutterPage } from '@ohos/flutter_ohos'
+
+let storage = LocalStorage.getShared()
+const EVENT_BACK_PRESS = 'EVENT_BACK_PRESS'
+
+@Entry(storage)
 @Component
 struct Index {
-  @State message: string = 'Celechron Loading...';
+  private context = getContext(this) as common.UIAbilityContext
+  @LocalStorageLink('viewId') viewId: string = "";
 
   build() {
-    Row() {
-      Column() {
-        Text(this.message)
-          .fontSize(50)
-          .fontWeight(FontWeight.Bold)
-      }
-      .width('100%')
+    Column() {
+      FlutterPage({ viewId: this.viewId })
     }
-    .height('100%')
+  }
+
+  onBackPress(): boolean {
+    this.context.eventHub.emit(EVENT_BACK_PRESS)
+    return true
   }
 }

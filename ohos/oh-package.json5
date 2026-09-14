@@ -1,12 +1,13 @@
 {
+  "modelVersion": "5.0.0",
   "name": "celechron",
   "version": "1.0.0",
-  "description": "Time scheduler for zjuers - HarmonyOS NEXT",
+  "description": "Please describe the basic information.",
   "main": "",
   "author": "",
-  "license": "GPL-3.0",
+  "license": "",
   "dependencies": {},
   "devDependencies": {
-    "@ohos/hypium": "1.0.18"
+    "@ohos/hypium": "1.0.6"
   }
 }

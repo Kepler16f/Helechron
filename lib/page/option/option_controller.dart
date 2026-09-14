@@ -5,15 +5,11 @@ import 'package:flutter/cupertino.dart';
 
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/model/option.dart';
-import 'package:celechron/services/diagnostic_log_service.dart';
 import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/worker/ecard_widget_messenger.dart';
 import 'package:celechron/worker/fuse.dart';
-import 'package:celechron/utils/platform_features.dart';
 import 'package:celechron/model/calendar_to_system.dart';
 import 'package:celechron/model/calendar_to_ical.dart';
-
-import 'package:celechron/utils/utils.dart';
 
 class OptionController extends GetxController {
   final _option = Get.find<Option>(tag: 'option');
@@ -71,8 +67,7 @@ class OptionController extends GetxController {
   set pushOnGradeChange(bool value) {
     _option.pushOnGradeChange.value = value;
     _db.setPushOnGradeChange(value);
-    _db.secureStorage.write(
-        key: 'pushOnGradeChange', value: value.toString());
+    _db.secureStorage.write(key: 'pushOnGradeChange', value: value.toString());
   }
 
   bool get pushOnDdlReminder => _option.pushOnDdlReminder.value;
@@ -80,8 +75,7 @@ class OptionController extends GetxController {
   set pushOnDdlReminder(bool value) {
     _option.pushOnDdlReminder.value = value;
     _db.setPushOnDdlReminder(value);
-    _db.secureStorage.write(
-        key: 'pushOnDdlReminder', value: value.toString());
+    _db.secureStorage.write(key: 'pushOnDdlReminder', value: value.toString());
   }
 
   BrightnessMode get brightnessMode => _option.brightnessMode.value;

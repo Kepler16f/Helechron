@@ -2,11 +2,11 @@
   "string": [
     {
       "name": "module_desc",
-      "value": "Celechron 时间管理器"
+      "value": "Celechron Time Scheduler"
     },
     {
       "name": "EntryAbility_desc",
-      "value": "Celechron 时间管理器"
+      "value": "Celechron Time Scheduler"
     },
     {
       "name": "EntryAbility_label",

@@ -1,11 +1,10 @@
-import 'package:celechron/utils/platform_features.dart';
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:celechron/services/secure_storage_service.dart';
 
 import 'package:celechron/http/zjuServices/zjuam.dart';
 import 'package:celechron/http/zjuServices/ecard.dart';
-
-import '../utils/utils.dart';
 
 class ECardWidgetMessenger {
   static const _platform = MethodChannel('top.celechron.celechron/ecardWidget');

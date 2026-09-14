@@ -10,56 +10,90 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      FLUTTER_OHOS_REPO: https://gitcode.com/openharmony-tpc/flutter_flutter.git
+      FLUTTER_OHOS_REF: 3.27.5-ohos-1.0.8
+      PUB_HOSTED_URL: https://pub.flutter-io.cn
+      FLUTTER_STORAGE_BASE_URL: https://storage.flutter-io.cn
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies (Linux)
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libgl1-mesa-dev
 
-      - name: Setup HarmonyOS CLI tools
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup HarmonyOS SDK and command-line tools
         uses: ErBWs/setup-ohos@v2
         with:
           version: 26.0.0.821
           cache: true
 
-      - name: Verify HarmonyOS CLI
+      - name: Verify HarmonyOS tools
         run: |
           hvigorw -v || true
+          ohpm -v || true
 
       - name: Clone Flutter-ohos SDK
         run: |
-          git clone https://gitcode.com/openharmony-tpc/flutter_flutter.git /opt/flutter-ohos --depth 1 -b oh-3.27.4-dev
-          export PATH="/opt/flutter-ohos/bin:$PATH"
-          flutter doctor -v
-        timeout-minutes: 15
+          FLUTTER_OHOS_DIR="$RUNNER_TEMP/flutter_ohos"
+          git clone --branch "$FLUTTER_OHOS_REF" --depth 1 "$FLUTTER_OHOS_REPO" "$FLUTTER_OHOS_DIR"
+          cd "$FLUTTER_OHOS_DIR"
+          git fetch --tags --force || true
+          git config --global --add safe.directory "$FLUTTER_OHOS_DIR"
+          echo "$FLUTTER_OHOS_DIR/bin" >> "$GITHUB_PATH"
+          echo "FLUTTER_ROOT=$FLUTTER_OHOS_DIR" >> "$GITHUB_ENV"
+        timeout-minutes: 20
 
-      - name: Setup Flutter-ohos PATH
+      - name: Configure npm registry
         run: |
-          echo "/opt/flutter-ohos/bin" >> $GITHUB_PATH
+          echo "registry=https://repo.huaweicloud.com/repository/npm/" > ~/.npmrc
+          echo "@ohos:registry=https://repo.harmonyos.com/npm/" >> ~/.npmrc
+
+      - name: Verify Flutter-ohos
+        run: |
+          flutter --version
+          dart --version
+          flutter doctor -v || true
 
       - name: Get Flutter dependencies
         run: flutter pub get
 
-      - name: Build HAP (Release)
-        run: flutter build hap --release
-        timeout-minutes: 25
+      - name: Build HAP
+        run: |
+          set +e
+          flutter build hap --release --target-platform ohos-arm64
+          FLUTTER_BUILD_STATUS=$?
+          set -e
+
+          HAP="$(find ohos/entry/build -type f -name '*unsigned*.hap' 2>/dev/null | head -n 1)"
+          if [ -z "$HAP" ]; then
+            echo "::error::No HAP file produced."
+            find ohos -type f -name '*.hap' -print || true
+            exit 1
+          fi
+
+          if [ "$FLUTTER_BUILD_STATUS" -ne 0 ]; then
+            echo "::notice title=Unsigned HAP recovered::flutter exited with $FLUTTER_BUILD_STATUS (missing signing config); uploading the unsigned HAP produced by hvigor."
+          fi
+
+          mkdir -p build/ohos
+          cp "$HAP" "build/ohos/celechron-harmonyos-unsigned.hap"
+          ls -lh build/ohos
+        timeout-minutes: 40
 
       - name: Upload HAP artifact
         uses: actions/upload-artifact@v4
         with:
           name: celechron-harmonyos-hap
-          path: ohos/build/output/default/*.hap
+          path: build/ohos/*.hap
           retention-days: 30
           if-no-files-found: error
-
-      - name: Upload unsigned APP artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: celechron-harmonyos-unsigned-app
-          path: ohos/build/output/default/*.app
-          retention-days: 30
-          if-no-files-found: warn

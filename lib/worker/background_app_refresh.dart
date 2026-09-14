@@ -1,9 +1,6 @@
 import 'package:celechron/services/diagnostic_log_service.dart';
 import 'package:celechron/services/refresh_coordinator.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
-import '../utils/utils.dart';
 
 Future<void> refreshScholar() async {
   if (await RefreshCoordinator.shouldYieldBackground()) {

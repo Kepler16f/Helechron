@@ -30,7 +30,8 @@ class Fuse {
         return null;
       }
 
-      var checkUpdateUrl = "https://api.celechron.top/checkUpdate?platform=ohos";
+      var checkUpdateUrl =
+          "https://api.celechron.top/checkUpdate?platform=ohos";
 
       var request = await _httpClient
           .getUrl(Uri.parse(checkUpdateUrl))
