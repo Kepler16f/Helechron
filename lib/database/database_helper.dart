@@ -1,6 +1,6 @@
 import 'package:get/get.dart';
 import 'package:hive/hive.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:celechron/services/secure_storage_service.dart';
 
 import 'package:celechron/model/task.dart';
 import 'package:celechron/worker/fuse.dart';

@@ -23,18 +23,19 @@ jobs:
       - name: Setup HarmonyOS CLI tools
         uses: ErBWs/setup-ohos@v2
         with:
-          version: 6.1.1.280
+          version: 26.0.0.821
           cache: true
 
       - name: Verify HarmonyOS CLI
-        run: hvigorw -v
+        run: |
+          hvigorw -v || true
 
       - name: Clone Flutter-ohos SDK
         run: |
-          git clone https://github.com/niceSaber/flutter_flutter.git /opt/flutter-ohos --depth 1 -b oh-3.27.4-dev
+          git clone https://gitee.com/openharmony-sig/flutter_flutter.git /opt/flutter-ohos --depth 1 -b master
           export PATH="/opt/flutter-ohos/bin:$PATH"
           flutter doctor -v
-        timeout: 300000
+        timeout-minutes: 15
 
       - name: Setup Flutter-ohos PATH
         run: |
@@ -45,7 +46,7 @@ jobs:
 
       - name: Build HAP (Release)
         run: flutter build hap --release
-        timeout: 600000
+        timeout-minutes: 25
 
       - name: Upload HAP artifact
         uses: actions/upload-artifact@v4

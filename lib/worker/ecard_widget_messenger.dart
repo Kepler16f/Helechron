@@ -1,6 +1,6 @@
 import 'package:celechron/utils/platform_features.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:celechron/services/secure_storage_service.dart';
 
 import 'package:celechron/http/zjuServices/zjuam.dart';
 import 'package:celechron/http/zjuServices/ecard.dart';

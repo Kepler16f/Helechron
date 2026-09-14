@@ -5,7 +5,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:get/get.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:celechron/services/secure_storage_service.dart';
 
 import 'package:celechron/design/persistent_headers.dart';
 import '../../http/zjuServices/ecard.dart';

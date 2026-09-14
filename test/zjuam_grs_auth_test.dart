@@ -5,7 +5,7 @@ import 'dart:io';
 
 import 'package:celechron/http/zjuServices/grs_new.dart';
 import 'package:celechron/http/zjuServices/zjuam.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:celechron/services/secure_storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _cacheKeyPrefix = 'zju_sso_cookie_';

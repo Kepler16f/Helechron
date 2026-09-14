@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:celechron/services/diagnostic_log_service.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:celechron/services/secure_storage_service.dart';
 
 import 'exceptions.dart';
 import 'response_utils.dart';
