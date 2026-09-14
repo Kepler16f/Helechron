@@ -26,15 +26,11 @@ class _CreditsPageState extends State<CreditsPage> {
   Future<void> _loadContributors() async {
     try {
       var result = await _githubService.getContributors(_httpClient);
-      // 无论是否有错误，都使用返回的 contributors 列表
-      // GitHubService 保证即使出错也会返回默认作者名单
       setState(() {
         _contributors = result.item2;
         _isLoading = false;
       });
     } catch (e) {
-      // 如果 GitHubService 本身抛出异常
-      // 则使用 GitHubService 中的默认名单
       setState(() {
         _contributors = GitHubService.defaultContributors;
         _isLoading = false;
@@ -69,23 +65,23 @@ class _CreditsPageState extends State<CreditsPage> {
     for (int i = 0; i < _contributors.length; i += 2) {
       List<Widget> children = [];
 
-      // 第一个contributor
       children.add(
         Expanded(
           child: Text(
             _contributors[i],
             textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 14),
           ),
         ),
       );
 
-      // 如果有第二个contributor，添加它
       if (i + 1 < _contributors.length) {
         children.add(
           Expanded(
             child: Text(
               _contributors[i + 1],
               textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14),
             ),
           ),
         );
@@ -101,9 +97,8 @@ class _CreditsPageState extends State<CreditsPage> {
         ),
       );
 
-      // 如果不是最后一行，添加间距
       if (i + 2 < _contributors.length) {
-        rows.add(const SizedBox(height: 12));
+        rows.add(const SizedBox(height: 8));
       }
     }
 
@@ -150,6 +145,15 @@ class _CreditsPageState extends State<CreditsPage> {
                               fontSize: 12,
                             ),
                           ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Celechron 的 OpenHarmony 移植版本，\n基于上游 1.3.0，有问题请到仓库反馈',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: CupertinoColors.secondaryLabel,
+                            ),
+                          ),
                         ],
                       )
                     ],
@@ -166,7 +170,7 @@ class _CreditsPageState extends State<CreditsPage> {
                     ),
                   ),
                   const SizedBox(
-                    height: 24,
+                    height: 16,
                   ),
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 32),
@@ -180,6 +184,7 @@ class _CreditsPageState extends State<CreditsPage> {
                           child: Text(
                             'Kepler16f',
                             textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 14),
                           ),
                         ),
                       ],
@@ -197,18 +202,18 @@ class _CreditsPageState extends State<CreditsPage> {
                     ),
                   ),
                   const SizedBox(
-                    height: 24,
+                    height: 16,
                   ),
                   const Text(
                     '🎨设计',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 18,
+                      fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(
-                    height: 16,
+                    height: 8,
                   ),
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 32),
@@ -222,12 +227,14 @@ class _CreditsPageState extends State<CreditsPage> {
                           child: Text(
                             'nosig',
                             textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 14),
                           ),
                         ),
                         Expanded(
                           child: Text(
                             '空之探险队的 Kate',
                             textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 14),
                           ),
                         ),
                       ],
@@ -240,12 +247,12 @@ class _CreditsPageState extends State<CreditsPage> {
                     '🧑‍💻开发',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 18,
+                      fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(
-                    height: 16,
+                    height: 8,
                   ),
                   _buildContributorsList(),
                 ],
@@ -267,13 +274,18 @@ class _CreditsPageState extends State<CreditsPage> {
                   const SizedBox(
                     height: 4,
                   ),
-                  Text(
-                    '浙ICP备2024061973号-2A',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: CupertinoDynamicColor.resolve(
-                          CupertinoColors.secondaryLabel, context),
+                  GestureDetector(
+                    onTap: () {
+                      // 可以后续接入 url_launcher 跳转仓库
+                    },
+                    child: Text(
+                      'https://github.com/Kepler16f/Helechron',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.secondaryLabel, context),
+                      ),
                     ),
                   ),
                 ],
