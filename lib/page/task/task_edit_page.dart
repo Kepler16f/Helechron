@@ -97,8 +97,6 @@ class _TaskEditPageState extends State<TaskEditPage> {
   }
 
   void removeAndExit() {
-    FormState().save();
-    now.forceRefreshStatus();
     now.status = TaskStatus.deleted;
     Navigator.of(context).pop(now);
   }

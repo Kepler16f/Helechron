@@ -152,8 +152,8 @@ class _CelechronAppState extends State<CelechronApp>
             data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
             child: child!,
           ),
-          title: 'Celechron',
-          home: const HomePage(title: 'Celechron'),
+          title: 'Helechron',
+          home: const HomePage(title: 'Helechron'),
           initialRoute: '/',
           routes: {
             '/ecardpaypage': (context) => ECardPayPage(),

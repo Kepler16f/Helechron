@@ -26,7 +26,7 @@ class TaskPage extends StatelessWidget {
   Future<void> showCardDialog(BuildContext context, Task deadline) async {
     return showDialog<void>(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogContext) {
         return CupertinoAlertDialog(
           title: Text(
             '${deadline.summary}：${deadline.type == TaskType.deadline ? deadlineStatusName[deadline.status]! : deadline.type == TaskType.fixed ? deadlineTypeName[TaskType.fixed] : ''}',
@@ -71,7 +71,7 @@ class TaskPage extends StatelessWidget {
           ),
           actions: [
             CupertinoDialogAction(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('返回'),
             ),
             if (deadline.type == TaskType.deadline &&
@@ -85,7 +85,7 @@ class TaskPage extends StatelessWidget {
                   }
                   _taskController.updateDeadlineListTime();
                   _taskController.taskList.refresh();
-                  Navigator.of(context).pop();
+                  Navigator.of(dialogContext).pop();
                 },
                 child: Text(
                     '标记为${deadline.status == TaskStatus.completed ? '未' : ''}完成'),
@@ -102,7 +102,7 @@ class TaskPage extends StatelessWidget {
                   }
                   _taskController.updateDeadlineListTime();
                   _taskController.taskList.refresh();
-                  Navigator.of(context).pop();
+                  Navigator.of(dialogContext).pop();
                 },
                 child:
                     Text(deadline.status == TaskStatus.running ? '暂停' : '继续'),
@@ -111,7 +111,7 @@ class TaskPage extends StatelessWidget {
                 deadline.type == TaskType.fixed)
               CupertinoDialogAction(
                 onPressed: () async {
-                  Navigator.of(context).pop();
+                  Navigator.of(dialogContext).pop();
                   Task res = await showCupertinoModalPopup(
                         context: context,
                         builder: (BuildContext context) {
@@ -134,7 +134,7 @@ class TaskPage extends StatelessWidget {
             if (deadline.type == TaskType.fixedlegacy)
               CupertinoDialogAction(
                 onPressed: () async {
-                  Navigator.of(context).pop();
+                  Navigator.of(dialogContext).pop();
                   deadline.status = TaskStatus.deleted;
                   _taskController.updateDeadlineList();
                   _taskController.taskList.refresh();

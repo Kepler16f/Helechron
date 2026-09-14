@@ -448,7 +448,7 @@ class OptionPage extends StatelessWidget {
                       child: Text('关于', style: headerFooterTextStyle)),
                   children: <CupertinoListTile>[
                     CupertinoListTile(
-                      title: const Text('关于 Celechron'),
+                      title: const Text('关于 Helechron'),
                       trailing: BackChervonRow(
                         child: Text(_optionController.celechronVersion,
                             style: trailingTextStyle),

@@ -137,7 +137,7 @@ class _CreditsPageState extends State<CreditsPage> {
                       Column(
                         children: [
                           const Text(
-                            'Celechron',
+                            'Helechron',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 32,
@@ -159,6 +159,37 @@ class _CreditsPageState extends State<CreditsPage> {
                   ),
                   const Text(
                     '制作人员',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                    ),
+                  ),
+                  const SizedBox(
+                    height: 24,
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 32),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      mainAxisSize: MainAxisSize.max,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      verticalDirection: VerticalDirection.down,
+                      children: <Widget>[
+                        Expanded(
+                          child: Text(
+                            'Kepler16f',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(
+                    height: 24,
+                  ),
+                  const Text(
+                    '上游制作人员',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontWeight: FontWeight.bold,

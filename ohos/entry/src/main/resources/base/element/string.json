@@ -2,15 +2,15 @@
   "string": [
     {
       "name": "module_desc",
-      "value": "Celechron 时间管理器"
+      "value": "Helechron 时间管理器"
     },
     {
       "name": "EntryAbility_desc",
-      "value": "Celechron 时间管理器"
+      "value": "Helechron 时间管理器"
     },
     {
       "name": "EntryAbility_label",
-      "value": "Celechron"
+      "value": "Helechron"
     }
   ]
 }

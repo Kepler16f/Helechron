@@ -2,15 +2,15 @@
   "string": [
     {
       "name": "module_desc",
-      "value": "Celechron Time Scheduler"
+      "value": "Helechron Time Scheduler"
     },
     {
       "name": "EntryAbility_desc",
-      "value": "Celechron Time Scheduler"
+      "value": "Helechron Time Scheduler"
     },
     {
       "name": "EntryAbility_label",
-      "value": "Celechron"
+      "value": "Helechron"
     }
   ]
 }
