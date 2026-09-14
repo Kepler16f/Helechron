@@ -1,7 +1,7 @@
 {
   "app": {
-    "bundleName": "xyz.nosig.celechron",
-    "vendor": "celechron",
+    "bundleName": "top.celechron.helechron",
+    "vendor": "Helechron",
     "versionCode": 1,
     "versionName": "0.0.1",
     "icon": "$media:app_icon",

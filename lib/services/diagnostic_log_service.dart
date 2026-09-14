@@ -205,7 +205,7 @@ class DiagnosticLogService {
     await _pruneExports(directory);
     await Share.shareXFiles(
       [XFile(file.path, mimeType: 'text/plain')],
-      text: 'Celechron 测试日志：$fileName',
+      text: 'Helechron 测试日志：$fileName',
     );
     return fileName;
   }
@@ -265,7 +265,7 @@ class DiagnosticLogService {
   Future<Directory> _exportDirectory() async {
     final directory = await getApplicationDocumentsDirectory();
     final exportDirectory =
-        Directory('${directory.path}${Platform.pathSeparator}CelechronLogs');
+        Directory('${directory.path}${Platform.pathSeparator}HelechronLogs');
     await exportDirectory.create(recursive: true);
     return exportDirectory;
   }
