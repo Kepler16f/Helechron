@@ -7,6 +7,9 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -85,15 +88,26 @@ jobs:
             echo "::notice title=Unsigned HAP recovered::flutter exited with $FLUTTER_BUILD_STATUS (missing signing config); uploading the unsigned HAP produced by hvigor."
           fi
 
+          VERSION=$(grep 'final version' lib/worker/fuse.dart | grep -oP '\[.*?\]' | tr -d '[] ' | tr ',' '.')
+          HAP_NAME="Helechron_${VERSION}_unsigned.hap"
+
           mkdir -p build/ohos
-          cp "$HAP" "build/ohos/celechron-harmonyos-unsigned.hap"
+          cp "$HAP" "build/ohos/$HAP_NAME"
+          echo "HAP_NAME=$HAP_NAME" >> "$GITHUB_ENV"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           ls -lh build/ohos
         timeout-minutes: 40
 
-      - name: Upload HAP artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: celechron-harmonyos-hap
-          path: build/ohos/*.hap
-          retention-days: 30
-          if-no-files-found: error
+      - name: Upload HAP to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${VERSION}"
+          HAP_PATH="build/ohos/${HAP_NAME}"
+
+          # 尝试创建 release，如果 tag 已存在则直接上传
+          gh release create "$TAG" "$HAP_PATH" \
+            --title "Helechron $TAG" \
+            --notes "自动构建 · $HAP_NAME" \
+            --latest 2>/dev/null || \
+          gh release upload "$TAG" "$HAP_PATH" --clobber
