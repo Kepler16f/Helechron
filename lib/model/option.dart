@@ -4,6 +4,9 @@ enum BrightnessMode { system, light, dark }
 
 enum GpaStrategy { best, first }
 
+/// 日程提醒方式：通知提醒（系统日历横幅）或闹钟提醒（后台代理闹钟）
+enum CalendarReminderMode { notification, alarm }
+
 class CourseIdMap {
   String id1, id2;
   String comment;
@@ -33,6 +36,7 @@ class Option {
   RxList<CourseIdMap> courseIdMappingList;
   RxBool hideHomeGpa;
   RxBool asyncRefresh;
+  Rx<CalendarReminderMode> calendarReminderMode;
 
   Option({
     required this.workTime,
@@ -45,5 +49,6 @@ class Option {
     required this.courseIdMappingList,
     required this.hideHomeGpa,
     required this.asyncRefresh,
+    required this.calendarReminderMode,
   });
 }

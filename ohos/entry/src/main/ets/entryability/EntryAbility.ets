@@ -2,6 +2,7 @@ import { FlutterAbility, FlutterEngine, MethodChannel, MethodCall, MethodResult 
 import { GeneratedPluginRegistrant } from '../plugins/GeneratedPluginRegistrant';
 import notificationManager from '@ohos.notificationManager';
 import calendarManager from '@ohos.calendarManager';
+import reminderAgentManager from '@ohos.reminderAgentManager';
 import abilityAccessCtrl, { Permissions } from '@ohos.abilityAccessCtrl';
 import bundleManager from '@ohos.bundle.bundleManager';
 import hilog from '@ohos.hilog';
@@ -14,6 +15,9 @@ const CALENDAR_DISPLAY_NAME = 'Helechron课表';
 const CALENDAR_TIME_ZONE = 'Asia/Shanghai';
 const PERMISSION_READ_CALENDAR = 'ohos.permission.READ_CALENDAR';
 const PERMISSION_WRITE_CALENDAR = 'ohos.permission.WRITE_CALENDAR';
+const DEFAULT_REMINDER_MINUTES = 15;
+const MAX_AGENT_REMINDERS = 30;
+const ALARM_HORIZON_MS = 7 * 24 * 60 * 60 * 1000;
 
 interface CalendarEventPayload {
   uid: string;
@@ -188,6 +192,95 @@ export default class EntryAbility extends FlutterAbility {
     }
   }
 
+  private async enableReminders(calendar: calendarManager.Calendar): Promise<void> {
+    try {
+      const config: calendarManager.CalendarConfig = { enableReminder: true };
+      await calendar.setConfig(config);
+    } catch (err) {
+      hilog.warn(DOMAIN, TAG, `enableReminders setConfig failed: ${JSON.stringify(err)}`);
+    }
+  }
+
+  private async addEventsInBatches(
+    calendar: calendarManager.Calendar,
+    events: calendarManager.Event[]
+  ): Promise<number> {
+    let success = 0;
+    const batchSize = 50;
+    for (let start = 0; start < events.length; start += batchSize) {
+      const end = Math.min(start + batchSize, events.length);
+      const batch: calendarManager.Event[] = [];
+      for (let i = start; i < end; i++) {
+        batch.push(events[i]);
+      }
+      try {
+        await calendar.addEvents(batch);
+        success += batch.length;
+      } catch (batchErr) {
+        hilog.warn(DOMAIN, TAG, `addEvents batch [${start},${end}) failed: ${JSON.stringify(batchErr)}; retrying individually`);
+        for (let i = 0; i < batch.length; i++) {
+          try {
+            await calendar.addEvent(batch[i]);
+            success++;
+          } catch (singleErr) {
+            hilog.error(DOMAIN, TAG, `addEvent failed: ${JSON.stringify(singleErr)}`);
+          }
+        }
+      }
+    }
+    return success;
+  }
+
+  private async updateAlarmReminders(
+    payloads: CalendarEventPayload[],
+    reminderMinutes: number
+  ): Promise<void> {
+    try {
+      await reminderAgentManager.cancelAllReminders();
+    } catch (cancelErr) {
+      hilog.warn(DOMAIN, TAG, `cancelAllReminders failed: ${JSON.stringify(cancelErr)}`);
+    }
+    const now = Date.now();
+    let published = 0;
+    for (let i = 0; i < payloads.length && published < MAX_AGENT_REMINDERS; i++) {
+      const payload = payloads[i];
+      if (payload.startTime <= 0) {
+        continue;
+      }
+      const triggerMs = payload.startTime - reminderMinutes * 60 * 1000;
+      if (triggerMs <= now) {
+        continue;
+      }
+      if (triggerMs - now > ALARM_HORIZON_MS) {
+        continue;
+      }
+      const trigger = new Date(triggerMs);
+      const reminder: reminderAgentManager.ReminderRequestCalendar = {
+        reminderType: reminderAgentManager.ReminderType.REMINDER_TYPE_CALENDAR,
+        dateTime: {
+          year: trigger.getFullYear(),
+          month: trigger.getMonth() + 1,
+          day: trigger.getDate(),
+          hour: trigger.getHours(),
+          minute: trigger.getMinutes(),
+          second: 0
+        },
+        title: payload.summary,
+        content: payload.description,
+        notificationId: published,
+        ringDuration: 5,
+        snoozeTimes: 0
+      };
+      try {
+        await reminderAgentManager.publishReminder(reminder);
+        published++;
+      } catch (pubErr) {
+        hilog.error(DOMAIN, TAG, `publishReminder failed: ${JSON.stringify(pubErr)}`);
+      }
+    }
+    hilog.info(DOMAIN, TAG, `updateAlarmReminders: published ${published} alarm reminders`);
+  }
+
   private syncCalendarEvents(call: MethodCall, result: MethodResult): void {
     const payloads = call.argument('events') as CalendarEventPayload[];
     if (payloads === null || payloads === undefined || payloads.length === 0) {
@@ -195,16 +288,33 @@ export default class EntryAbility extends FlutterAbility {
       result.success(0);
       return;
     }
-    hilog.info(DOMAIN, TAG, `syncCalendarEvents: received ${payloads.length} events`);
-    this.doCalendarSync(payloads, result);
+    const reminderMinutesRaw = call.argument('reminderMinutes') as number;
+    const reminderMinutes =
+      (reminderMinutesRaw !== null && reminderMinutesRaw !== undefined && reminderMinutesRaw > 0)
+        ? reminderMinutesRaw
+        : DEFAULT_REMINDER_MINUTES;
+    const useAlarm = call.argument('useAlarm') === true;
+    hilog.info(DOMAIN, TAG, `syncCalendarEvents: ${payloads.length} events, reminder=${reminderMinutes}min, useAlarm=${useAlarm}`);
+    this.doCalendarSync(payloads, reminderMinutes, useAlarm, result);
   }
 
-  private async doCalendarSync(payloads: CalendarEventPayload[], result: MethodResult): Promise<void> {
+  private async doCalendarSync(
+    payloads: CalendarEventPayload[],
+    reminderMinutes: number,
+    useAlarm: boolean,
+    result: MethodResult
+  ): Promise<void> {
     try {
       const calendar = await this.getOrCreateCalendar();
+      await this.enableReminders(calendar);
       const events: calendarManager.Event[] = [];
+      let skipped = 0;
       for (let i = 0; i < payloads.length; i++) {
         const payload = payloads[i];
+        if (payload.startTime <= 0 || payload.endTime <= 0 || payload.endTime <= payload.startTime) {
+          skipped++;
+          continue;
+        }
         const event: calendarManager.Event = {
           type: calendarManager.EventType.NORMAL,
           title: payload.summary,
@@ -214,14 +324,18 @@ export default class EntryAbility extends FlutterAbility {
           isAllDay: false,
           timeZone: CALENDAR_TIME_ZONE,
           description: payload.description,
+          reminderTime: useAlarm ? [] : [reminderMinutes],
           identifier: payload.uid
         };
         events.push(event);
       }
-      hilog.info(DOMAIN, TAG, `doCalendarSync: adding ${events.length} events to calendar`);
-      await calendar.addEvents(events);
-      hilog.info(DOMAIN, TAG, `doCalendarSync: successfully synced ${events.length} events`);
-      result.success(events.length);
+      hilog.info(DOMAIN, TAG, `doCalendarSync: ${events.length} valid events, ${skipped} skipped`);
+      const count = await this.addEventsInBatches(calendar, events);
+      if (useAlarm) {
+        await this.updateAlarmReminders(payloads, reminderMinutes);
+      }
+      hilog.info(DOMAIN, TAG, `doCalendarSync: successfully wrote ${count} events`);
+      result.success(count);
     } catch (err) {
       const detail = JSON.stringify(err);
       hilog.error(DOMAIN, TAG, `doCalendarSync failed: ${detail}`);
@@ -246,6 +360,11 @@ export default class EntryAbility extends FlutterAbility {
         }
       }
       hilog.info(DOMAIN, TAG, `doClearCalendarEvents: cleared ${deletedCount} Helechron calendars`);
+      try {
+        await reminderAgentManager.cancelAllReminders();
+      } catch (cancelErr) {
+        hilog.warn(DOMAIN, TAG, `cancelAllReminders failed: ${JSON.stringify(cancelErr)}`);
+      }
       result.success(deletedCount);
     } catch (err) {
       hilog.error(DOMAIN, TAG, `doClearCalendarEvents failed: ${JSON.stringify(err)}`);

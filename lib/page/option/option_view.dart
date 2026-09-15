@@ -351,6 +351,30 @@ class OptionPage extends StatelessWidget {
                       ),
                       CupertinoListTile(
                         title: Text(
+                          '提醒方式',
+                          style: TextStyle(
+                            color: _optionController.calendarSyncEnabled.value
+                                ? null
+                                : CupertinoDynamicColor.resolve(
+                                    CupertinoColors.quaternaryLabel, context),
+                          ),
+                        ),
+                        trailing: CupertinoSlidingSegmentedControl<
+                            CalendarReminderMode>(
+                          children: const {
+                            CalendarReminderMode.notification: Text('通知提醒'),
+                            CalendarReminderMode.alarm: Text('闹钟提醒'),
+                          },
+                          groupValue: _optionController.calendarReminderMode,
+                          onValueChanged: (value) {
+                            if (value != null) {
+                              _optionController.setCalendarReminderMode(value);
+                            }
+                          },
+                        ),
+                      ),
+                      CupertinoListTile(
+                        title: Text(
                           '课表同步选项',
                           style: TextStyle(
                             color: _optionController.calendarSyncEnabled.value

@@ -1,8 +1,10 @@
 import 'package:flutter/cupertino.dart';
 import 'package:get/get.dart';
 import 'package:celechron/model/location_mapper.dart';
+import 'package:celechron/model/option.dart';
 import 'package:celechron/model/period.dart';
 import 'package:celechron/model/scholar.dart';
+import 'package:celechron/model/task.dart';
 import 'package:celechron/services/diagnostic_log_service.dart';
 import 'package:celechron/services/ohos_native_service.dart';
 
@@ -13,6 +15,12 @@ class CalendarToSystemManager {
 
   final RxBool calendarSyncEnabled = false.obs;
   final RxBool hasCalendarPermission = false.obs;
+
+  /// 提醒方式（通知提醒 / 闹钟提醒），默认通知提醒
+  CalendarReminderMode reminderMode = CalendarReminderMode.notification;
+
+  /// 提前提醒分钟数
+  int reminderMinutes = 15;
 
   CalendarToSystemManager(this._scholarRx);
 
@@ -107,6 +115,56 @@ class CalendarToSystemManager {
       }
     }
 
+    // 任务(DDL)：来自学在浙大的待办，按课程聚合，截止前提醒
+    for (final todo in scholar.todos) {
+      final end = todo.endTime;
+      if (end == null || end.isBefore(DateTime.now())) continue;
+      events.add({
+        'uid': 'todo_${todo.id}',
+        'summary': '[任务] ${todo.course}',
+        'description': '${todo.name}\n课程：${todo.course}\n截止：$end',
+        'location': '',
+        'startTime': end
+            .subtract(Duration(minutes: reminderMinutes))
+            .millisecondsSinceEpoch,
+        'endTime': end.millisecondsSinceEpoch,
+      });
+    }
+
+    // 本地任务：DDL 与固定日程
+    try {
+      final taskList = Get.find<RxList<Task>>(tag: 'taskList');
+      for (final task in taskList) {
+        if (task.status == TaskStatus.deleted) continue;
+        if (task.type == TaskType.deadline) {
+          final end = task.endTime;
+          if (end.isBefore(DateTime.now())) continue;
+          events.add({
+            'uid': 'task_${task.uid}',
+            'summary': '[DDL] ${task.summary}',
+            'description': task.description,
+            'location': task.location,
+            'startTime': end
+                .subtract(Duration(minutes: reminderMinutes))
+                .millisecondsSinceEpoch,
+            'endTime': end.millisecondsSinceEpoch,
+          });
+        } else if (task.type == TaskType.fixed) {
+          if (task.endTime.isBefore(DateTime.now())) continue;
+          events.add({
+            'uid': 'task_${task.uid}',
+            'summary': '[日程] ${task.summary}',
+            'description': task.description,
+            'location': task.location,
+            'startTime': task.startTime.millisecondsSinceEpoch,
+            'endTime': task.endTime.millisecondsSinceEpoch,
+          });
+        }
+      }
+    } catch (e) {
+      _log('sync', level: CelechronLogLevel.warning, message: '读取本地任务失败：$e');
+    }
+
     if (events.isEmpty) {
       _log('sync',
           level: CelechronLogLevel.error,
@@ -114,12 +172,19 @@ class CalendarToSystemManager {
       return false;
     }
 
-    _log('sync', message: '准备同步 ${events.length} 个日程');
+    final useAlarm = reminderMode == CalendarReminderMode.alarm;
+    _log('sync',
+        message:
+            '准备同步 ${events.length} 个日程（提醒方式=${useAlarm ? "闹钟" : "通知"}，提前$reminderMinutes分钟）');
 
     // 先清除旧日历（去重），再写入新事件
     await OhosNativeService.instance.clearCalendarEvents();
 
-    final count = await OhosNativeService.instance.syncCalendarEvents(events);
+    final count = await OhosNativeService.instance.syncCalendarEvents(
+      events,
+      reminderMinutes: reminderMinutes,
+      useAlarm: useAlarm,
+    );
     if (count > 0) {
       calendarSyncEnabled.value = true;
       _log('sync', message: '同步成功，写入 $count 个日程');

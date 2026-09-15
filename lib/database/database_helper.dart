@@ -57,6 +57,7 @@ class DatabaseHelper {
   final String kCourseIdMappingList = 'courseIdMappingList';
   final String kHideHomeGpa = 'hideHomeGpa';
   final String kAsyncRefresh = 'asyncRefresh';
+  final String kCalendarReminderMode = 'calendarReminderMode';
 
   Option getOption() {
     return Option(
@@ -70,6 +71,7 @@ class DatabaseHelper {
       courseIdMappingList: getCourseIdMappingList().obs,
       hideHomeGpa: getHideHomeGpa().obs,
       asyncRefresh: getAsyncRefresh().obs,
+      calendarReminderMode: getCalendarReminderMode().obs,
     );
   }
 
@@ -174,6 +176,18 @@ class DatabaseHelper {
 
   Future<void> setAsyncRefresh(bool asyncRefresh) async {
     await optionsBox.put(kAsyncRefresh, asyncRefresh);
+  }
+
+  CalendarReminderMode getCalendarReminderMode() {
+    if (optionsBox.get(kCalendarReminderMode) == null) {
+      optionsBox.put(
+          kCalendarReminderMode, CalendarReminderMode.notification.index);
+    }
+    return CalendarReminderMode.values[optionsBox.get(kCalendarReminderMode)];
+  }
+
+  Future<void> setCalendarReminderMode(CalendarReminderMode mode) async {
+    await optionsBox.put(kCalendarReminderMode, mode.index);
   }
 
   List<CourseIdMap> getCourseIdMappingList() {

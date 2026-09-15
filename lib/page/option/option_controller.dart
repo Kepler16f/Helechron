@@ -30,6 +30,7 @@ class OptionController extends GetxController {
   void onInit() {
     super.onInit();
     _calendarManager = CalendarToSystemManager(scholar);
+    _calendarManager.reminderMode = _option.calendarReminderMode.value;
 
     ever(courseIdMappingList, (value) {
       _db.setCourseIdMappingList(value);
@@ -162,6 +163,19 @@ class OptionController extends GetxController {
   RxBool get calendarSyncEnabled => _calendarManager.calendarSyncEnabled;
 
   RxBool get hasCalendarPermission => _calendarManager.hasCalendarPermission;
+
+  CalendarReminderMode get calendarReminderMode =>
+      _option.calendarReminderMode.value;
+
+  Future<void> setCalendarReminderMode(CalendarReminderMode mode) async {
+    _option.calendarReminderMode.value = mode;
+    await _db.setCalendarReminderMode(mode);
+    _calendarManager.reminderMode = mode;
+    // 若已同步，则重新同步以应用新的提醒方式
+    if (_calendarManager.calendarSyncEnabled.value) {
+      await _calendarManager.syncScholarToSystemCalendar();
+    }
+  }
 
   Future<void> toggleCalendarSync(BuildContext context, bool enabled) =>
       _calendarManager.toggleCalendarSync(context, enabled);

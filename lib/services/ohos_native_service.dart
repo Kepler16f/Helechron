@@ -42,13 +42,23 @@ class OhosNativeService {
   }
 
   /// 同步课程事件到系统日历
+  /// [reminderMinutes] 提前提醒分钟数
+  /// [useAlarm] true 使用闹钟代理提醒，false 使用系统日历通知提醒
   /// 返回成功插入的事件数
-  Future<int> syncCalendarEvents(List<Map<String, dynamic>> events) async {
+  Future<int> syncCalendarEvents(
+    List<Map<String, dynamic>> events, {
+    int reminderMinutes = 15,
+    bool useAlarm = false,
+  }) async {
     try {
       lastCalendarError = null;
       final result = await _channel.invokeMethod<int>(
         'syncCalendarEvents',
-        {'events': events},
+        {
+          'events': events,
+          'reminderMinutes': reminderMinutes,
+          'useAlarm': useAlarm,
+        },
       );
       return result ?? 0;
     } on PlatformException catch (e) {
