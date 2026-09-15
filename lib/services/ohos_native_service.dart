@@ -8,6 +8,68 @@ class OhosNativeService {
   static const MethodChannel _channel =
       MethodChannel('top.celechron.helechron/native');
 
+  // ==================== Calendar ====================
+
+  /// 检查日历权限
+  Future<bool> checkCalendarPermission() async {
+    try {
+      final result =
+          await _channel.invokeMethod<bool>('checkCalendarPermission');
+      return result ?? false;
+    } on PlatformException catch (e) {
+      debugPrint('checkCalendarPermission failed: $e');
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  /// 请求日历权限
+  Future<bool> requestCalendarPermission() async {
+    try {
+      final result =
+          await _channel.invokeMethod<bool>('requestCalendarPermission');
+      return result ?? false;
+    } on PlatformException catch (e) {
+      debugPrint('requestCalendarPermission failed: $e');
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  /// 同步课程事件到系统日历
+  /// 返回成功插入的事件数
+  Future<int> syncCalendarEvents(List<Map<String, dynamic>> events) async {
+    try {
+      final result = await _channel.invokeMethod<int>(
+        'syncCalendarEvents',
+        {'events': events},
+      );
+      return result ?? 0;
+    } on PlatformException catch (e) {
+      debugPrint('syncCalendarEvents failed: $e');
+      return 0;
+    } on MissingPluginException {
+      return 0;
+    }
+  }
+
+  /// 清除已同步的日历事件
+  Future<int> clearCalendarEvents() async {
+    try {
+      final result = await _channel.invokeMethod<int>('clearCalendarEvents');
+      return result ?? 0;
+    } on PlatformException catch (e) {
+      debugPrint('clearCalendarEvents failed: $e');
+      return 0;
+    } on MissingPluginException {
+      return 0;
+    }
+  }
+
+  // ==================== Notifications ====================
+
   /// 请求通知权限
   Future<bool> requestNotificationPermission() async {
     try {

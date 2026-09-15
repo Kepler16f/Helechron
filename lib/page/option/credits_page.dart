@@ -280,15 +280,33 @@ class _CreditsPageState extends State<CreditsPage> {
                       // 可以后续接入 url_launcher 跳转仓库
                     },
                     child: Text(
-                      'https://github.com/Kepler16f/Helechron',
+                      'Helechron 项目网站',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 12,
                         color: CupertinoDynamicColor.resolve(
-                            CupertinoColors.secondaryLabel, context),
+                            CupertinoColors.activeBlue, context),
                       ),
                     ),
                   ),
+                  const SizedBox(
+                    height: 4,
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      // 可以后续接入 url_launcher 跳转上游仓库
+                    },
+                    child: Text(
+                      '上游 Celechron 项目网站',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.activeBlue, context),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
                 ],
               ),
             ),

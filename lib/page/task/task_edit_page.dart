@@ -126,7 +126,8 @@ class _TaskEditPageState extends State<TaskEditPage> {
     }
 
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
+      backgroundColor: CupertinoDynamicColor.resolve(
+          CupertinoColors.systemGroupedBackground, context),
       navigationBar: CupertinoNavigationBar(
         backgroundColor: CupertinoDynamicColor.resolve(
             CupertinoColors.systemGroupedBackground, context),

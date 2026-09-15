@@ -17,7 +17,7 @@ class Fuse {
   final HttpClient _httpClient = HttpClient();
   final DatabaseHelper _db = Get.find<DatabaseHelper>(tag: 'db');
 
-  String get displayVersion => '0.0.3_dev2';
+  String get displayVersion => '0.0.3_dev3';
 
   Fuse() {
     lastUpdateTime = DateTime(2001, 1, 1);
