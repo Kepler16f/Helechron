@@ -11,6 +11,10 @@
     {
       "name": "EntryAbility_label",
       "value": "Helechron"
+    },
+    {
+      "name": "calendar_permission_reason",
+      "value": "用于将课程表同步到系统日历"
     }
   ]
 }
