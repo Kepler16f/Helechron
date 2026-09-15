@@ -8,8 +8,11 @@ import 'package:celechron/model/option.dart';
 import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/worker/ecard_widget_messenger.dart';
 import 'package:celechron/worker/fuse.dart';
+import 'package:celechron/worker/background_app_refresh.dart';
 import 'package:celechron/model/calendar_to_system.dart';
 import 'package:celechron/model/calendar_to_ical.dart';
+import 'package:celechron/services/ohos_native_service.dart';
+import 'package:celechron/utils/platform_features.dart';
 
 class OptionController extends GetxController {
   final _option = Get.find<Option>(tag: 'option');
@@ -17,6 +20,8 @@ class OptionController extends GetxController {
   final _fuse = Get.find<Rx<Fuse>>(tag: 'fuse');
   final _db = Get.find<DatabaseHelper>(tag: 'db');
   late final RxInt allowTimeLength = _option.allowTime.length.obs;
+
+  Timer? _periodicRefreshTimer;
 
   // 日历管理器
   late final CalendarToSystemManager _calendarManager;
@@ -31,6 +36,42 @@ class OptionController extends GetxController {
     });
 
     _calendarManager.checkInitialCalendarSyncStatus();
+
+    if (PlatformFeatures.hasBackgroundRefresh) {
+      if (_option.pushOnGradeChange.value || _option.pushOnDdlReminder.value) {
+        _startPeriodicRefresh();
+      }
+    }
+  }
+
+  @override
+  void onClose() {
+    _periodicRefreshTimer?.cancel();
+    super.onClose();
+  }
+
+  void _startPeriodicRefresh() {
+    _periodicRefreshTimer?.cancel();
+    // 周期性触发后台刷新逻辑（15 分钟）
+    _periodicRefreshTimer = Timer.periodic(
+      const Duration(minutes: 15),
+      (_) => refreshScholar(),
+    );
+  }
+
+  void _stopPeriodicRefresh() {
+    _periodicRefreshTimer?.cancel();
+    _periodicRefreshTimer = null;
+  }
+
+  void _updateBackgroundWorker() {
+    final enabled = pushOnGradeChange || pushOnDdlReminder;
+    if (enabled) {
+      _startPeriodicRefresh();
+      OhosNativeService.instance.requestNotificationPermission();
+    } else {
+      _stopPeriodicRefresh();
+    }
   }
 
   Duration get workTime => _option.workTime.value;
@@ -68,6 +109,7 @@ class OptionController extends GetxController {
     _option.pushOnGradeChange.value = value;
     _db.setPushOnGradeChange(value);
     _db.secureStorage.write(key: 'pushOnGradeChange', value: value.toString());
+    _updateBackgroundWorker();
   }
 
   bool get pushOnDdlReminder => _option.pushOnDdlReminder.value;
@@ -76,6 +118,7 @@ class OptionController extends GetxController {
     _option.pushOnDdlReminder.value = value;
     _db.setPushOnDdlReminder(value);
     _db.secureStorage.write(key: 'pushOnDdlReminder', value: value.toString());
+    _updateBackgroundWorker();
   }
 
   BrightnessMode get brightnessMode => _option.brightnessMode.value;

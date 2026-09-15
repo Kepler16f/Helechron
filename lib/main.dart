@@ -15,6 +15,8 @@ import 'package:celechron/services/refresh_coordinator.dart';
 import 'package:celechron/worker/ecard_widget_messenger.dart';
 import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/utils/global.dart';
+import 'package:celechron/services/ohos_native_service.dart';
+import 'package:celechron/utils/platform_features.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -88,6 +90,18 @@ class _CelechronAppState extends State<CelechronApp>
 
     // 监听AppLinks，用于跳转至付款码页面
     _initAppLinks();
+
+    // 在鸿蒙平台上尝试预热通知权限
+    if (PlatformFeatures.isOhos) {
+      _initOhosNotification();
+    }
+  }
+
+  void _initOhosNotification() async {
+    final option = Get.find<Option>(tag: 'option');
+    if (option.pushOnGradeChange.value || option.pushOnDdlReminder.value) {
+      await OhosNativeService.instance.requestNotificationPermission();
+    }
   }
 
   @override

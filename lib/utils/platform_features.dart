@@ -2,7 +2,11 @@ import 'dart:io';
 
 final class PlatformFeatures {
   static bool get hasBackgroundRefresh {
-    return false;
+    return isOhos;
+  }
+
+  static bool get hasNotificationSupport {
+    return isOhos;
   }
 
   static bool get hasWidgetSupport {
