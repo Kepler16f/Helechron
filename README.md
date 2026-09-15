@@ -3,7 +3,7 @@
 <div style="text-align: center; ">
 
 
-服务于浙大学生的时间管理器Celechron的HarmonyOS NEXT构建
+服务于浙大学生的时间管理器 Celechron 的 HarmonyOS NEXT 构建
 
 日程一览 · 课表查看 · DDL 助手 · 成绩查询
 
@@ -27,7 +27,7 @@
 
 ```bash
 # 1. 克隆 Flutter-ohos SDK
-git clone https://github.com/niceSaber/flutter_flutter.git
+git clone https://gitcode.com/openharmony-tpc/flutter_flutter.git -b 3.27.5-ohos-1.0.8
 export PATH="<flutter_flutter_path>/bin:$PATH"
 
 # 2. 安装依赖
@@ -44,7 +44,7 @@ flutter build hap --release
 1. 前往仓库的 Actions 页面
 2. 选择 "Build HarmonyOS HAP" 工作流
 3. 点击 "Run workflow" 手动触发，或等待 push 自动触发
-4. 构建完成后在 Artifacts 中下载 HAP 文件
+4. 构建完成后在 Artifacts 中下载 HAP 文件（直接输出 .hap，无需解压）
 
 ### 使用 DevEco Studio
 
@@ -60,7 +60,7 @@ flutter build hap --release
 - **日程 (Calendar)** — 日历视图，展示每日课表和日程安排
 - **任务 (Task/DDL)** — 截止日期管理器
 - **学业 (Scholar)** — 课程列表、成绩查询、考试列表
-- **设置 (Option)** — 登录、校园卡付款码
+- **设置 (Option)** — 登录、校园卡付款码、深色模式、系统日历同步
 
 ### HarmonyOS NEXT 适配说明
 
@@ -72,12 +72,12 @@ flutter build hap --release
 - 本地存储 (Hive)
 - 课程表导出 (iCal)
 - 校园卡付款码
-
-**暂未实现功能：**
-- 后台定时刷新 (需 HarmonyOS Background Tasks API)
-- 本地通知推送 (需 HarmonyOS Notification Kit)
-- 系统日历同步 (需 HarmonyOS Calendar Kit)
-- 原生桌面小组件 (需 HarmonyOS Form Kit)
+- 应用图标（ZJU 求是鹰校徽风格，75% 渲染比例，适配圆角矩形安全区）
+- 深色模式完整支持
+- 本地通知推送（成绩变动提醒、DDL 截止提醒）
+- 后台定时刷新（通过 MethodChannel 桥接 ArkTS 原生能力）
+- 系统日历同步（通过 ArkTS Calendar Kit 将课程表同步到系统日历）
+- 关于页面（含上游 Celechron 项目链接）
 
 ## 许可证
 
