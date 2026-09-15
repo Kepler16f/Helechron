@@ -65,7 +65,17 @@ jobs:
           flutter doctor -v || true
 
       - name: Get Flutter dependencies
-        run: flutter pub get
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if flutter pub get; then
+              echo "flutter pub get succeeded on attempt $attempt"
+              exit 0
+            fi
+            echo "::warning::flutter pub get failed on attempt $attempt (gitee may be rate-limiting), retrying in 20s..."
+            sleep 20
+          done
+          echo "::error::flutter pub get failed after 5 attempts"
+          exit 1
 
       - name: Build HAP
         run: |
