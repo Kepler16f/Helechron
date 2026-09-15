@@ -145,43 +145,49 @@ export default class EntryAbility extends FlutterAbility {
 
   private async getOrCreateCalendar(): Promise<calendarManager.Calendar> {
     const manager = this.getCalendarManagerInstance();
-    hilog.info(DOMAIN, TAG, 'getOrCreateCalendar: listing all calendars');
-    const calendars = await manager.getAllCalendars();
-    hilog.info(DOMAIN, TAG, `getOrCreateCalendar: found ${calendars.length} calendars`);
-    for (let i = 0; i < calendars.length; i++) {
-      const account = calendars[i].getAccount();
-      hilog.info(DOMAIN, TAG, `  calendar[${i}]: name=${account.name}, type=${account.type}`);
-      if (account.name === CALENDAR_ACCOUNT_NAME) {
-        hilog.info(DOMAIN, TAG, 'getOrCreateCalendar: found existing Helechron calendar');
-        return calendars[i];
-      }
-    }
-    hilog.info(DOMAIN, TAG, 'getOrCreateCalendar: creating new Helechron calendar');
-    const account: calendarManager.CalendarAccount = {
-      name: CALENDAR_ACCOUNT_NAME,
-      type: calendarManager.CalendarType.LOCAL,
-      displayName: CALENDAR_DISPLAY_NAME
-    };
+    hilog.info(DOMAIN, TAG, 'getOrCreateCalendar: getting system default calendar');
     try {
-      const newCalendar = await manager.createCalendar(account);
-      hilog.info(DOMAIN, TAG, 'getOrCreateCalendar: new calendar created successfully');
-      return newCalendar;
-    } catch (createErr) {
-      hilog.warn(DOMAIN, TAG, `getOrCreateCalendar: createCalendar failed (${JSON.stringify(createErr)}), falling back to default calendar`);
-      return await manager.getCalendar();
+      const defaultCalendar = await manager.getCalendar();
+      hilog.info(DOMAIN, TAG, 'getOrCreateCalendar: got system default calendar');
+      return defaultCalendar;
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, `getOrCreateCalendar: getCalendar failed (${JSON.stringify(err)}), falling back to createCalendar`);
+      const account: calendarManager.CalendarAccount = {
+        name: CALENDAR_ACCOUNT_NAME,
+        type: calendarManager.CalendarType.LOCAL,
+        displayName: CALENDAR_DISPLAY_NAME
+      };
+      return await manager.createCalendar(account);
     }
   }
 
   private async hasSyncedCalendar(result: MethodResult): Promise<void> {
     try {
       const manager = this.getCalendarManagerInstance();
-      const calendars = await manager.getAllCalendars();
+      // 检查默认日历中是否有本应用同步的事件
       let found = false;
-      for (let i = 0; i < calendars.length; i++) {
-        const account = calendars[i].getAccount();
-        if (account.name === CALENDAR_ACCOUNT_NAME) {
-          found = true;
-          break;
+      try {
+        const defaultCalendar = await manager.getCalendar();
+        const events = await defaultCalendar.getEvents();
+        for (let i = 0; i < events.length; i++) {
+          const title = events[i].title || '';
+          if (title.startsWith('[')) {
+            found = true;
+            break;
+          }
+        }
+      } catch (e) {
+        hilog.warn(DOMAIN, TAG, `hasSyncedCalendar check default calendar error: ${JSON.stringify(e)}`);
+      }
+
+      if (!found) {
+        const calendars = await manager.getAllCalendars();
+        for (let i = 0; i < calendars.length; i++) {
+          const account = calendars[i].getAccount();
+          if (account.name === CALENDAR_ACCOUNT_NAME) {
+            found = true;
+            break;
+          }
         }
       }
       hilog.info(DOMAIN, TAG, `hasSyncedCalendar: ${found}`);
@@ -350,22 +356,50 @@ export default class EntryAbility extends FlutterAbility {
   private async doClearCalendarEvents(result: MethodResult): Promise<void> {
     try {
       const manager = this.getCalendarManagerInstance();
+      let deletedEventsCount = 0;
+
+      // 1. 从默认日历中删除当前应用同步的日程 (以 [ 开头或者带 identifier 的日程)
+      try {
+        const defaultCalendar = await manager.getCalendar();
+        const allEvents = await defaultCalendar.getEvents();
+        const toDeleteIds: number[] = [];
+        for (let i = 0; i < allEvents.length; i++) {
+          const ev = allEvents[i];
+          if (ev.id !== undefined && ev.id !== null) {
+            // 只要 title 带 [学期名] 或 [任务] 或 [DDL] 或 [日程]，即本应用写入的日程
+            const title = ev.title || '';
+            if (title.startsWith('[') || (ev.identifier && (ev.identifier.startsWith('todo_') || ev.identifier.startsWith('task_') || ev.identifier.startsWith('exam_')))) {
+              toDeleteIds.push(ev.id);
+            }
+          }
+        }
+        if (toDeleteIds.length > 0) {
+          await defaultCalendar.deleteEvents(toDeleteIds);
+          deletedEventsCount += toDeleteIds.length;
+          hilog.info(DOMAIN, TAG, `doClearCalendarEvents: deleted ${toDeleteIds.length} events from default calendar`);
+        }
+      } catch (defaultCalErr) {
+        hilog.warn(DOMAIN, TAG, `doClearCalendarEvents: clear from default calendar failed: ${JSON.stringify(defaultCalErr)}`);
+      }
+
+      // 2. 清理可能遗留的 Helechron 独立日历
       const calendars = await manager.getAllCalendars();
-      let deletedCount = 0;
       for (let i = 0; i < calendars.length; i++) {
         const account = calendars[i].getAccount();
         if (account.name === CALENDAR_ACCOUNT_NAME) {
           await manager.deleteCalendar(calendars[i]);
-          deletedCount++;
         }
       }
-      hilog.info(DOMAIN, TAG, `doClearCalendarEvents: cleared ${deletedCount} Helechron calendars`);
+
+      // 3. 清理代理闹钟提醒
       try {
         await reminderAgentManager.cancelAllReminders();
       } catch (cancelErr) {
         hilog.warn(DOMAIN, TAG, `cancelAllReminders failed: ${JSON.stringify(cancelErr)}`);
       }
-      result.success(deletedCount);
+
+      hilog.info(DOMAIN, TAG, `doClearCalendarEvents completed, deleted ${deletedEventsCount} events`);
+      result.success(deletedEventsCount);
     } catch (err) {
       hilog.error(DOMAIN, TAG, `doClearCalendarEvents failed: ${JSON.stringify(err)}`);
       result.success(0);
