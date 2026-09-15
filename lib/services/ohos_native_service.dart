@@ -8,6 +8,9 @@ class OhosNativeService {
   static const MethodChannel _channel =
       MethodChannel('top.celechron.helechron/native');
 
+  /// 最近一次日历同步失败的原生错误信息，用于诊断与向用户展示
+  String? lastCalendarError;
+
   // ==================== Calendar ====================
 
   /// 检查日历权限
@@ -42,15 +45,19 @@ class OhosNativeService {
   /// 返回成功插入的事件数
   Future<int> syncCalendarEvents(List<Map<String, dynamic>> events) async {
     try {
+      lastCalendarError = null;
       final result = await _channel.invokeMethod<int>(
         'syncCalendarEvents',
         {'events': events},
       );
       return result ?? 0;
     } on PlatformException catch (e) {
-      debugPrint('syncCalendarEvents failed: $e');
+      lastCalendarError = '${e.code}: ${e.message}';
+      debugPrint('syncCalendarEvents failed: $lastCalendarError');
       return 0;
     } on MissingPluginException {
+      lastCalendarError = '原生通道不可用 (MissingPluginException)';
+      debugPrint('syncCalendarEvents failed: $lastCalendarError');
       return 0;
     }
   }

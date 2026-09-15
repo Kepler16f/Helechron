@@ -158,9 +158,14 @@ export default class EntryAbility extends FlutterAbility {
       type: calendarManager.CalendarType.LOCAL,
       displayName: CALENDAR_DISPLAY_NAME
     };
-    const newCalendar = await manager.createCalendar(account);
-    hilog.info(DOMAIN, TAG, 'getOrCreateCalendar: new calendar created successfully');
-    return newCalendar;
+    try {
+      const newCalendar = await manager.createCalendar(account);
+      hilog.info(DOMAIN, TAG, 'getOrCreateCalendar: new calendar created successfully');
+      return newCalendar;
+    } catch (createErr) {
+      hilog.warn(DOMAIN, TAG, `getOrCreateCalendar: createCalendar failed (${JSON.stringify(createErr)}), falling back to default calendar`);
+      return await manager.getCalendar();
+    }
   }
 
   private async hasSyncedCalendar(result: MethodResult): Promise<void> {
@@ -184,10 +189,9 @@ export default class EntryAbility extends FlutterAbility {
   }
 
   private syncCalendarEvents(call: MethodCall, result: MethodResult): void {
-    const args = call.arguments as Record<string, Object>;
-    const payloads = (args !== null && args !== undefined) ? (args['events'] as CalendarEventPayload[]) : null;
+    const payloads = call.argument('events') as CalendarEventPayload[];
     if (payloads === null || payloads === undefined || payloads.length === 0) {
-      hilog.info(DOMAIN, TAG, `syncCalendarEvents: no events to sync (args=${JSON.stringify(args)})`);
+      hilog.info(DOMAIN, TAG, 'syncCalendarEvents: no events to sync');
       result.success(0);
       return;
     }
@@ -219,8 +223,9 @@ export default class EntryAbility extends FlutterAbility {
       hilog.info(DOMAIN, TAG, `doCalendarSync: successfully synced ${events.length} events`);
       result.success(events.length);
     } catch (err) {
-      hilog.error(DOMAIN, TAG, `doCalendarSync failed: ${JSON.stringify(err)}`);
-      result.success(0);
+      const detail = JSON.stringify(err);
+      hilog.error(DOMAIN, TAG, `doCalendarSync failed: ${detail}`);
+      result.error('CALENDAR_SYNC_FAILED', detail, null);
     }
   }
 
