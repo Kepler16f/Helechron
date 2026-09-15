@@ -85,7 +85,7 @@ jobs:
             echo "::notice title=Unsigned HAP recovered::flutter exited with $FLUTTER_BUILD_STATUS (missing signing config); uploading the unsigned HAP produced by hvigor."
           fi
 
-          VERSION=$(grep 'final version' lib/worker/fuse.dart | grep -oP '\[.*?\]' | tr -d '[] ' | tr ',' '.')
+          VERSION=$(grep "displayVersion =>" lib/worker/fuse.dart | sed "s/.*'\(.*\)'.*/\1/")
           HAP_NAME="Helechron_${VERSION}_unsigned.hap"
 
           mkdir -p build/ohos
