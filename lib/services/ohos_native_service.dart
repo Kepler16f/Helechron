@@ -68,6 +68,19 @@ class OhosNativeService {
     }
   }
 
+  /// 检查是否存在已同步的 Helechron 日历
+  Future<bool> hasSyncedCalendar() async {
+    try {
+      final result = await _channel.invokeMethod<bool>('hasSyncedCalendar');
+      return result ?? false;
+    } on PlatformException catch (e) {
+      debugPrint('hasSyncedCalendar failed: $e');
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
   // ==================== Notifications ====================
 
   /// 请求通知权限

@@ -172,8 +172,8 @@ class OptionController extends GetxController {
   Map<String, dynamic> getCalendarSyncStatus() {
     final stats = _calendarManager.getSyncStats();
     return {
-      'enabled': calendarSyncEnabled,
-      'hasPermission': hasCalendarPermission,
+      'enabled': calendarSyncEnabled.value,
+      'hasPermission': hasCalendarPermission.value,
       'isLoggedIn': scholar.value.isLogan,
       ...stats,
     };

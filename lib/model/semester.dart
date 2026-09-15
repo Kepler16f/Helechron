@@ -352,6 +352,7 @@ class Semester {
     }
     for (var exam in _exams) {
       var period = Period(
+          uid: 'exam_${exam.id}',
           type: PeriodType.test,
           fromUid: exam.id,
           description:

@@ -29,23 +29,38 @@ class CalendarToSystemManager {
   }
 
   Future<bool> syncScholarToSystemCalendar({String? semesterName}) async {
-    if (!scholar.isLogan) return false;
+    if (!scholar.isLogan) {
+      debugPrint('[CalendarSync] not logged in, skip');
+      return false;
+    }
 
     final hasPermission = await checkPermissions();
     if (!hasPermission) {
+      debugPrint('[CalendarSync] no permission, requesting...');
       final granted = await requestPermissions();
-      if (!granted) return false;
+      if (!granted) {
+        debugPrint('[CalendarSync] permission denied');
+        return false;
+      }
     }
 
     final semesters = semesterName != null
         ? scholar.semesters.where((s) => s.name == semesterName).toList()
         : scholar.semesters;
 
-    if (semesters.isEmpty) return false;
+    if (semesters.isEmpty) {
+      debugPrint('[CalendarSync] no semesters to sync');
+      return false;
+    }
 
+    debugPrint(
+        '[CalendarSync] building events from ${semesters.length} semesters');
     final events = <Map<String, dynamic>>[];
     for (final semester in semesters) {
-      for (final period in semester.periods) {
+      final periods = semester.periods;
+      debugPrint(
+          '[CalendarSync] semester ${semester.name}: ${periods.length} periods');
+      for (final period in periods) {
         if (period.type == PeriodType.virtual) continue;
         final mappedLocation =
             CalendarLocationMapper.mapForCalendar(period.location);
@@ -60,9 +75,18 @@ class CalendarToSystemManager {
       }
     }
 
-    if (events.isEmpty) return false;
+    if (events.isEmpty) {
+      debugPrint('[CalendarSync] no events to sync after filtering');
+      return false;
+    }
+
+    debugPrint('[CalendarSync] syncing ${events.length} events to calendar');
+
+    // 先清除旧日历（去重），再写入新事件
+    await OhosNativeService.instance.clearCalendarEvents();
 
     final count = await OhosNativeService.instance.syncCalendarEvents(events);
+    debugPrint('[CalendarSync] sync result: $count events');
     if (count > 0) {
       calendarSyncEnabled.value = true;
     }
@@ -71,9 +95,8 @@ class CalendarToSystemManager {
 
   Future<bool> clearSyncedEvents() async {
     final count = await OhosNativeService.instance.clearCalendarEvents();
-    if (count > 0) {
-      calendarSyncEnabled.value = false;
-    }
+    calendarSyncEnabled.value = false;
+    debugPrint('[CalendarSync] cleared $count calendars');
     return true;
   }
 
@@ -150,7 +173,11 @@ class CalendarToSystemManager {
   Future<void> checkInitialCalendarSyncStatus() async {
     final hasPermission = await checkPermissions();
     hasCalendarPermission.value = hasPermission;
-    calendarSyncEnabled.value = false;
+    // 检测系统中是否存在已同步的 Helechron 日历
+    final exists = await OhosNativeService.instance.hasSyncedCalendar();
+    calendarSyncEnabled.value = exists;
+    debugPrint(
+        '[CalendarSync] initial status: permission=$hasPermission, calendarExists=$exists');
   }
 
   Future<void> toggleCalendarSync(BuildContext context, bool enabled) async {

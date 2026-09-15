@@ -73,6 +73,9 @@ export default class EntryAbility extends FlutterAbility {
       case 'clearCalendarEvents':
         this.clearCalendarEvents(result);
         break;
+      case 'hasSyncedCalendar':
+        this.hasSyncedCalendar(result);
+        break;
       default:
         result.notImplemented();
         break;
@@ -97,9 +100,10 @@ export default class EntryAbility extends FlutterAbility {
       const granted =
         readStatus === abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED &&
         writeStatus === abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED;
+      hilog.info(DOMAIN, TAG, `checkCalendarPermission: read=${readStatus}, write=${writeStatus}, granted=${granted}`);
       result.success(granted);
     } catch (err) {
-      hilog.warn(DOMAIN, TAG, `checkCalendarPermission failed: ${JSON.stringify(err)}`);
+      hilog.error(DOMAIN, TAG, `checkCalendarPermission failed: ${JSON.stringify(err)}`);
       result.success(false);
     }
   }
@@ -123,6 +127,7 @@ export default class EntryAbility extends FlutterAbility {
           break;
         }
       }
+      hilog.info(DOMAIN, TAG, `requestCalendarPermission: authResults=${JSON.stringify(requestResult.authResults)}, allGranted=${allGranted}`);
       result.success(allGranted);
     } catch (err) {
       hilog.error(DOMAIN, TAG, `requestCalendarPermission failed: ${JSON.stringify(err)}`);
@@ -130,29 +135,63 @@ export default class EntryAbility extends FlutterAbility {
     }
   }
 
+  private getCalendarManagerInstance(): calendarManager.CalendarManager {
+    return calendarManager.getCalendarManager(this.context);
+  }
+
   private async getOrCreateCalendar(): Promise<calendarManager.Calendar> {
-    const manager = calendarManager.getCalendarManager(this.context);
+    const manager = this.getCalendarManagerInstance();
+    hilog.info(DOMAIN, TAG, 'getOrCreateCalendar: listing all calendars');
     const calendars = await manager.getAllCalendars();
+    hilog.info(DOMAIN, TAG, `getOrCreateCalendar: found ${calendars.length} calendars`);
     for (let i = 0; i < calendars.length; i++) {
       const account = calendars[i].getAccount();
+      hilog.info(DOMAIN, TAG, `  calendar[${i}]: name=${account.name}, type=${account.type}`);
       if (account.name === CALENDAR_ACCOUNT_NAME) {
+        hilog.info(DOMAIN, TAG, 'getOrCreateCalendar: found existing Helechron calendar');
         return calendars[i];
       }
     }
+    hilog.info(DOMAIN, TAG, 'getOrCreateCalendar: creating new Helechron calendar');
     const account: calendarManager.CalendarAccount = {
       name: CALENDAR_ACCOUNT_NAME,
       type: calendarManager.CalendarType.LOCAL,
       displayName: CALENDAR_DISPLAY_NAME
     };
-    return await manager.createCalendar(account);
+    const newCalendar = await manager.createCalendar(account);
+    hilog.info(DOMAIN, TAG, 'getOrCreateCalendar: new calendar created successfully');
+    return newCalendar;
+  }
+
+  private async hasSyncedCalendar(result: MethodResult): Promise<void> {
+    try {
+      const manager = this.getCalendarManagerInstance();
+      const calendars = await manager.getAllCalendars();
+      let found = false;
+      for (let i = 0; i < calendars.length; i++) {
+        const account = calendars[i].getAccount();
+        if (account.name === CALENDAR_ACCOUNT_NAME) {
+          found = true;
+          break;
+        }
+      }
+      hilog.info(DOMAIN, TAG, `hasSyncedCalendar: ${found}`);
+      result.success(found);
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, `hasSyncedCalendar failed: ${JSON.stringify(err)}`);
+      result.success(false);
+    }
   }
 
   private syncCalendarEvents(call: MethodCall, result: MethodResult): void {
-    const payloads = call.argument('events') as CalendarEventPayload[];
+    const args = call.arguments as Record<string, Object>;
+    const payloads = (args !== null && args !== undefined) ? (args['events'] as CalendarEventPayload[]) : null;
     if (payloads === null || payloads === undefined || payloads.length === 0) {
+      hilog.info(DOMAIN, TAG, `syncCalendarEvents: no events to sync (args=${JSON.stringify(args)})`);
       result.success(0);
       return;
     }
+    hilog.info(DOMAIN, TAG, `syncCalendarEvents: received ${payloads.length} events`);
     this.doCalendarSync(payloads, result);
   }
 
@@ -175,12 +214,13 @@ export default class EntryAbility extends FlutterAbility {
         };
         events.push(event);
       }
+      hilog.info(DOMAIN, TAG, `doCalendarSync: adding ${events.length} events to calendar`);
       await calendar.addEvents(events);
-      hilog.info(DOMAIN, TAG, `Synced ${events.length} events to system calendar`);
+      hilog.info(DOMAIN, TAG, `doCalendarSync: successfully synced ${events.length} events`);
       result.success(events.length);
     } catch (err) {
-      hilog.error(DOMAIN, TAG, `syncCalendarEvents failed: ${JSON.stringify(err)}`);
-      result.error('CALENDAR_ERROR', `Sync failed: ${JSON.stringify(err)}`, null);
+      hilog.error(DOMAIN, TAG, `doCalendarSync failed: ${JSON.stringify(err)}`);
+      result.success(0);
     }
   }
 
@@ -190,7 +230,7 @@ export default class EntryAbility extends FlutterAbility {
 
   private async doClearCalendarEvents(result: MethodResult): Promise<void> {
     try {
-      const manager = calendarManager.getCalendarManager(this.context);
+      const manager = this.getCalendarManagerInstance();
       const calendars = await manager.getAllCalendars();
       let deletedCount = 0;
       for (let i = 0; i < calendars.length; i++) {
@@ -200,11 +240,11 @@ export default class EntryAbility extends FlutterAbility {
           deletedCount++;
         }
       }
-      hilog.info(DOMAIN, TAG, `Cleared ${deletedCount} Helechron calendars`);
+      hilog.info(DOMAIN, TAG, `doClearCalendarEvents: cleared ${deletedCount} Helechron calendars`);
       result.success(deletedCount);
     } catch (err) {
-      hilog.error(DOMAIN, TAG, `clearCalendarEvents failed: ${JSON.stringify(err)}`);
-      result.error('CALENDAR_ERROR', `Clear failed: ${JSON.stringify(err)}`, null);
+      hilog.error(DOMAIN, TAG, `doClearCalendarEvents failed: ${JSON.stringify(err)}`);
+      result.success(0);
     }
   }
 
@@ -258,7 +298,7 @@ export default class EntryAbility extends FlutterAbility {
       })
       .catch((err: Error) => {
         hilog.error(DOMAIN, TAG, `Failed to publish notification: ${JSON.stringify(err)}`);
-        result.error('NOTIFICATION_ERROR', `Failed to publish: ${JSON.stringify(err)}`, null);
+        result.success(false);
       });
   }
 
