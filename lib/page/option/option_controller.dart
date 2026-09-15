@@ -159,9 +159,9 @@ class OptionController extends GetxController {
     CalendarToIcal.showExportDialog(context, scholar.value);
   }
 
-  bool get calendarSyncEnabled => _calendarManager.calendarSyncEnabled;
+  RxBool get calendarSyncEnabled => _calendarManager.calendarSyncEnabled;
 
-  bool get hasCalendarPermission => _calendarManager.hasCalendarPermission;
+  RxBool get hasCalendarPermission => _calendarManager.hasCalendarPermission;
 
   Future<void> toggleCalendarSync(BuildContext context, bool enabled) =>
       _calendarManager.toggleCalendarSync(context, enabled);

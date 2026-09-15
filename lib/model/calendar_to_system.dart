@@ -8,24 +8,21 @@ import 'package:celechron/services/ohos_native_service.dart';
 class CalendarToSystemManager {
   final Scholar scholar;
 
-  final RxBool _calendarSyncEnabled = false.obs;
-  final RxBool _hasCalendarPermission = false.obs;
-
-  bool get calendarSyncEnabled => _calendarSyncEnabled.value;
-  bool get hasCalendarPermission => _hasCalendarPermission.value;
+  final RxBool calendarSyncEnabled = false.obs;
+  final RxBool hasCalendarPermission = false.obs;
 
   CalendarToSystemManager(this.scholar);
 
   Future<bool> checkPermissions() async {
     final enabled = await OhosNativeService.instance.checkCalendarPermission();
-    _hasCalendarPermission.value = enabled;
+    hasCalendarPermission.value = enabled;
     return enabled;
   }
 
   Future<bool> requestPermissions() async {
     final granted =
         await OhosNativeService.instance.requestCalendarPermission();
-    _hasCalendarPermission.value = granted;
+    hasCalendarPermission.value = granted;
     return granted;
   }
 
@@ -65,7 +62,7 @@ class CalendarToSystemManager {
 
     final count = await OhosNativeService.instance.syncCalendarEvents(events);
     if (count > 0) {
-      _calendarSyncEnabled.value = true;
+      calendarSyncEnabled.value = true;
     }
     return count > 0;
   }
@@ -73,7 +70,7 @@ class CalendarToSystemManager {
   Future<bool> clearSyncedEvents() async {
     final count = await OhosNativeService.instance.clearCalendarEvents();
     if (count > 0) {
-      _calendarSyncEnabled.value = false;
+      calendarSyncEnabled.value = false;
     }
     return true;
   }
@@ -99,7 +96,7 @@ class CalendarToSystemManager {
       builder: (BuildContext context) => CupertinoAlertDialog(
         title: const Text('同步到系统日历'),
         content: Text(
-          _calendarSyncEnabled.value
+          calendarSyncEnabled.value
               ? '课程表已同步到系统日历。'
               : '将课程表同步到系统日历，可在日历应用中查看课程安排。',
         ),
@@ -108,7 +105,7 @@ class CalendarToSystemManager {
             child: const Text('取消'),
             onPressed: () => Get.back(),
           ),
-          if (_calendarSyncEnabled.value)
+          if (calendarSyncEnabled.value)
             CupertinoDialogAction(
               isDestructiveAction: true,
               child: const Text('取消同步'),
@@ -117,7 +114,7 @@ class CalendarToSystemManager {
                 Get.back();
               },
             ),
-          if (!_calendarSyncEnabled.value)
+          if (!calendarSyncEnabled.value)
             CupertinoDialogAction(
               isDefaultAction: true,
               child: const Text('同步'),
@@ -150,13 +147,28 @@ class CalendarToSystemManager {
 
   Future<void> checkInitialCalendarSyncStatus() async {
     final hasPermission = await checkPermissions();
-    _hasCalendarPermission.value = hasPermission;
-    _calendarSyncEnabled.value = false;
+    hasCalendarPermission.value = hasPermission;
+    calendarSyncEnabled.value = false;
   }
 
   Future<void> toggleCalendarSync(BuildContext context, bool enabled) async {
     if (enabled) {
-      showCalendarSyncDialog(context);
+      final success = await syncScholarToSystemCalendar();
+      if (!success && context.mounted) {
+        showCupertinoDialog(
+          context: context,
+          builder: (BuildContext dialogContext) => CupertinoAlertDialog(
+            title: const Text('同步失败'),
+            content: const Text('请确保已授予日历权限，且课程表数据已加载。'),
+            actions: [
+              CupertinoDialogAction(
+                child: const Text('确定'),
+                onPressed: () => Get.back(),
+              ),
+            ],
+          ),
+        );
+      }
     } else {
       await clearSyncedEvents();
     }
@@ -164,8 +176,8 @@ class CalendarToSystemManager {
 
   Map<String, dynamic> getCalendarSyncStatus() {
     return {
-      'enabled': calendarSyncEnabled,
-      'hasPermission': hasCalendarPermission,
+      'enabled': calendarSyncEnabled.value,
+      'hasPermission': hasCalendarPermission.value,
       'isLoggedIn': scholar.isLogan,
       ...getSyncStats(),
     };

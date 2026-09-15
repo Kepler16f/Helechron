@@ -339,8 +339,8 @@ class OptionPage extends StatelessWidget {
                       CupertinoListTile(
                         title: const Text('同步到系统日历'),
                         trailing: CupertinoAsyncSwitch(
-                          value: _optionController.calendarSyncEnabled &&
-                              _optionController.hasCalendarPermission,
+                          value: _optionController.calendarSyncEnabled.value &&
+                              _optionController.hasCalendarPermission.value,
                           onChanged: (value) async {
                             await _optionController.toggleCalendarSync(
                                 context, value);
@@ -351,8 +351,8 @@ class OptionPage extends StatelessWidget {
                         title: Text(
                           '课表同步选项',
                           style: TextStyle(
-                            color: _optionController.calendarSyncEnabled
-                                ? null // 使用默认颜色
+                            color: _optionController.calendarSyncEnabled.value
+                                ? null
                                 : CupertinoDynamicColor.resolve(
                                     CupertinoColors.quaternaryLabel, context),
                           ),
@@ -364,12 +364,12 @@ class OptionPage extends StatelessWidget {
                                         CupertinoColors.secondaryLabel,
                                         context),
                                     fontSize: 16))),
-                        onTap: _optionController.calendarSyncEnabled
+                        onTap: _optionController.calendarSyncEnabled.value
                             ? () {
                                 _optionController
                                     .showCalendarSyncDialog(context);
                               }
-                            : null, // 禁用点击
+                            : null,
                       ),
                       CupertinoListTile(
                         title: const Text('导出为iCal文件'),
