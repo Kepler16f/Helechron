@@ -29,7 +29,7 @@ class OptionController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    _calendarManager = CalendarToSystemManager(scholar.value);
+    _calendarManager = CalendarToSystemManager(scholar);
 
     ever(courseIdMappingList, (value) {
       _db.setCourseIdMappingList(value);

@@ -50,13 +50,15 @@ class OptionPage extends StatelessWidget {
                 CupertinoDynamicColor.resolve(_kHeaderFooterColor, context)));
 
     return CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemGroupedBackground,
+        backgroundColor: CupertinoDynamicColor.resolve(
+            CupertinoColors.systemGroupedBackground, context),
         child: SafeArea(
             child: CustomScrollView(
           slivers: [
-            const CupertinoSliverNavigationBar(
-              largeTitle: Text('设置'),
-              backgroundColor: CupertinoColors.systemGroupedBackground,
+            CupertinoSliverNavigationBar(
+              largeTitle: const Text('设置'),
+              backgroundColor: CupertinoDynamicColor.resolve(
+                  CupertinoColors.systemGroupedBackground, context),
               border: null,
             ),
             // 教务
@@ -472,7 +474,17 @@ class OptionPage extends StatelessWidget {
                       },
                     ),
                     CupertinoListTile(
-                      title: const Text('前往项目网站'),
+                      title: const Text('Helechron 项目网站'),
+                      trailing: const BackChervonRow(),
+                      onTap: () async {
+                        await launchUrlString(
+                          'https://github.com/Kepler16f/Helechron',
+                          mode: LaunchMode.externalApplication,
+                        );
+                      },
+                    ),
+                    CupertinoListTile(
+                      title: const Text('上游 Celechron 项目网站'),
                       trailing: BackChervonRow(
                         child: Obx(() {
                           if (_optionController.hasNewVersion) {

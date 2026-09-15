@@ -6,12 +6,14 @@ import 'package:celechron/model/scholar.dart';
 import 'package:celechron/services/ohos_native_service.dart';
 
 class CalendarToSystemManager {
-  final Scholar scholar;
+  final Rx<Scholar> _scholarRx;
+
+  Scholar get scholar => _scholarRx.value;
 
   final RxBool calendarSyncEnabled = false.obs;
   final RxBool hasCalendarPermission = false.obs;
 
-  CalendarToSystemManager(this.scholar);
+  CalendarToSystemManager(this._scholarRx);
 
   Future<bool> checkPermissions() async {
     final enabled = await OhosNativeService.instance.checkCalendarPermission();
