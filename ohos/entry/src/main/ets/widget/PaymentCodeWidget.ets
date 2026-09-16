@@ -14,12 +14,4 @@ export default class PaymentCodeWidgetExtension extends FormExtensionAbility {
     };
     return formBindingData.createFormBindingData(formData);
   }
-
-  onUpdateForm(formId: number): void {
-    // refresh if needed
-  }
-
-  onDestroyForm(formId: number): void {
-    // cleanup
-  }
 }
