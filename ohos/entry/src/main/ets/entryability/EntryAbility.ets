@@ -33,6 +33,7 @@ interface AddEventResult {
 
 export default class EntryAbility extends FlutterAbility {
   private methodChannel: MethodChannel | null = null;
+  private samplePayload: CalendarEventPayload | null = null;
 
   configureFlutterEngine(flutterEngine: FlutterEngine) {
     super.configureFlutterEngine(flutterEngine);
@@ -254,6 +255,31 @@ export default class EntryAbility extends FlutterAbility {
         title: 't4', type: calendarManager.EventType.NORMAL, startTime: now + 4, endTime: now + 3600004, isAllDay: false, reminderTime: [15], description: 'test-desc'
       };
       const variants: calendarManager.Event[] = [v0, v1, v2, v3, v4];
+
+      // v5: real data from the first sync payload (Chinese title/desc/location)
+      const s = this.samplePayload;
+      if (s !== null && s !== undefined) {
+        steps.push(`sample:sumLen=${s.summary.length},descLen=${s.description.length},locLen=${s.location.length}`);
+        const v5: calendarManager.Event = {
+          title: s.summary,
+          type: calendarManager.EventType.NORMAL,
+          startTime: now + 5,
+          endTime: now + 3600005,
+          isAllDay: false,
+          reminderTime: [15],
+          description: s.description
+        };
+        if (s.location !== null && s.location !== undefined && s.location !== '') {
+          v5.location = { location: s.location };
+        }
+        variants.push(v5);
+      }
+
+      // v6: alarm mode uses an empty reminderTime array
+      const v6: calendarManager.Event = {
+        title: 't6', type: calendarManager.EventType.NORMAL, startTime: now + 6, endTime: now + 3600006, isAllDay: false, reminderTime: []
+      };
+      variants.push(v6);
       for (let i = 0; i < variants.length; i++) {
         try {
           const id = await calendar.addEvent(variants[i]);
@@ -315,7 +341,9 @@ export default class EntryAbility extends FlutterAbility {
     let added = 0;
     let failed = 0;
     let firstError = '';
-    const chunkSize = 10;
+    // Serial write: the calendar service rejects overlapping addEvent calls
+    // (self-test proved a single serial addEvent succeeds with the same fields).
+    const chunkSize = 1;
     for (let start = 0; start < events.length; start += chunkSize) {
       const end = Math.min(start + chunkSize, events.length);
       const tasks: Promise<void>[] = [];
@@ -424,6 +452,7 @@ export default class EntryAbility extends FlutterAbility {
     result: MethodResult
   ): Promise<void> {
     try {
+      this.samplePayload = payloads[0];
       const calendar = await this.getTargetCalendar();
       await this.enableReminders(calendar);
 
