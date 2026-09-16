@@ -181,8 +181,6 @@ class ScholarController extends GetxController {
       }
     } catch (_) {}
   }
-    } catch (_) {}
-  }
 
   Future<List<String?>> fetchData() async {
     // scholar.refresh 使用 single-flight；并发调用会共同等待同一个结果。
