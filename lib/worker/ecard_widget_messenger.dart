@@ -89,8 +89,7 @@ class ECardWidgetMessenger {
         final account =
             eCardAccount ?? await ECard.getAccount(httpClient, synjonesAuth);
         await secureStorage.write(key: 'eCardAccount', value: account);
-        final code =
-            await ECard.getBarcode(httpClient, synjonesAuth, account);
+        final code = await ECard.getBarcode(httpClient, synjonesAuth, account);
         await OhosNativeService.instance.updatePaymentCodeWidget(code: code);
       } finally {
         httpClient.close(force: true);

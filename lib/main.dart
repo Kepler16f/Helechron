@@ -75,7 +75,8 @@ Future<void> _consumePendingWidgetRoute() async {
   if (target == null) {
     return;
   }
-  WidgetsBinding.instance.addPostFrameCallback((_) => _handleWidgetRoute(target));
+  WidgetsBinding.instance
+      .addPostFrameCallback((_) => _handleWidgetRoute(target));
 }
 
 Future<void> _refreshRestoredScholar(Rx<Scholar> scholar) async {

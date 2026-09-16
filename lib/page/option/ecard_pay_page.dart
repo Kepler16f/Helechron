@@ -81,9 +81,9 @@ class ECardPayPage extends StatelessWidget {
                   } else {
                     return GestureDetector(
                         onTap: () => _requestNewCode().then((value) {
-                          _barcode.value = value ?? '';
-                          _syncPaymentCode(value);
-                        }),
+                              _barcode.value = value ?? '';
+                              _syncPaymentCode(value);
+                            }),
                         child: Stack(
                           alignment: Alignment.center,
                           children: [

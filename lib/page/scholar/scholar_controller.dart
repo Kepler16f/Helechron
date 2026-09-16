@@ -163,15 +163,13 @@ class ScholarController extends GetxController {
         statusText = '上课中';
         statusColor = '#4CAF50';
       } else {
-        final remainingMin =
-            currentOrNext.startTime.difference(now).inMinutes;
+        final remainingMin = currentOrNext.startTime.difference(now).inMinutes;
         if (remainingMin >= leadWindowMinutes) {
           progress = 0;
         } else if (remainingMin <= 0) {
           progress = 100;
         } else {
-          progress =
-              (1 - remainingMin / leadWindowMinutes) * 100;
+          progress = (1 - remainingMin / leadWindowMinutes) * 100;
         }
         if (remainingMin <= 0) {
           statusText = '即将开始';
