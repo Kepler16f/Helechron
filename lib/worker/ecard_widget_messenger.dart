@@ -1,7 +1,9 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/services.dart';
 import 'package:celechron/services/secure_storage_service.dart';
+import 'package:celechron/services/ohos_native_service.dart';
 
 import 'package:celechron/http/zjuServices/zjuam.dart';
 import 'package:celechron/http/zjuServices/ecard.dart';
@@ -12,7 +14,9 @@ class ECardWidgetMessenger {
   static void installNativeHandler() {
     _platform.setMethodCallHandler((call) async {
       if (call.method == 'refreshCredential') {
-        return await update(notifyNative: false);
+        final ok = await update(notifyNative: false);
+        await updatePaymentCode();
+        return ok;
       }
       throw MissingPluginException('Unsupported ECard method: ${call.method}');
     });
@@ -56,5 +60,43 @@ class ECardWidgetMessenger {
     var secureStorage = const FlutterSecureStorage();
     await secureStorage.delete(key: 'synjonesAuth');
     await secureStorage.delete(key: 'eCardAccount');
+  }
+
+  /// 拉取当前付款码并同步到桌面小组件。
+  /// 未登录时静默跳过，失败时保留上一次的付款码。
+  static Future<void> updatePaymentCode() async {
+    try {
+      final secureStorage = const FlutterSecureStorage();
+      final synjonesAuth = await secureStorage.read(key: 'synjonesAuth');
+      var eCardAccount = await secureStorage.read(key: 'eCardAccount');
+
+      if (synjonesAuth == null || synjonesAuth.isEmpty) {
+        return;
+      }
+
+      // 测试账号：生成模拟付款码，便于本地预览
+      if (synjonesAuth == "3200000000" || eCardAccount == "3200000000") {
+        final code =
+            List.generate(16, (_) => Random().nextInt(10).toString()).join();
+        await OhosNativeService.instance.updatePaymentCodeWidget(code: code);
+        return;
+      }
+
+      final httpClient = HttpClient();
+      httpClient.userAgent =
+          "E-CampusZJU/2.3.20 (iPhone; iOS 17.5.1; Scale/3.00)";
+      try {
+        final account =
+            eCardAccount ?? await ECard.getAccount(httpClient, synjonesAuth);
+        await secureStorage.write(key: 'eCardAccount', value: account);
+        final code =
+            await ECard.getBarcode(httpClient, synjonesAuth, account);
+        await OhosNativeService.instance.updatePaymentCodeWidget(code: code);
+      } finally {
+        httpClient.close(force: true);
+      }
+    } catch (_) {
+      // 网络或鉴权失败：保留上一次的付款码，不覆盖为空
+    }
   }
 }

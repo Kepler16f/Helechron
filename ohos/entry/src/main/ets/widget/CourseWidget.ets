@@ -1,4 +1,4 @@
-import { Want } from '@kit.AbilityKit';
+import { Want, Configuration } from '@kit.AbilityKit';
 import { formBindingData, FormExtensionAbility, formInfo, formProvider } from '@kit.FormKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import preferences from '@ohos.data.preferences';
@@ -19,6 +19,8 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
     let courseTeacher = '';
     let courseStatus = '全部结课';
     let courseStatusColor = '#888888';
+    let progressPercent = '0';
+    let progressColor = '#1E88E5';
     let hasCourse = '0';
 
     try {
@@ -32,6 +34,8 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
       courseTeacher = prefs.getSync('courseTeacher', '') as string;
       courseStatus = prefs.getSync('courseStatus', '全部结课') as string;
       courseStatusColor = prefs.getSync('courseStatusColor', '#888888') as string;
+      progressPercent = prefs.getSync('progressPercent', '0') as string;
+      progressColor = prefs.getSync('progressColor', '#1E88E5') as string;
       hasCourse = prefs.getSync('hasCourse', '0') as string;
     } catch (e) {
       // ignore
@@ -44,6 +48,8 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
       'courseTeacher': courseTeacher,
       'courseStatus': courseStatus,
       'courseStatusColor': courseStatusColor,
+      'progressPercent': progressPercent,
+      'progressColor': progressColor,
       'hasCourse': hasCourse
     };
     return formBindingData.createFormBindingData(data);
@@ -57,6 +63,23 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
     try {
       const prefs = preferences.getPreferencesSync(this.context, { name: PREFS_NAME });
       this.removeFormId(prefs, formId);
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  onConfigurationUpdate(config: Configuration): void {
+    // 深浅色模式或语言变化时，强制刷新所有小组件以重新解析主题色
+    try {
+      const prefs = preferences.getPreferencesSync(this.context, { name: PREFS_NAME });
+      const raw = prefs.getSync(FORM_IDS_KEY, '') as string;
+      if (!raw) {
+        return;
+      }
+      const ids = raw.split(',').filter((id: string) => id.length > 0);
+      for (const id of ids) {
+        this.refreshFormData(id);
+      }
     } catch (e) {
       // ignore
     }
@@ -95,6 +118,8 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
     let courseTeacher = '';
     let courseStatus = '全部结课';
     let courseStatusColor = '#888888';
+    let progressPercent = '0';
+    let progressColor = '#1E88E5';
     let hasCourse = '0';
 
     try {
@@ -105,6 +130,8 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
       courseTeacher = prefs.getSync('courseTeacher', '') as string;
       courseStatus = prefs.getSync('courseStatus', '全部结课') as string;
       courseStatusColor = prefs.getSync('courseStatusColor', '#888888') as string;
+      progressPercent = prefs.getSync('progressPercent', '0') as string;
+      progressColor = prefs.getSync('progressColor', '#1E88E5') as string;
       hasCourse = prefs.getSync('hasCourse', '0') as string;
     } catch (e) {
       // ignore
@@ -117,6 +144,8 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
       'courseTeacher': courseTeacher,
       'courseStatus': courseStatus,
       'courseStatusColor': courseStatusColor,
+      'progressPercent': progressPercent,
+      'progressColor': progressColor,
       'hasCourse': hasCourse
     };
     const formData = formBindingData.createFormBindingData(data);

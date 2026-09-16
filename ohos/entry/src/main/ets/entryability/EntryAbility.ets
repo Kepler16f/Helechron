@@ -1,5 +1,6 @@
 import { FlutterAbility, FlutterEngine, MethodChannel, MethodCall, MethodResult } from '@ohos/flutter_ohos';
 import { GeneratedPluginRegistrant } from '../plugins/GeneratedPluginRegistrant';
+import { Want, AbilityConstant } from '@kit.AbilityKit';
 import { formBindingData, formProvider } from '@kit.FormKit';
 import notificationManager from '@ohos.notificationManager';
 import { calendarManager } from '@kit.CalendarKit';
@@ -33,9 +34,14 @@ interface AddEventResult {
   firstError: string;
 }
 
+interface WidgetRouteParams {
+  target: string;
+}
+
 export default class EntryAbility extends FlutterAbility {
   private methodChannel: MethodChannel | null = null;
   private samplePayload: CalendarEventPayload | null = null;
+  private pendingRoute: string = '';
 
   configureFlutterEngine(flutterEngine: FlutterEngine) {
     super.configureFlutterEngine(flutterEngine);
@@ -51,6 +57,47 @@ export default class EntryAbility extends FlutterAbility {
         this.handleMethodCall(call, result);
       }
     });
+
+    // 冷启动时若由小组件拉起，记录目标路由，等待 Dart 侧主动领取
+    this.captureRouteFromWant(this.launchWant);
+  }
+
+  onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+    super.onNewWant(want, launchParam);
+    this.captureRouteFromWant(want);
+    // 热启动时 Flutter 引擎已就绪，直接推送给 Dart
+    this.flushPendingRoute();
+  }
+
+  private captureRouteFromWant(want: Want): void {
+    const params = want.parameters;
+    if (!params) {
+      return;
+    }
+    const target = params['target'] as string;
+    if (target !== undefined && target !== null && target.length > 0) {
+      this.pendingRoute = target;
+      hilog.info(DOMAIN, TAG, `captured widget route: ${target}`);
+    }
+  }
+
+  private flushPendingRoute(): void {
+    if (this.methodChannel === null || this.pendingRoute.length === 0) {
+      return;
+    }
+    const route = this.pendingRoute;
+    this.pendingRoute = '';
+    const params: WidgetRouteParams = { target: route };
+    this.methodChannel.invokeMethod('onWidgetRoute', params).catch((err: BusinessError) => {
+      hilog.warn(DOMAIN, TAG, `push widget route failed: ${err.message}`);
+    });
+  }
+
+  private consumePendingRoute(result: MethodResult): void {
+    const route = this.pendingRoute;
+    this.pendingRoute = '';
+    hilog.info(DOMAIN, TAG, `consumePendingRoute: ${route}`);
+    result.success(route);
   }
 
   private handleMethodCall(call: MethodCall, result: MethodResult): void {
@@ -100,6 +147,9 @@ export default class EntryAbility extends FlutterAbility {
         break;
       case 'updateCourseWidget':
         this.updateCourseWidget(call, result);
+        break;
+      case 'consumePendingRoute':
+        this.consumePendingRoute(result);
         break;
       default:
         result.notImplemented();
@@ -739,6 +789,8 @@ export default class EntryAbility extends FlutterAbility {
       const teacher = (call.argument('teacher') as string) || '';
       const status = (call.argument('status') as string) || '全部结课';
       const statusColor = (call.argument('statusColor') as string) || '#888888';
+      const progressPercent = (call.argument('progressPercent') as string) || '0';
+      const progressColor = (call.argument('progressColor') as string) || '#1E88E5';
       const hasCourse = (call.argument('hasCourse') as string) || '0';
 
       const prefs = await this.getWidgetPrefs();
@@ -748,6 +800,8 @@ export default class EntryAbility extends FlutterAbility {
       await prefs.put('courseTeacher', teacher);
       await prefs.put('courseStatus', status);
       await prefs.put('courseStatusColor', statusColor);
+      await prefs.put('progressPercent', progressPercent);
+      await prefs.put('progressColor', progressColor);
       await prefs.put('hasCourse', hasCourse);
       await prefs.flush();
 
@@ -762,6 +816,8 @@ export default class EntryAbility extends FlutterAbility {
           'courseTeacher': teacher,
           'courseStatus': status,
           'courseStatusColor': statusColor,
+          'progressPercent': progressPercent,
+          'progressColor': progressColor,
           'hasCourse': hasCourse
         };
         const bindingData = formBindingData.createFormBindingData(data);

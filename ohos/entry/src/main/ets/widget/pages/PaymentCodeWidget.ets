@@ -14,7 +14,7 @@ struct PaymentCodeWidget {
         Text(this.displayName)
           .fontSize(12)
           .fontWeight(FontWeight.Medium)
-          .fontColor('#333333')
+          .fontColor($r('app.color.widget_text_primary'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
@@ -28,11 +28,11 @@ struct PaymentCodeWidget {
             .width('68%')
             .aspectRatio(1)
             .color('#000000')
-            .backgroundColor('#FFFFFF')
+            .backgroundColor($r('app.color.widget_qr_background'))
 
           Text(this.paymentCode)
             .fontSize(10)
-            .fontColor('#888888')
+            .fontColor($r('app.color.widget_text_tertiary'))
             .margin({ top: 4 })
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -45,11 +45,11 @@ struct PaymentCodeWidget {
           Text('点击打开付款码')
             .fontSize(13)
             .fontWeight(FontWeight.Medium)
-            .fontColor('#1E88E5')
+            .fontColor($r('app.color.widget_accent'))
 
           Text('打开应用后自动同步')
             .fontSize(10)
-            .fontColor('#999999')
+            .fontColor($r('app.color.widget_text_tertiary'))
         }
         .width('100%')
         .layoutWeight(1)
@@ -59,7 +59,7 @@ struct PaymentCodeWidget {
     .width('100%')
     .height('100%')
     .padding(10)
-    .backgroundColor('#FFFFFF')
+    .backgroundColor($r('app.color.widget_background'))
     .borderRadius(16)
     .onClick(() => {
       postCardAction(this, {

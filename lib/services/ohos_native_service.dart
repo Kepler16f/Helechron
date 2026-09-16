@@ -247,6 +247,8 @@ class OhosNativeService {
     required String teacher,
     required String status,
     required String statusColor,
+    required String progressPercent,
+    required String progressColor,
     required bool hasCourse,
   }) async {
     try {
@@ -257,6 +259,8 @@ class OhosNativeService {
         'teacher': teacher,
         'status': status,
         'statusColor': statusColor,
+        'progressPercent': progressPercent,
+        'progressColor': progressColor,
         'hasCourse': hasCourse ? '1' : '0',
       });
     } on PlatformException catch (e) {
@@ -275,7 +279,47 @@ class OhosNativeService {
       teacher: '',
       status: '全部结课',
       statusColor: '#888888',
+      progressPercent: '0',
+      progressColor: '#1E88E5',
       hasCourse: false,
     );
+  }
+
+  // ==================== Widget Routes ====================
+
+  static void Function(String target)? _widgetRouteHandler;
+  static bool _routeHandlerInstalled = false;
+
+  /// 注册小组件点击跳转回调（原生 -> Dart）。
+  void installWidgetRouteHandler(void Function(String target) handler) {
+    _widgetRouteHandler = handler;
+    if (_routeHandlerInstalled) return;
+    _routeHandlerInstalled = true;
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'onWidgetRoute') {
+        final args = call.arguments;
+        if (args is Map && args['target'] is String) {
+          _widgetRouteHandler?.call(args['target'] as String);
+        }
+        return null;
+      }
+      throw MissingPluginException('Unsupported native method: ${call.method}');
+    });
+  }
+
+  /// 领取冷启动时由小组件传入的待处理路由。
+  Future<String?> consumePendingRoute() async {
+    try {
+      final route = await _channel.invokeMethod<String>('consumePendingRoute');
+      if (route != null && route.isNotEmpty) {
+        return route;
+      }
+      return null;
+    } on PlatformException catch (e) {
+      debugPrint('consumePendingRoute failed: $e');
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
   }
 }

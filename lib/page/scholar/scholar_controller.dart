@@ -137,48 +137,73 @@ class ScholarController extends GetxController {
           .where((p) => !p.hasEnded && p.endTime.isAfter(now))
           .toList()
         ..sort((a, b) => a.startTime.compareTo(b.startTime));
-      if (upcoming.isNotEmpty) {
-        final currentOrNext = upcoming.first;
-        final isOngoing = currentOrNext.startTime.isBefore(now) &&
-            currentOrNext.endTime.isAfter(now);
-        String statusText;
-        String statusColor;
-        if (isOngoing) {
-          statusText = '上课中';
-          statusColor = '#4CAF50';
-        } else {
-          final diffMin = currentOrNext.startTime.difference(now).inMinutes;
-          if (diffMin <= 0) {
-            statusText = '即将开始';
-            statusColor = '#2196F3';
-          } else if (diffMin < 60) {
-            statusText = '$diffMin分钟后';
-            statusColor = '#FF9800';
-          } else {
-            final h = diffMin ~/ 60;
-            final m = diffMin % 60;
-            statusText = m > 0 ? '$h小时$m分钟后' : '$h小时后';
-            statusColor = '#FF9800';
-          }
-        }
-        final pad = (int n) => n.toString().padLeft(2, '0');
-        final timeStr =
-            '${pad(currentOrNext.startTime.hour)}:${pad(currentOrNext.startTime.minute)} - ${pad(currentOrNext.endTime.hour)}:${pad(currentOrNext.endTime.minute)}';
-        final teacherMatch =
-            RegExp(r'教师:\s*(.+)').firstMatch(currentOrNext.description);
-        final teacher = teacherMatch?.group(1) ?? '';
-        OhosNativeService.instance.updateCourseWidget(
-          courseName: currentOrNext.summary,
-          courseTime: timeStr,
-          location: currentOrNext.location,
-          teacher: teacher,
-          status: statusText,
-          statusColor: statusColor,
-          hasCourse: true,
-        );
-      } else {
+      if (upcoming.isEmpty) {
         OhosNativeService.instance.clearCourseWidget();
+        return;
       }
+
+      final currentOrNext = upcoming.first;
+      final isOngoing = currentOrNext.startTime.isBefore(now) &&
+          currentOrNext.endTime.isAfter(now);
+
+      // 提前进入倒计时的窗口：开始前 2 小时
+      const leadWindowMinutes = 120;
+
+      String statusText;
+      String statusColor;
+      double progress;
+
+      if (isOngoing) {
+        final totalMin =
+            currentOrNext.endTime.difference(currentOrNext.startTime).inMinutes;
+        final elapsedMin = now.difference(currentOrNext.startTime).inMinutes;
+        progress = totalMin <= 0
+            ? 100
+            : (elapsedMin / totalMin * 100).clamp(0, 100).toDouble();
+        statusText = '上课中';
+        statusColor = '#4CAF50';
+      } else {
+        final remainingMin =
+            currentOrNext.startTime.difference(now).inMinutes;
+        if (remainingMin >= leadWindowMinutes) {
+          progress = 0;
+        } else if (remainingMin <= 0) {
+          progress = 100;
+        } else {
+          progress =
+              (1 - remainingMin / leadWindowMinutes) * 100;
+        }
+        if (remainingMin <= 0) {
+          statusText = '即将开始';
+          statusColor = '#2196F3';
+        } else if (remainingMin < 60) {
+          statusText = '开始还有 $remainingMin 分钟';
+          statusColor = remainingMin <= 30 ? '#FF9800' : '#2196F3';
+        } else {
+          final h = remainingMin ~/ 60;
+          final m = remainingMin % 60;
+          statusText = m > 0 ? '开始还有 $h 小时 $m 分' : '开始还有 $h 小时';
+          statusColor = '#2196F3';
+        }
+      }
+
+      final pad = (int n) => n.toString().padLeft(2, '0');
+      final timeStr =
+          '${pad(currentOrNext.startTime.hour)}:${pad(currentOrNext.startTime.minute)} - ${pad(currentOrNext.endTime.hour)}:${pad(currentOrNext.endTime.minute)}';
+      final teacherMatch =
+          RegExp(r'教师:\s*(.+)').firstMatch(currentOrNext.description);
+      final teacher = teacherMatch?.group(1) ?? '';
+      OhosNativeService.instance.updateCourseWidget(
+        courseName: currentOrNext.summary,
+        courseTime: timeStr,
+        location: currentOrNext.location,
+        teacher: teacher,
+        status: statusText,
+        statusColor: statusColor,
+        progressPercent: progress.round().toString(),
+        progressColor: statusColor,
+        hasCourse: true,
+      );
     } catch (_) {}
   }
 

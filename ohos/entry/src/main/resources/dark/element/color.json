@@ -2,27 +2,27 @@
   "color": [
     {
       "name": "start_window_background",
-      "value": "#FFFFFF"
+      "value": "#000000"
     },
     {
       "name": "widget_background",
-      "value": "#FFFFFF"
+      "value": "#2C2C2E"
     },
     {
       "name": "widget_text_primary",
-      "value": "#1A1A1A"
+      "value": "#F2F2F7"
     },
     {
       "name": "widget_text_secondary",
-      "value": "#666666"
+      "value": "#C7C7CC"
     },
     {
       "name": "widget_text_tertiary",
-      "value": "#999999"
+      "value": "#8E8E93"
     },
     {
       "name": "widget_accent",
-      "value": "#1E88E5"
+      "value": "#4A9EFF"
     },
     {
       "name": "widget_qr_background",
@@ -30,11 +30,11 @@
     },
     {
       "name": "widget_badge_background",
-      "value": "#12000000"
+      "value": "#22FFFFFF"
     },
     {
       "name": "widget_progress_track",
-      "value": "#14000000"
+      "value": "#33FFFFFF"
     }
   ]
 }

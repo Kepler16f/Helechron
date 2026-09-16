@@ -21,6 +21,7 @@ import 'package:celechron/utils/platform_features.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   ECardWidgetMessenger.installNativeHandler();
+  OhosNativeService.instance.installWidgetRouteHandler(_handleWidgetRoute);
 
   // 尽可能早地声明前台活跃
   await RefreshCoordinator.setForegroundActive(true);
@@ -45,11 +46,36 @@ void main() async {
   if (scholar.value.isLogan) {
     unawaited(
       _refreshRestoredScholar(scholar)
-          .whenComplete(ECardWidgetMessenger.update),
+          .whenComplete(ECardWidgetMessenger.update)
+          .whenComplete(ECardWidgetMessenger.updatePaymentCode),
     );
   } else {
     unawaited(ECardWidgetMessenger.update());
+    unawaited(ECardWidgetMessenger.updatePaymentCode());
   }
+
+  // 领取冷启动时由小组件传入的待处理路由
+  unawaited(_consumePendingWidgetRoute());
+}
+
+/// 处理来自桌面小组件的点击跳转
+void _handleWidgetRoute(String target) {
+  final navigator = navigatorKey.currentState;
+  if (navigator == null) {
+    return;
+  }
+  if (target == 'ecardpaypage') {
+    navigator.popUntil((route) => route.isFirst);
+    navigator.pushNamed('/ecardpaypage');
+  }
+}
+
+Future<void> _consumePendingWidgetRoute() async {
+  final target = await OhosNativeService.instance.consumePendingRoute();
+  if (target == null) {
+    return;
+  }
+  WidgetsBinding.instance.addPostFrameCallback((_) => _handleWidgetRoute(target));
 }
 
 Future<void> _refreshRestoredScholar(Rx<Scholar> scholar) async {
@@ -115,6 +141,7 @@ class _CelechronAppState extends State<CelechronApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _startForegroundLease();
+      unawaited(_consumePendingWidgetRoute());
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.detached) {
@@ -122,6 +149,7 @@ class _CelechronAppState extends State<CelechronApp>
     }
     if (state == AppLifecycleState.paused) {
       ECardWidgetMessenger.update();
+      ECardWidgetMessenger.updatePaymentCode();
     }
   }
 
