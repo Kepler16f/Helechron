@@ -77,6 +77,12 @@ jobs:
           echo "::error::flutter pub get failed after 5 attempts"
           exit 1
 
+      - name: Get version
+        id: get_version
+        run: |
+          VERSION=$(grep "displayVersion =>" lib/worker/fuse.dart | sed "s/.*'\(.*\)'.*/\1/")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Build HAP
         run: |
           set +e
@@ -95,18 +101,17 @@ jobs:
             echo "::notice title=Unsigned HAP recovered::flutter exited with $FLUTTER_BUILD_STATUS (missing signing config); uploading the unsigned HAP produced by hvigor."
           fi
 
-          VERSION=$(grep "displayVersion =>" lib/worker/fuse.dart | sed "s/.*'\(.*\)'.*/\1/")
-          HAP_NAME="Helechron_${VERSION}_unsigned.hap"
+          HAP_NAME="Helechron_${{ steps.get_version.outputs.version }}_unsigned.hap"
 
           mkdir -p build/ohos
-          cp "$HAP" "build/ohos/$HAP_NAME"
+          (cd "$(dirname "$HAP")" && zip -r "$OLDPWD/build/ohos/$HAP_NAME" "$(basename "$HAP")")
           ls -lh build/ohos
         timeout-minutes: 40
 
       - name: Upload HAP artifact
         uses: actions/upload-artifact@v7
         with:
+          name: Helechron_${{ steps.get_version.outputs.version }}_unsigned.hap
           path: build/ohos/Helechron_*_unsigned.hap
-          archive: false
           retention-days: 30
           if-no-files-found: error
