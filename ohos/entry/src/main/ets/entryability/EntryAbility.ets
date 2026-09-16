@@ -1,5 +1,6 @@
 import { FlutterAbility, FlutterEngine, MethodChannel, MethodCall, MethodResult } from '@ohos/flutter_ohos';
 import { GeneratedPluginRegistrant } from '../plugins/GeneratedPluginRegistrant';
+import { formBindingData, formProvider } from '@kit.FormKit';
 import notificationManager from '@ohos.notificationManager';
 import { calendarManager } from '@kit.CalendarKit';
 import { BusinessError } from '@kit.BasicServicesKit';
@@ -93,6 +94,12 @@ export default class EntryAbility extends FlutterAbility {
         break;
       case 'setWidgetData':
         this.setWidgetData(call, result);
+        break;
+      case 'updatePaymentCodeWidget':
+        this.updatePaymentCodeWidget(call, result);
+        break;
+      case 'updateCourseWidget':
+        this.updateCourseWidget(call, result);
         break;
       default:
         result.notImplemented();
@@ -687,6 +694,86 @@ export default class EntryAbility extends FlutterAbility {
       result.success(true);
     } catch (e) {
       hilog.error(DOMAIN, TAG, `setWidgetData failed: ${JSON.stringify(e)}`);
+      result.success(false);
+    }
+  }
+
+  private async updatePaymentCodeWidget(call: MethodCall, result: MethodResult): Promise<void> {
+    try {
+      const code = (call.argument('paymentCode') as string) || '';
+      const name = (call.argument('displayName') as string) || '浙大校园卡付款码';
+      const prefs = await this.getWidgetPrefs();
+      await prefs.put('paymentCode', code);
+      await prefs.put('displayName', name);
+      await prefs.put('hasCode', code.length > 0 ? '1' : '0');
+      await prefs.flush();
+
+      // 主动推送到当前所有付款码小组件
+      const formIdsStr = (await prefs.get('payment_form_ids', '')) as string;
+      if (formIdsStr.length > 0) {
+        const formIds = formIdsStr.split(',').filter(id => id.length > 0);
+        const data: Record<string, string> = {
+          'paymentCode': code,
+          'displayName': name,
+          'hasCode': code.length > 0 ? '1' : '0'
+        };
+        const bindingData = formBindingData.createFormBindingData(data);
+        for (const id of formIds) {
+          formProvider.updateForm(id, bindingData).catch((err: BusinessError) => {
+            hilog.warn(DOMAIN, TAG, `updateForm payment failed for ${id}: ${err.message}`);
+          });
+        }
+      }
+      result.success(true);
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `updatePaymentCodeWidget failed: ${JSON.stringify(e)}`);
+      result.success(false);
+    }
+  }
+
+  private async updateCourseWidget(call: MethodCall, result: MethodResult): Promise<void> {
+    try {
+      const courseName = (call.argument('courseName') as string) || '今日暂无课程';
+      const courseTime = (call.argument('courseTime') as string) || '';
+      const location = (call.argument('location') as string) || '';
+      const teacher = (call.argument('teacher') as string) || '';
+      const status = (call.argument('status') as string) || '全部结课';
+      const statusColor = (call.argument('statusColor') as string) || '#888888';
+      const hasCourse = (call.argument('hasCourse') as string) || '0';
+
+      const prefs = await this.getWidgetPrefs();
+      await prefs.put('courseName', courseName);
+      await prefs.put('courseTime', courseTime);
+      await prefs.put('courseLocation', location);
+      await prefs.put('courseTeacher', teacher);
+      await prefs.put('courseStatus', status);
+      await prefs.put('courseStatusColor', statusColor);
+      await prefs.put('hasCourse', hasCourse);
+      await prefs.flush();
+
+      // 主动推送到当前所有课程小组件
+      const formIdsStr = (await prefs.get('course_form_ids', '')) as string;
+      if (formIdsStr.length > 0) {
+        const formIds = formIdsStr.split(',').filter(id => id.length > 0);
+        const data: Record<string, string> = {
+          'courseName': courseName,
+          'courseTime': courseTime,
+          'courseLocation': location,
+          'courseTeacher': teacher,
+          'courseStatus': status,
+          'courseStatusColor': statusColor,
+          'hasCourse': hasCourse
+        };
+        const bindingData = formBindingData.createFormBindingData(data);
+        for (const id of formIds) {
+          formProvider.updateForm(id, bindingData).catch((err: BusinessError) => {
+            hilog.warn(DOMAIN, TAG, `updateForm course failed for ${id}: ${err.message}`);
+          });
+        }
+      }
+      result.success(true);
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `updateCourseWidget failed: ${JSON.stringify(e)}`);
       result.success(false);
     }
   }

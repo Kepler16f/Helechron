@@ -1,30 +1,50 @@
-import {
-  Want
-} from '@kit.AbilityKit';
-import {
-  formBindingData,
-  FormExtensionAbility,
-  formProvider
-} from '@kit.FormKit';
+import { Want } from '@kit.AbilityKit';
+import { formBindingData, FormExtensionAbility, formInfo, formProvider } from '@kit.FormKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import preferences from '@ohos.data.preferences';
 
 const PREFS_NAME = 'helechron_widget_data';
+const FORM_IDS_KEY = 'course_form_ids';
 
 export default class CourseWidgetExtension extends FormExtensionAbility {
-  async onCreateForm(want: Want): Promise<formBindingData.FormBindingData> {
-    let courseData = '';
-    try {
-      const prefs = await preferences.getPreferences(getContext(this), PREFS_NAME);
-      const stored = await prefs.get('nextCourse', '') as string;
-      if (stored !== null && stored !== undefined) {
-        courseData = stored;
-      }
-    } catch (e) {
-      // use defaults
+  onAddForm(want: Want): formBindingData.FormBindingData {
+    let formId = '';
+    if (want.parameters) {
+      formId = String(want.parameters[formInfo.FormParam.IDENTITY_KEY] || '');
     }
+
+    let courseName = '今日暂无课程';
+    let courseTime = '';
+    let courseLocation = '';
+    let courseTeacher = '';
+    let courseStatus = '全部结课';
+    let courseStatusColor = '#888888';
+    let hasCourse = '0';
+
+    try {
+      const prefs = preferences.getPreferencesSync(this.context, { name: PREFS_NAME });
+      if (formId.length > 0) {
+        this.saveFormId(prefs, formId);
+      }
+      courseName = prefs.getSync('courseName', '今日暂无课程') as string;
+      courseTime = prefs.getSync('courseTime', '') as string;
+      courseLocation = prefs.getSync('courseLocation', '') as string;
+      courseTeacher = prefs.getSync('courseTeacher', '') as string;
+      courseStatus = prefs.getSync('courseStatus', '全部结课') as string;
+      courseStatusColor = prefs.getSync('courseStatusColor', '#888888') as string;
+      hasCourse = prefs.getSync('hasCourse', '0') as string;
+    } catch (e) {
+      // ignore
+    }
+
     const data: Record<string, string> = {
-      'courseData': courseData
+      'courseName': courseName,
+      'courseTime': courseTime,
+      'courseLocation': courseLocation,
+      'courseTeacher': courseTeacher,
+      'courseStatus': courseStatus,
+      'courseStatusColor': courseStatusColor,
+      'hasCourse': hasCourse
     };
     return formBindingData.createFormBindingData(data);
   }
@@ -33,19 +53,71 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
     this.refreshFormData(formId);
   }
 
-  private async refreshFormData(formId: string): Promise<void> {
-    let courseData = '';
+  onRemoveForm(formId: string): void {
     try {
-      const prefs = await preferences.getPreferences(getContext(this), PREFS_NAME);
-      const stored = await prefs.get('nextCourse', '') as string;
-      if (stored !== null && stored !== undefined) {
-        courseData = stored;
+      const prefs = preferences.getPreferencesSync(this.context, { name: PREFS_NAME });
+      this.removeFormId(prefs, formId);
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  private saveFormId(prefs: preferences.Preferences, formId: string): void {
+    try {
+      const raw = prefs.getSync(FORM_IDS_KEY, '') as string;
+      const ids = raw ? raw.split(',').filter((id: string) => id.length > 0) : [];
+      if (!ids.includes(formId)) {
+        ids.push(formId);
+        prefs.putSync(FORM_IDS_KEY, ids.join(','));
+        prefs.flush();
       }
     } catch (e) {
-      // use defaults
+      // ignore
     }
+  }
+
+  private removeFormId(prefs: preferences.Preferences, formId: string): void {
+    try {
+      const raw = prefs.getSync(FORM_IDS_KEY, '') as string;
+      if (!raw) return;
+      const ids = raw.split(',').filter((id: string) => id !== formId && id.length > 0);
+      prefs.putSync(FORM_IDS_KEY, ids.join(','));
+      prefs.flush();
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  private refreshFormData(formId: string): void {
+    let courseName = '今日暂无课程';
+    let courseTime = '';
+    let courseLocation = '';
+    let courseTeacher = '';
+    let courseStatus = '全部结课';
+    let courseStatusColor = '#888888';
+    let hasCourse = '0';
+
+    try {
+      const prefs = preferences.getPreferencesSync(this.context, { name: PREFS_NAME });
+      courseName = prefs.getSync('courseName', '今日暂无课程') as string;
+      courseTime = prefs.getSync('courseTime', '') as string;
+      courseLocation = prefs.getSync('courseLocation', '') as string;
+      courseTeacher = prefs.getSync('courseTeacher', '') as string;
+      courseStatus = prefs.getSync('courseStatus', '全部结课') as string;
+      courseStatusColor = prefs.getSync('courseStatusColor', '#888888') as string;
+      hasCourse = prefs.getSync('hasCourse', '0') as string;
+    } catch (e) {
+      // ignore
+    }
+
     const data: Record<string, string> = {
-      'courseData': courseData
+      'courseName': courseName,
+      'courseTime': courseTime,
+      'courseLocation': courseLocation,
+      'courseTeacher': courseTeacher,
+      'courseStatus': courseStatus,
+      'courseStatusColor': courseStatusColor,
+      'hasCourse': hasCourse
     };
     const formData = formBindingData.createFormBindingData(data);
     formProvider.updateForm(formId, formData).catch((err: BusinessError) => {

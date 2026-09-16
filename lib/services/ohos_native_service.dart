@@ -208,7 +208,7 @@ class OhosNativeService {
 
   // ==================== Widgets ====================
 
-  /// 向原生 AppStorage 写入小组件数据
+  /// 向原生写入小组件数据（通用键值）
   Future<void> setWidgetData(String key, String value) async {
     try {
       await _channel.invokeMethod('setWidgetData', {
@@ -223,28 +223,59 @@ class OhosNativeService {
   }
 
   /// 更新付款码小组件数据
-  Future<void> updatePaymentCodeWidget(String code, String name) async {
-    await setWidgetData('paymentCode', code);
-    await setWidgetData('displayName', name);
+  Future<void> updatePaymentCodeWidget({
+    required String code,
+    String displayName = '浙大校园卡付款码',
+  }) async {
+    try {
+      await _channel.invokeMethod('updatePaymentCodeWidget', {
+        'paymentCode': code,
+        'displayName': displayName,
+      });
+    } on PlatformException catch (e) {
+      debugPrint('updatePaymentCodeWidget failed: $e');
+    } on MissingPluginException {
+      // Not on HarmonyOS
+    }
   }
 
-  /// 更新课程小组件数据（下一节课信息）
-  /// 格式: "课程名|周几|开始时间戳|结束时间|地点|教师"
+  /// 更新课程小组件数据
   Future<void> updateCourseWidget({
     required String courseName,
-    required int weekday,
-    required DateTime startTime,
-    required DateTime endTime,
-    String location = '',
-    String teacher = '',
+    required String courseTime,
+    required String location,
+    required String teacher,
+    required String status,
+    required String statusColor,
+    required bool hasCourse,
   }) async {
-    final data =
-        '$courseName|$weekday|${startTime.millisecondsSinceEpoch}|${endTime.millisecondsSinceEpoch}|$location|$teacher';
-    await setWidgetData('nextCourse', data);
+    try {
+      await _channel.invokeMethod('updateCourseWidget', {
+        'courseName': courseName,
+        'courseTime': courseTime,
+        'location': location,
+        'teacher': teacher,
+        'status': status,
+        'statusColor': statusColor,
+        'hasCourse': hasCourse ? '1' : '0',
+      });
+    } on PlatformException catch (e) {
+      debugPrint('updateCourseWidget failed: $e');
+    } on MissingPluginException {
+      // Not on HarmonyOS
+    }
   }
 
-  /// 清除课程小组件（无课时调用）
+  /// 清除课程小组件（无课或已全部结课）
   Future<void> clearCourseWidget() async {
-    await setWidgetData('nextCourse', '');
+    await updateCourseWidget(
+      courseName: '今日暂无课程',
+      courseTime: '',
+      location: '',
+      teacher: '',
+      status: '全部结课',
+      statusColor: '#888888',
+      hasCourse: false,
+    );
   }
 }

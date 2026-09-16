@@ -5,6 +5,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:get/get.dart';
+import 'package:celechron/services/ohos_native_service.dart';
 import 'package:celechron/services/secure_storage_service.dart';
 
 import 'package:celechron/design/persistent_headers.dart';
@@ -49,10 +50,16 @@ class ECardPayPage extends StatelessWidget {
         _requestNewCode().then((code) {
           _loading.value = false;
           _barcode.value = code ?? '';
+          if (code != null && code.isNotEmpty) {
+            OhosNativeService.instance.updatePaymentCodeWidget(code: code);
+          }
         });
       } else {
         _loading.value = false;
         _barcode.value = code;
+        if (code.isNotEmpty) {
+          OhosNativeService.instance.updatePaymentCodeWidget(code: code);
+        }
       }
     });
     return CupertinoPageScaffold(
@@ -71,8 +78,13 @@ class ECardPayPage extends StatelessWidget {
                     return const CupertinoActivityIndicator();
                   } else {
                     return GestureDetector(
-                        onTap: () => _requestNewCode()
-                            .then((value) => _barcode.value = value ?? ''),
+                        onTap: () => _requestNewCode().then((value) {
+                          _barcode.value = value ?? '';
+                          if (value != null && value.isNotEmpty) {
+                            OhosNativeService.instance
+                                .updatePaymentCodeWidget(code: value);
+                          }
+                        }),
                         child: Stack(
                           alignment: Alignment.center,
                           children: [
