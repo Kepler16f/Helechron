@@ -62,7 +62,7 @@ class OhosNativeService {
       );
       return result ?? 0;
     } on PlatformException catch (e) {
-      lastCalendarError = '${e.code}: ${e.message}';
+      lastCalendarError = '${e.code}: ${e.message} ${e.details ?? ''}';
       debugPrint('syncCalendarEvents failed: $lastCalendarError');
       return 0;
     } on MissingPluginException {
@@ -107,6 +107,18 @@ class OhosNativeService {
       return 'diagnostics failed: $e';
     } on MissingPluginException {
       return 'native channel unavailable';
+    }
+  }
+
+  /// 自测：逐步测试日历 API 各环节（权限→获取日历→添加测试事件→回读→清理）
+  Future<String> calendarSelfTest() async {
+    try {
+      final result = await _channel.invokeMethod<String>('calendarSelfTest');
+      return result ?? '';
+    } on PlatformException catch (e) {
+      return 'selfTest platform error: $e';
+    } on MissingPluginException {
+      return 'selfTest: native channel unavailable';
     }
   }
 

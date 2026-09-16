@@ -1,7 +1,7 @@
 import { FlutterAbility, FlutterEngine, MethodChannel, MethodCall, MethodResult } from '@ohos/flutter_ohos';
 import { GeneratedPluginRegistrant } from '../plugins/GeneratedPluginRegistrant';
 import notificationManager from '@ohos.notificationManager';
-import calendarManager from '@ohos.calendarManager';
+import { calendarManager } from '@kit.CalendarKit';
 import reminderAgentManager from '@ohos.reminderAgentManager';
 import abilityAccessCtrl, { Permissions } from '@ohos.abilityAccessCtrl';
 import bundleManager from '@ohos.bundle.bundleManager';
@@ -80,6 +80,9 @@ export default class EntryAbility extends FlutterAbility {
       case 'calendarDiagnostics':
         this.calendarDiagnostics(result);
         break;
+      case 'calendarSelfTest':
+        this.calendarSelfTest(result);
+        break;
       default:
         result.notImplemented();
         break;
@@ -121,7 +124,7 @@ export default class EntryAbility extends FlutterAbility {
       const atManager = abilityAccessCtrl.createAtManager();
       const permissions: Array<Permissions> = [
         PERMISSION_READ_CALENDAR,
-        PERMISSION_WRITE_CALENDAR
+        PERMISSION_WRITE_CALENDAR,
       ];
       const requestResult = await atManager.requestPermissionsFromUser(this.context, permissions);
       let allGranted = true;
@@ -132,6 +135,10 @@ export default class EntryAbility extends FlutterAbility {
         }
       }
       hilog.info(DOMAIN, TAG, `requestCalendarPermission: authResults=${JSON.stringify(requestResult.authResults)}, allGranted=${allGranted}`);
+
+      const readStatus = atManager.checkAccessTokenSync(this.getTokenId(), PERMISSION_READ_CALENDAR);
+      const writeStatus = atManager.checkAccessTokenSync(this.getTokenId(), PERMISSION_WRITE_CALENDAR);
+      hilog.info(DOMAIN, TAG, `requestCalendarPermission: afterRequest read=${readStatus}, write=${writeStatus}`);
       result.success(allGranted);
     } catch (err) {
       hilog.error(DOMAIN, TAG, `requestCalendarPermission failed: ${JSON.stringify(err)}`);
@@ -199,6 +206,79 @@ export default class EntryAbility extends FlutterAbility {
     }
   }
 
+  private async calendarSelfTest(result: MethodResult): Promise<void> {
+    const steps: string[] = [];
+    try {
+      // Step 0: Check permissions
+      const atManager = abilityAccessCtrl.createAtManager();
+      const tokenId = this.getTokenId();
+      const readStatus = atManager.checkAccessTokenSync(tokenId, PERMISSION_READ_CALENDAR);
+      const writeStatus = atManager.checkAccessTokenSync(tokenId, PERMISSION_WRITE_CALENDAR);
+      steps.push(`step0:perm read=${readStatus} write=${writeStatus}`);
+
+      steps.push('step1:getManager');
+      const manager = this.getCalendarManagerInstance();
+
+      steps.push('step2:getCalendar');
+      const calendar = await manager.getCalendar();
+      const account = calendar.getAccount();
+      steps.push(`step3:account=${account.name}/${account.type},calId=${calendar.id}`);
+
+      // Test A: Minimal event (title + times only)
+      const now = Date.now();
+      const testA: calendarManager.Event = {
+        title: '[HelechronTestA]',
+        startTime: now,
+        endTime: now + 3600000,
+      };
+      steps.push('step4a:addEvent(minimal)');
+      try {
+        const idA = await calendar.addEvent(testA);
+        steps.push(`step5a:returned id=${idA}`);
+        if (idA > 0) {
+          try { await calendar.deleteEvents([idA]); } catch (_) {}
+        }
+      } catch (ea) {
+        steps.push(`step5a:FAILED ${JSON.stringify(ea)}`);
+      }
+
+      // Test B: Full event matching sync structure
+      const testB: calendarManager.Event = {
+        title: '[HelechronTestB]',
+        startTime: now + 7200000,
+        endTime: now + 10800000,
+        isAllDay: false,
+        reminderTime: [15],
+      };
+      steps.push('step4b:addEvent(full)');
+      try {
+        const idB = await calendar.addEvent(testB);
+        steps.push(`step5b:returned id=${idB}`);
+        if (idB > 0) {
+          try { await calendar.deleteEvents([idB]); } catch (_) {}
+        }
+      } catch (eb) {
+        steps.push(`step5b:FAILED ${JSON.stringify(eb)}`);
+      }
+
+      // Verify
+      try {
+        const all = await calendar.getEvents();
+        steps.push(`step6:totalEvents=${all.length}`);
+      } catch (ev) {
+        steps.push(`step6:getEvents FAILED ${JSON.stringify(ev)}`);
+      }
+
+      const msg = steps.join(' | ');
+      hilog.info(DOMAIN, TAG, `calendarSelfTest: ${msg}`);
+      result.success(msg);
+    } catch (err) {
+      const msg = steps.join(' | ') + ` | FATAL: ${JSON.stringify(err)}`;
+      hilog.error(DOMAIN, TAG, `calendarSelfTest: ${msg}`);
+      result.success(msg);
+    }
+  }
+
   private async enableReminders(calendar: calendarManager.Calendar): Promise<void> {
     try {
       const config: calendarManager.CalendarConfig = { enableReminder: true };
@@ -234,9 +314,10 @@ export default class EntryAbility extends FlutterAbility {
   private async addEventConcurrent(
     calendar: calendarManager.Calendar,
     events: calendarManager.Event[]
-  ): Promise<number> {
+  ): Promise<{ added: number; firstError: string }> {
     let added = 0;
     let failed = 0;
+    let firstError = '';
     const chunkSize = 10;
     for (let start = 0; start < events.length; start += chunkSize) {
       const end = Math.min(start + chunkSize, events.length);
@@ -247,20 +328,28 @@ export default class EntryAbility extends FlutterAbility {
           .then((id: number): void => {
             if (id > 0) {
               added++;
+            } else {
+              failed++;
+              if (firstError === '') {
+                firstError = `addEvent returned id=${id}`;
+              }
+              hilog.error(DOMAIN, TAG, `addEvent: invalid id=${id} for title=${ev.title}`);
             }
           })
           .catch((e: Object): void => {
             failed++;
-            if (failed <= 3) {
-              hilog.error(DOMAIN, TAG, `addEvent failed: ${JSON.stringify(e)}`);
+            const errStr = JSON.stringify(e);
+            if (firstError === '') {
+              firstError = errStr;
             }
+            hilog.error(DOMAIN, TAG, `addEvent failed: ${errStr}`);
           });
         tasks.push(task);
       }
       await Promise.all(tasks);
     }
-    hilog.info(DOMAIN, TAG, `addEventConcurrent: added=${added}, failed=${failed}`);
-    return added;
+    hilog.info(DOMAIN, TAG, `addEventConcurrent: added=${added}, failed=${failed}, firstError=${firstError}`);
+    return { added, firstError };
   }
 
   private async updateAlarmReminders(
@@ -368,7 +457,8 @@ export default class EntryAbility extends FlutterAbility {
         events.push(event);
       }
       hilog.info(DOMAIN, TAG, `doCalendarSync: ${events.length} valid events, ${skipped} skipped, cleaned=${cleaned}`);
-      const added = await this.addEventConcurrent(calendar, events);
+      const addResult = await this.addEventConcurrent(calendar, events);
+      const added = addResult.added;
 
       // 回读校验：统计默认日历中本应用写入的日程数量
       let verified = 0;
@@ -390,7 +480,8 @@ export default class EntryAbility extends FlutterAbility {
       }
 
       if (added === 0 && events.length > 0) {
-        result.error('CALENDAR_SYNC_FAILED', `added=0, verified=${verified}`, null);
+        const detail = `added=0, verified=${verified}, firstError=${addResult.firstError}, validEvents=${events.length}, skipped=${skipped}`;
+        result.error('CALENDAR_SYNC_FAILED', detail, null);
         return;
       }
       result.success(verified > 0 ? verified : added);

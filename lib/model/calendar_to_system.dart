@@ -312,11 +312,13 @@ class CalendarToSystemManager {
           level: CelechronLogLevel.error,
           message: '同步失败',
           error: OhosNativeService.instance.lastCalendarError);
+      final selfTest = await OhosNativeService.instance.calendarSelfTest();
+      _log('selfTest', message: selfTest);
       Get.snackbar(
         '日历同步失败',
-        '写入 0 条。\n${OhosNativeService.instance.lastCalendarError ?? "未知错误"}\n$diagnostics',
+        '${OhosNativeService.instance.lastCalendarError ?? "未知错误"}\n$selfTest',
         snackPosition: SnackPosition.TOP,
-        duration: const Duration(seconds: 10),
+        duration: const Duration(seconds: 15),
       );
     }
     return count > 0;
