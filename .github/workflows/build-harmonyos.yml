@@ -102,10 +102,10 @@ jobs:
           fi
 
           VERSION="${{ steps.get_version.outputs.version }}"
-          HAP_NAME="Helechron_${VERSION}_unsigned"
+          HAP_NAME="Helechron_${VERSION}_unsigned.hap"
 
           mkdir -p build/ohos
-          cp -r "$(dirname "$HAP")" "build/ohos/$HAP_NAME"
+          cp "$HAP" "build/ohos/$HAP_NAME"
           ls -lh build/ohos
         timeout-minutes: 40
 
@@ -113,7 +113,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: Helechron_${{ steps.get_version.outputs.version }}_unsigned.hap
-          path: build/ohos/Helechron_*_unsigned
+          path: build/ohos/Helechron_*_unsigned.hap
           archive: false
           retention-days: 30
           if-no-files-found: error
