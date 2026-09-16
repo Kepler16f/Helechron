@@ -1,31 +1,10 @@
-import {
-  hilog
-} from '@kit.PerformanceAnalysisKit';
-
-const DOMAIN = 0x0000;
-const TAG = 'PaymentCodeWidgetUI';
 const QR_SIZE = 21;
 
 @Entry
 @Component
 struct PaymentCodeWidget {
-  @State paymentCode: string = '10000000000000000001';
-  @State displayName: string = '付款码';
-
-  aboutToAppear(): void {
-    try {
-      const code = AppStorage.Get<string>('paymentCode');
-      if (code !== undefined) {
-        this.paymentCode = code;
-      }
-      const name = AppStorage.Get<string>('displayName');
-      if (name !== undefined) {
-        this.displayName = name;
-      }
-    } catch (e) {
-      hilog.warn(DOMAIN, TAG, `Read AppStorage failed: ${JSON.stringify(e)}`);
-    }
-  }
+  paymentCode: string = '10000000000000000001';
+  displayName: string = '付款码';
 
   drawQrCode(ctx: CanvasRenderingContext2D, code: string, size: number): void {
     const cellSize = size / QR_SIZE;
@@ -100,12 +79,6 @@ struct PaymentCodeWidget {
       Canvas()
         .width('100%')
         .aspectRatio(1)
-        .onReady((ctx: CanvasRenderingContext2D, matrix: Matrix4Transform) => {
-          const w = (ctx.width as number) || 200;
-          const h = (ctx.height as number) || 200;
-          const size = Math.min(w, h);
-          this.drawQrCode(ctx, this.paymentCode, size);
-        })
 
       Text(this.paymentCode)
         .fontSize(10)
