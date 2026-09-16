@@ -33,6 +33,52 @@
         ]
       }
     ],
+    "extensionAbilities": [
+      {
+        "name": "PaymentCodeWidget",
+        "srcEntry": "./ets/widget/PaymentCodeWidget.ets",
+        "type": "form",
+        "metadata": [
+          {
+            "name": "ohos.extension.form",
+            "resource": "$profile:payment_code_widget_config"
+          }
+        ],
+        "exported": true,
+        "skills": [
+          {
+            "entities": [
+              "entity.system.home"
+            ],
+            "actions": [
+              "action.system.home"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "CourseWidget",
+        "srcEntry": "./ets/widget/CourseWidget.ets",
+        "type": "form",
+        "metadata": [
+          {
+            "name": "ohos.extension.form",
+            "resource": "$profile:course_widget_config"
+          }
+        ],
+        "exported": true,
+        "skills": [
+          {
+            "entities": [
+              "entity.system.home"
+            ],
+            "actions": [
+              "action.system.home"
+            ]
+          }
+        ]
+      }
+    ],
     "requestPermissions": [
       {
         "name": "ohos.permission.INTERNET"

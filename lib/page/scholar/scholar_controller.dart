@@ -7,6 +7,8 @@ import 'package:celechron/model/todo.dart';
 import 'package:celechron/model/semester.dart';
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/model/option.dart';
+import 'package:celechron/model/period.dart';
+import 'package:celechron/services/ohos_native_service.dart';
 
 class ScholarController extends GetxController {
   final _scholar = Get.find<Rx<Scholar>>(tag: 'scholar');
@@ -128,6 +130,37 @@ class ScholarController extends GetxController {
         DateTime.now().difference(_scholar.value.lastUpdateTimeHomework);
   }
 
+  void _updateCourseWidget() {
+    try {
+      final now = DateTime.now();
+      final allPeriods = _scholar.value.periods;
+      final upcoming = allPeriods
+          .where((p) =>
+              p.type == PeriodType.classes && p.endTime.isAfter(now))
+          .toList()
+        ..sort((a, b) => a.startTime.compareTo(b.startTime));
+
+      if (upcoming.isNotEmpty) {
+        final next = upcoming.first;
+        final teacherMatch =
+            RegExp(r'教师:\s*(.+)').firstMatch(next.description);
+        final teacher = teacherMatch?.group(1) ?? '';
+        OhosNativeService.instance.updateCourseWidget(
+          courseName: next.summary,
+          weekday: next.startTime.weekday,
+          startTime: next.startTime,
+          endTime: next.endTime,
+          location: next.location,
+          teacher: teacher,
+        );
+      } else {
+        OhosNativeService.instance.clearCourseWidget();
+      }
+    } catch (e) {
+      // Widget update is best-effort
+    }
+  }
+
   Future<List<String?>> fetchData() async {
     // scholar.refresh 使用 single-flight；并发调用会共同等待同一个结果。
     // 这里计数以保证最后一个调用结束时才收起状态文案。
@@ -145,6 +178,7 @@ class ScholarController extends GetxController {
           .then((value) {
         _scholar.refresh();
         _updateDurations();
+        _updateCourseWidget();
         return value;
       });
     } finally {

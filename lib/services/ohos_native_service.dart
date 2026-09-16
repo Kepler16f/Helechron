@@ -205,4 +205,46 @@ class OhosNativeService {
       return false;
     }
   }
+
+  // ==================== Widgets ====================
+
+  /// 向原生 AppStorage 写入小组件数据
+  Future<void> setWidgetData(String key, String value) async {
+    try {
+      await _channel.invokeMethod('setWidgetData', {
+        'key': key,
+        'value': value,
+      });
+    } on PlatformException catch (e) {
+      debugPrint('setWidgetData failed: $e');
+    } on MissingPluginException {
+      // Not on HarmonyOS
+    }
+  }
+
+  /// 更新付款码小组件数据
+  Future<void> updatePaymentCodeWidget(String code, String name) async {
+    await setWidgetData('paymentCode', code);
+    await setWidgetData('displayName', name);
+  }
+
+  /// 更新课程小组件数据（下一节课信息）
+  /// 格式: "课程名|周几|开始时间戳|结束时间|地点|教师"
+  Future<void> updateCourseWidget({
+    required String courseName,
+    required int weekday,
+    required DateTime startTime,
+    required DateTime endTime,
+    String location = '',
+    String teacher = '',
+  }) async {
+    final data =
+        '$courseName|$weekday|${startTime.millisecondsSinceEpoch}|${endTime.millisecondsSinceEpoch}|$location|$teacher';
+    await setWidgetData('nextCourse', data);
+  }
+
+  /// 清除课程小组件（无课时调用）
+  Future<void> clearCourseWidget() async {
+    await setWidgetData('nextCourse', '');
+  }
 }

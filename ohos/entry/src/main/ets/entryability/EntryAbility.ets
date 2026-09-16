@@ -90,6 +90,9 @@ export default class EntryAbility extends FlutterAbility {
       case 'calendarSelfTest':
         this.calendarSelfTest(result);
         break;
+      case 'setWidgetData':
+        this.setWidgetData(call, result);
+        break;
       default:
         result.notImplemented();
         break;
@@ -651,5 +654,24 @@ export default class EntryAbility extends FlutterAbility {
         hilog.error(DOMAIN, TAG, `Failed to cancel all notifications: ${JSON.stringify(err)}`);
         result.success(false);
       });
+  }
+
+  // ==================== Widget ====================
+
+  private setWidgetData(call: MethodCall, result: MethodResult): void {
+    try {
+      const key = call.argument('key') as string;
+      const value = call.argument('value') as string;
+      if (key === null || key === undefined || key === '') {
+        result.success(false);
+        return;
+      }
+      AppStorage.SetOrCreate(key, value);
+      hilog.info(DOMAIN, TAG, `setWidgetData: key=${key}, value=${value.substring(0, 50)}`);
+      result.success(true);
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `setWidgetData failed: ${JSON.stringify(e)}`);
+      result.success(false);
+    }
   }
 }

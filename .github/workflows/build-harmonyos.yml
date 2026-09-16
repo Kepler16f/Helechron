@@ -101,10 +101,11 @@ jobs:
             echo "::notice title=Unsigned HAP recovered::flutter exited with $FLUTTER_BUILD_STATUS (missing signing config); uploading the unsigned HAP produced by hvigor."
           fi
 
-          HAP_NAME="Helechron_${{ steps.get_version.outputs.version }}_unsigned.hap"
+          VERSION="${{ steps.get_version.outputs.version }}"
+          HAP_NAME="Helechron_${VERSION}_unsigned"
 
           mkdir -p build/ohos
-          (cd "$(dirname "$HAP")" && zip -r "$OLDPWD/build/ohos/$HAP_NAME" "$(basename "$HAP")")
+          cp -r "$(dirname "$HAP")" "build/ohos/$HAP_NAME"
           ls -lh build/ohos
         timeout-minutes: 40
 
@@ -112,6 +113,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: Helechron_${{ steps.get_version.outputs.version }}_unsigned.hap
-          path: build/ohos/Helechron_*_unsigned.hap
+          path: build/ohos/Helechron_*_unsigned
+          archive: false
           retention-days: 30
           if-no-files-found: error
