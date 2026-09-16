@@ -25,6 +25,11 @@ interface CalendarEventPayload {
   endTime: number;
 }
 
+interface AddEventResult {
+  added: number;
+  firstError: string;
+}
+
 export default class EntryAbility extends FlutterAbility {
   private methodChannel: MethodChannel | null = null;
 
@@ -228,6 +233,7 @@ export default class EntryAbility extends FlutterAbility {
       const now = Date.now();
       const testA: calendarManager.Event = {
         title: '[HelechronTestA]',
+        type: calendarManager.EventType.NORMAL,
         startTime: now,
         endTime: now + 3600000,
       };
@@ -245,6 +251,7 @@ export default class EntryAbility extends FlutterAbility {
       // Test B: Full event matching sync structure
       const testB: calendarManager.Event = {
         title: '[HelechronTestB]',
+        type: calendarManager.EventType.NORMAL,
         startTime: now + 7200000,
         endTime: now + 10800000,
         isAllDay: false,
@@ -314,7 +321,7 @@ export default class EntryAbility extends FlutterAbility {
   private async addEventConcurrent(
     calendar: calendarManager.Calendar,
     events: calendarManager.Event[]
-  ): Promise<{ added: number; firstError: string }> {
+  ): Promise<AddEventResult> {
     let added = 0;
     let failed = 0;
     let firstError = '';
@@ -349,7 +356,8 @@ export default class EntryAbility extends FlutterAbility {
       await Promise.all(tasks);
     }
     hilog.info(DOMAIN, TAG, `addEventConcurrent: added=${added}, failed=${failed}, firstError=${firstError}`);
-    return { added, firstError };
+    const res: AddEventResult = { added: added, firstError: firstError };
+    return res;
   }
 
   private async updateAlarmReminders(
