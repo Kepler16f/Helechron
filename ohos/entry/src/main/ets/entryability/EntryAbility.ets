@@ -88,9 +88,12 @@ export default class EntryAbility extends FlutterAbility {
     const route = this.pendingRoute;
     this.pendingRoute = '';
     const params: WidgetRouteParams = { target: route };
-    this.methodChannel.invokeMethod('onWidgetRoute', params).catch((err: BusinessError) => {
-      hilog.warn(DOMAIN, TAG, `push widget route failed: ${err.message}`);
-    });
+    try {
+      this.methodChannel.invokeMethod('onWidgetRoute', params);
+      hilog.info(DOMAIN, TAG, `pushed widget route: ${route}`);
+    } catch (err) {
+      hilog.warn(DOMAIN, TAG, `push widget route failed: ${JSON.stringify(err)}`);
+    }
   }
 
   private consumePendingRoute(result: MethodResult): void {
