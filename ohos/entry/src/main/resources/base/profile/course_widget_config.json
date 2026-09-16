@@ -8,11 +8,11 @@
       "uiSyntax": "arkts",
       "isDefault": true,
       "updateEnabled": true,
-      "scheduledUpdateTime": "0:5",
+      "scheduledUpdateTime": "00:05",
       "updateDuration": 1,
-      "defaultDimension": "1*3",
+      "defaultDimension": "2*4",
       "supportDimensions": [
-        "1*3"
+        "2*4"
       ]
     }
   ]
