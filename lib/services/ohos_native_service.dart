@@ -98,6 +98,18 @@ class OhosNativeService {
     }
   }
 
+  /// 获取系统日历写入诊断信息（账户、事件总数、本应用事件数）
+  Future<String> calendarDiagnostics() async {
+    try {
+      final result = await _channel.invokeMethod<String>('calendarDiagnostics');
+      return result ?? '';
+    } on PlatformException catch (e) {
+      return 'diagnostics failed: $e';
+    } on MissingPluginException {
+      return 'native channel unavailable';
+    }
+  }
+
   // ==================== Notifications ====================
 
   /// 请求通知权限

@@ -290,29 +290,34 @@ class CalendarToSystemManager {
         message:
             '准备同步 ${events.length} 个日程（提醒方式=${useAlarm ? "闹钟" : "通知"}，提前$reminderMinutes分钟）');
 
-    // 先清除旧日历（去重），再写入新事件
-    await OhosNativeService.instance.clearCalendarEvents();
-
     final count = await OhosNativeService.instance.syncCalendarEvents(
       events,
       reminderMinutes: reminderMinutes,
       useAlarm: useAlarm,
     );
+    final diagnostics = await OhosNativeService.instance.calendarDiagnostics();
+    _log('diagnostics', message: diagnostics);
+
     if (count > 0) {
       calendarSyncEnabled.value = true;
       _log('sync', message: '同步成功，写入 $count 个日程');
-      // 应用内弹窗或提示告知同步结果：同步了几门课共多少节
       Get.snackbar(
         '日历同步成功',
-        '已同步 $totalCourseCount 门课程，共 $totalClassSessionCount 节课到系统日历',
+        '已同步 $totalCourseCount 门课程，共 $totalClassSessionCount 节课到系统日历\n$diagnostics',
         snackPosition: SnackPosition.TOP,
-        duration: const Duration(seconds: 4),
+        duration: const Duration(seconds: 8),
       );
     } else {
       _log('sync',
           level: CelechronLogLevel.error,
           message: '同步失败',
           error: OhosNativeService.instance.lastCalendarError);
+      Get.snackbar(
+        '日历同步失败',
+        '写入 0 条。\n${OhosNativeService.instance.lastCalendarError ?? "未知错误"}\n$diagnostics',
+        snackPosition: SnackPosition.TOP,
+        duration: const Duration(seconds: 10),
+      );
     }
     return count > 0;
   }
