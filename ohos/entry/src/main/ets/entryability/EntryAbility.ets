@@ -2,6 +2,7 @@ import { FlutterAbility, FlutterEngine, MethodChannel, MethodCall, MethodResult 
 import { GeneratedPluginRegistrant } from '../plugins/GeneratedPluginRegistrant';
 import notificationManager from '@ohos.notificationManager';
 import { calendarManager } from '@kit.CalendarKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 import reminderAgentManager from '@ohos.reminderAgentManager';
 import abilityAccessCtrl, { Permissions } from '@ohos.abilityAccessCtrl';
 import bundleManager from '@ohos.bundle.bundleManager';
@@ -211,76 +212,65 @@ export default class EntryAbility extends FlutterAbility {
     }
   }
 
+  private formatError(e: Object): string {
+    try {
+      const be = e as BusinessError;
+      return `code=${be.code},msg=${be.message}`;
+    } catch (ignore) {
+      return JSON.stringify(e);
+    }
+  }
+
   private async calendarSelfTest(result: MethodResult): Promise<void> {
     const steps: string[] = [];
     try {
-      // Step 0: Check permissions
       const atManager = abilityAccessCtrl.createAtManager();
       const tokenId = this.getTokenId();
       const readStatus = atManager.checkAccessTokenSync(tokenId, PERMISSION_READ_CALENDAR);
       const writeStatus = atManager.checkAccessTokenSync(tokenId, PERMISSION_WRITE_CALENDAR);
-      steps.push(`step0:perm read=${readStatus} write=${writeStatus}`);
+      steps.push(`perm(r=${readStatus},w=${writeStatus})`);
 
-      steps.push('step1:getManager');
       const manager = this.getCalendarManagerInstance();
-
-      steps.push('step2:getCalendar');
       const calendar = await manager.getCalendar();
       const account = calendar.getAccount();
-      steps.push(`step3:account=${account.name}/${account.type},calId=${calendar.id}`);
+      steps.push(`cal=${calendar.id}/${account.name}/${account.type}`);
 
-      // Test A: Minimal event (title + times only)
-      const now = Date.now();
-      const testA: calendarManager.Event = {
-        title: '[HelechronTestA]',
-        type: calendarManager.EventType.NORMAL,
-        startTime: now,
-        endTime: now + 3600000,
+      // Incremental field tests: each variant adds one more field,
+      // so the first FAIL pinpoints the offending field.
+      const now = Date.now() + 120000;
+      const v0: calendarManager.Event = {
+        title: 't0', type: calendarManager.EventType.NORMAL, startTime: now, endTime: now + 3600000
       };
-      steps.push('step4a:addEvent(minimal)');
-      try {
-        const idA = await calendar.addEvent(testA);
-        steps.push(`step5a:returned id=${idA}`);
-        if (idA > 0) {
-          try { await calendar.deleteEvents([idA]); } catch (_) {}
-        }
-      } catch (ea) {
-        steps.push(`step5a:FAILED ${JSON.stringify(ea)}`);
-      }
-
-      // Test B: Full event matching sync structure
-      const testB: calendarManager.Event = {
-        title: '[HelechronTestB]',
-        type: calendarManager.EventType.NORMAL,
-        startTime: now + 7200000,
-        endTime: now + 10800000,
-        isAllDay: false,
-        reminderTime: [15],
+      const v1: calendarManager.Event = {
+        title: 't1', type: calendarManager.EventType.NORMAL, startTime: now + 1, endTime: now + 3600001, isAllDay: false
       };
-      steps.push('step4b:addEvent(full)');
-      try {
-        const idB = await calendar.addEvent(testB);
-        steps.push(`step5b:returned id=${idB}`);
-        if (idB > 0) {
-          try { await calendar.deleteEvents([idB]); } catch (_) {}
+      const v2: calendarManager.Event = {
+        title: 't2', type: calendarManager.EventType.NORMAL, startTime: now + 2, endTime: now + 3600002, isAllDay: false, reminderTime: [15]
+      };
+      const v3: calendarManager.Event = {
+        title: 't3', type: calendarManager.EventType.NORMAL, startTime: now + 3, endTime: now + 3600003, isAllDay: false, reminderTime: [15], location: { location: 'test-place' }
+      };
+      const v4: calendarManager.Event = {
+        title: 't4', type: calendarManager.EventType.NORMAL, startTime: now + 4, endTime: now + 3600004, isAllDay: false, reminderTime: [15], description: 'test-desc'
+      };
+      const variants: calendarManager.Event[] = [v0, v1, v2, v3, v4];
+      for (let i = 0; i < variants.length; i++) {
+        try {
+          const id = await calendar.addEvent(variants[i]);
+          steps.push(`v${i}=OK(${id})`);
+          if (id > 0) {
+            try { await calendar.deleteEvents([id]); } catch (delErr) { steps.push(`v${i}del=F(${this.formatError(delErr)})`); }
+          }
+        } catch (e) {
+          steps.push(`v${i}=FAIL(${this.formatError(e)})`);
         }
-      } catch (eb) {
-        steps.push(`step5b:FAILED ${JSON.stringify(eb)}`);
-      }
-
-      // Verify
-      try {
-        const all = await calendar.getEvents();
-        steps.push(`step6:totalEvents=${all.length}`);
-      } catch (ev) {
-        steps.push(`step6:getEvents FAILED ${JSON.stringify(ev)}`);
       }
 
       const msg = steps.join(' | ');
       hilog.info(DOMAIN, TAG, `calendarSelfTest: ${msg}`);
       result.success(msg);
     } catch (err) {
-      const msg = steps.join(' | ') + ` | FATAL: ${JSON.stringify(err)}`;
+      const msg = steps.join(' | ') + ` | FATAL: ${this.formatError(err)}`;
       hilog.error(DOMAIN, TAG, `calendarSelfTest: ${msg}`);
       result.success(msg);
     }
@@ -345,7 +335,7 @@ export default class EntryAbility extends FlutterAbility {
           })
           .catch((e: Object): void => {
             failed++;
-            const errStr = JSON.stringify(e);
+            const errStr = this.formatError(e);
             if (firstError === '') {
               firstError = errStr;
             }
