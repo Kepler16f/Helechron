@@ -222,6 +222,24 @@ export default class EntryAbility extends FlutterAbility {
     }
   }
 
+  // Flutter-ohos decodes channel maps as Map<string, Object>, not plain objects,
+  // so fields must be read with .get() (property access returns undefined).
+  private str(m: Map<string, Object>, key: string): string {
+    const v = m.get(key);
+    if (typeof v === 'string') {
+      return v;
+    }
+    return '';
+  }
+
+  private num(m: Map<string, Object>, key: string): number {
+    const v = m.get(key);
+    if (typeof v === 'number') {
+      return v;
+    }
+    return 0;
+  }
+
   private async calendarSelfTest(result: MethodResult): Promise<void> {
     const steps: string[] = [];
     try {
@@ -429,12 +447,27 @@ export default class EntryAbility extends FlutterAbility {
   }
 
   private syncCalendarEvents(call: MethodCall, result: MethodResult): void {
-    const payloads = call.argument('events') as CalendarEventPayload[];
-    if (payloads === null || payloads === undefined || payloads.length === 0) {
+    const rawList = call.argument('events') as Map<string, Object>[];
+    if (rawList === null || rawList === undefined || rawList.length === 0) {
       hilog.info(DOMAIN, TAG, 'syncCalendarEvents: no events to sync');
       result.success(0);
       return;
     }
+    // Convert decoded Map<string, Object> entries into typed payloads.
+    const payloads: CalendarEventPayload[] = [];
+    for (let i = 0; i < rawList.length; i++) {
+      const m = rawList[i];
+      const payload: CalendarEventPayload = {
+        uid: this.str(m, 'uid'),
+        summary: this.str(m, 'summary'),
+        description: this.str(m, 'description'),
+        location: this.str(m, 'location'),
+        startTime: this.num(m, 'startTime'),
+        endTime: this.num(m, 'endTime')
+      };
+      payloads.push(payload);
+    }
+    hilog.info(DOMAIN, TAG, `syncCalendarEvents: decoded ${payloads.length} payloads, firstTitle=${payloads[0].summary}`);
     const reminderMinutesRaw = call.argument('reminderMinutes') as number;
     const reminderMinutes =
       (reminderMinutesRaw !== null && reminderMinutesRaw !== undefined && reminderMinutesRaw > 0)
