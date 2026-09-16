@@ -3,10 +3,11 @@ import 'dart:async';
 import 'package:get/get.dart';
 
 import 'package:celechron/http/spider.dart';
-import 'package:celechron/model/todo.dart';
-import 'package:celechron/model/semester.dart';
-import 'package:celechron/model/scholar.dart';
 import 'package:celechron/model/option.dart';
+import 'package:celechron/model/scholar.dart';
+import 'package:celechron/model/semester.dart';
+import 'package:celechron/model/todo.dart';
+import 'package:celechron/services/ohos_native_service.dart';
 
 class ScholarController extends GetxController {
   final _scholar = Get.find<Rx<Scholar>>(tag: 'scholar');
@@ -128,6 +129,33 @@ class ScholarController extends GetxController {
         DateTime.now().difference(_scholar.value.lastUpdateTimeHomework);
   }
 
+  void _syncWidgetData() {
+    try {
+      final now = DateTime.now();
+      final periods = _scholar.value.periods;
+      final upcoming = periods
+          .where((p) => !p.hasEnded && p.startTime.isAfter(now))
+          .toList()
+        ..sort((a, b) => a.startTime.compareTo(b.startTime));
+      if (upcoming.isNotEmpty) {
+        final next = upcoming.first;
+        final teacherMatch =
+            RegExp(r'教师:\s*(.+)').firstMatch(next.description);
+        final teacher = teacherMatch?.group(1) ?? '';
+        OhosNativeService.instance.updateCourseWidget(
+          courseName: next.summary,
+          weekday: next.startTime.weekday,
+          startTime: next.startTime,
+          endTime: next.endTime,
+          location: next.location,
+          teacher: teacher,
+        );
+      } else {
+        OhosNativeService.instance.clearCourseWidget();
+      }
+    } catch (_) {}
+  }
+
   Future<List<String?>> fetchData() async {
     // scholar.refresh 使用 single-flight；并发调用会共同等待同一个结果。
     // 这里计数以保证最后一个调用结束时才收起状态文案。
@@ -145,6 +173,7 @@ class ScholarController extends GetxController {
           .then((value) {
         _scholar.refresh();
         _updateDurations();
+        _syncWidgetData();
         return value;
       });
     } finally {

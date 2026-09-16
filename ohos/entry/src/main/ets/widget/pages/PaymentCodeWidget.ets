@@ -1,21 +1,46 @@
-const QR_SIZE = 21;
+import preferences from '@ohos.data.preferences';
+
+const PREFS_NAME = 'helechron_widget_data';
 
 @Entry
 @Component
 struct PaymentCodeWidget {
   paymentCode: string = '10000000000000000001';
   displayName: string = '付款码';
+  qrReady: boolean = false;
+
+  aboutToAppear(): void {
+    this.loadFromPrefs();
+  }
+
+  async loadFromPrefs(): Promise<void> {
+    try {
+      const ctx = getContext(this);
+      const prefs = await preferences.getPreferences(ctx, PREFS_NAME);
+      const code = await prefs.get('paymentCode', '') as string;
+      const name = await prefs.get('displayName', '') as string;
+      if (code !== null && code !== undefined && code.length > 0) {
+        this.paymentCode = code;
+      }
+      if (name !== null && name !== undefined && name.length > 0) {
+        this.displayName = name;
+      }
+    } catch (e) {
+      // use defaults
+    }
+    this.qrReady = true;
+  }
 
   drawQrCode(ctx: CanvasRenderingContext2D, code: string, size: number): void {
-    const cellSize = size / QR_SIZE;
+    const cellSize = size / 21;
     const grid = this.generateGrid(code);
 
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, size, size);
 
     ctx.fillStyle = '#000000';
-    for (let row = 0; row < QR_SIZE; row++) {
-      for (let col = 0; col < QR_SIZE; col++) {
+    for (let row = 0; row < 21; row++) {
+      for (let col = 0; col < 21; col++) {
         if (grid[row][col]) {
           ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
         }
@@ -23,8 +48,8 @@ struct PaymentCodeWidget {
     }
 
     this.drawFinderPattern(ctx, 0, 0, cellSize);
-    this.drawFinderPattern(ctx, (QR_SIZE - 7) * cellSize, 0, cellSize);
-    this.drawFinderPattern(ctx, 0, (QR_SIZE - 7) * cellSize, cellSize);
+    this.drawFinderPattern(ctx, 14 * cellSize, 0, cellSize);
+    this.drawFinderPattern(ctx, 0, 14 * cellSize, cellSize);
   }
 
   drawFinderPattern(ctx: CanvasRenderingContext2D, x: number, y: number, cs: number): void {
@@ -39,20 +64,20 @@ struct PaymentCodeWidget {
   generateGrid(code: string): boolean[][] {
     const grid: boolean[][] = [];
     let seed = this.simpleHash(code);
-    for (let i = 0; i < QR_SIZE; i++) {
+    for (let i = 0; i < 21; i++) {
       grid[i] = [];
-      for (let j = 0; j < QR_SIZE; j++) {
+      for (let j = 0; j < 21; j++) {
         seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF;
         grid[i][j] = (seed % 3) !== 0;
       }
     }
     for (let i = 0; i < 8; i++) {
-      for (let j = 8; j < QR_SIZE - 8; j++) {
+      for (let j = 8; j < 13; j++) {
         seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF;
         grid[i][j] = (seed % 2) === 0;
       }
     }
-    for (let i = 8; i < QR_SIZE - 8; i++) {
+    for (let i = 8; i < 13; i++) {
       for (let j = 0; j < 3; j++) {
         seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF;
         grid[i][j] = (seed % 2) === 0;
@@ -76,9 +101,15 @@ struct PaymentCodeWidget {
         .fontWeight(FontWeight.Medium)
         .margin({ bottom: 8 })
 
-      Canvas()
-        .width('100%')
-        .aspectRatio(1)
+      if (this.qrReady) {
+        Canvas()
+          .width('100%')
+          .aspectRatio(1)
+      } else {
+        Text('加载中...')
+          .fontSize(12)
+          .fontColor('#CCCCCC')
+      }
 
       Text(this.paymentCode)
         .fontSize(10)

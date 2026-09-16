@@ -7,6 +7,7 @@ import reminderAgentManager from '@ohos.reminderAgentManager';
 import abilityAccessCtrl, { Permissions } from '@ohos.abilityAccessCtrl';
 import bundleManager from '@ohos.bundle.bundleManager';
 import hilog from '@ohos.hilog';
+import preferences from '@ohos.data.preferences';
 
 const DOMAIN = 0x0000;
 const TAG = 'HelechronNative';
@@ -658,7 +659,20 @@ export default class EntryAbility extends FlutterAbility {
 
   // ==================== Widget ====================
 
-  private setWidgetData(call: MethodCall, result: MethodResult): void {
+  private widgetPrefsName = 'helechron_widget_data';
+  private widgetPrefs: preferences.Preferences | null = null;
+
+  private async getWidgetPrefs(): Promise<preferences.Preferences> {
+    if (this.widgetPrefs === null) {
+      this.widgetPrefs = await preferences.getPreferences(
+        getContext(this),
+        this.widgetPrefsName
+      );
+    }
+    return this.widgetPrefs;
+  }
+
+  private async setWidgetData(call: MethodCall, result: MethodResult): Promise<void> {
     try {
       const key = call.argument('key') as string;
       const value = call.argument('value') as string;
@@ -666,8 +680,10 @@ export default class EntryAbility extends FlutterAbility {
         result.success(false);
         return;
       }
-      AppStorage.SetOrCreate(key, value);
-      hilog.info(DOMAIN, TAG, `setWidgetData: key=${key}, value=${value.substring(0, 50)}`);
+      const prefs = await this.getWidgetPrefs();
+      await prefs.put(key, value);
+      await prefs.flush();
+      hilog.info(DOMAIN, TAG, `setWidgetData: key=${key}, value=${(value !== null && value !== undefined) ? value.substring(0, 50) : ''}`);
       result.success(true);
     } catch (e) {
       hilog.error(DOMAIN, TAG, `setWidgetData failed: ${JSON.stringify(e)}`);
