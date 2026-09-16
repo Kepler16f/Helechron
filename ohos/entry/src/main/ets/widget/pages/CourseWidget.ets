@@ -1,4 +1,6 @@
-@Entry
+let storageCourse = new LocalStorage();
+
+@Entry(storageCourse)
 @Component
 struct CourseWidget {
   @LocalStorageProp('courseData') courseData: string = '';

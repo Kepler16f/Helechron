@@ -1,4 +1,6 @@
-@Entry
+let storagePaymentCode = new LocalStorage();
+
+@Entry(storagePaymentCode)
 @Component
 struct PaymentCodeWidget {
   @LocalStorageProp('paymentCode') paymentCode: string = '10000000000000000001';
