@@ -135,10 +135,10 @@ class ScholarController extends GetxController {
       final now = DateTime.now();
       final allPeriods = _scholar.value.periods;
       final upcoming = allPeriods
-          .where((p) =>
-              p.type == PeriodType.classes && p.endTime.isAfter(now))
-          .toList()
-        ..sort((a, b) => a.startTime.compareTo(b.startTime));
+          .where(
+              (p) => p.type == PeriodType.classes && p.endTime.isAfter(now))
+          .toList();
+      upcoming.sort((a, b) => a.startTime.compareTo(b.startTime));
 
       if (upcoming.isNotEmpty) {
         final next = upcoming.first;
