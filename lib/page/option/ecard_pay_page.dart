@@ -43,6 +43,12 @@ class ECardPayPage extends StatelessWidget {
   final RxString _barcode = ''.obs;
   final RxBool _loading = true.obs;
 
+  void _syncPaymentCode(String? code) {
+    if (code != null && code.isNotEmpty) {
+      OhosNativeService.instance.updatePaymentCodeWidget(code: code);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     _requestNewCode().then((code) {
@@ -50,16 +56,12 @@ class ECardPayPage extends StatelessWidget {
         _requestNewCode().then((code) {
           _loading.value = false;
           _barcode.value = code ?? '';
-          if (code != null && code.isNotEmpty) {
-            OhosNativeService.instance.updatePaymentCodeWidget(code: code);
-          }
+          _syncPaymentCode(code);
         });
       } else {
         _loading.value = false;
         _barcode.value = code;
-        if (code.isNotEmpty) {
-          OhosNativeService.instance.updatePaymentCodeWidget(code: code);
-        }
+        _syncPaymentCode(code);
       }
     });
     return CupertinoPageScaffold(
@@ -80,10 +82,7 @@ class ECardPayPage extends StatelessWidget {
                     return GestureDetector(
                         onTap: () => _requestNewCode().then((value) {
                           _barcode.value = value ?? '';
-                          if (value != null && value.isNotEmpty) {
-                            OhosNativeService.instance
-                                .updatePaymentCodeWidget(code: value);
-                          }
+                          _syncPaymentCode(value);
                         }),
                         child: Stack(
                           alignment: Alignment.center,
