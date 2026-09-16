@@ -1,18 +1,17 @@
 {
-  "name": "PaymentCodeWidget",
-  "description": "付款码小组件",
-  "src": "./ets/widget/PaymentCodeWidget",
-  "uiSyntax": "arkts",
-  "window": {
-    "designWidth": 720,
-    "autoDesignWidth": true
-  },
-  "colorMode": "auto",
-  "isDefault": true,
-  "updateEnabled": false,
-  "scheduledUpdateTime": "00:00",
-  "defaultDimension": "2*2",
-  "supportDimensions": [
-    "2*2"
+  "forms": [
+    {
+      "name": "PaymentCodeWidget",
+      "displayName": "付款码",
+      "description": "显示付款码二维码",
+      "src": "./ets/widget/pages/PaymentCodeWidget.ets",
+      "uiSyntax": "arkts",
+      "isDefault": true,
+      "updateEnabled": false,
+      "defaultDimension": "2*2",
+      "supportDimensions": [
+        "2*2"
+      ]
+    }
   ]
 }

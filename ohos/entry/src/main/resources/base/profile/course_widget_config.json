@@ -1,18 +1,19 @@
 {
-  "name": "CourseWidget",
-  "description": "最近课程小组件",
-  "src": "./ets/widget/CourseWidget",
-  "uiSyntax": "arkts",
-  "window": {
-    "designWidth": 720,
-    "autoDesignWidth": true
-  },
-  "colorMode": "auto",
-  "isDefault": true,
-  "updateEnabled": true,
-  "scheduledUpdateTime": "00:05",
-  "defaultDimension": "1*3",
-  "supportDimensions": [
-    "1*3"
+  "forms": [
+    {
+      "name": "CourseWidget",
+      "displayName": "最近课程",
+      "description": "显示最近即将开始的课程",
+      "src": "./ets/widget/pages/CourseWidget.ets",
+      "uiSyntax": "arkts",
+      "isDefault": true,
+      "updateEnabled": true,
+      "scheduledUpdateTime": "0:5",
+      "updateDuration": 1,
+      "defaultDimension": "1*3",
+      "supportDimensions": [
+        "1*3"
+      ]
+    }
   ]
 }
