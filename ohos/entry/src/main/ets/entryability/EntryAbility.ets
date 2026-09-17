@@ -794,9 +794,9 @@ export default class EntryAbility extends FlutterAbility {
       const courseTime = (call.argument('courseTime') as string) || '';
       const location = (call.argument('location') as string) || '';
       const teacher = (call.argument('teacher') as string) || '';
-      const startArg = call.argument('courseStartMs');
-      const endArg = call.argument('courseEndMs');
-      const leadArg = call.argument('leadWindowMinutes');
+      const startArg = call.argument('courseStartMs') as number;
+      const endArg = call.argument('courseEndMs') as number;
+      const leadArg = call.argument('leadWindowMinutes') as number;
       const courseStartMs = typeof startArg === 'number' ? startArg : 0;
       const courseEndMs = typeof endArg === 'number' ? endArg : 0;
       const leadWindowMinutes = typeof leadArg === 'number' ? leadArg : 120;
