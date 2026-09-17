@@ -110,8 +110,26 @@ class ECardWidgetMessenger {
         final account =
             eCardAccount ?? await ECard.getAccount(httpClient, synjonesAuth);
         await secureStorage.write(key: 'eCardAccount', value: account);
-        final code = await ECard.getBarcode(httpClient, synjonesAuth, account);
-        await OhosNativeService.instance.updatePaymentCodeWidget(code: code);
+        try {
+          final code =
+              await ECard.getBarcode(httpClient, synjonesAuth, account);
+          await OhosNativeService.instance.updatePaymentCodeWidget(code: code);
+        } catch (_) {
+          // 付款码接口失败通常是 synjones-auth 过期：重新登录一次再取，
+          // 避免小组件长期停留在过期/空白的付款码。
+          final reloginOk = await update(notifyNative: false);
+          if (!reloginOk) {
+            return;
+          }
+          final freshAuth = await secureStorage.read(key: 'synjonesAuth');
+          final freshAccount = await secureStorage.read(key: 'eCardAccount');
+          if (freshAuth == null || freshAuth.isEmpty) {
+            return;
+          }
+          final code = await ECard.getBarcode(
+              httpClient, freshAuth, freshAccount ?? account);
+          await OhosNativeService.instance.updatePaymentCodeWidget(code: code);
+        }
       } finally {
         httpClient.close(force: true);
       }

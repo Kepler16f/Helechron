@@ -43,10 +43,15 @@ void main() async {
 
   runApp(const CelechronApp());
 
-  // 应用级课程小组件同步：独立于页面生命周期，进程存活期间持续刷新。
-  // 改为仅在数据变化时推送（scholar refresh 完成、app resumed），
-  // 不再高频定时推送，由原生侧 setFormNextRefreshTime 预调度课程边界。
+  // 应用级课程小组件同步：独立于页面生命周期，进程存活期间持续刷新，
+  // 保证下课能及时切换到下一节课。主动刷新走 updateForm，不计入系统
+  // 50 次/天配额，因此用 5 秒高频推送让倒计时尽量平滑；应用不在时由
+  // 原生侧 updateDuration(30min) + 边界预调度兜底。
   ScholarWidgetSync.sync();
+  Timer.periodic(
+    const Duration(seconds: 5),
+    (_) => ScholarWidgetSync.sync(),
+  );
 
   var scholar = Get.find<Rx<Scholar>>(tag: 'scholar');
   if (scholar.value.isLogan) {
@@ -149,12 +154,16 @@ class _CelechronAppState extends State<CelechronApp>
     if (state == AppLifecycleState.resumed) {
       _startForegroundLease();
       unawaited(_consumePendingWidgetRoute());
+      // 回到前台立即刷新一次（定时器可能已被系统挂起）
       ScholarWidgetSync.sync();
       unawaited(ECardWidgetMessenger.updatePaymentCode());
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.detached) {
       _stopForegroundLease();
+      // 离开前台（例如用户从小组件打开应用后返回桌面）时补一次推送，
+      // 否则定时器被挂起会导致小组件停留在旧状态。
+      ScholarWidgetSync.sync();
     }
     if (state == AppLifecycleState.paused) {
       ECardWidgetMessenger.update();

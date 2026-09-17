@@ -1,7 +1,5 @@
-import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 
 import 'package:celechron/model/period.dart';
@@ -15,9 +13,10 @@ import 'package:celechron/services/ohos_native_service.dart';
 ///    离开页面即停止刷新，导致小组件不刷新、下课也不切换）。
 /// 2. 一次性下发"后续若干节课"的时间表，交由原生侧按当前时间选择
 ///    当前/下一节课并计算状态与倒计时。这样即使应用被杀，系统级刷新
-///    仍能正确切换课程。
-/// 3. 仅在数据变化时推送（scholar refresh、app resumed），
-///    原生侧通过 setFormNextRefreshTime 预调度所有课程边界。
+///    （updateDuration + setFormNextRefreshTime 链式边界调度）仍能正确切换课程。
+/// 3. 这里**不做去重**：原生侧每次收到推送都会重新按当前时间计算倒计时并
+///    `updateForm`，所以高频推送正是倒计时平滑刷新的来源。磁盘写入由原生侧
+///    按数据是否变化去重，高频推送的开销很小。
 class ScholarWidgetSync {
   ScholarWidgetSync._();
 
@@ -27,35 +26,11 @@ class ScholarWidgetSync {
   /// 下发到原生侧的课程条目上限（覆盖当天剩余与次日课程即可）
   static const int _maxCourses = 16;
 
-  /// Debounce 延迟（秒），防止连续多次调用导致重复推送
-  static const int _debounceSeconds = 3;
-
   /// 防止重入
   static bool _running = false;
 
-  /// Debounce 定时器
-  static Timer? _debounceTimer;
-
-  /// 上一次推送的 JSON（用于去重）
-  static String _lastPushedJson = '';
-
-  /// 计算最近的未结束课程并推送到原生小组件（带 debounce）。
+  /// 计算最近的未结束课程并推送到原生小组件。
   static void sync() {
-    if (_debounceTimer?.isActive ?? false) {
-      return;
-    }
-    _debounceTimer = Timer(const Duration(seconds: _debounceSeconds), () {
-      _doSync();
-    });
-  }
-
-  /// 立即推送（忽略 debounce），用于需要即时更新的场景。
-  static void syncImmediate() {
-    _debounceTimer?.cancel();
-    _doSync();
-  }
-
-  static void _doSync() {
     if (_running) {
       return;
     }
@@ -77,20 +52,10 @@ class ScholarWidgetSync {
         .toList()
       ..sort((a, b) => a.startTime.compareTo(b.startTime));
 
-    final json = jsonEncode(
-      upcoming.take(_maxCourses).map(_encodeCourse).toList(),
-    );
-
-    // 去重：如果数据未变化，跳过推送
-    if (json == _lastPushedJson) {
-      debugPrint('ScholarWidgetSync: data unchanged, skip push');
-      return;
-    }
-    _lastPushedJson = json;
-
-    debugPrint('ScholarWidgetSync: pushing ${upcoming.length} courses');
     OhosNativeService.instance.updateCourseWidget(
-      coursesJson: json,
+      coursesJson: jsonEncode(
+        upcoming.take(_maxCourses).map(_encodeCourse).toList(),
+      ),
       leadWindowMinutes: leadWindowMinutes,
     );
   }

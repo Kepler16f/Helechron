@@ -10,7 +10,7 @@ import abilityAccessCtrl, { Permissions } from '@ohos.abilityAccessCtrl';
 import bundleManager from '@ohos.bundle.bundleManager';
 import hilog from '@ohos.hilog';
 import preferences from '@ohos.data.preferences';
-import { buildCourseFormData, scheduleAllBoundaries } from '../widget/CourseStateHelper';
+import { buildCourseFormData, scheduleNextBoundary } from '../widget/CourseStateHelper';
 
 const DOMAIN = 0x0000;
 const TAG = 'HelechronNative';
@@ -68,6 +68,57 @@ export default class EntryAbility extends FlutterAbility {
     this.captureRouteFromWant(want);
     // 热启动时 Flutter 引擎已就绪，直接推送给 Dart
     this.flushPendingRoute();
+    // 同时直接把小组件刷新到最新状态
+    this.pushAllWidgets();
+  }
+
+  onForeground(): void {
+    super.onForeground();
+    this.pushAllWidgets();
+  }
+
+  onBackground(): void {
+    super.onBackground();
+    // 应用退到后台（例如用户从小组件打开应用后返回桌面）时立即刷新小组件，
+    // 不依赖 Dart 定时器（此时可能已被系统挂起）。
+    this.pushAllWidgets();
+  }
+
+  /// 直接由原生把课程与付款码小组件刷新到最新状态（不经过 Dart）。
+  private async pushAllWidgets(): Promise<void> {
+    try {
+      const prefs = await this.getWidgetPrefs();
+      const courseIds = ((await prefs.get('course_form_ids', '')) as string)
+        .split(',').filter(id => id.length > 0);
+      if (courseIds.length > 0) {
+        const bindingData = formBindingData.createFormBindingData(buildCourseFormData(prefs));
+        for (const id of courseIds) {
+          formProvider.updateForm(id, bindingData).catch((err: BusinessError) => {
+            hilog.warn(DOMAIN, TAG, `pushAllWidgets course failed for ${id}: ${err.message}`);
+          });
+        }
+      }
+
+      const payIds = ((await prefs.get('payment_form_ids', '')) as string)
+        .split(',').filter(id => id.length > 0);
+      if (payIds.length > 0) {
+        const code = (await prefs.get('paymentCode', '')) as string;
+        const name = (await prefs.get('displayName', '浙大校园卡付款码')) as string;
+        const payData: Record<string, string> = {
+          'paymentCode': code,
+          'displayName': name,
+          'hasCode': code.length > 0 ? '1' : '0'
+        };
+        const payBinding = formBindingData.createFormBindingData(payData);
+        for (const id of payIds) {
+          formProvider.updateForm(id, payBinding).catch((err: BusinessError) => {
+            hilog.warn(DOMAIN, TAG, `pushAllWidgets payment failed for ${id}: ${err.message}`);
+          });
+        }
+      }
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, `pushAllWidgets failed: ${JSON.stringify(e)}`);
+    }
   }
 
   private captureRouteFromWant(want: Want): void {
@@ -816,7 +867,7 @@ export default class EntryAbility extends FlutterAbility {
             hilog.warn(DOMAIN, TAG, `updateForm course failed for ${id}: ${err.message}`);
           });
           if (changed) {
-            scheduleAllBoundaries(id, prefs);
+            scheduleNextBoundary(id, prefs);
           }
         }
       }

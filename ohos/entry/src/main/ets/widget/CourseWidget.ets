@@ -2,7 +2,7 @@ import { Want, Configuration } from '@kit.AbilityKit';
 import { formBindingData, FormExtensionAbility, formInfo, formProvider } from '@kit.FormKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import preferences from '@ohos.data.preferences';
-import { buildCourseFormData, scheduleAllBoundaries } from './CourseStateHelper';
+import { buildCourseFormData, scheduleNextBoundary } from './CourseStateHelper';
 
 const PREFS_NAME = 'helechron_widget_data';
 const FORM_IDS_KEY = 'course_form_ids';
@@ -17,7 +17,7 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
     if (prefs !== null) {
       if (formId.length > 0) {
         this.saveFormId(prefs, formId);
-        scheduleAllBoundaries(formId, prefs);
+        scheduleNextBoundary(formId, prefs);
       }
       return formBindingData.createFormBindingData(buildCourseFormData(prefs));
     }
@@ -39,8 +39,8 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
       return;
     }
     this.pushFormData(formId, prefs);
-    // 系统定时刷新后，重新调度所有课程边界
-    scheduleAllBoundaries(formId, prefs);
+    // 系统刷新后，重新预调度下一个课程边界
+    scheduleNextBoundary(formId, prefs);
   }
 
   onFormEvent(formId: string, message: string): void {
@@ -50,8 +50,8 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
     }
     console.info(`CourseWidget onFormEvent: formId=${formId}, message=${message}`);
     this.pushFormData(formId, prefs);
-    // 用户交互后，重新调度所有课程边界
-    scheduleAllBoundaries(formId, prefs);
+    // 用户交互后，重新预调度下一个课程边界
+    scheduleNextBoundary(formId, prefs);
   }
 
   onRemoveForm(formId: string): void {

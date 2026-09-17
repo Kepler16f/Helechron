@@ -11,12 +11,10 @@ const COLOR_PROGRESS_DEFAULT = '#1E88E5';
 
 /// 系统"下次刷新"最小间隔（分钟），由系统限制
 const MIN_NEXT_REFRESH_MINUTES = 5;
-/// 课程进行中 / 进入倒计时窗口时的刷新间隔（分钟）
-const ACTIVE_REFRESH_MINUTES = 20;
-/// 距下一节课还很远时的兜底刷新间隔（分钟）
-const IDLE_REFRESH_MINUTES = 180;
 /// 每个课程边界调度的提前量（分钟），确保不晚于边界触发
 const BOUNDARY_LEAD_MINUTES = 1;
+/// 单次可调度的最长等待（分钟），超过则交由定时刷新兜底
+const MAX_NEXT_REFRESH_MINUTES = 60 * 24;
 
 export interface CourseItem {
   s: number; // 开始时间戳(ms)
@@ -205,94 +203,45 @@ export function buildCourseFormData(prefs: preferences.Preferences): Record<stri
   return data;
 }
 
-/// 计算下一次系统刷新应等待的分钟数（受 50 次/天配额约束的策略）：
-/// - 课程进行中或已进入倒计时窗口：到下一个精确边界的时间；
-/// - 距开课尚远：睡到"进入倒计时窗口"的时刻（上限 IDLE_REFRESH_MINUTES）；
-/// - 无后续课程：IDLE_REFRESH_MINUTES 兜底。
-export function nextRefreshMinutes(prefs: preferences.Preferences): number {
+/// 距离最近课程边界（开课/下课，提前 BOUNDARY_LEAD_MINUTES 分钟）的分钟数。
+/// 返回 0 表示没有可调度的未来边界；结果已按系统下限 MIN_NEXT_REFRESH_MINUTES 收敛。
+export function minutesToNextBoundary(prefs: preferences.Preferences): number {
   const items = parseCourses(prefs);
-  const leadMin = getNum(prefs, 'leadWindowMinutes', DEFAULT_LEAD_MINUTES);
   const now = Date.now();
-  const item = pickCurrentOrNext(items, now);
-  if (item === null) {
-    return IDLE_REFRESH_MINUTES;
-  }
-
-  const ongoing = now >= item.s && now < item.e;
-  const withinLead = now < item.s && item.s - now <= leadMin * 60000;
-
-  let wait: number;
-  if (ongoing) {
-    // 课程进行中 → 精确到下课时间
-    wait = Math.ceil((item.e - now) / 60000);
-  } else if (withinLead) {
-    // 已进入倒计时窗口 → 精确到开课时间
-    wait = Math.ceil((item.s - now) / 60000);
-  } else {
-    // 距开课尚远 → 睡到倒计时窗口开始
-    wait = Math.ceil((item.s - leadMin * 60000 - now) / 60000);
-    if (wait <= 0) {
-      wait = MIN_NEXT_REFRESH_MINUTES;
-    }
-    // 但不超过 IDLE_REFRESH_MINUTES（updateDuration 30分钟会兜底）
-    if (wait > IDLE_REFRESH_MINUTES) {
-      wait = IDLE_REFRESH_MINUTES;
+  const leadMs = BOUNDARY_LEAD_MINUTES * 60000;
+  let best = 0;
+  for (const item of items) {
+    const candidates: number[] = [item.s - leadMs, item.e - leadMs];
+    for (const c of candidates) {
+      if (c <= now) {
+        continue;
+      }
+      const wait = Math.ceil((c - now) / 60000);
+      if (best === 0 || wait < best) {
+        best = wait;
+      }
     }
   }
-
-  if (wait < MIN_NEXT_REFRESH_MINUTES) {
-    wait = MIN_NEXT_REFRESH_MINUTES;
+  if (best === 0 || best > MAX_NEXT_REFRESH_MINUTES) {
+    return 0;
   }
-  return wait;
+  if (best < MIN_NEXT_REFRESH_MINUTES) {
+    best = MIN_NEXT_REFRESH_MINUTES;
+  }
+  return best;
 }
 
-/// 调度单次系统刷新（基于 nextRefreshMinutes 计算）。
-export function scheduleBoundaryRefresh(formId: string, prefs: preferences.Preferences): void {
-  const minutes = nextRefreshMinutes(prefs);
+/// 预调度"最近的一个课程边界"的系统刷新。
+///
+/// 说明：`formProvider.setFormNextRefreshTime` 只能登记**一次**待触发的刷新
+/// 时间（后调用会覆盖先前的），无法一次性登记多个边界。正确做法是每次只登记
+/// 最近的一个边界，待其触发（`onUpdateForm`）后再登记下一个，形成链式预调度，
+/// 既能在边界处精确切换，又尽量节省 50 次/天的配额。
+export function scheduleNextBoundary(formId: string, prefs: preferences.Preferences): void {
+  const minutes = minutesToNextBoundary(prefs);
   if (minutes <= 0) {
     return;
   }
-  try {
-    formProvider.setFormNextRefreshTime(formId, minutes, (err: BusinessError) => {
-      if (err) {
-        console.warn(`setFormNextRefreshTime failed: ${err.code} ${err.message}`);
-      }
-    });
-  } catch (e) {
-    console.warn(`setFormNextRefreshTime exception: ${JSON.stringify(e)}`);
-  }
-}
-
-/// 预调度所有未来课程边界（开课/下课）的系统刷新。
-/// 每个边界提前 BOUNDARY_LEAD_MINUTES 分钟调度，确保状态切换时立即刷新。
-/// 配额消耗：N 节课 → 最多 2N 次（每节开课+下课各一次）。
-export function scheduleAllBoundaries(formId: string, prefs: preferences.Preferences): void {
-  const items = parseCourses(prefs);
-  const now = Date.now();
-  let scheduled = 0;
-
-  for (const item of items) {
-    // 调度开课边界（start - BOUNDARY_LEAD_MINUTES）
-    const startWait = Math.ceil((item.s - BOUNDARY_LEAD_MINUTES * 60000 - now) / 60000);
-    if (startWait >= MIN_NEXT_REFRESH_MINUTES && startWait <= 60 * 24) {
-      trySetFormNextRefreshTime(formId, startWait);
-      scheduled++;
-    }
-
-    // 调度下课边界（end - BOUNDARY_LEAD_MINUTES）
-    const endWait = Math.ceil((item.e - BOUNDARY_LEAD_MINUTES * 60000 - now) / 60000);
-    if (endWait >= MIN_NEXT_REFRESH_MINUTES && endWait <= 60 * 24) {
-      trySetFormNextRefreshTime(formId, endWait);
-      scheduled++;
-    }
-  }
-
-  if (scheduled > 0) {
-    console.info(`CourseWidget: scheduled ${scheduled} boundary refreshes for ${formId}`);
-  }
-}
-
-function trySetFormNextRefreshTime(formId: string, minutes: number): void {
   try {
     formProvider.setFormNextRefreshTime(formId, minutes, (err: BusinessError) => {
       if (err) {
