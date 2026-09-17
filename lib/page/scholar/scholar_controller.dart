@@ -149,9 +149,12 @@ class ScholarController extends GetxController {
       // 提前进入倒计时的窗口：开始前 2 小时
       const leadWindowMinutes = 120;
 
+      final pad = (int n) => n.toString().padLeft(2, '0');
+
       String statusText;
       String statusColor;
       double progress;
+      String countdownStr;
 
       if (isOngoing) {
         final totalMin =
@@ -162,8 +165,14 @@ class ScholarController extends GetxController {
             : (elapsedMin / totalMin * 100).clamp(0, 100).toDouble();
         statusText = '上课中';
         statusColor = '#4CAF50';
+        final remainSec = currentOrNext.endTime.difference(now).inSeconds;
+        final rH = remainSec ~/ 3600;
+        final rM = (remainSec % 3600) ~/ 60;
+        final rS = remainSec % 60;
+        countdownStr = '${pad(rH)}:${pad(rM)}:${pad(rS)}';
       } else {
-        final remainingMin = currentOrNext.startTime.difference(now).inMinutes;
+        final remainSec = currentOrNext.startTime.difference(now).inSeconds;
+        final remainingMin = remainSec ~/ 60;
         if (remainingMin >= leadWindowMinutes) {
           progress = 0;
         } else if (remainingMin <= 0) {
@@ -183,12 +192,14 @@ class ScholarController extends GetxController {
           statusText = m > 0 ? '开始还有 $h 小时 $m 分' : '开始还有 $h 小时';
           statusColor = '#2196F3';
         }
+        final rH = remainSec ~/ 3600;
+        final rM = (remainSec % 3600) ~/ 60;
+        final rS = remainSec % 60;
+        countdownStr = '${pad(rH)}:${pad(rM)}:${pad(rS)}';
       }
 
-      final pad = (int n) => n.toString().padLeft(2, '0');
       final timeStr =
           '${pad(currentOrNext.startTime.hour)}:${pad(currentOrNext.startTime.minute)} - ${pad(currentOrNext.endTime.hour)}:${pad(currentOrNext.endTime.minute)}';
-      final nowTimeStr = '${pad(now.hour)}:${pad(now.minute)}';
       final teacherMatch =
           RegExp(r'教师:\s*(.+)').firstMatch(currentOrNext.description);
       final teacher = teacherMatch?.group(1) ?? '';
@@ -199,7 +210,7 @@ class ScholarController extends GetxController {
         teacher: teacher,
         status: statusText,
         statusColor: statusColor,
-        statusTime: nowTimeStr,
+        statusTime: countdownStr,
         progressPercent: progress.round().toString(),
         progressColor: statusColor,
         hasCourse: true,
@@ -282,9 +293,7 @@ class ScholarController extends GetxController {
     _syncWidgetData();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _updateDurations();
-      if (timer.tick % 60 == 0) {
-        _syncWidgetData();
-      }
+      _syncWidgetData();
     });
   }
 
