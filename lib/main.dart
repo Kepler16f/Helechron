@@ -43,14 +43,10 @@ void main() async {
 
   runApp(const CelechronApp());
 
-  // 应用级课程小组件同步：独立于页面生命周期，进程存活期间持续刷新，
-  // 保证下课后能及时切换到下一节课。主动刷新不计入系统 50 次/天配额，
-  // 因此这里用 10 秒的高频推送让倒计时尽量平滑。
+  // 应用级课程小组件同步：独立于页面生命周期，进程存活期间持续刷新。
+  // 改为仅在数据变化时推送（scholar refresh 完成、app resumed），
+  // 不再高频定时推送，由原生侧 setFormNextRefreshTime 预调度课程边界。
   ScholarWidgetSync.sync();
-  Timer.periodic(
-    const Duration(seconds: 10),
-    (_) => ScholarWidgetSync.sync(),
-  );
 
   var scholar = Get.find<Rx<Scholar>>(tag: 'scholar');
   if (scholar.value.isLogan) {

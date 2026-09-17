@@ -2,7 +2,7 @@ import { Want, Configuration } from '@kit.AbilityKit';
 import { formBindingData, FormExtensionAbility, formInfo, formProvider } from '@kit.FormKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import preferences from '@ohos.data.preferences';
-import { buildCourseFormData, scheduleBoundaryRefresh } from './CourseStateHelper';
+import { buildCourseFormData, scheduleAllBoundaries } from './CourseStateHelper';
 
 const PREFS_NAME = 'helechron_widget_data';
 const FORM_IDS_KEY = 'course_form_ids';
@@ -17,9 +17,7 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
     if (prefs !== null) {
       if (formId.length > 0) {
         this.saveFormId(prefs, formId);
-      }
-      if (formId.length > 0) {
-        scheduleBoundaryRefresh(formId, prefs);
+        scheduleAllBoundaries(formId, prefs);
       }
       return formBindingData.createFormBindingData(buildCourseFormData(prefs));
     }
@@ -41,10 +39,10 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
       return;
     }
     this.pushFormData(formId, prefs);
-    scheduleBoundaryRefresh(formId, prefs);
+    // 系统定时刷新后，重新调度所有课程边界
+    scheduleAllBoundaries(formId, prefs);
   }
 
-  /// 卡片内交互（如刷新按钮）通过 postCardAction action:'message' 触发。
   onFormEvent(formId: string, message: string): void {
     const prefs = this.getPrefs();
     if (prefs === null) {
@@ -52,7 +50,8 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
     }
     console.info(`CourseWidget onFormEvent: formId=${formId}, message=${message}`);
     this.pushFormData(formId, prefs);
-    scheduleBoundaryRefresh(formId, prefs);
+    // 用户交互后，重新调度所有课程边界
+    scheduleAllBoundaries(formId, prefs);
   }
 
   onRemoveForm(formId: string): void {
@@ -63,7 +62,6 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
   }
 
   onConfigurationUpdate(config: Configuration): void {
-    // 深浅色模式或语言变化时，强制刷新所有小组件以重新解析主题色
     const prefs = this.getPrefs();
     if (prefs === null) {
       return;

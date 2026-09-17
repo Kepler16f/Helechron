@@ -10,7 +10,7 @@ import abilityAccessCtrl, { Permissions } from '@ohos.abilityAccessCtrl';
 import bundleManager from '@ohos.bundle.bundleManager';
 import hilog from '@ohos.hilog';
 import preferences from '@ohos.data.preferences';
-import { buildCourseFormData, scheduleBoundaryRefresh } from '../widget/CourseStateHelper';
+import { buildCourseFormData, scheduleAllBoundaries } from '../widget/CourseStateHelper';
 
 const DOMAIN = 0x0000;
 const TAG = 'HelechronNative';
@@ -816,7 +816,7 @@ export default class EntryAbility extends FlutterAbility {
             hilog.warn(DOMAIN, TAG, `updateForm course failed for ${id}: ${err.message}`);
           });
           if (changed) {
-            scheduleBoundaryRefresh(id, prefs);
+            scheduleAllBoundaries(id, prefs);
           }
         }
       }
