@@ -165,14 +165,12 @@ class ScholarController extends GetxController {
             : (elapsedMin / totalMin * 100).clamp(0, 100).toDouble();
         statusText = '上课中';
         statusColor = '#4CAF50';
-        final remainSec = currentOrNext.endTime.difference(now).inSeconds;
-        final rH = remainSec ~/ 3600;
-        final rM = (remainSec % 3600) ~/ 60;
-        final rS = remainSec % 60;
-        countdownStr = '${pad(rH)}:${pad(rM)}:${pad(rS)}';
+        final remainMin = currentOrNext.endTime.difference(now).inMinutes;
+        final rH = remainMin ~/ 60;
+        final rM = remainMin % 60;
+        countdownStr = '${pad(rH)}:${pad(rM)}';
       } else {
-        final remainSec = currentOrNext.startTime.difference(now).inSeconds;
-        final remainingMin = remainSec ~/ 60;
+        final remainingMin = currentOrNext.startTime.difference(now).inMinutes;
         if (remainingMin >= leadWindowMinutes) {
           progress = 0;
         } else if (remainingMin <= 0) {
@@ -192,10 +190,9 @@ class ScholarController extends GetxController {
           statusText = m > 0 ? '开始还有 $h 小时 $m 分' : '开始还有 $h 小时';
           statusColor = '#2196F3';
         }
-        final rH = remainSec ~/ 3600;
-        final rM = (remainSec % 3600) ~/ 60;
-        final rS = remainSec % 60;
-        countdownStr = '${pad(rH)}:${pad(rM)}:${pad(rS)}';
+        final rH = remainingMin ~/ 60;
+        final rM = remainingMin % 60;
+        countdownStr = '${pad(rH)}:${pad(rM)}';
       }
 
       final timeStr =
@@ -293,7 +290,9 @@ class ScholarController extends GetxController {
     _syncWidgetData();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _updateDurations();
-      _syncWidgetData();
+      if (timer.tick % 60 == 0) {
+        _syncWidgetData();
+      }
     });
   }
 

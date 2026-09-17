@@ -29,34 +29,26 @@ struct PaymentCodeWidget {
             .aspectRatio(1)
             .color('#000000')
             .backgroundColor($r('app.color.widget_qr_background'))
-
-          Text(this.paymentCode)
-            .fontSize(10)
-            .fontColor($r('app.color.widget_text_tertiary'))
-            .margin({ top: 4 })
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
         .width('100%')
         .layoutWeight(1)
         .justifyContent(FlexAlign.Center)
 
-        // 刷新按钮
+        // 刷新按钮（图标）
         Row() {
-          Text('刷新')
-            .fontSize(12)
+          Text('\u21BB')
+            .fontSize(18)
             .fontColor($r('app.color.widget_accent'))
-            .fontWeight(FontWeight.Medium)
         }
         .width('100%')
-        .height(28)
+        .height(30)
         .justifyContent(FlexAlign.Center)
         .onClick(() => {
           postCardAction(this, {
-            action: 'message',
-            abilityName: 'PaymentCodeWidget',
+            action: 'router',
+            abilityName: 'EntryAbility',
             params: {
-              action: 'refresh_payment_code'
+              target: 'ecardpaypage'
             }
           });
         })
