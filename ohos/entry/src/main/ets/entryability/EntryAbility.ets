@@ -792,6 +792,7 @@ export default class EntryAbility extends FlutterAbility {
       const teacher = (call.argument('teacher') as string) || '';
       const status = (call.argument('status') as string) || '全部结课';
       const statusColor = (call.argument('statusColor') as string) || '#888888';
+      const statusTime = (call.argument('statusTime') as string) || '';
       const progressPercent = (call.argument('progressPercent') as string) || '0';
       const progressColor = (call.argument('progressColor') as string) || '#1E88E5';
       const hasCourse = (call.argument('hasCourse') as string) || '0';
@@ -803,6 +804,7 @@ export default class EntryAbility extends FlutterAbility {
       await prefs.put('courseTeacher', teacher);
       await prefs.put('courseStatus', status);
       await prefs.put('courseStatusColor', statusColor);
+      await prefs.put('courseStatusTime', statusTime);
       await prefs.put('progressPercent', progressPercent);
       await prefs.put('progressColor', progressColor);
       await prefs.put('hasCourse', hasCourse);
@@ -819,6 +821,7 @@ export default class EntryAbility extends FlutterAbility {
           'courseTeacher': teacher,
           'courseStatus': status,
           'courseStatusColor': statusColor,
+          'courseStatusTime': statusTime,
           'progressPercent': progressPercent,
           'progressColor': progressColor,
           'hasCourse': hasCourse

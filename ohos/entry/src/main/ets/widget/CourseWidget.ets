@@ -19,6 +19,7 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
     let courseTeacher = '';
     let courseStatus = '全部结课';
     let courseStatusColor = '#888888';
+    let courseStatusTime = '';
     let progressPercent = '0';
     let progressColor = '#1E88E5';
     let hasCourse = '0';
@@ -34,6 +35,7 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
       courseTeacher = prefs.getSync('courseTeacher', '') as string;
       courseStatus = prefs.getSync('courseStatus', '全部结课') as string;
       courseStatusColor = prefs.getSync('courseStatusColor', '#888888') as string;
+      courseStatusTime = prefs.getSync('courseStatusTime', '') as string;
       progressPercent = prefs.getSync('progressPercent', '0') as string;
       progressColor = prefs.getSync('progressColor', '#1E88E5') as string;
       hasCourse = prefs.getSync('hasCourse', '0') as string;
@@ -48,6 +50,7 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
       'courseTeacher': courseTeacher,
       'courseStatus': courseStatus,
       'courseStatusColor': courseStatusColor,
+      'courseStatusTime': courseStatusTime,
       'progressPercent': progressPercent,
       'progressColor': progressColor,
       'hasCourse': hasCourse
@@ -118,6 +121,7 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
     let courseTeacher = '';
     let courseStatus = '全部结课';
     let courseStatusColor = '#888888';
+    let courseStatusTime = '';
     let progressPercent = '0';
     let progressColor = '#1E88E5';
     let hasCourse = '0';
@@ -130,6 +134,7 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
       courseTeacher = prefs.getSync('courseTeacher', '') as string;
       courseStatus = prefs.getSync('courseStatus', '全部结课') as string;
       courseStatusColor = prefs.getSync('courseStatusColor', '#888888') as string;
+      courseStatusTime = prefs.getSync('courseStatusTime', '') as string;
       progressPercent = prefs.getSync('progressPercent', '0') as string;
       progressColor = prefs.getSync('progressColor', '#1E88E5') as string;
       hasCourse = prefs.getSync('hasCourse', '0') as string;
@@ -144,6 +149,7 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
       'courseTeacher': courseTeacher,
       'courseStatus': courseStatus,
       'courseStatusColor': courseStatusColor,
+      'courseStatusTime': courseStatusTime,
       'progressPercent': progressPercent,
       'progressColor': progressColor,
       'hasCourse': hasCourse

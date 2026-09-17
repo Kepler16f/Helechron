@@ -40,6 +40,26 @@ struct PaymentCodeWidget {
         .width('100%')
         .layoutWeight(1)
         .justifyContent(FlexAlign.Center)
+
+        // 刷新按钮
+        Row() {
+          Text('刷新')
+            .fontSize(12)
+            .fontColor($r('app.color.widget_accent'))
+            .fontWeight(FontWeight.Medium)
+        }
+        .width('100%')
+        .height(28)
+        .justifyContent(FlexAlign.Center)
+        .onClick(() => {
+          postCardAction(this, {
+            action: 'message',
+            abilityName: 'PaymentCodeWidget',
+            params: {
+              action: 'refresh_payment_code'
+            }
+          });
+        })
       } else {
         Column({ space: 4 }) {
           Text('点击打开付款码')

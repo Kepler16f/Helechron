@@ -188,6 +188,7 @@ class ScholarController extends GetxController {
       final pad = (int n) => n.toString().padLeft(2, '0');
       final timeStr =
           '${pad(currentOrNext.startTime.hour)}:${pad(currentOrNext.startTime.minute)} - ${pad(currentOrNext.endTime.hour)}:${pad(currentOrNext.endTime.minute)}';
+      final nowTimeStr = '${pad(now.hour)}:${pad(now.minute)}';
       final teacherMatch =
           RegExp(r'教师:\s*(.+)').firstMatch(currentOrNext.description);
       final teacher = teacherMatch?.group(1) ?? '';
@@ -198,6 +199,7 @@ class ScholarController extends GetxController {
         teacher: teacher,
         status: statusText,
         statusColor: statusColor,
+        statusTime: nowTimeStr,
         progressPercent: progress.round().toString(),
         progressColor: statusColor,
         hasCourse: true,

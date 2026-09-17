@@ -9,40 +9,46 @@ struct CourseWidget {
   @LocalStorageProp('courseTeacher') courseTeacher: string = '';
   @LocalStorageProp('courseStatus') courseStatus: string = '全部结课';
   @LocalStorageProp('courseStatusColor') courseStatusColor: string = '#888888';
+  @LocalStorageProp('courseStatusTime') courseStatusTime: string = '';
   @LocalStorageProp('progressPercent') progressPercent: string = '0';
   @LocalStorageProp('progressColor') progressColor: string = '#1E88E5';
   @LocalStorageProp('hasCourse') hasCourse: string = '0';
 
   build() {
     Column() {
-      // 头部栏：品牌 + 状态标签
+      // 头部栏：品牌
       Row() {
         Text('Helechron')
           .fontSize(11)
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.widget_text_tertiary'))
-
-        Blank()
-
-        Text(this.courseStatus)
-          .fontSize(11)
-          .fontColor(this.courseStatusColor)
-          .fontWeight(FontWeight.Medium)
-          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-          .backgroundColor($r('app.color.widget_badge_background'))
-          .borderRadius(4)
       }
       .width('100%')
-      .margin({ bottom: 8 })
+      .margin({ bottom: 6 })
 
-      // 课程名
-      Text(this.courseName)
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.widget_text_primary'))
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width('100%')
+      // 课程名 + 状态时间行
+      Row() {
+        Text(this.courseName)
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.widget_text_primary'))
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+
+        if (this.courseStatusTime.length > 0) {
+          Text(this.courseStatus)
+            .fontSize(13)
+            .fontColor(this.courseStatusColor)
+            .fontWeight(FontWeight.Medium)
+          Text(' ' + this.courseStatusTime)
+            .fontSize(13)
+            .fontColor(this.courseStatusColor)
+            .fontWeight(FontWeight.Bold)
+        }
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Bottom)
 
       // 倒计时进度条
       if (this.hasCourse === '1') {
@@ -50,16 +56,16 @@ struct CourseWidget {
           Row() {
           }
           .width('100%')
-          .height(6)
+          .height(10)
           .backgroundColor($r('app.color.widget_progress_track'))
-          .borderRadius(3)
+          .borderRadius(5)
 
           Row() {
           }
           .width(this.progressPercent + '%')
-          .height(6)
+          .height(10)
           .backgroundColor(this.progressColor)
-          .borderRadius(3)
+          .borderRadius(5)
         }
         .width('100%')
         .margin({ top: 8, bottom: 8 })
