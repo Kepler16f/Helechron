@@ -15,112 +15,136 @@ struct CourseWidget {
   @LocalStorageProp('hasCourse') hasCourse: string = '0';
 
   build() {
-    Column() {
-      // 头部栏：品牌
-      Row() {
-        Text('Helechron')
-          .fontSize(11)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.widget_text_tertiary'))
-      }
-      .width('100%')
-      .margin({ bottom: 6 })
-
-      // 课程名 + 状态时间行
-      Row() {
-        Text(this.courseName)
-          .fontSize(17)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.widget_text_primary'))
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .layoutWeight(1)
-
-        if (this.courseStatusTime.length > 0) {
-          Text(this.courseStatus)
-            .fontSize(13)
-            .fontColor(this.courseStatusColor)
+    Stack({ alignContent: Alignment.BottomEnd }) {
+      Column() {
+        Row() {
+          Text('Helechron')
+            .fontSize(11)
             .fontWeight(FontWeight.Medium)
-          Text(' ' + this.courseStatusTime)
-            .fontSize(13)
-            .fontColor(this.courseStatusColor)
-            .fontWeight(FontWeight.Bold)
-        }
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Bottom)
-
-      // 倒计时进度条
-      if (this.hasCourse === '1') {
-        Stack({ alignContent: Alignment.Start }) {
-          Row() {
-          }
-          .width('100%')
-          .height(10)
-          .backgroundColor($r('app.color.widget_progress_track'))
-          .borderRadius(5)
-
-          Row() {
-          }
-          .width(this.progressPercent + '%')
-          .height(10)
-          .backgroundColor(this.progressColor)
-          .borderRadius(5)
+            .fontColor($r('app.color.widget_text_tertiary'))
         }
         .width('100%')
-        .margin({ top: 8, bottom: 8 })
-      } else {
-        Blank()
-      }
+        .margin({ bottom: 6 })
 
-      // 底部课程元数据：时间、地点、教师
-      Column({ space: 3 }) {
-        if (this.courseTime.length > 0) {
-          Row() {
-            Text(this.courseTime)
-              .fontSize(12)
-              .fontColor($r('app.color.widget_text_secondary'))
+        Row() {
+          Text(this.courseName)
+            .fontSize(17)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.widget_text_primary'))
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+
+          if (this.courseStatusTime.length > 0) {
+            Text(this.courseStatus)
+              .fontSize(13)
+              .fontColor(this.courseStatusColor)
+              .fontWeight(FontWeight.Medium)
+            Text(' ' + this.courseStatusTime)
+              .fontSize(13)
+              .fontColor(this.courseStatusColor)
+              .fontWeight(FontWeight.Bold)
+          }
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Bottom)
+
+        if (this.hasCourse === '1') {
+          Stack({ alignContent: Alignment.Start }) {
+            Row() {
+            }
+            .width('100%')
+            .height(10)
+            .backgroundColor($r('app.color.widget_progress_track'))
+            .borderRadius(5)
+
+            Row() {
+            }
+            .width(this.progressPercent + '%')
+            .height(10)
+            .backgroundColor(this.progressColor)
+            .borderRadius(5)
           }
           .width('100%')
+          .margin({ top: 8, bottom: 8 })
+        } else {
+          Blank()
         }
 
-        if (this.courseLocation.length > 0) {
-          Row() {
-            Text(this.courseLocation)
-              .fontSize(12)
-              .fontColor($r('app.color.widget_text_secondary'))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Column({ space: 3 }) {
+          if (this.courseTime.length > 0) {
+            Row() {
+              Text(this.courseTime)
+                .fontSize(12)
+                .fontColor($r('app.color.widget_text_secondary'))
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+            }
+            .width('100%')
           }
-          .width('100%')
-        }
 
-        if (this.courseTeacher.length > 0) {
-          Row() {
-            Text(this.courseTeacher)
-              .fontSize(11)
-              .fontColor($r('app.color.widget_text_tertiary'))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          if (this.courseLocation.length > 0) {
+            Row() {
+              Text(this.courseLocation)
+                .fontSize(12)
+                .fontColor($r('app.color.widget_text_secondary'))
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+            }
+            .width('100%')
           }
-          .width('100%')
+
+          if (this.courseTeacher.length > 0) {
+            Row() {
+              Text(this.courseTeacher)
+                .fontSize(11)
+                .fontColor($r('app.color.widget_text_tertiary'))
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+            }
+            .width('100%')
+          }
         }
+        .width('100%')
+        .padding({ right: 30 })
       }
       .width('100%')
+      .height('100%')
+      .padding(14)
+      .onClick(() => {
+        postCardAction(this, {
+          action: 'router',
+          abilityName: 'EntryAbility',
+          params: {
+            target: 'scholar'
+          }
+        });
+      })
+
+      Row() {
+        Text('\u21BB')
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.widget_text_secondary'))
+      }
+      .width(30)
+      .height(30)
+      .borderRadius(15)
+      .backgroundColor($r('app.color.widget_badge_background'))
+      .justifyContent(FlexAlign.Center)
+      .margin(8)
+      .onClick(() => {
+        postCardAction(this, {
+          action: 'message',
+          params: {
+            event: 'refresh_course'
+          }
+        });
+      })
     }
     .width('100%')
     .height('100%')
-    .padding(14)
     .backgroundColor($r('app.color.widget_background'))
     .borderRadius(16)
-    .onClick(() => {
-      postCardAction(this, {
-        action: 'router',
-        abilityName: 'EntryAbility',
-        params: {
-          target: 'scholar'
-        }
-      });
-    })
   }
 }

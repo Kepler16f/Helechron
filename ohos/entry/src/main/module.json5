@@ -77,6 +77,28 @@
             ]
           }
         ]
+      },
+      {
+        "name": "SimpleCourseWidget",
+        "srcEntry": "./ets/widget/SimpleCourseWidget.ets",
+        "type": "form",
+        "metadata": [
+          {
+            "name": "ohos.extension.form",
+            "resource": "$profile:simple_course_widget_config"
+          }
+        ],
+        "exported": true,
+        "skills": [
+          {
+            "entities": [
+              "entity.system.home"
+            ],
+            "actions": [
+              "action.system.home"
+            ]
+          }
+        ]
       }
     ],
     "requestPermissions": [

@@ -11,6 +11,7 @@ import bundleManager from '@ohos.bundle.bundleManager';
 import hilog from '@ohos.hilog';
 import preferences from '@ohos.data.preferences';
 import { buildCourseFormData, scheduleNextBoundary } from '../widget/CourseStateHelper';
+import { buildSimpleCourseFormData } from '../widget/SimpleCourseStateHelper';
 
 const DOMAIN = 0x0000;
 const TAG = 'HelechronNative';
@@ -95,6 +96,17 @@ export default class EntryAbility extends FlutterAbility {
         for (const id of courseIds) {
           formProvider.updateForm(id, bindingData).catch((err: BusinessError) => {
             hilog.warn(DOMAIN, TAG, `pushAllWidgets course failed for ${id}: ${err.message}`);
+          });
+        }
+      }
+
+      const simpleCourseIds = ((await prefs.get('simple_course_form_ids', '')) as string)
+        .split(',').filter(id => id.length > 0);
+      if (simpleCourseIds.length > 0) {
+        const simpleBindingData = formBindingData.createFormBindingData(buildSimpleCourseFormData(prefs));
+        for (const id of simpleCourseIds) {
+          formProvider.updateForm(id, simpleBindingData).catch((err: BusinessError) => {
+            hilog.warn(DOMAIN, TAG, `pushAllWidgets simpleCourse failed for ${id}: ${err.message}`);
           });
         }
       }

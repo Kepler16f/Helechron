@@ -9,60 +9,68 @@ struct PaymentCodeWidget {
 
   build() {
     Column() {
-      // 顶部标题：放大并居中
-      Text(this.displayName)
-        .fontSize(15)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.widget_text_primary'))
-        .textAlign(TextAlign.Center)
-        .width('100%')
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-      // 主体内容
-      if (this.hasCode === '1' && this.paymentCode.length > 0) {
-        // 二维码：按剩余高度取正方形，确保与刷新按钮不重叠
-        QRCode(this.paymentCode)
+      Row() {
+        Text(this.displayName)
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.widget_text_primary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
-          .aspectRatio(1)
-          .color('#000000')
-          .backgroundColor($r('app.color.widget_qr_background'))
-          .margin({ top: 6, bottom: 6 })
+
+        if (this.hasCode === '1' && this.paymentCode.length > 0) {
+          Row() {
+            Text('\u21BB')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor($r('app.color.widget_text_secondary'))
+          }
+          .width(28)
+          .height(28)
+          .borderRadius(14)
+          .backgroundColor($r('app.color.widget_badge_background'))
+          .justifyContent(FlexAlign.Center)
           .onClick(() => {
             postCardAction(this, {
-              action: 'router',
-              abilityName: 'EntryAbility',
+              action: 'message',
               params: {
-                target: 'ecardpaypage'
+                event: 'refresh_payment_code'
               }
             });
           })
-
-        // 刷新按钮：实心圆形按钮，点击后原生侧直接重新取码（不拉起应用）
-        Row() {
-          Text('\u21BB')
-            .fontSize(20)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.widget_button_text'))
         }
-        .width(36)
-        .height(32)
-        .borderRadius(16)
-        .backgroundColor($r('app.color.widget_accent'))
-        .justifyContent(FlexAlign.Center)
-        .margin({ bottom: 2 })
+      }
+      .width('100%')
+      .margin({ bottom: 8 })
+
+      if (this.hasCode === '1' && this.paymentCode.length > 0) {
+        Column() {
+          QRCode(this.paymentCode)
+            .width('100%')
+            .height('100%')
+            .color('#000000')
+            .backgroundColor($r('app.color.widget_qr_background'))
+        }
+        .layoutWeight(1)
+        .aspectRatio(1)
+        .alignSelf(ItemAlign.Center)
+        .constraintSize({ maxWidth: '100%' })
+        .padding(8)
+        .backgroundColor($r('app.color.widget_qr_background'))
+        .borderRadius(12)
         .onClick(() => {
           postCardAction(this, {
-            action: 'message',
+            action: 'router',
+            abilityName: 'EntryAbility',
             params: {
-              event: 'refresh_payment_code'
+              target: 'ecardpaypage'
             }
           });
         })
       } else {
         Column({ space: 4 }) {
           Text('点击打开付款码')
-            .fontSize(13)
+            .fontSize(14)
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.widget_accent'))
 
@@ -86,7 +94,7 @@ struct PaymentCodeWidget {
     }
     .width('100%')
     .height('100%')
-    .padding(12)
+    .padding(8)
     .backgroundColor($r('app.color.widget_background'))
     .borderRadius(16)
   }

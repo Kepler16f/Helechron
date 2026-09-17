@@ -1,0 +1,19 @@
+{
+  "forms": [
+    {
+      "name": "SimpleCourseWidget",
+      "displayName": "课程简报",
+      "description": "显示下一门课程的简要状态",
+      "src": "./ets/widget/pages/SimpleCourseWidget.ets",
+      "uiSyntax": "arkts",
+      "isDefault": true,
+      "updateEnabled": true,
+      "scheduledUpdateTime": "00:05",
+      "updateDuration": 1,
+      "defaultDimension": "2*4",
+      "supportDimensions": [
+        "2*4"
+      ]
+    }
+  ]
+}
