@@ -38,6 +38,19 @@ export default class PaymentCodeWidgetExtension extends FormExtensionAbility {
     this.refreshFormData(formId);
   }
 
+  /// 卡片内点击“刷新”按钮时触发（postCardAction action: 'message'）。
+  /// 重新读取本地缓存并刷新卡片，不拉起应用。
+  onFormEvent(formId: string, message: string): void {
+    try {
+      console.info(`PaymentCodeWidget onFormEvent: formId=${formId}, message=${message}`);
+      if (message.indexOf('refresh_payment_code') >= 0) {
+        this.refreshFormData(formId);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
   onRemoveForm(formId: string): void {
     try {
       const prefs = preferences.getPreferencesSync(this.context, { name: PREFS_NAME });

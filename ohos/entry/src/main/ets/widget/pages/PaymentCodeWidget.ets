@@ -23,9 +23,10 @@ struct PaymentCodeWidget {
 
       // 主体内容
       if (this.hasCode === '1' && this.paymentCode.length > 0) {
+        // 二维码区域：点击进入付款码页
         Column() {
           QRCode(this.paymentCode)
-            .width('68%')
+            .width('66%')
             .aspectRatio(1)
             .color('#000000')
             .backgroundColor($r('app.color.widget_qr_background'))
@@ -33,22 +34,31 @@ struct PaymentCodeWidget {
         .width('100%')
         .layoutWeight(1)
         .justifyContent(FlexAlign.Center)
-
-        // 刷新按钮（图标）
-        Row() {
-          Text('\u21BB')
-            .fontSize(18)
-            .fontColor($r('app.color.widget_accent'))
-        }
-        .width('100%')
-        .height(30)
-        .justifyContent(FlexAlign.Center)
         .onClick(() => {
           postCardAction(this, {
             action: 'router',
             abilityName: 'EntryAbility',
             params: {
               target: 'ecardpaypage'
+            }
+          });
+        })
+
+        // 刷新按钮（图标）：触发 onFormEvent 直接刷新卡片，不拉起应用
+        Row() {
+          Text('\u21BB')
+            .fontSize(18)
+            .fontColor($r('app.color.widget_accent'))
+        }
+        .width(40)
+        .height(26)
+        .justifyContent(FlexAlign.Center)
+        .margin({ top: 8, bottom: 2 })
+        .onClick(() => {
+          postCardAction(this, {
+            action: 'message',
+            params: {
+              event: 'refresh_payment_code'
             }
           });
         })
@@ -66,6 +76,15 @@ struct PaymentCodeWidget {
         .width('100%')
         .layoutWeight(1)
         .justifyContent(FlexAlign.Center)
+        .onClick(() => {
+          postCardAction(this, {
+            action: 'router',
+            abilityName: 'EntryAbility',
+            params: {
+              target: 'ecardpaypage'
+            }
+          });
+        })
       }
     }
     .width('100%')
@@ -73,14 +92,5 @@ struct PaymentCodeWidget {
     .padding(10)
     .backgroundColor($r('app.color.widget_background'))
     .borderRadius(16)
-    .onClick(() => {
-      postCardAction(this, {
-        action: 'router',
-        abilityName: 'EntryAbility',
-        params: {
-          target: 'ecardpaypage'
-        }
-      });
-    })
   }
 }
