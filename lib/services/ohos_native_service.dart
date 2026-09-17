@@ -259,29 +259,19 @@ class OhosNativeService {
 
   /// 更新课程小组件数据。
   ///
-  /// 只上传课程原始信息与起止时间戳，状态文案/倒计时/进度条均由原生侧
-  /// 依据当前时间计算；这样系统级刷新（30 分钟定时、setFormNextRefreshTime）
-  /// 也能得到正确结果，应用被杀后仍可正常切换课程。
+  /// [coursesJson] 为后续若干节课的紧凑 JSON 数组，字段：
+  /// `s` 开始时间戳(ms)、`e` 结束时间戳(ms)、`n` 课程名、`t` 时间区间、
+  /// `l` 地点、`c` 教师。状态/倒计时/进度/当前课程选择均由原生侧依据
+  /// 当前时间计算，因此系统级刷新（定时、下次刷新）无需 Dart 参与，
+  /// 应用被杀后也能正确切换课程。
   Future<void> updateCourseWidget({
-    required String courseName,
-    required String courseTime,
-    required String location,
-    required String teacher,
-    required int courseStartMs,
-    required int courseEndMs,
+    required String coursesJson,
     required int leadWindowMinutes,
-    required bool hasCourse,
   }) async {
     try {
       await _channel.invokeMethod('updateCourseWidget', {
-        'courseName': courseName,
-        'courseTime': courseTime,
-        'location': location,
-        'teacher': teacher,
-        'courseStartMs': courseStartMs,
-        'courseEndMs': courseEndMs,
+        'coursesJson': coursesJson,
         'leadWindowMinutes': leadWindowMinutes,
-        'hasCourse': hasCourse ? '1' : '0',
       });
     } on PlatformException catch (e) {
       debugPrint('updateCourseWidget failed: $e');
@@ -292,16 +282,7 @@ class OhosNativeService {
 
   /// 清除课程小组件（无课或已全部结课）
   Future<void> clearCourseWidget() async {
-    await updateCourseWidget(
-      courseName: '今日暂无课程',
-      courseTime: '',
-      location: '',
-      teacher: '',
-      courseStartMs: 0,
-      courseEndMs: 0,
-      leadWindowMinutes: 120,
-      hasCourse: false,
-    );
+    await updateCourseWidget(coursesJson: '[]', leadWindowMinutes: 120);
   }
 
   // ==================== Widget Routes ====================

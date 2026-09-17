@@ -790,30 +790,22 @@ export default class EntryAbility extends FlutterAbility {
 
   private async updateCourseWidget(call: MethodCall, result: MethodResult): Promise<void> {
     try {
-      const courseName = (call.argument('courseName') as string) || '今日暂无课程';
-      const courseTime = (call.argument('courseTime') as string) || '';
-      const location = (call.argument('location') as string) || '';
-      const teacher = (call.argument('teacher') as string) || '';
-      const startArg = call.argument('courseStartMs') as number;
-      const endArg = call.argument('courseEndMs') as number;
+      const coursesJson = (call.argument('coursesJson') as string) || '';
       const leadArg = call.argument('leadWindowMinutes') as number;
-      const courseStartMs = typeof startArg === 'number' ? startArg : 0;
-      const courseEndMs = typeof endArg === 'number' ? endArg : 0;
       const leadWindowMinutes = typeof leadArg === 'number' ? leadArg : 120;
-      const hasCourse = (call.argument('hasCourse') as string) || '0';
 
       const prefs = await this.getWidgetPrefs();
-      await prefs.put('courseName', courseName);
-      await prefs.put('courseTime', courseTime);
-      await prefs.put('courseLocation', location);
-      await prefs.put('courseTeacher', teacher);
-      await prefs.put('courseStartMs', courseStartMs);
-      await prefs.put('courseEndMs', courseEndMs);
-      await prefs.put('leadWindowMinutes', leadWindowMinutes);
-      await prefs.put('hasCourse', hasCourse);
-      await prefs.flush();
+      const prevJson = (await prefs.get('coursesJson', '')) as string;
+      const prevLead = (await prefs.get('leadWindowMinutes', -1)) as number;
+      const changed = prevJson !== coursesJson || prevLead !== leadWindowMinutes;
+      if (changed) {
+        await prefs.put('coursesJson', coursesJson);
+        await prefs.put('leadWindowMinutes', leadWindowMinutes);
+        await prefs.flush();
+      }
 
-      // 主动推送到当前所有课程小组件（状态/倒计时由 CourseStateHelper 计算）
+      // 主动推送到当前所有课程小组件（状态/倒计时由 CourseStateHelper 计算）。
+      // 数据未变化时跳过落盘与刷新调度，避免高频推送造成无谓开销。
       const formIdsStr = (await prefs.get('course_form_ids', '')) as string;
       if (formIdsStr.length > 0) {
         const formIds = formIdsStr.split(',').filter(id => id.length > 0);
@@ -823,7 +815,9 @@ export default class EntryAbility extends FlutterAbility {
           formProvider.updateForm(id, bindingData).catch((err: BusinessError) => {
             hilog.warn(DOMAIN, TAG, `updateForm course failed for ${id}: ${err.message}`);
           });
-          scheduleBoundaryRefresh(id, prefs);
+          if (changed) {
+            scheduleBoundaryRefresh(id, prefs);
+          }
         }
       }
       result.success(true);

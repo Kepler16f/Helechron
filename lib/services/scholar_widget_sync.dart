@@ -1,19 +1,27 @@
+import 'dart:convert';
+
 import 'package:get/get.dart';
 
+import 'package:celechron/model/period.dart';
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/services/ohos_native_service.dart';
 
 /// 课程小组件数据同步。
 ///
-/// 关键点：不依赖任何页面的生命周期。原实现放在 `ScholarController`
-/// （由 `scholar_view` 通过 `Get.put` 创建）中，离开页面后控制器被销毁、
-/// 定时器停止，导致小组件不再刷新、上完课也不会切到下一节。
-/// 这里改为由应用级定时器驱动，只要应用进程存活就会持续同步。
+/// 关键点：
+/// 1. 不依赖任何页面的生命周期（原实现放在由页面 `Get.put` 的控制器里，
+///    离开页面即停止刷新，导致小组件不刷新、下课也不切换）。
+/// 2. 一次性下发“后续若干节课”的时间表，交由原生侧按当前时间选择
+///    当前/下一节课并计算状态与倒计时。这样即使应用被杀，系统级刷新
+///    仍能正确切换课程。
 class ScholarWidgetSync {
   ScholarWidgetSync._();
 
   /// 提前进入倒计时的窗口（分钟）
   static const int leadWindowMinutes = 120;
+
+  /// 下发到原生侧的课程条目上限（覆盖当天剩余与次日课程即可）
+  static const int _maxCourses = 16;
 
   /// 防止重入
   static bool _running = false;
@@ -41,32 +49,27 @@ class ScholarWidgetSync {
         .toList()
       ..sort((a, b) => a.startTime.compareTo(b.startTime));
 
-    if (upcoming.isEmpty) {
-      OhosNativeService.instance.clearCourseWidget();
-      return;
-    }
-
-    final currentOrNext = upcoming.first;
-    final pad = (int n) => n.toString().padLeft(2, '0');
-    final timeStr =
-        '${pad(currentOrNext.startTime.hour)}:${pad(currentOrNext.startTime.minute)} - '
-        '${pad(currentOrNext.endTime.hour)}:${pad(currentOrNext.endTime.minute)}';
-    final teacherMatch =
-        RegExp(r'教师:\s*(.+)').firstMatch(currentOrNext.description);
-    final teacher = teacherMatch?.group(1) ?? '';
-
-    // 状态/进度/倒计时由原生侧依据起止时间戳计算：
-    // 这样系统级刷新（30 分钟定时、setFormNextRefreshTime）无需 Dart 参与
-    // 也能得到正确结果，且应用被杀后仍能切换课程。
     OhosNativeService.instance.updateCourseWidget(
-      courseName: currentOrNext.summary,
-      courseTime: timeStr,
-      location: currentOrNext.location,
-      teacher: teacher,
-      courseStartMs: currentOrNext.startTime.millisecondsSinceEpoch,
-      courseEndMs: currentOrNext.endTime.millisecondsSinceEpoch,
+      coursesJson: jsonEncode(
+        upcoming.take(_maxCourses).map(_encodeCourse).toList(),
+      ),
       leadWindowMinutes: leadWindowMinutes,
-      hasCourse: true,
     );
+  }
+
+  static Map<String, Object> _encodeCourse(Period period) {
+    final start = period.startTime;
+    final end = period.endTime;
+    final pad = (int n) => n.toString().padLeft(2, '0');
+    final teacherMatch = RegExp(r'教师:\s*(.+)').firstMatch(period.description);
+    return {
+      's': start.millisecondsSinceEpoch,
+      'e': end.millisecondsSinceEpoch,
+      'n': period.summary,
+      't':
+          '${pad(start.hour)}:${pad(start.minute)} - ${pad(end.hour)}:${pad(end.minute)}',
+      'l': period.location,
+      'c': teacherMatch?.group(1) ?? '',
+    };
   }
 }

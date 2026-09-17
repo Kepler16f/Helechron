@@ -8,7 +8,22 @@ const COLOR_SOON = '#2196F3';
 const COLOR_URGENT = '#FF9800';
 const COLOR_IDLE = '#888888';
 const COLOR_PROGRESS_DEFAULT = '#1E88E5';
+
+/// 系统“下次刷新”最小间隔（分钟），由系统限制
 const MIN_NEXT_REFRESH_MINUTES = 5;
+/// 课程进行中 / 进入倒计时窗口时的刷新间隔（分钟）
+const ACTIVE_REFRESH_MINUTES = 20;
+/// 距下一节课还很远时的兜底刷新间隔（分钟）
+const IDLE_REFRESH_MINUTES = 180;
+
+export interface CourseItem {
+  s: number; // 开始时间戳(ms)
+  e: number; // 结束时间戳(ms)
+  n: string; // 课程名
+  t: string; // 时间区间
+  l: string; // 地点
+  c: string; // 教师
+}
 
 export interface CourseState {
   status: string;
@@ -17,6 +32,10 @@ export interface CourseState {
   progress: string;
   progressColor: string;
   hasCourse: string;
+  name: string;
+  time: string;
+  location: string;
+  teacher: string;
 }
 
 function getStr(prefs: preferences.Preferences, key: string, def: string): string {
@@ -33,45 +52,95 @@ function pad2(n: number): string {
   return n < 10 ? `0${n}` : `${n}`;
 }
 
-/// 依据课程起止时间戳与当前时间计算状态、倒计时与进度。
-/// 全部在原生侧完成，因此系统级刷新（定时/下次刷新）无需 Dart 参与。
+/// 解析 Dart 侧下发的课程时间表。
+function parseCourses(prefs: preferences.Preferences): CourseItem[] {
+  const json = getStr(prefs, 'coursesJson', '');
+  const items: CourseItem[] = [];
+  if (json.length === 0) {
+    return items;
+  }
+  try {
+    const raw = JSON.parse(json) as Record<string, Object>[];
+    for (const r of raw) {
+      const s = r['s'];
+      const e = r['e'];
+      const n = r['n'];
+      const t = r['t'];
+      const l = r['l'];
+      const c = r['c'];
+      const item: CourseItem = {
+        s: typeof s === 'number' ? s : 0,
+        e: typeof e === 'number' ? e : 0,
+        n: typeof n === 'string' ? n : '',
+        t: typeof t === 'string' ? t : '',
+        l: typeof l === 'string' ? l : '',
+        c: typeof c === 'string' ? c : ''
+      };
+      if (item.e > 0) {
+        items.push(item);
+      }
+    }
+  } catch (err) {
+    console.error(`parseCourses failed: ${JSON.stringify(err)}`);
+  }
+  return items;
+}
+
+/// 选取当前进行中或最近将要开始的课程（结束时间晚于现在的、开始最早的一节）。
+function pickCurrentOrNext(items: CourseItem[], now: number): CourseItem | null {
+  let best: CourseItem | null = null;
+  for (const item of items) {
+    if (item.e <= now) {
+      continue;
+    }
+    if (best === null || item.s < best.s) {
+      best = item;
+    }
+  }
+  return best;
+}
+
+function idleState(): CourseState {
+  const idle: CourseState = {
+    status: '全部结课',
+    statusColor: COLOR_IDLE,
+    countdown: '',
+    progress: '0',
+    progressColor: COLOR_PROGRESS_DEFAULT,
+    hasCourse: '0',
+    name: '今日暂无课程',
+    time: '',
+    location: '',
+    teacher: ''
+  };
+  return idle;
+}
+
+/// 依据课程时间表与当前时间计算状态、倒计时与进度。
 export function computeCourseState(prefs: preferences.Preferences): CourseState {
-  const hasCourse = getStr(prefs, 'hasCourse', '0');
-  const startMs = getNum(prefs, 'courseStartMs', 0);
-  const endMs = getNum(prefs, 'courseEndMs', 0);
-  let leadMin = getNum(prefs, 'leadWindowMinutes', DEFAULT_LEAD_MINUTES);
-  if (leadMin <= 0) {
-    leadMin = DEFAULT_LEAD_MINUTES;
-  }
-
-  if (hasCourse !== '1' || startMs <= 0 || endMs <= 0) {
-    const idle: CourseState = {
-      status: '全部结课',
-      statusColor: COLOR_IDLE,
-      countdown: '',
-      progress: '0',
-      progressColor: COLOR_PROGRESS_DEFAULT,
-      hasCourse: '0'
-    };
-    return idle;
-  }
-
+  const items = parseCourses(prefs);
+  const leadMin = getNum(prefs, 'leadWindowMinutes', DEFAULT_LEAD_MINUTES);
   const now = Date.now();
+  const item = pickCurrentOrNext(items, now);
+  if (item === null) {
+    return idleState();
+  }
+
   let status = '';
   let statusColor = COLOR_SOON;
   let progress = 0;
   let countdown = '';
 
-  if (now >= startMs && now < endMs) {
-    const total = endMs - startMs;
-    const elapsed = now - startMs;
+  if (now >= item.s && now < item.e) {
+    const total = item.e - item.s;
+    const elapsed = now - item.s;
     progress = total <= 0 ? 100 : (elapsed / total) * 100;
     status = '上课中';
     statusColor = COLOR_ONGOING;
-    const remainMin = Math.floor((endMs - now) / 60000);
+    const remainMin = Math.floor((item.e - now) / 60000);
     countdown = `${pad2(Math.floor(remainMin / 60))}:${pad2(remainMin % 60)}`;
   } else {
-    const remainMin = Math.floor((startMs - now) / 60000);
+    const remainMin = Math.floor((item.s - now) / 60000);
     if (remainMin >= leadMin) {
       progress = 0;
     } else if (remainMin <= 0) {
@@ -107,7 +176,11 @@ export function computeCourseState(prefs: preferences.Preferences): CourseState 
     countdown: countdown,
     progress: Math.round(progress).toString(),
     progressColor: statusColor,
-    hasCourse: '1'
+    hasCourse: '1',
+    name: item.n,
+    time: item.t,
+    location: item.l,
+    teacher: item.c
   };
   return result;
 }
@@ -116,10 +189,10 @@ export function computeCourseState(prefs: preferences.Preferences): CourseState 
 export function buildCourseFormData(prefs: preferences.Preferences): Record<string, string> {
   const state = computeCourseState(prefs);
   const data: Record<string, string> = {
-    'courseName': getStr(prefs, 'courseName', '今日暂无课程'),
-    'courseTime': getStr(prefs, 'courseTime', ''),
-    'courseLocation': getStr(prefs, 'courseLocation', ''),
-    'courseTeacher': getStr(prefs, 'courseTeacher', ''),
+    'courseName': state.name,
+    'courseTime': state.time,
+    'courseLocation': state.location,
+    'courseTeacher': state.teacher,
     'courseStatus': state.status,
     'courseStatusColor': state.statusColor,
     'courseStatusTime': state.countdown,
@@ -130,33 +203,50 @@ export function buildCourseFormData(prefs: preferences.Preferences): Record<stri
   return data;
 }
 
-/// 距离下一个课程边界（开课/下课）的分钟数，用于 setFormNextRefreshTime。
-/// 返回 0 表示无需调度；最小值受系统限制为 5 分钟。
-export function minutesToNextBoundary(prefs: preferences.Preferences): number {
-  const startMs = getNum(prefs, 'courseStartMs', 0);
-  const endMs = getNum(prefs, 'courseEndMs', 0);
-  if (startMs <= 0 || endMs <= 0) {
-    return 0;
-  }
+/// 计算下一次系统刷新应等待的分钟数（受 50 次/天配额约束的策略）：
+/// - 课程进行中或已进入倒计时窗口：每 ACTIVE_REFRESH_MINUTES 分钟刷新；
+/// - 距开课尚远：睡到“进入倒计时窗口”的时刻（上限 IDLE_REFRESH_MINUTES）；
+/// - 无后续课程：IDLE_REFRESH_MINUTES 兜底。
+/// 同时保证不晚于下一个课程边界，以便下课时立即切换。
+export function nextRefreshMinutes(prefs: preferences.Preferences): number {
+  const items = parseCourses(prefs);
+  const leadMin = getNum(prefs, 'leadWindowMinutes', DEFAULT_LEAD_MINUTES);
   const now = Date.now();
-  let boundary = 0;
-  if (now < startMs) {
-    boundary = startMs;
-  } else if (now < endMs) {
-    boundary = endMs;
+  const item = pickCurrentOrNext(items, now);
+  if (item === null) {
+    return IDLE_REFRESH_MINUTES;
+  }
+
+  // 与“课程边界（开课/下课）”的距离，用于精确切换
+  const boundary = item.s > now ? item.s : item.e;
+  const untilBoundary = Math.ceil((boundary - now) / 60000);
+
+  let wait = IDLE_REFRESH_MINUTES;
+  const ongoing = now >= item.s && now < item.e;
+  const withinLead = now < item.s && item.s - now <= leadMin * 60000;
+  if (ongoing || withinLead) {
+    wait = ACTIVE_REFRESH_MINUTES;
   } else {
-    return 0;
+    // 尚未进入倒计时窗口：睡到窗口开始
+    const untilLead = Math.ceil((item.s - leadMin * 60000 - now) / 60000);
+    if (untilLead > 0 && untilLead < wait) {
+      wait = untilLead;
+    }
   }
-  let minutes = Math.ceil((boundary - now) / 60000);
-  if (minutes < MIN_NEXT_REFRESH_MINUTES) {
-    minutes = MIN_NEXT_REFRESH_MINUTES;
+
+  // 不晚于课程边界，确保下课能立刻切到下一节
+  if (untilBoundary > 0 && untilBoundary < wait) {
+    wait = untilBoundary;
   }
-  return minutes;
+  if (wait < MIN_NEXT_REFRESH_MINUTES) {
+    wait = MIN_NEXT_REFRESH_MINUTES;
+  }
+  return wait;
 }
 
-/// 为单个卡片调度下一次系统刷新（在课程边界处切换课程）。
+/// 为单个卡片调度下一次系统刷新。
 export function scheduleBoundaryRefresh(formId: string, prefs: preferences.Preferences): void {
-  const minutes = minutesToNextBoundary(prefs);
+  const minutes = nextRefreshMinutes(prefs);
   if (minutes <= 0) {
     return;
   }

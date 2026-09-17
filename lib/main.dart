@@ -44,10 +44,11 @@ void main() async {
   runApp(const CelechronApp());
 
   // 应用级课程小组件同步：独立于页面生命周期，进程存活期间持续刷新，
-  // 保证下课后能及时切换到下一节课。
+  // 保证下课后能及时切换到下一节课。主动刷新不计入系统 50 次/天配额，
+  // 因此这里用 10 秒的高频推送让倒计时尽量平滑。
   ScholarWidgetSync.sync();
   Timer.periodic(
-    const Duration(seconds: 30),
+    const Duration(seconds: 10),
     (_) => ScholarWidgetSync.sync(),
   );
 

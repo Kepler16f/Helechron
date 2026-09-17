@@ -9,7 +9,7 @@
       "isDefault": true,
       "updateEnabled": true,
       "scheduledUpdateTime": "00:05",
-      "updateDuration": 2,
+      "updateDuration": 0,
       "defaultDimension": "2*4",
       "supportDimensions": [
         "2*4"
