@@ -70,11 +70,29 @@ function pickCurrentOrNext(items: SimpleCourseItem[], now: number): SimpleCourse
   return best;
 }
 
+function buildDateLabel(itemTs: number): string {
+  const now = new Date();
+  const itemDate = new Date(itemTs);
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const itemDayStart = new Date(itemDate.getFullYear(), itemDate.getMonth(), itemDate.getDate()).getTime();
+  const diffDays = Math.round((itemDayStart - todayStart) / 86400000);
+  if (diffDays <= 0) {
+    return '今天';
+  } else if (diffDays === 1) {
+    return '明天';
+  } else if (diffDays === 2) {
+    return '后天';
+  } else {
+    return `${diffDays}天后`;
+  }
+}
+
 function idleState(): Record<string, string> {
   return {
     'courseName': '今日暂无课程',
     'courseStatus': '全部结课',
     'courseStatusColor': COLOR_IDLE,
+    'courseDate': '',
     'hasCourse': '0'
   };
 }
@@ -114,6 +132,7 @@ export function buildSimpleCourseFormData(prefs: preferences.Preferences): Recor
     'courseTeacher': item.c,
     'courseStatus': status,
     'courseStatusColor': statusColor,
+    'courseDate': buildDateLabel(item.s),
     'hasCourse': '1'
   };
 }

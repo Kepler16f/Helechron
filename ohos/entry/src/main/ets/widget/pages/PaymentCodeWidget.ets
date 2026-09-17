@@ -23,12 +23,12 @@ struct PaymentCodeWidget {
             Text('\u21BB')
               .fontSize(16)
               .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.widget_text_secondary'))
+              .fontColor($r('app.color.widget_button_text'))
           }
           .width(28)
           .height(28)
           .borderRadius(14)
-          .backgroundColor($r('app.color.widget_badge_background'))
+          .backgroundColor($r('app.color.widget_accent'))
           .justifyContent(FlexAlign.Center)
           .onClick(() => {
             postCardAction(this, {
