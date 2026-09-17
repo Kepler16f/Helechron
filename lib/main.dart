@@ -12,6 +12,7 @@ import 'package:celechron/page/home_page.dart';
 import 'package:celechron/page/option/ecard_pay_page.dart';
 import 'package:celechron/services/diagnostic_log_service.dart';
 import 'package:celechron/services/refresh_coordinator.dart';
+import 'package:celechron/services/scholar_widget_sync.dart';
 import 'package:celechron/worker/ecard_widget_messenger.dart';
 import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/utils/global.dart';
@@ -41,6 +42,14 @@ void main() async {
   Get.put(db.getFuse().obs, tag: 'fuse');
 
   runApp(const CelechronApp());
+
+  // 应用级课程小组件同步：独立于页面生命周期，进程存活期间持续刷新，
+  // 保证下课后能及时切换到下一节课。
+  ScholarWidgetSync.sync();
+  Timer.periodic(
+    const Duration(seconds: 30),
+    (_) => ScholarWidgetSync.sync(),
+  );
 
   var scholar = Get.find<Rx<Scholar>>(tag: 'scholar');
   if (scholar.value.isLogan) {
@@ -143,6 +152,8 @@ class _CelechronAppState extends State<CelechronApp>
     if (state == AppLifecycleState.resumed) {
       _startForegroundLease();
       unawaited(_consumePendingWidgetRoute());
+      ScholarWidgetSync.sync();
+      unawaited(ECardWidgetMessenger.updatePaymentCode());
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.detached) {

@@ -239,17 +239,37 @@ class OhosNativeService {
     }
   }
 
-  /// 更新课程小组件数据
+  /// 将校园卡鉴权凭据写入小组件本地存储，
+  /// 供桌面小组件的「刷新」按钮在原生侧直接重新取码（无需拉起应用）。
+  Future<void> setPaymentCredentials({
+    required String synjonesAuth,
+    required String eCardAccount,
+  }) async {
+    try {
+      await _channel.invokeMethod('setPaymentCredentials', {
+        'synjonesAuth': synjonesAuth,
+        'eCardAccount': eCardAccount,
+      });
+    } on PlatformException catch (e) {
+      debugPrint('setPaymentCredentials failed: $e');
+    } on MissingPluginException {
+      // Not on HarmonyOS
+    }
+  }
+
+  /// 更新课程小组件数据。
+  ///
+  /// 只上传课程原始信息与起止时间戳，状态文案/倒计时/进度条均由原生侧
+  /// 依据当前时间计算；这样系统级刷新（30 分钟定时、setFormNextRefreshTime）
+  /// 也能得到正确结果，应用被杀后仍可正常切换课程。
   Future<void> updateCourseWidget({
     required String courseName,
     required String courseTime,
     required String location,
     required String teacher,
-    required String status,
-    required String statusColor,
-    required String statusTime,
-    required String progressPercent,
-    required String progressColor,
+    required int courseStartMs,
+    required int courseEndMs,
+    required int leadWindowMinutes,
     required bool hasCourse,
   }) async {
     try {
@@ -258,11 +278,9 @@ class OhosNativeService {
         'courseTime': courseTime,
         'location': location,
         'teacher': teacher,
-        'status': status,
-        'statusColor': statusColor,
-        'statusTime': statusTime,
-        'progressPercent': progressPercent,
-        'progressColor': progressColor,
+        'courseStartMs': courseStartMs,
+        'courseEndMs': courseEndMs,
+        'leadWindowMinutes': leadWindowMinutes,
         'hasCourse': hasCourse ? '1' : '0',
       });
     } on PlatformException catch (e) {
@@ -279,11 +297,9 @@ class OhosNativeService {
       courseTime: '',
       location: '',
       teacher: '',
-      status: '全部结课',
-      statusColor: '#888888',
-      statusTime: '',
-      progressPercent: '0',
-      progressColor: '#1E88E5',
+      courseStartMs: 0,
+      courseEndMs: 0,
+      leadWindowMinutes: 120,
       hasCourse: false,
     );
   }

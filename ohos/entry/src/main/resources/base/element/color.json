@@ -35,6 +35,10 @@
     {
       "name": "widget_progress_track",
       "value": "#14000000"
+    },
+    {
+      "name": "widget_button_text",
+      "value": "#FFFFFF"
     }
   ]
 }

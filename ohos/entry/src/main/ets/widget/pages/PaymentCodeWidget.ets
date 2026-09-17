@@ -44,16 +44,19 @@ struct PaymentCodeWidget {
           });
         })
 
-        // 刷新按钮（图标）：触发 onFormEvent 直接刷新卡片，不拉起应用
+        // 刷新按钮：实心圆形按钮，点击后原生侧直接重新取码（不拉起应用）
         Row() {
           Text('\u21BB')
-            .fontSize(18)
-            .fontColor($r('app.color.widget_accent'))
+            .fontSize(22)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.widget_button_text'))
         }
-        .width(40)
-        .height(26)
+        .width(44)
+        .height(44)
+        .borderRadius(22)
+        .backgroundColor($r('app.color.widget_accent'))
         .justifyContent(FlexAlign.Center)
-        .margin({ top: 8, bottom: 2 })
+        .margin({ top: 10, bottom: 4 })
         .onClick(() => {
           postCardAction(this, {
             action: 'message',
