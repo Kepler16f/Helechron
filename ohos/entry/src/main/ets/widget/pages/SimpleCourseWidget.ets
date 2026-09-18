@@ -6,6 +6,7 @@ struct SimpleCourseWidget {
   @LocalStorageProp('courseName') courseName: string = '今日暂无课程';
   @LocalStorageProp('courseTime') courseTime: string = '';
   @LocalStorageProp('courseLocation') courseLocation: string = '';
+  @LocalStorageProp('courseTeacher') courseTeacher: string = '';
   @LocalStorageProp('courseStatus') courseStatus: string = '全部结课';
   @LocalStorageProp('courseStatusColor') courseStatusColor: string = '#888888';
   @LocalStorageProp('courseDate') courseDate: string = '';
@@ -65,6 +66,17 @@ struct SimpleCourseWidget {
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .margin({ top: 2 })
+        }
+
+        if (this.courseTeacher.length > 0) {
+          Text(this.courseTeacher)
+            .fontSize(10)
+            .fontColor($r('app.color.widget_text_tertiary'))
+            .textAlign(TextAlign.Center)
+            .width('100%')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .margin({ top: 1 })
         }
       }
     }
