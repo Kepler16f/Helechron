@@ -4,6 +4,8 @@ let storageSimpleCourse = new LocalStorage();
 @Component
 struct SimpleCourseWidget {
   @LocalStorageProp('courseName') courseName: string = '今日暂无课程';
+  @LocalStorageProp('courseTime') courseTime: string = '';
+  @LocalStorageProp('courseLocation') courseLocation: string = '';
   @LocalStorageProp('courseStatus') courseStatus: string = '全部结课';
   @LocalStorageProp('courseStatusColor') courseStatusColor: string = '#888888';
   @LocalStorageProp('courseDate') courseDate: string = '';
@@ -18,7 +20,8 @@ struct SimpleCourseWidget {
           .fontColor($r('app.color.widget_text_tertiary'))
       }
       .width('100%')
-      .margin({ bottom: 4 })
+
+      Blank()
 
       Text(this.courseStatus)
         .fontSize(26)
@@ -26,7 +29,6 @@ struct SimpleCourseWidget {
         .fontColor(this.courseStatusColor)
         .textAlign(TextAlign.Center)
         .width('100%')
-        .margin({ top: 2, bottom: 4 })
 
       Text(this.courseName)
         .fontSize(14)
@@ -36,14 +38,44 @@ struct SimpleCourseWidget {
         .width('100%')
         .maxLines(2)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .margin({ top: 4 })
 
-      if (this.hasCourse === '1' && this.courseDate.length > 0) {
-        Text(this.courseDate)
-          .fontSize(12)
-          .fontColor($r('app.color.widget_text_secondary'))
-          .textAlign(TextAlign.Center)
-          .width('100%')
-          .margin({ top: 4 })
+      Blank()
+
+      if (this.hasCourse === '1') {
+        Column({ space: 3 }) {
+          if (this.courseDate.length > 0) {
+            Row() {
+              Text(this.courseDate)
+                .fontSize(11)
+                .fontColor($r('app.color.widget_text_secondary'))
+              if (this.courseTime.length > 0) {
+                Text('  ·  ' + this.courseTime)
+                  .fontSize(11)
+                  .fontColor($r('app.color.widget_text_secondary'))
+              }
+            }
+            .width('100%')
+            .justifyContent(FlexAlign.Center)
+          } else if (this.courseTime.length > 0) {
+            Text(this.courseTime)
+              .fontSize(11)
+              .fontColor($r('app.color.widget_text_secondary'))
+              .textAlign(TextAlign.Center)
+              .width('100%')
+          }
+
+          if (this.courseLocation.length > 0) {
+            Text(this.courseLocation)
+              .fontSize(11)
+              .fontColor($r('app.color.widget_text_tertiary'))
+              .textAlign(TextAlign.Center)
+              .width('100%')
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+        }
+        .width('100%')
       }
     }
     .width('100%')
@@ -51,7 +83,6 @@ struct SimpleCourseWidget {
     .padding(12)
     .backgroundColor($r('app.color.widget_background'))
     .borderRadius(16)
-    .justifyContent(FlexAlign.Center)
     .onClick(() => {
       postCardAction(this, {
         action: 'router',
