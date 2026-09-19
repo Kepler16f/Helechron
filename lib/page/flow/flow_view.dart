@@ -153,7 +153,7 @@ class FlowPage extends StatelessWidget {
                                           Text(
                                             '离结束还有',
                                             style: TextStyle(
-                                              fontSize: 14,
+                                              fontSize: 15,
                                               fontWeight: FontWeight.normal,
                                               color: CupertinoTheme.of(context)
                                                   .textTheme
@@ -168,7 +168,7 @@ class FlowPage extends StatelessWidget {
                                                 .difference(_flowController
                                                     .timeNow.value)),
                                             style: TextStyle(
-                                              fontSize: 18,
+                                              fontSize: 22,
                                               fontWeight: FontWeight.bold,
                                               color: CupertinoTheme.of(context)
                                                   .textTheme
@@ -186,7 +186,7 @@ class FlowPage extends StatelessWidget {
                                           Text(
                                             '开始还有',
                                             style: TextStyle(
-                                              fontSize: 14,
+                                              fontSize: 15,
                                               fontWeight: FontWeight.normal,
                                               color: CupertinoTheme.of(context)
                                                   .textTheme
@@ -197,15 +197,12 @@ class FlowPage extends StatelessWidget {
                                             ),
                                           ),
                                           Text(
-                                            TimeHelper.toHMS(period.startTime
-                                                .difference(_flowController
-                                                    .timeNow.value)),
+                                            _flowController.countdownText(
+                                                _flowController.timeNow.value,
+                                                period.startTime),
                                             style: TextStyle(
-                                              fontSize: 18,
+                                              fontSize: 22,
                                               fontWeight: FontWeight.bold,
-                                              fontFeatures: const [
-                                                FontFeature.tabularFigures()
-                                              ],
                                               color: CupertinoTheme.of(context)
                                                   .textTheme
                                                   .textStyle
@@ -224,33 +221,64 @@ class FlowPage extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
-                LayoutBuilder(
-                    builder: (context, constraints) => Stack(
-                          children: [
-                            SizedBox(
-                              height: 8,
-                              width: (constraints.maxWidth),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: CupertinoDynamicColor.resolve(
-                                      CupertinoColors.separator, context),
-                                  borderRadius: BorderRadius.circular(4),
+                Obx(() {
+                  final bool showBar;
+                  if (_flowController.isDuringFlow) {
+                    showBar = true;
+                  } else {
+                    final remainMs = period.startTime
+                        .difference(_flowController.timeNow.value)
+                        .inMilliseconds;
+                    showBar =
+                        remainMs < const Duration(hours: 2).inMilliseconds;
+                  }
+                  if (!showBar) return const SizedBox.shrink();
+                  return LayoutBuilder(
+                      builder: (context, constraints) => Stack(
+                            children: [
+                              SizedBox(
+                                height: 8,
+                                width: (constraints.maxWidth),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: CupertinoDynamicColor.resolve(
+                                        CupertinoColors.separator, context),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
                                 ),
                               ),
-                            ),
-                            Obx(() => SizedBox(
+                              Obx(() {
+                                final double barWidth;
+                                if (_flowController.isDuringFlow) {
+                                  final elapsed = _flowController.timeNow.value
+                                      .difference(period.startTime)
+                                      .inMilliseconds;
+                                  final total = period.endTime
+                                      .difference(period.startTime)
+                                      .inMilliseconds;
+                                  barWidth = total > 0
+                                      ? max(
+                                          constraints.maxWidth *
+                                              elapsed /
+                                              total,
+                                          0.0)
+                                      : 0.0;
+                                } else {
+                                  final leadMs =
+                                      const Duration(hours: 2).inMilliseconds;
+                                  final remainMs = period.startTime
+                                      .difference(_flowController.timeNow.value)
+                                      .inMilliseconds;
+                                  if (remainMs <= 0) {
+                                    barWidth = constraints.maxWidth;
+                                  } else {
+                                    barWidth = constraints.maxWidth *
+                                        (1 - remainMs / leadMs);
+                                  }
+                                }
+                                return SizedBox(
                                   height: 8,
-                                  width: _flowController.isDuringFlow
-                                      ? (max(
-                                          (constraints.maxWidth) *
-                                              _flowController.timeNow.value
-                                                  .difference(period.startTime)
-                                                  .inMilliseconds /
-                                              period.endTime
-                                                  .difference(period.startTime)
-                                                  .inMilliseconds,
-                                          0.0))
-                                      : (constraints.maxWidth),
+                                  width: barWidth,
                                   child: Container(
                                     decoration: BoxDecoration(
                                       color: CupertinoDynamicColor.resolve(
@@ -258,9 +286,11 @@ class FlowPage extends StatelessWidget {
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                   ),
-                                ))
-                          ],
-                        )),
+                                );
+                              })
+                            ],
+                          ));
+                }),
               ],
             ),
           ),

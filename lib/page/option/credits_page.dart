@@ -148,7 +148,7 @@ class _CreditsPageState extends State<CreditsPage> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Celechron 的 OpenHarmony 移植版本，\n基于上游 1.3.0，有问题请到仓库反馈',
+                            'Celechron 的 OpenHarmony 移植版本，\n基于上游 1.3.0，有问题请到仓库反馈\n目前图标采用"求是鸡"梗图占位，不代表本应用和 Celechron 原应用以及浙江大学官方有关。\n若涉及侵权请在 GitHub 联系作者更换，有好的图标建议也请在 GitHub 联系作者。',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 11,
@@ -164,7 +164,7 @@ class _CreditsPageState extends State<CreditsPage> {
                     height: 24,
                   ),
                   const Text(
-                    '制作人员',
+                    '移植制作人员',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
@@ -196,7 +196,7 @@ class _CreditsPageState extends State<CreditsPage> {
                     height: 24,
                   ),
                   const Text(
-                    '上游制作人员',
+                    '上游 Celechron 制作人员',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
@@ -285,7 +285,7 @@ class _CreditsPageState extends State<CreditsPage> {
                           CupertinoColors.secondaryLabel, context),
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  SizedBox(height: MediaQuery.paddingOf(context).bottom + 32),
                 ],
               ),
             ),

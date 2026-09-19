@@ -10,6 +10,7 @@ import 'package:celechron/model/scholar.dart';
 import 'package:celechron/model/option.dart';
 import 'package:celechron/page/home_page.dart';
 import 'package:celechron/page/option/ecard_pay_page.dart';
+import 'package:celechron/page/flow/flow_controller.dart';
 import 'package:celechron/services/diagnostic_log_service.dart';
 import 'package:celechron/services/refresh_coordinator.dart';
 import 'package:celechron/services/scholar_widget_sync.dart';
@@ -165,6 +166,10 @@ class _CelechronAppState extends State<CelechronApp>
       // 回到前台立即刷新一次（定时器可能已被系统挂起）
       ScholarWidgetSync.sync();
       unawaited(ECardWidgetMessenger.updatePaymentCode());
+      // 倒计时精度：回到前台切回精确显示
+      try {
+        Get.find<FlowController>().onAppResumed();
+      } catch (_) {}
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.detached) {
@@ -172,6 +177,10 @@ class _CelechronAppState extends State<CelechronApp>
       // 离开前台（例如用户从小组件打开应用后返回桌面）时补一次推送，
       // 否则定时器被挂起会导致小组件停留在旧状态。
       ScholarWidgetSync.sync();
+      // 倒计时精度：进入后台 2 分钟后降级为粗略显示
+      try {
+        Get.find<FlowController>().onAppBackgrounded();
+      } catch (_) {}
     }
     if (state == AppLifecycleState.paused) {
       ECardWidgetMessenger.update();

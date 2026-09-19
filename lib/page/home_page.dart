@@ -51,6 +51,11 @@ class _HomePageState extends State<HomePage> {
   void _onNativeTabChanged(int index) {
     if (index == _indexNum) return;
     if (index < 0 || index >= _pages.length) return;
+    // 如果当前有子页面在栈上，先返回主页再切换 Tab
+    final rootNav = Navigator.of(context, rootNavigator: true);
+    if (rootNav.canPop()) {
+      rootNav.popUntil((route) => route.isFirst);
+    }
     _pageController.jumpToPage(index);
   }
 

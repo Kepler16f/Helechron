@@ -445,10 +445,8 @@ class OptionPage extends StatelessWidget {
                         additionalDividerMargin: 2,
                         margin: _defaultMargin,
                         header: Container(
-                            padding: const EdgeInsets.only(left: 32),
-                            child: Text('显示',
-                                style: headerFooterTextStyle.copyWith(
-                                    fontSize: 12))),
+                            padding: const EdgeInsets.only(left: 16),
+                            child: Text('显示', style: headerFooterTextStyle)),
                         footer: Container(
                             padding: const EdgeInsets.only(left: 16),
                             child: Text(
@@ -593,7 +591,12 @@ class OptionPage extends StatelessWidget {
                           },
                         ),
                       ]),
-                )
+                ),
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: MediaQuery.paddingOf(context).bottom + 16,
+                  ),
+                ),
               ],
             )));
   }
