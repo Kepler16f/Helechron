@@ -285,25 +285,69 @@ class OhosNativeService {
     await updateCourseWidget(coursesJson: '[]', leadWindowMinutes: 120);
   }
 
-  // ==================== Widget Routes ====================
+  /// 设置底部 Tab 栏样式（鸿蒙原生 ArkTS 接口）
+  Future<void> setBottomBarStyle({
+    required bool floating,
+    required bool immersiveLight,
+  }) async {
+    try {
+      await _channel.invokeMethod('setBottomBarStyle', {
+        'floating': floating,
+        'immersiveLight': immersiveLight,
+      });
+    } on PlatformException catch (e) {
+      debugPrint('setBottomBarStyle failed: $e');
+    } on MissingPluginException {}
+  }
+
+  /// 通知原生侧当前选中 Tab
+  Future<void> setCurrentTab(int index) async {
+    try {
+      await _channel.invokeMethod('setCurrentTab', {'index': index});
+    } on PlatformException catch (e) {
+      debugPrint('setCurrentTab failed: $e');
+    } on MissingPluginException {}
+  }
+
+  // ==================== Widget Routes & Native Tab ====================
 
   static void Function(String target)? _widgetRouteHandler;
+  static void Function(int index)? _nativeTabHandler;
   static bool _routeHandlerInstalled = false;
 
   /// 注册小组件点击跳转回调（原生 -> Dart）。
   void installWidgetRouteHandler(void Function(String target) handler) {
     _widgetRouteHandler = handler;
+    _ensureIncomingHandlerInstalled();
+  }
+
+  /// 注册原生底栏 Tab 切换回调（原生 -> Dart）。
+  void installNativeTabHandler(void Function(int index) handler) {
+    _nativeTabHandler = handler;
+    _ensureIncomingHandlerInstalled();
+  }
+
+  static void _ensureIncomingHandlerInstalled() {
     if (_routeHandlerInstalled) return;
     _routeHandlerInstalled = true;
     _channel.setMethodCallHandler((call) async {
-      if (call.method == 'onWidgetRoute') {
-        final args = call.arguments;
-        if (args is Map && args['target'] is String) {
-          _widgetRouteHandler?.call(args['target'] as String);
-        }
-        return null;
+      switch (call.method) {
+        case 'onWidgetRoute':
+          final args = call.arguments;
+          if (args is Map && args['target'] is String) {
+            _widgetRouteHandler?.call(args['target'] as String);
+          }
+          return null;
+        case 'onNativeTabChanged':
+          final args = call.arguments;
+          if (args is Map && args['index'] is int) {
+            _nativeTabHandler?.call(args['index'] as int);
+          }
+          return null;
+        default:
+          throw MissingPluginException(
+              'Unsupported native method: ${call.method}');
       }
-      throw MissingPluginException('Unsupported native method: ${call.method}');
     });
   }
 

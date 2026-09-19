@@ -414,6 +414,31 @@ class OptionPage extends StatelessWidget {
                         child: Text('工具', style: headerFooterTextStyle)),
                     children: <Widget>[
                   CupertinoListTile(
+                    title: const Text('付款码'),
+                    trailing: const BackChervonRow(),
+                    onTap: () async {
+                      Navigator.of(context, rootNavigator: true)
+                          .pushNamed('/ecardpaypage');
+                    },
+                  ),
+                ])),
+            // 工具 → 显示
+            SliverToBoxAdapter(
+                child: CupertinoListSection.insetGrouped(
+                    additionalDividerMargin: 2,
+                    margin: _defaultMargin,
+                    header: Container(
+                        padding: const EdgeInsets.only(left: 32),
+                        child: Text('显示',
+                            style:
+                                headerFooterTextStyle.copyWith(fontSize: 12))),
+                    footer: Container(
+                        padding: const EdgeInsets.only(left: 16),
+                        child: Text(
+                            '悬浮底栏遵循鸿蒙原生设计规范，液态玻璃沉浸光感需要 HarmonyOS 6 及以上版本。',
+                            style: headerFooterTextStyle)),
+                    children: <Widget>[
+                  CupertinoListTile(
                     title: const Text('暗色模式'),
                     trailing: BackChervonRow(
                         child: Obx(() => Text(
@@ -429,13 +454,28 @@ class OptionPage extends StatelessWidget {
                     onTap: () => _showBrightnessPicker(context),
                   ),
                   CupertinoListTile(
-                    title: const Text('付款码'),
-                    trailing: const BackChervonRow(),
-                    onTap: () async {
-                      Navigator.of(context, rootNavigator: true)
-                          .pushNamed('/ecardpaypage');
-                    },
+                    title: const Text('悬浮底栏'),
+                    subtitle: const Text('底部 Tab 栏悬停显示，胶囊形悬浮'),
+                    trailing: Obx(() => CupertinoSwitch(
+                          value: _optionController.bottomBarFloating,
+                          onChanged: (value) {
+                            _optionController.bottomBarFloating = value;
+                          },
+                        )),
                   ),
+                  Obx(() => CupertinoListTile(
+                        title: const Text('沉浸光感'),
+                        subtitle: const Text('悬浮底栏背景液态玻璃光感效果'),
+                        trailing: CupertinoSwitch(
+                          value: _optionController.bottomBarImmersiveLight,
+                          onChanged: _optionController.bottomBarFloating
+                              ? (value) {
+                                  _optionController.bottomBarImmersiveLight =
+                                      value;
+                                }
+                              : null,
+                        ),
+                      )),
                 ])),
             // 关于
             SliverToBoxAdapter(

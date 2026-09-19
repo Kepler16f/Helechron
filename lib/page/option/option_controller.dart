@@ -129,6 +129,31 @@ class OptionController extends GetxController {
     _db.setBrightnessMode(value);
   }
 
+  bool get bottomBarFloating => _option.bottomBarFloating.value;
+
+  set bottomBarFloating(bool value) {
+    _option.bottomBarFloating.value = value;
+    _db.setBottomBarFloating(value);
+    if (!value) {
+      bottomBarImmersiveLight = false;
+    }
+    OhosNativeService.instance.setBottomBarStyle(
+      floating: bottomBarFloating,
+      immersiveLight: bottomBarImmersiveLight,
+    );
+  }
+
+  bool get bottomBarImmersiveLight => _option.bottomBarImmersiveLight.value;
+
+  set bottomBarImmersiveLight(bool value) {
+    _option.bottomBarImmersiveLight.value = value;
+    _db.setBottomBarImmersiveLight(value);
+    OhosNativeService.instance.setBottomBarStyle(
+      floating: bottomBarFloating,
+      immersiveLight: bottomBarImmersiveLight,
+    );
+  }
+
   RxList<CourseIdMap> get courseIdMappingList => _option.courseIdMappingList;
 
   bool get hideHomeGpa => _option.hideHomeGpa.value;

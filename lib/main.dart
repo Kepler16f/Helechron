@@ -39,6 +39,14 @@ void main() async {
   Get.put(db.getFlowList().obs, tag: 'flowList');
   Get.put(db.getFlowListUpdateTime().obs, tag: 'flowListLastUpdate');
   Get.put(db.getOption(), tag: 'option');
+
+  // 将底栏样式同步到原生
+  final option = Get.find<Option>(tag: 'option');
+  OhosNativeService.instance.setBottomBarStyle(
+    floating: option.bottomBarFloating.value,
+    immersiveLight: option.bottomBarImmersiveLight.value,
+  );
+
   Get.put(db.getFuse().obs, tag: 'fuse');
 
   runApp(const CelechronApp());

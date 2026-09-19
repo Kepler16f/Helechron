@@ -58,6 +58,8 @@ class DatabaseHelper {
   final String kHideHomeGpa = 'hideHomeGpa';
   final String kAsyncRefresh = 'asyncRefresh';
   final String kCalendarReminderMode = 'calendarReminderMode';
+  final String kBottomBarFloating = 'bottomBarFloating';
+  final String kBottomBarImmersiveLight = 'bottomBarImmersiveLight';
 
   Option getOption() {
     return Option(
@@ -72,6 +74,8 @@ class DatabaseHelper {
       hideHomeGpa: getHideHomeGpa().obs,
       asyncRefresh: getAsyncRefresh().obs,
       calendarReminderMode: getCalendarReminderMode().obs,
+      bottomBarFloating: getBottomBarFloating().obs,
+      bottomBarImmersiveLight: getBottomBarImmersiveLight().obs,
     );
   }
 
@@ -188,6 +192,28 @@ class DatabaseHelper {
 
   Future<void> setCalendarReminderMode(CalendarReminderMode mode) async {
     await optionsBox.put(kCalendarReminderMode, mode.index);
+  }
+
+  bool getBottomBarFloating() {
+    if (optionsBox.get(kBottomBarFloating) == null) {
+      optionsBox.put(kBottomBarFloating, false);
+    }
+    return optionsBox.get(kBottomBarFloating);
+  }
+
+  Future<void> setBottomBarFloating(bool floating) async {
+    await optionsBox.put(kBottomBarFloating, floating);
+  }
+
+  bool getBottomBarImmersiveLight() {
+    if (optionsBox.get(kBottomBarImmersiveLight) == null) {
+      optionsBox.put(kBottomBarImmersiveLight, false);
+    }
+    return optionsBox.get(kBottomBarImmersiveLight);
+  }
+
+  Future<void> setBottomBarImmersiveLight(bool immersive) async {
+    await optionsBox.put(kBottomBarImmersiveLight, immersive);
   }
 
   List<CourseIdMap> getCourseIdMappingList() {

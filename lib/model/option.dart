@@ -37,6 +37,8 @@ class Option {
   RxBool hideHomeGpa;
   RxBool asyncRefresh;
   Rx<CalendarReminderMode> calendarReminderMode;
+  RxBool bottomBarFloating;
+  RxBool bottomBarImmersiveLight;
 
   Option({
     required this.workTime,
@@ -50,5 +52,7 @@ class Option {
     required this.hideHomeGpa,
     required this.asyncRefresh,
     required this.calendarReminderMode,
+    required this.bottomBarFloating,
+    required this.bottomBarImmersiveLight,
   });
 }

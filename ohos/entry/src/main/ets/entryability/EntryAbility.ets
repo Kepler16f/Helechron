@@ -60,8 +60,41 @@ export default class EntryAbility extends FlutterAbility {
       }
     });
 
+    // 初始化 AppStorage：从持久化存储恢复底栏样式
+    this.initAppStorageFromPrefs();
+
+    // 监听原生底栏 Tab 切换事件并转发给 Flutter
+    try {
+      this.context.eventHub.on('bottomBarTabChanged', (data: Object) => {
+        const index = typeof data === 'number' ? data : 0;
+        hilog.info(DOMAIN, TAG, `bottomBarTabChanged: index=${index}`);
+        this.methodChannel?.invokeMethod('onNativeTabChanged', { index: index });
+      });
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, `eventHub.on failed: ${JSON.stringify(e)}`);
+    }
+
     // 冷启动时若由小组件拉起，记录目标路由，等待 Dart 侧主动领取
     this.captureRouteFromWant(this.launchWant);
+  }
+
+  private async initAppStorageFromPrefs(): Promise<void> {
+    try {
+      const prefs = await this.getWidgetPrefs();
+      const floatingRaw = (await prefs.get('bottomBarFloating', '0')) as string;
+      const immersiveRaw = (await prefs.get('bottomBarImmersiveLight', '0')) as string;
+      const floating = floatingRaw === '1';
+      const immersiveLight = immersiveRaw === '1' && floating;
+      AppStorage.setOrCreate('bottomBarFloating', floating);
+      AppStorage.setOrCreate('bottomBarImmersiveLight', immersiveLight);
+      AppStorage.setOrCreate('bottomBarCurrentTab', 0);
+      hilog.info(DOMAIN, TAG, `initAppStorageFromPrefs: floating=${floating}, immersiveLight=${immersiveLight}`);
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, `initAppStorageFromPrefs failed: ${JSON.stringify(e)}`);
+      AppStorage.setOrCreate('bottomBarFloating', false);
+      AppStorage.setOrCreate('bottomBarImmersiveLight', false);
+      AppStorage.setOrCreate('bottomBarCurrentTab', 0);
+    }
   }
 
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
@@ -214,6 +247,12 @@ export default class EntryAbility extends FlutterAbility {
         break;
       case 'updateCourseWidget':
         this.updateCourseWidget(call, result);
+        break;
+      case 'setBottomBarStyle':
+        this.setBottomBarStyle(call, result);
+        break;
+      case 'setCurrentTab':
+        this.setCurrentTab(call, result);
         break;
       case 'setPaymentCredentials':
         this.setPaymentCredentials(call, result);
@@ -907,6 +946,36 @@ export default class EntryAbility extends FlutterAbility {
       result.success(true);
     } catch (e) {
       hilog.error(DOMAIN, TAG, `setPaymentCredentials failed: ${JSON.stringify(e)}`);
+      result.success(false);
+    }
+  }
+
+  private async setBottomBarStyle(call: MethodCall, result: MethodResult): Promise<void> {
+    try {
+      const floating = call.argument('floating') === true;
+      const immersiveLight = call.argument('immersiveLight') === true;
+      const prefs = await this.getWidgetPrefs();
+      await prefs.put('bottomBarFloating', floating ? '1' : '0');
+      await prefs.put('bottomBarImmersiveLight', immersiveLight ? '1' : '0');
+      await prefs.flush();
+      AppStorage.setOrCreate('bottomBarFloating', floating);
+      AppStorage.setOrCreate('bottomBarImmersiveLight', immersiveLight && floating);
+      hilog.info(DOMAIN, TAG, `setBottomBarStyle: floating=${floating}, immersiveLight=${immersiveLight}`);
+      result.success(true);
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `setBottomBarStyle failed: ${JSON.stringify(e)}`);
+      result.success(false);
+    }
+  }
+
+  private setCurrentTab(call: MethodCall, result: MethodResult): void {
+    try {
+      const indexArg: Object = call.argument('index') as Object;
+      const index: number = typeof indexArg === 'number' ? Math.max(0, Math.min(4, Math.floor(indexArg))) : 0;
+      AppStorage.setOrCreate('bottomBarCurrentTab', index);
+      result.success(true);
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `setCurrentTab failed: ${JSON.stringify(e)}`);
       result.success(false);
     }
   }
