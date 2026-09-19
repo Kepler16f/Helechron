@@ -51,13 +51,13 @@ struct Index {
   BottomBarItem(symbol: Resource, title: string, index: number) {
     Column() {
       SymbolGlyph(symbol)
-        .fontSize(22)
+        .fontSize(this.bottomBarFloating ? 20 : 22)
         .fontColor([this.bottomBarCurrentTab === index
           ? $r('sys.color.ohos_id_color_emphasize')
           : $r('sys.color.ohos_id_color_text_secondary')])
       Text(title)
-        .fontSize(10)
-        .margin({ top: 2 })
+        .fontSize(this.bottomBarFloating ? 9 : 10)
+        .margin({ top: this.bottomBarFloating ? 1 : 2 })
         .fontColor(this.bottomBarCurrentTab === index
           ? $r('sys.color.ohos_id_color_emphasize')
           : $r('sys.color.ohos_id_color_text_secondary'))
@@ -89,7 +89,7 @@ struct Index {
 
       if (this.bottomBarFloating) {
         if (this.bottomBarImmersiveLight) {
-          // 沉浸光感液态玻璃：毛玻璃 + 高饱和/提亮 + 顶部高光渐变 + 边缘描边 + 底部投影
+          // 沉浸光感液态玻璃：毛玻璃 + 高饱和/提亮 + 自适应背景色 + 高光渐变 + 边缘描边 + 底部投影
           Row() {
             this.BarItems()
           }
@@ -99,20 +99,22 @@ struct Index {
           .clip(true)
           .margin({ bottom: this.safeBottom + 8 })
           .backgroundEffect({
-            radius: 30,
-            saturation: 1.6,
-            brightness: 1.12
+            radius: 40,
+            saturation: 2.0,
+            brightness: 1.18,
+            color: '#18FFFFFF',
+            adaptiveColor: AdaptiveColor.AVERAGE
           })
           .linearGradient({
             angle: 180,
             colors: [
-              ['#47FFFFFF', 0.0],
-              ['#14FFFFFF', 0.45],
-              ['#00FFFFFF', 0.78]
+              ['#50FFFFFF', 0.0],
+              ['#1AFFFFFF', 0.40],
+              ['#00FFFFFF', 0.72]
             ]
           })
-          .border({ width: 0.5, color: '#73FFFFFF' })
-          .shadow({ radius: 24, color: '#2E000000', offsetX: 0, offsetY: 8 })
+          .border({ width: 1, color: '#4DFFFFFF' })
+          .shadow({ radius: 28, color: '#38000000', offsetX: 0, offsetY: 10 })
         } else {
           Row() {
             this.BarItems()

@@ -104,8 +104,10 @@ class PracticeScorePage extends StatelessWidget {
         context,
       ),
       child: SafeArea(
+        bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          padding: EdgeInsets.fromLTRB(
+              16, 16, 16, MediaQuery.paddingOf(context).bottom + 48),
           children: [
             _SummaryCard(
               categoryName: _categoryName,
@@ -194,8 +196,10 @@ class PracticeScoreDetailPage extends StatelessWidget {
         context,
       ),
       child: SafeArea(
+        bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          padding: EdgeInsets.fromLTRB(
+              16, 16, 16, MediaQuery.paddingOf(context).bottom + 48),
           children: [
             _Card(
               child: Column(

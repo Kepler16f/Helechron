@@ -17,9 +17,17 @@ class CourseDetailPage extends StatelessWidget {
   late final Course course;
 
   CourseDetailPage({required courseId, super.key}) {
-    course = _scholar.value.semesters
-        .firstWhere((e) => e.courses.containsKey(courseId))
-        .courses[courseId]!;
+    Course? found;
+    for (final semester in _scholar.value.semesters) {
+      for (final c in semester.courses.values) {
+        if (c.id == courseId) {
+          found = c;
+          break;
+        }
+      }
+      if (found != null) break;
+    }
+    course = found!;
   }
 
   Widget createSessionCard(context, List<Session> sessions) {

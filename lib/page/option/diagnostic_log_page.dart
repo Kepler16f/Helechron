@@ -159,6 +159,7 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
         middle: Text('诊断与测试'),
       ),
       child: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             Padding(
@@ -213,7 +214,8 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
     if (_bundle.reports.isEmpty) {
       return ListView(
         key: const ValueKey('readable-report-page'),
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(
+            16, 16, 16, MediaQuery.paddingOf(context).bottom + 48),
         children: [
           _card(
             context,
@@ -233,7 +235,8 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
     return CupertinoScrollbar(
       child: ListView(
         key: const ValueKey('readable-report-page'),
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+        padding: EdgeInsets.fromLTRB(
+            16, 4, 16, MediaQuery.paddingOf(context).bottom + 48),
         children: [
           if (_bundle.damagedLineCount > 0)
             _noticeCard(
@@ -565,7 +568,8 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
     return CupertinoScrollbar(
       child: ListView(
         key: const ValueKey('raw-log-page'),
-        padding: const EdgeInsets.only(top: 4, bottom: 24),
+        padding: EdgeInsets.only(
+            top: 4, bottom: MediaQuery.paddingOf(context).bottom + 48),
         children: [
           CupertinoListSection.insetGrouped(
             header: const Text('完整原始日志'),

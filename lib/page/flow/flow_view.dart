@@ -221,76 +221,51 @@ class FlowPage extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Obx(() {
-                  final bool showBar;
-                  if (_flowController.isDuringFlow) {
-                    showBar = true;
-                  } else {
-                    final remainMs = period.startTime
-                        .difference(_flowController.timeNow.value)
-                        .inMilliseconds;
-                    showBar =
-                        remainMs < const Duration(hours: 2).inMilliseconds;
-                  }
-                  if (!showBar) return const SizedBox.shrink();
-                  return LayoutBuilder(
-                      builder: (context, constraints) => Stack(
-                            children: [
-                              SizedBox(
+                LayoutBuilder(
+                    builder: (context, constraints) => Stack(
+                          children: [
+                            SizedBox(
+                              height: 8,
+                              width: (constraints.maxWidth),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: CupertinoDynamicColor.resolve(
+                                      CupertinoColors.separator, context),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                            ),
+                            Obx(() {
+                              final double barWidth;
+                              if (_flowController.isDuringFlow) {
+                                final elapsed = _flowController.timeNow.value
+                                    .difference(period.startTime)
+                                    .inMilliseconds;
+                                final total = period.endTime
+                                    .difference(period.startTime)
+                                    .inMilliseconds;
+                                barWidth = total > 0
+                                    ? max(
+                                        constraints.maxWidth * elapsed / total,
+                                        0.0)
+                                    : 0.0;
+                              } else {
+                                barWidth = constraints.maxWidth;
+                              }
+                              return SizedBox(
                                 height: 8,
-                                width: (constraints.maxWidth),
+                                width: barWidth,
                                 child: Container(
                                   decoration: BoxDecoration(
                                     color: CupertinoDynamicColor.resolve(
-                                        CupertinoColors.separator, context),
+                                        themeColor, context),
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                 ),
-                              ),
-                              Obx(() {
-                                final double barWidth;
-                                if (_flowController.isDuringFlow) {
-                                  final elapsed = _flowController.timeNow.value
-                                      .difference(period.startTime)
-                                      .inMilliseconds;
-                                  final total = period.endTime
-                                      .difference(period.startTime)
-                                      .inMilliseconds;
-                                  barWidth = total > 0
-                                      ? max(
-                                          constraints.maxWidth *
-                                              elapsed /
-                                              total,
-                                          0.0)
-                                      : 0.0;
-                                } else {
-                                  final leadMs =
-                                      const Duration(hours: 2).inMilliseconds;
-                                  final remainMs = period.startTime
-                                      .difference(_flowController.timeNow.value)
-                                      .inMilliseconds;
-                                  if (remainMs <= 0) {
-                                    barWidth = constraints.maxWidth;
-                                  } else {
-                                    barWidth = constraints.maxWidth *
-                                        (1 - remainMs / leadMs);
-                                  }
-                                }
-                                return SizedBox(
-                                  height: 8,
-                                  width: barWidth,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: CupertinoDynamicColor.resolve(
-                                          themeColor, context),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                  ),
-                                );
-                              })
-                            ],
-                          ));
-                }),
+                              );
+                            })
+                          ],
+                        )),
               ],
             ),
           ),
