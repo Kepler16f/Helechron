@@ -16,19 +16,39 @@ struct Index {
   @StorageLink('bottomBarImmersiveLight') bottomBarImmersiveLight: boolean = false;
   @StorageLink('bottomBarCurrentTab') bottomBarCurrentTab: number = 0;
 
-  private tabsController: TabsController = new TabsController();
+  private switchTab(index: number): void {
+    if (index === this.bottomBarCurrentTab) {
+      return;
+    }
+    this.bottomBarCurrentTab = index;
+    try {
+      this.context.eventHub.emit('bottomBarTabChanged', index);
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, `emit bottomBarTabChanged failed: ${JSON.stringify(e)}`);
+    }
+  }
 
   @Builder
-  TabItem(title: string, index: number) {
+  BottomBarItem(symbol: Resource, title: string, index: number) {
     Column() {
+      SymbolGlyph(symbol)
+        .fontSize(22)
+        .fontColor([this.bottomBarCurrentTab === index
+          ? $r('sys.color.ohos_id_color_emphasize')
+          : $r('sys.color.ohos_id_color_text_secondary')])
       Text(title)
-        .fontColor(this.bottomBarCurrentTab === index ? $r('sys.color.ohos_id_color_emphasize') : $r('sys.color.ohos_id_color_text_secondary'))
-        .fontSize(12)
-        .fontWeight(this.bottomBarCurrentTab === index ? FontWeight.Medium : FontWeight.Normal)
+        .fontSize(10)
+        .margin({ top: 2 })
+        .fontColor(this.bottomBarCurrentTab === index
+          ? $r('sys.color.ohos_id_color_emphasize')
+          : $r('sys.color.ohos_id_color_text_secondary'))
     }
-    .width('100%')
+    .layoutWeight(1)
     .height('100%')
     .justifyContent(FlexAlign.Center)
+    .onClick(() => {
+      this.switchTab(index);
+    })
   }
 
   build() {
@@ -43,51 +63,21 @@ struct Index {
         Column() {
           Blank()
           Row() {
-            Tabs({ index: this.bottomBarCurrentTab, controller: this.tabsController }) {
-              TabContent() {
-                this.TabItem('接下来', 0)
-              }.tabBar(new BottomTabBarStyle($r('sys.symbol.clock'), '接下来'))
-
-              TabContent() {
-                this.TabItem('日程', 1)
-              }.tabBar(new BottomTabBarStyle($r('sys.symbol.calendar'), '日程'))
-
-              TabContent() {
-                this.TabItem('任务', 2)
-              }.tabBar(new BottomTabBarStyle($r('sys.symbol.checkmark'), '任务'))
-
-              TabContent() {
-                this.TabItem('学业', 3)
-              }.tabBar(new BottomTabBarStyle($r('sys.symbol.person'), '学业'))
-
-              TabContent() {
-                this.TabItem('设置', 4)
-              }.tabBar(new BottomTabBarStyle($r('sys.symbol.gearshape'), '设置'))
-            }
-            .barPosition(BarPosition.End)
-            .barMode(BarMode.Fixed)
-            .barOverlap(true)
-            .vertical(false)
-            .onChange((index: number) => {
-              if (index !== this.bottomBarCurrentTab) {
-                this.bottomBarCurrentTab = index;
-                try {
-                  this.context.eventHub.emit('bottomBarTabChanged', index);
-                } catch (e) {
-                  hilog.warn(DOMAIN, TAG, `emit bottomBarTabChanged failed: ${JSON.stringify(e)}`);
-                }
-              }
-            })
-            .width('100%')
-            .height(56)
+            this.BottomBarItem($r('sys.symbol.clock'), '接下来', 0)
+            this.BottomBarItem($r('sys.symbol.calendar'), '日程', 1)
+            this.BottomBarItem($r('sys.symbol.checkmark'), '任务', 2)
+            this.BottomBarItem($r('sys.symbol.person'), '学业', 3)
+            this.BottomBarItem($r('sys.symbol.gearshape'), '设置', 4)
           }
           .width('92%')
           .height(56)
           .borderRadius(28)
           .clip(true)
-          .margin({ bottom: 12 })
+          .margin({ bottom: 20 })
           .backgroundEffect({ radius: 30 })
-          .backgroundColor(this.bottomBarImmersiveLight ? Color.Transparent : $r('sys.color.ohos_id_color_bottom_tab_bg'))
+          .backgroundColor(this.bottomBarImmersiveLight
+            ? Color.Transparent
+            : $r('sys.color.ohos_id_color_bottom_tab_bg'))
         }
         .width('100%')
         .height('100%')
