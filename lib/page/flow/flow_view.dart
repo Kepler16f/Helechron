@@ -572,6 +572,7 @@ class FlowPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
       child: SafeArea(
+        bottom: false,
         child: CustomScrollView(
           // Allow the list to shrink wrap around the top and bottom bars.
           slivers: [

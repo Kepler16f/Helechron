@@ -527,6 +527,7 @@ class TaskPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
       child: SafeArea(
+        bottom: false,
         child: CustomScrollView(
           slivers: [
             CupertinoSliverNavigationBar(

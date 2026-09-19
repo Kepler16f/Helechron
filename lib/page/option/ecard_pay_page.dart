@@ -66,6 +66,7 @@ class ECardPayPage extends StatelessWidget {
     });
     return CupertinoPageScaffold(
       child: SafeArea(
+        bottom: false,
         child: CustomScrollView(
           slivers: [
             const CelechronSliverTextHeader(subtitle: '付款码'),

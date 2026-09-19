@@ -145,6 +145,7 @@ class _TaskEditPageState extends State<TaskEditPage> {
         border: null,
       ),
       child: SafeArea(
+        bottom: false,
         child: CustomScrollView(
           slivers: [
             SliverList(

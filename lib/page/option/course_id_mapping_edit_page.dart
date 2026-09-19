@@ -176,6 +176,7 @@ class CourseIdMappingEditPage extends StatelessWidget {
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.systemGroupedBackground,
       child: SafeArea(
+        bottom: false,
         child: CustomScrollView(
           slivers: [
             const CelechronSliverTextHeader(subtitle: '自定义课程代码映射'),

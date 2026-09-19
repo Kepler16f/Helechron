@@ -9,6 +9,7 @@ class CustomLicensePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
       child: SafeArea(
+        bottom: false,
         child: CustomScrollView(
           slivers: [
             const CelechronSliverTextHeader(subtitle: '服务条款'),

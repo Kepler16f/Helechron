@@ -91,9 +91,14 @@ class _HomePageState extends State<HomePage> {
           EdgeInsets.only(bottom: existingMediaQuery.viewInsets.bottom);
 
       if (floating) {
-        // 悬浮底栏：内容延伸到原生底栏后方（镂空），系统安全区交由原生处理
+        // 悬浮底栏：可滚动内容底部预留栏高，使最后一个条目能继续滚动到
+        // 悬浮底栏上方；页面用 SafeArea(bottom:false) 把该值交给
+        // CustomScrollView 作为 SliverPadding，内容仍延伸到栏后方（镂空）。
+        const double floatingBarInset = 64.0; // 底部外边距 8 + 栏高 56
         newMediaQuery = newMediaQuery.copyWith(
-          padding: newMediaQuery.padding.copyWith(bottom: 0),
+          padding: newMediaQuery.padding.copyWith(
+            bottom: existingMediaQuery.padding.bottom + floatingBarInset,
+          ),
         );
       } else {
         // 普通原生底栏：底部留出栏高，避免内容被遮挡
