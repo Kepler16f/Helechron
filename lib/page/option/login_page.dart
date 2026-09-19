@@ -1,10 +1,22 @@
 import 'package:celechron/utils/platform_features.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:get/get.dart';
+import 'package:celechron/model/option.dart';
 import 'package:celechron/model/scholar.dart';
 
 import '../../worker/ecard_widget_messenger.dart';
 import 'option_controller.dart';
+
+/// 原生底栏在安全区之上额外占用的高度：
+/// 悬浮模式 = 底部外边距 8 + 栏高 56；普通模式 = 栏高 56。
+double _nativeBottomBarInset() {
+  try {
+    final option = Get.find<Option>(tag: 'option');
+    return option.bottomBarFloating.value ? 64 : 56;
+  } catch (_) {
+    return 0;
+  }
+}
 
 class LoginForm extends StatelessWidget {
   final TextEditingController usernameController = TextEditingController();
@@ -25,7 +37,10 @@ class LoginForm extends StatelessWidget {
             color: CupertinoDynamicColor.resolve(
                 CupertinoColors.systemGroupedBackground, context)),
         padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
+          bottom: MediaQuery.of(context).viewInsets.bottom +
+              (MediaQuery.of(context).viewInsets.bottom > 0
+                  ? 0
+                  : _nativeBottomBarInset()),
           left: 6,
           right: 6,
         ),

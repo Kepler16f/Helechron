@@ -89,6 +89,7 @@ struct Index {
 
       if (this.bottomBarFloating) {
         if (this.bottomBarImmersiveLight) {
+          // 沉浸光感液态玻璃：毛玻璃 + 高饱和/提亮 + 顶部高光渐变 + 边缘描边 + 底部投影
           Row() {
             this.BarItems()
           }
@@ -97,8 +98,21 @@ struct Index {
           .borderRadius(28)
           .clip(true)
           .margin({ bottom: this.safeBottom + 8 })
-          .backgroundEffect({ radius: 30 })
-          .backgroundColor(Color.Transparent)
+          .backgroundEffect({
+            radius: 30,
+            saturation: 1.6,
+            brightness: 1.12
+          })
+          .linearGradient({
+            angle: 180,
+            colors: [
+              ['#47FFFFFF', 0.0],
+              ['#14FFFFFF', 0.45],
+              ['#00FFFFFF', 0.78]
+            ]
+          })
+          .border({ width: 0.5, color: '#73FFFFFF' })
+          .shadow({ radius: 24, color: '#2E000000', offsetX: 0, offsetY: 8 })
         } else {
           Row() {
             this.BarItems()
@@ -109,6 +123,7 @@ struct Index {
           .clip(true)
           .margin({ bottom: this.safeBottom + 8 })
           .backgroundColor($r('sys.color.ohos_id_color_bottom_tab_bg'))
+          .shadow({ radius: 16, color: '#1F000000', offsetX: 0, offsetY: 6 })
         }
       } else {
         Row() {
