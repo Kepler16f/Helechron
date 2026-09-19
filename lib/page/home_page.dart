@@ -1,6 +1,5 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
-import 'package:flutter/material.dart' show Icons;
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
@@ -48,7 +47,7 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  /// 原生悬浮底栏点击 → 跳转对应页
+  /// 原生底栏点击 → 跳转对应页
   void _onNativeTabChanged(int index) {
     if (index == _indexNum) return;
     if (index < 0 || index >= _pages.length) return;
@@ -60,37 +59,6 @@ class _HomePageState extends State<HomePage> {
     final option = Get.find<Option>(tag: 'option');
     return Obx(() {
       final bool floating = option.bottomBarFloating.value;
-
-      final tabBar = CupertinoTabBar(
-        iconSize: 26,
-        backgroundColor: CupertinoDynamicColor.resolve(
-                CupertinoColors.secondarySystemBackground, context)
-            .withValues(alpha: 0.5),
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.time),
-            label: '接下来',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.calendar),
-            label: '日程',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.check_mark),
-            label: '任务',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.school_rounded),
-            label: '学业',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.settings),
-            label: '设置',
-          ),
-        ],
-        currentIndex: _indexNum,
-        onTap: (int index) => _pageController.jumpToPage(index),
-      );
 
       final ScrollBehavior scrollBehavior = ScrollConfiguration.of(context);
       Widget content = HeroMode(
@@ -123,19 +91,17 @@ class _HomePageState extends State<HomePage> {
           EdgeInsets.only(bottom: existingMediaQuery.viewInsets.bottom);
 
       if (floating) {
-        // 原生悬浮底栏（56 高 + 12 底距）占位，内容底部留白避免被遮挡
-        const double nativeBarSpace = 76.0;
+        // 悬浮底栏：内容延伸到原生底栏后方（镂空），系统安全区交由原生处理
+        newMediaQuery = newMediaQuery.copyWith(
+          padding: newMediaQuery.padding.copyWith(bottom: 0),
+        );
+      } else {
+        // 普通原生底栏：底部留出栏高，避免内容被遮挡
+        const double nativeBarHeight = 56.0;
         newMediaQuery = newMediaQuery.copyWith(
           padding: newMediaQuery.padding.copyWith(
-            bottom: existingMediaQuery.padding.bottom + nativeBarSpace,
+            bottom: nativeBarHeight + existingMediaQuery.padding.bottom,
           ),
-        );
-      } else if (tabBar.preferredSize.height >
-          existingMediaQuery.viewInsets.bottom) {
-        final double bottomPadding =
-            tabBar.preferredSize.height + existingMediaQuery.padding.bottom;
-        newMediaQuery = newMediaQuery.copyWith(
-          padding: newMediaQuery.padding.copyWith(bottom: bottomPadding),
         );
       }
 
@@ -149,11 +115,6 @@ class _HomePageState extends State<HomePage> {
               data: newMediaQuery,
               child: Padding(padding: contentPadding, child: content),
             ),
-            // 悬浮底栏开启时由原生渲染，隐藏 Flutter 底栏避免重叠
-            if (!floating)
-              MediaQuery.withNoTextScaling(
-                child: Align(alignment: Alignment.bottomCenter, child: tabBar),
-              ),
           ],
         ),
       );

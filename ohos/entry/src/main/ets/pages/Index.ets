@@ -1,6 +1,7 @@
 ﻿import common from '@ohos.app.ability.common';
 import { FlutterPage } from '@ohos/flutter_ohos'
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { window } from '@kit.ArkUI';
 
 let storage = LocalStorage.getShared()
 const EVENT_BACK_PRESS = 'EVENT_BACK_PRESS'
@@ -15,6 +16,24 @@ struct Index {
   @StorageLink('bottomBarFloating') bottomBarFloating: boolean = false;
   @StorageLink('bottomBarImmersiveLight') bottomBarImmersiveLight: boolean = false;
   @StorageLink('bottomBarCurrentTab') bottomBarCurrentTab: number = 0;
+  @State private safeBottom: number = 0;
+
+  aboutToAppear(): void {
+    this.loadSafeArea();
+  }
+
+  private async loadSafeArea(): Promise<void> {
+    try {
+      const win = await window.getLastWindow(this.context);
+      const area = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
+      const h = px2vp(area.bottomRect.height);
+      this.safeBottom = h > 0 ? h : 24;
+      hilog.info(DOMAIN, TAG, `safeBottom=${this.safeBottom}`);
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, `loadSafeArea failed: ${JSON.stringify(e)}`);
+      this.safeBottom = 24;
+    }
+  }
 
   private switchTab(index: number): void {
     if (index === this.bottomBarCurrentTab) {
@@ -51,8 +70,17 @@ struct Index {
     })
   }
 
+  @Builder
+  BarItems() {
+    this.BottomBarItem($r('sys.symbol.clock'), '接下来', 0)
+    this.BottomBarItem($r('sys.symbol.calendar'), '日程', 1)
+    this.BottomBarItem($r('sys.symbol.checkmark'), '任务', 2)
+    this.BottomBarItem($r('sys.symbol.person'), '学业', 3)
+    this.BottomBarItem($r('sys.symbol.gearshape'), '设置', 4)
+  }
+
   build() {
-    Stack() {
+    Stack({ alignContent: Alignment.Bottom }) {
       Column() {
         FlutterPage({ viewId: this.viewId })
       }
@@ -60,27 +88,36 @@ struct Index {
       .height('100%')
 
       if (this.bottomBarFloating) {
-        Column() {
-          Blank()
+        if (this.bottomBarImmersiveLight) {
           Row() {
-            this.BottomBarItem($r('sys.symbol.clock'), '接下来', 0)
-            this.BottomBarItem($r('sys.symbol.calendar'), '日程', 1)
-            this.BottomBarItem($r('sys.symbol.checkmark'), '任务', 2)
-            this.BottomBarItem($r('sys.symbol.person'), '学业', 3)
-            this.BottomBarItem($r('sys.symbol.gearshape'), '设置', 4)
+            this.BarItems()
           }
           .width('92%')
           .height(56)
           .borderRadius(28)
           .clip(true)
-          .margin({ bottom: 20 })
+          .margin({ bottom: this.safeBottom + 8 })
           .backgroundEffect({ radius: 30 })
-          .backgroundColor(this.bottomBarImmersiveLight
-            ? Color.Transparent
-            : $r('sys.color.ohos_id_color_bottom_tab_bg'))
+          .backgroundColor(Color.Transparent)
+        } else {
+          Row() {
+            this.BarItems()
+          }
+          .width('92%')
+          .height(56)
+          .borderRadius(28)
+          .clip(true)
+          .margin({ bottom: this.safeBottom + 8 })
+          .backgroundColor($r('sys.color.ohos_id_color_bottom_tab_bg'))
+        }
+      } else {
+        Row() {
+          this.BarItems()
         }
         .width('100%')
-        .height('100%')
+        .height(56 + this.safeBottom)
+        .padding({ bottom: this.safeBottom })
+        .backgroundColor($r('sys.color.ohos_id_color_bottom_tab_bg'))
       }
     }
     .width('100%')
