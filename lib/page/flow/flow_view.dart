@@ -153,7 +153,7 @@ class FlowPage extends StatelessWidget {
                                           Text(
                                             '离结束还有',
                                             style: TextStyle(
-                                              fontSize: 15,
+                                              fontSize: 14,
                                               fontWeight: FontWeight.normal,
                                               color: CupertinoTheme.of(context)
                                                   .textTheme
@@ -168,7 +168,7 @@ class FlowPage extends StatelessWidget {
                                                 .difference(_flowController
                                                     .timeNow.value)),
                                             style: TextStyle(
-                                              fontSize: 22,
+                                              fontSize: 18,
                                               fontWeight: FontWeight.bold,
                                               color: CupertinoTheme.of(context)
                                                   .textTheme
@@ -186,7 +186,7 @@ class FlowPage extends StatelessWidget {
                                           Text(
                                             '开始还有',
                                             style: TextStyle(
-                                              fontSize: 15,
+                                              fontSize: 14,
                                               fontWeight: FontWeight.normal,
                                               color: CupertinoTheme.of(context)
                                                   .textTheme
@@ -197,12 +197,15 @@ class FlowPage extends StatelessWidget {
                                             ),
                                           ),
                                           Text(
-                                            _flowController.countdownText(
-                                                _flowController.timeNow.value,
-                                                period.startTime),
+                                            TimeHelper.toHMS(period.startTime
+                                                .difference(_flowController
+                                                    .timeNow.value)),
                                             style: TextStyle(
-                                              fontSize: 22,
+                                              fontSize: 18,
                                               fontWeight: FontWeight.bold,
+                                              fontFeatures: const [
+                                                FontFeature.tabularFigures()
+                                              ],
                                               color: CupertinoTheme.of(context)
                                                   .textTheme
                                                   .textStyle

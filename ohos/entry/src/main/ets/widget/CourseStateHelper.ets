@@ -126,41 +126,66 @@ export function computeCourseState(prefs: preferences.Preferences): CourseState 
     return idleState();
   }
 
+  // 读取精度模式：'exact'=精确(时:分)，'coarse'=粗略(30分钟粒度)
+  const precision = getStr(prefs, 'widgetPrecision', 'exact');
+
   let status = '';
   let statusColor = COLOR_SOON;
   let progress = 0;
   let countdown = '';
 
   if (now >= item.s && now < item.e) {
+    // 上课中
     const total = item.e - item.s;
     const elapsed = now - item.s;
     progress = total <= 0 ? 100 : (elapsed / total) * 100;
     status = '上课中';
     statusColor = COLOR_ONGOING;
-    const remainMin = Math.floor((item.e - now) / 60000);
-    countdown = `${pad2(Math.floor(remainMin / 60))}:${pad2(remainMin % 60)}`;
+    const remainMs = item.e - now;
+    if (precision === 'coarse') {
+      // 粗略模式：按 30 分钟粒度
+      const remainMin = Math.round(remainMs / 60000 / 30) * 30;
+      countdown = `${pad2(Math.floor(remainMin / 60))}:${pad2(remainMin % 60)}`;
+    } else {
+      // 精确模式：精确到分
+      const remainMin = Math.floor(remainMs / 60000);
+      countdown = `${pad2(Math.floor(remainMin / 60))}:${pad2(remainMin % 60)}`;
+    }
   } else {
-    const remainMin = Math.floor((item.s - now) / 60000);
-    if (remainMin >= leadMin) {
+    // 开课前
+    const remainMs = item.s - now;
+    const remainMin = Math.floor(remainMs / 60000);
+
+    // 进度条：距开课 >2h 隐藏，≤2h 线性渐进
+    if (remainMin > leadMin) {
       progress = 0;
     } else if (remainMin <= 0) {
       progress = 100;
     } else {
       progress = (1 - remainMin / leadMin) * 100;
     }
+
     if (remainMin <= 0) {
       status = '即将开始';
       statusColor = COLOR_SOON;
-    } else if (remainMin < 60) {
-      status = `开始还有 ${remainMin} 分钟`;
-      statusColor = remainMin <= 30 ? COLOR_URGENT : COLOR_SOON;
     } else {
-      const h = Math.floor(remainMin / 60);
-      const m = remainMin % 60;
-      status = m > 0 ? `开始还有 ${h} 小时 ${m} 分` : `开始还有 ${h} 小时`;
-      statusColor = COLOR_SOON;
+      // 倒计时文本：始终显示"开始还有 X 时 X 分"，不再重复 HH:MM
+      if (precision === 'coarse') {
+        // 粗略模式：按 30 分钟粒度
+        const rounded = Math.round(remainMin / 30) * 30;
+        const h = Math.floor(rounded / 60);
+        const m = rounded % 60;
+        status = m > 0 ? `开始还有 ${h} 小时 ${m} 分` : `开始还有 ${h} 小时`;
+      } else {
+        // 精确模式
+        const h = Math.floor(remainMin / 60);
+        const m = remainMin % 60;
+        status = m > 0 ? `开始还有 ${h} 小时 ${m} 分` : `开始还有 ${h} 小时`;
+      }
+      statusColor = remainMin <= 30 ? COLOR_URGENT : COLOR_SOON;
     }
-    countdown = `${pad2(Math.floor(remainMin / 60))}:${pad2(remainMin % 60)}`;
+    // 开课前不显示 HH:MM 倒计时（避免与状态文本重复）
+    countdown = '';
   }
 
   if (progress < 0) {

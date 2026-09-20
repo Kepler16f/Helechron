@@ -63,6 +63,11 @@ struct CourseWidget {
             .fontSize(13)
             .fontColor(this.courseStatusColor)
             .fontWeight(FontWeight.Bold)
+        } else {
+          Text(this.courseStatus)
+            .fontSize(13)
+            .fontColor(this.courseStatusColor)
+            .fontWeight(FontWeight.Medium)
         }
       }
       .width('100%')

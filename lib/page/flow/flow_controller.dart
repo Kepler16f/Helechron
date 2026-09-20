@@ -18,61 +18,12 @@ class FlowController extends GetxController {
   var _currentScholarFlowCursor = -1;
   var timeNow = DateTime.now().obs;
   Timer? _timer;
-  Timer? _precisionCooldownTimer;
   bool _walkPending = false;
   DateTime _nextWalkAt = DateTime.fromMillisecondsSinceEpoch(0);
   int _lastFlowSig = 0;
   DateTime _lastAccrualSaveAt = DateTime.fromMillisecondsSinceEpoch(0);
 
-  /// 应用存活时使用精确显示（时:分），切到后台 2 分钟后降级为粗略显示（30 分钟粒度）
-  bool _foregroundPrecision = true;
-
   bool get isDuringFlow => flowList.first.startTime.isBefore(DateTime.now());
-
-  void onAppResumed() {
-    _foregroundPrecision = true;
-    _precisionCooldownTimer?.cancel();
-    _precisionCooldownTimer = Timer(const Duration(minutes: 2), () {
-      _foregroundPrecision = false;
-    });
-  }
-
-  void onAppBackgrounded() {
-    _precisionCooldownTimer?.cancel();
-    _precisionCooldownTimer = Timer(const Duration(minutes: 2), () {
-      _foregroundPrecision = false;
-    });
-  }
-
-  /// 倒计时文本：始终显示 "开始还有 X 时 X 分" / "离结束还有 X 时 X 分"
-  /// 精确模式显示时+分，粗略模式按 30 分钟粒度取整
-  String countdownText(DateTime from, DateTime to) {
-    final diff = to.difference(from);
-    final totalMinutes = diff.inMinutes;
-    if (totalMinutes <= 0) return '';
-    final hours = totalMinutes ~/ 60;
-    if (_foregroundPrecision) {
-      final minutes = totalMinutes % 60;
-      if (hours > 0 && minutes > 0) {
-        return '$hours 时 $minutes 分';
-      } else if (hours > 0) {
-        return '$hours 时';
-      } else {
-        return '$minutes 分';
-      }
-    } else {
-      final rounded = ((totalMinutes + 15) ~/ 30) * 30;
-      final rHours = rounded ~/ 60;
-      final rMinutes = rounded % 60;
-      if (rHours > 0 && rMinutes > 0) {
-        return '$rHours 时 $rMinutes 分';
-      } else if (rHours > 0) {
-        return '$rHours 时';
-      } else {
-        return '$rMinutes 分';
-      }
-    }
-  }
 
   @override
   void onInit() {
@@ -106,7 +57,6 @@ class FlowController extends GetxController {
   @override
   void onClose() {
     _timer?.cancel();
-    _precisionCooldownTimer?.cancel();
     super.onClose();
   }
 

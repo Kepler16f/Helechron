@@ -89,7 +89,7 @@ struct Index {
 
       if (this.bottomBarFloating) {
         if (this.bottomBarImmersiveLight) {
-          // 沉浸光感液态玻璃：毛玻璃 + 高饱和/提亮 + 自适应背景色 + 高光渐变 + 边缘描边 + 底部投影
+          // 沉浸光感液态玻璃：系统级模糊 + 高饱和/提亮 + 高光渐变 + 边缘描边 + 底部投影
           Row() {
             this.BarItems()
           }
@@ -98,23 +98,22 @@ struct Index {
           .borderRadius(28)
           .clip(true)
           .margin({ bottom: this.safeBottom + 8 })
+          .backgroundBlurStyle(BlurStyle.regular)
           .backgroundEffect({
             radius: 40,
-            saturation: 2.0,
-            brightness: 1.18,
-            color: '#18FFFFFF',
-            adaptiveColor: AdaptiveColor.AVERAGE
+            saturation: 1.8,
+            brightness: 1.15
           })
           .linearGradient({
             angle: 180,
             colors: [
-              ['#50FFFFFF', 0.0],
-              ['#1AFFFFFF', 0.40],
-              ['#00FFFFFF', 0.72]
+              ['#4DFFFFFF', 0.0],
+              ['#1AFFFFFF', 0.35],
+              ['#00FFFFFF', 0.65]
             ]
           })
-          .border({ width: 1, color: '#4DFFFFFF' })
-          .shadow({ radius: 28, color: '#38000000', offsetX: 0, offsetY: 10 })
+          .border({ width: 0.5, color: '#59FFFFFF' })
+          .shadow({ radius: 24, color: '#2E000000', offsetX: 0, offsetY: 8 })
         } else {
           Row() {
             this.BarItems()
