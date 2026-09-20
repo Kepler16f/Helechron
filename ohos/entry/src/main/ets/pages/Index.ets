@@ -54,9 +54,30 @@ struct Index {
   @State private safeBottom: number = 0;
   @State private apiLevel: number = 12;
   private tabsController: HdsTabsController = new HdsTabsController();
+  /// 沉浸材质类型与等级：默认沉浸式 + 自适应（由系统按设备算力与沉浸光感强度决定实际效果）
+  private materialType: hdsMaterial.MaterialType = hdsMaterial.MaterialType.IMMERSIVE;
+  private materialLevel: hdsMaterial.MaterialLevel = hdsMaterial.MaterialLevel.ADAPTIVE;
 
   aboutToAppear(): void {
     this.loadSafeArea();
+    this.resolveMaterialLevel();
+  }
+
+  /// 查询设备支持的材质类型；不支持沉浸材质时降级，避免出现无效材质。
+  private resolveMaterialLevel(): void {
+    try {
+      const types = hdsMaterial.getSystemMaterialTypes();
+      if (types.indexOf(hdsMaterial.MaterialType.IMMERSIVE) >= 0) {
+        this.materialType = hdsMaterial.MaterialType.IMMERSIVE;
+        this.materialLevel = hdsMaterial.MaterialLevel.ADAPTIVE;
+      } else {
+        this.materialType = hdsMaterial.MaterialType.ADAPTIVE;
+        this.materialLevel = hdsMaterial.MaterialLevel.SMOOTH;
+      }
+      hilog.info(DOMAIN, TAG, `materialType=${this.materialType}, materialLevel=${this.materialLevel}`);
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, `resolveMaterialLevel failed: ${JSON.stringify(e)}`);
+    }
   }
 
   /// Flutter 侧滑动切页时同步 HdsTabs 内部选中态
@@ -178,9 +199,11 @@ struct Index {
     .barFloatingStyle({
       barBottomMargin: this.safeBottom + 8,
       adaptToHandedness: true,
+      // 关闭默认的浅灰渐变蒙层，避免遮住玻璃质感（注意不能用 Color.Transparent/0，HDS 会当作未设置）
+      gradientMask: { maskColor: '#00000000', maskHeight: 1 },
       systemMaterialEffect: {
-        materialType: hdsMaterial.MaterialType.IMMERSIVE,
-        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        materialType: this.materialType,
+        materialLevel: this.materialLevel
       }
     })
     .align(Alignment.Bottom)
