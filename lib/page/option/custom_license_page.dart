@@ -1,3 +1,4 @@
+import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/design/persistent_headers.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:url_launcher/url_launcher_string.dart';
@@ -72,9 +73,8 @@ class CustomLicensePage extends StatelessWidget {
                 ]),
               ),
             ),
-            SliverToBoxAdapter(
-              child:
-                  SizedBox(height: MediaQuery.paddingOf(context).bottom + 16),
+            const SliverToBoxAdapter(
+              child: NativeBottomBarSpacer(),
             ),
           ],
         ),

@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 
 import 'package:get/get.dart';
 
+import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/design/persistent_headers.dart';
 import 'package:celechron/model/option.dart';
 import 'option_controller.dart';
@@ -231,9 +232,8 @@ class CourseIdMappingEditPage extends StatelessWidget {
                 ),
               ],
             )),
-            SliverToBoxAdapter(
-              child:
-                  SizedBox(height: MediaQuery.paddingOf(context).bottom + 16),
+            const SliverToBoxAdapter(
+              child: NativeBottomBarSpacer(),
             ),
           ],
         ),

@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/model/task.dart';
 import 'package:celechron/utils/utils.dart';
 import 'package:celechron/utils/time_helper.dart';
@@ -669,9 +670,8 @@ class _TaskEditPageState extends State<TaskEditPage> {
                 ),
               ]),
             ),
-            SliverToBoxAdapter(
-              child:
-                  SizedBox(height: MediaQuery.paddingOf(context).bottom + 16),
+            const SliverToBoxAdapter(
+              child: NativeBottomBarSpacer(),
             ),
           ],
         ),

@@ -8,6 +8,7 @@ import 'package:get/get.dart';
 import 'package:celechron/services/ohos_native_service.dart';
 import 'package:celechron/services/secure_storage_service.dart';
 
+import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/design/persistent_headers.dart';
 import '../../http/zjuServices/ecard.dart';
 
@@ -165,9 +166,8 @@ class ECardPayPage extends StatelessWidget {
                 ),
               ],
             )),
-            SliverToBoxAdapter(
-              child:
-                  SizedBox(height: MediaQuery.paddingOf(context).bottom + 16),
+            const SliverToBoxAdapter(
+              child: NativeBottomBarSpacer(),
             ),
           ],
         ),

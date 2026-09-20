@@ -1,3 +1,4 @@
+import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/design/persistent_headers.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:get/get.dart';
@@ -360,9 +361,8 @@ class _AllowTimeEditPageState extends State<AllowTimeEditPage> {
                 ),
               ]),
             ),
-            SliverToBoxAdapter(
-              child:
-                  SizedBox(height: MediaQuery.paddingOf(context).bottom + 16),
+            const SliverToBoxAdapter(
+              child: NativeBottomBarSpacer(),
             ),
           ],
         ),

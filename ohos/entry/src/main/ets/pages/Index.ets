@@ -95,7 +95,7 @@ struct Index {
       if (this.bottomBarFloating) {
         if (this.bottomBarImmersiveLight) {
           if (this.apiLevel >= 23) {
-            // API 23+ (HarmonyOS 6.1+): 液态玻璃 - 高透明模糊
+            // API 23+ (HarmonyOS 6.1+): 纯透明液态玻璃 - 仅背景模糊，无白色蒙版
             Row() {
               this.BarItems()
             }
@@ -104,48 +104,32 @@ struct Index {
             .borderRadius(28)
             .clip(true)
             .margin({ bottom: this.safeBottom + 8 })
-            .backgroundBlurStyle(BlurStyle.Regular)
+            .backgroundColor(Color.Transparent)
             .backgroundEffect({
-              radius: 60,
-              saturation: 2.5,
-              brightness: 1.3
-            })
-            .linearGradient({
-              angle: 180,
-              colors: [
-                ['#15FFFFFF', 0.0],
-                ['#08FFFFFF', 0.4],
-                ['#00FFFFFF', 0.7]
-              ]
-            })
-            .border({ width: 0.5, color: '#30FFFFFF' })
-            .shadow({ radius: 32, color: '#22000000', offsetX: 0, offsetY: 8 })
-          } else {
-            // API 12-22: 液态玻璃 - 基础透明模糊
-            Row() {
-              this.BarItems()
-            }
-            .width('92%')
-            .height(56)
-            .borderRadius(28)
-            .clip(true)
-            .margin({ bottom: this.safeBottom + 8 })
-            .backgroundBlurStyle(BlurStyle.Regular)
-            .backgroundEffect({
-              radius: 50,
+              radius: 40,
               saturation: 2.0,
-              brightness: 1.2
+              brightness: 1.1
             })
-            .linearGradient({
-              angle: 180,
-              colors: [
-                ['#12FFFFFF', 0.0],
-                ['#06FFFFFF', 0.4],
-                ['#00FFFFFF', 0.7]
-              ]
+            .border({ width: 0.5, color: '#26FFFFFF' })
+            .shadow({ radius: 20, color: '#1A000000', offsetX: 0, offsetY: 6 })
+          } else {
+            // API 12-22: 纯透明液态玻璃 - 基础背景模糊
+            Row() {
+              this.BarItems()
+            }
+            .width('92%')
+            .height(56)
+            .borderRadius(28)
+            .clip(true)
+            .margin({ bottom: this.safeBottom + 8 })
+            .backgroundColor(Color.Transparent)
+            .backgroundEffect({
+              radius: 30,
+              saturation: 1.8,
+              brightness: 1.05
             })
-            .border({ width: 0.5, color: '#28FFFFFF' })
-            .shadow({ radius: 24, color: '#1E000000', offsetX: 0, offsetY: 6 })
+            .border({ width: 0.5, color: '#1FFFFFFF' })
+            .shadow({ radius: 16, color: '#14000000', offsetX: 0, offsetY: 4 })
           }
         } else {
           Row() {

@@ -1,3 +1,4 @@
+import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/services/diagnostic_log_service.dart';
 import 'package:celechron/services/diagnostic_report.dart';
 import 'package:flutter/cupertino.dart';
@@ -214,8 +215,8 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
     if (_bundle.reports.isEmpty) {
       return ListView(
         key: const ValueKey('readable-report-page'),
-        padding: EdgeInsets.fromLTRB(
-            16, 16, 16, MediaQuery.paddingOf(context).bottom + 48),
+        padding: EdgeInsets.fromLTRB(16, 16, 16,
+            MediaQuery.paddingOf(context).bottom + nativeBottomBarInset() + 16),
         children: [
           _card(
             context,
@@ -235,8 +236,8 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
     return CupertinoScrollbar(
       child: ListView(
         key: const ValueKey('readable-report-page'),
-        padding: EdgeInsets.fromLTRB(
-            16, 4, 16, MediaQuery.paddingOf(context).bottom + 48),
+        padding: EdgeInsets.fromLTRB(16, 4, 16,
+            MediaQuery.paddingOf(context).bottom + nativeBottomBarInset() + 16),
         children: [
           if (_bundle.damagedLineCount > 0)
             _noticeCard(
@@ -569,7 +570,10 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
       child: ListView(
         key: const ValueKey('raw-log-page'),
         padding: EdgeInsets.only(
-            top: 4, bottom: MediaQuery.paddingOf(context).bottom + 48),
+            top: 4,
+            bottom: MediaQuery.paddingOf(context).bottom +
+                nativeBottomBarInset() +
+                16),
         children: [
           CupertinoListSection.insetGrouped(
             header: const Text('完整原始日志'),

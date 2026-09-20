@@ -1,4 +1,5 @@
 import 'package:celechron/design/multiple_columns.dart';
+import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/model/practice_score_item.dart';
 import 'package:celechron/model/scholar.dart';
 import 'package:flutter/cupertino.dart';
@@ -107,7 +108,12 @@ class PracticeScorePage extends StatelessWidget {
         bottom: false,
         child: ListView(
           padding: EdgeInsets.fromLTRB(
-              16, 16, 16, MediaQuery.paddingOf(context).bottom + 48),
+              16,
+              16,
+              16,
+              MediaQuery.paddingOf(context).bottom +
+                  nativeBottomBarInset() +
+                  16),
           children: [
             _SummaryCard(
               categoryName: _categoryName,
@@ -199,7 +205,12 @@ class PracticeScoreDetailPage extends StatelessWidget {
         bottom: false,
         child: ListView(
           padding: EdgeInsets.fromLTRB(
-              16, 16, 16, MediaQuery.paddingOf(context).bottom + 48),
+              16,
+              16,
+              16,
+              MediaQuery.paddingOf(context).bottom +
+                  nativeBottomBarInset() +
+                  16),
           children: [
             _Card(
               child: Column(
