@@ -669,6 +669,10 @@ class _TaskEditPageState extends State<TaskEditPage> {
                 ),
               ]),
             ),
+            SliverToBoxAdapter(
+              child:
+                  SizedBox(height: MediaQuery.paddingOf(context).bottom + 16),
+            ),
           ],
         ),
       ),

@@ -360,6 +360,10 @@ class _AllowTimeEditPageState extends State<AllowTimeEditPage> {
                 ),
               ]),
             ),
+            SliverToBoxAdapter(
+              child:
+                  SizedBox(height: MediaQuery.paddingOf(context).bottom + 16),
+            ),
           ],
         ),
       ),

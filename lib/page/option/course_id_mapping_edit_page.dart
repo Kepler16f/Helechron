@@ -230,7 +230,11 @@ class CourseIdMappingEditPage extends StatelessWidget {
                   child: const Text('添加新的映射关系'),
                 ),
               ],
-            ))
+            )),
+            SliverToBoxAdapter(
+              child:
+                  SizedBox(height: MediaQuery.paddingOf(context).bottom + 16),
+            ),
           ],
         ),
       ),

@@ -164,7 +164,11 @@ class ECardPayPage extends StatelessWidget {
                   flex: 6,
                 ),
               ],
-            ))
+            )),
+            SliverToBoxAdapter(
+              child:
+                  SizedBox(height: MediaQuery.paddingOf(context).bottom + 16),
+            ),
           ],
         ),
       ),
