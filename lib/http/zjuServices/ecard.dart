@@ -135,6 +135,20 @@ class ECard {
       throw ExceptionWithMessage(
           '校园卡付款码接口：未返回有效付款码；响应摘要：${responseSummary(barcodeJson)}');
     }
+    // 捕获降级码：返回内容长度/字符集异常时通常是鉴权失败或接口降级
+    // 返回的"假"码看上去是字符串，但扫码会被 POS 拒绝。
+    // 这种情况应触发上层自动重登，而非继续展示无效码。
+    if (!_isValidBarcode(barcode)) {
+      throw AuthenticationExpiredException(
+          '校园卡付款码接口：返回内容疑似降级码（长度=${barcode.length}）；响应摘要：${responseSummary(barcodeJson)}');
+    }
     return barcode;
   }
+
+  /// 合法付款码：长度 14-64，字符集限定为字母数字 + base64/QR 常见符号。
+  /// 此规则能拦截 HTML/JSON 残留、空响应包装等明显垃圾；
+  /// 同时兼容老版本纯数字 18 位与未来可能的新版编码格式。
+  static final RegExp _validBarcodePattern =
+      RegExp(r'^[A-Za-z0-9+/=_\-]{14,64}$');
+  static bool _isValidBarcode(String s) => _validBarcodePattern.hasMatch(s);
 }

@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math';
 
 import 'package:flutter/services.dart';
 import 'package:celechron/services/secure_storage_service.dart';
@@ -61,7 +60,7 @@ class ECardWidgetMessenger {
   /// 将鉴权凭据同步给原生，供小组件刷新按钮在原生侧直接取码。
   static Future<void> _pushCredentials() async {
     try {
-      final secureStorage = const FlutterSecureStorage();
+      const secureStorage = FlutterSecureStorage();
       final synjonesAuth = await secureStorage.read(key: 'synjonesAuth');
       final eCardAccount = await secureStorage.read(key: 'eCardAccount');
       if (synjonesAuth == null || synjonesAuth.isEmpty) {
@@ -84,7 +83,7 @@ class ECardWidgetMessenger {
   /// 未登录时静默跳过，失败时保留上一次的付款码。
   static Future<void> updatePaymentCode() async {
     try {
-      final secureStorage = const FlutterSecureStorage();
+      const secureStorage = FlutterSecureStorage();
       final synjonesAuth = await secureStorage.read(key: 'synjonesAuth');
       var eCardAccount = await secureStorage.read(key: 'eCardAccount');
 
@@ -95,11 +94,9 @@ class ECardWidgetMessenger {
       // 让原生侧也持有凭据，支持小组件“刷新”按钮直接取码
       await _pushCredentials();
 
-      // 测试账号：生成模拟付款码，便于本地预览
+      // 未登录 / 测试账号：不推送任何码，让小组件显示"点击打开付款码"占位
       if (synjonesAuth == "3200000000" || eCardAccount == "3200000000") {
-        final code =
-            List.generate(16, (_) => Random().nextInt(10).toString()).join();
-        await OhosNativeService.instance.updatePaymentCodeWidget(code: code);
+        await OhosNativeService.instance.updatePaymentCodeWidget(code: '');
         return;
       }
 
