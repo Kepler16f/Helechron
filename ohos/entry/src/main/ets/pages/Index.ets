@@ -1,7 +1,7 @@
 ﻿import common from '@ohos.app.ability.common';
 import { FlutterPage } from '@ohos/flutter_ohos'
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { window, BlurStyle } from '@kit.ArkUI';
+import { window } from '@kit.ArkUI';
 import { deviceInfo } from '@kit.BasicServicesKit';
 
 let storage = LocalStorage.getShared()
@@ -30,7 +30,9 @@ struct Index {
       const area = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
       const h = px2vp(area.bottomRect.height);
       this.safeBottom = h > 0 ? h : 24;
-      this.apiLevel = deviceInfo.versionAPI;
+      // versionId 例如 "5.0.0(12)"，提取括号内的 API 级别
+      const match = deviceInfo.versionId.match(/\((\d+)\)/);
+      this.apiLevel = match ? Number(match[1]) : 12;
       hilog.info(DOMAIN, TAG, `safeBottom=${this.safeBottom}, apiLevel=${this.apiLevel}`);
     } catch (e) {
       hilog.warn(DOMAIN, TAG, `loadSafeArea failed: ${JSON.stringify(e)}`);
