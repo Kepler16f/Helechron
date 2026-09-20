@@ -1,7 +1,8 @@
 ﻿import common from '@ohos.app.ability.common';
 import { FlutterPage } from '@ohos/flutter_ohos'
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { window } from '@kit.ArkUI';
+import { window, BlurStyle } from '@kit.ArkUI';
+import { deviceInfo } from '@kit.BasicServicesKit';
 
 let storage = LocalStorage.getShared()
 const EVENT_BACK_PRESS = 'EVENT_BACK_PRESS'
@@ -17,6 +18,7 @@ struct Index {
   @StorageLink('bottomBarImmersiveLight') bottomBarImmersiveLight: boolean = false;
   @StorageLink('bottomBarCurrentTab') bottomBarCurrentTab: number = 0;
   @State private safeBottom: number = 0;
+  @State private apiLevel: number = 12;
 
   aboutToAppear(): void {
     this.loadSafeArea();
@@ -28,7 +30,8 @@ struct Index {
       const area = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
       const h = px2vp(area.bottomRect.height);
       this.safeBottom = h > 0 ? h : 24;
-      hilog.info(DOMAIN, TAG, `safeBottom=${this.safeBottom}`);
+      this.apiLevel = deviceInfo.versionAPI;
+      hilog.info(DOMAIN, TAG, `safeBottom=${this.safeBottom}, apiLevel=${this.apiLevel}`);
     } catch (e) {
       hilog.warn(DOMAIN, TAG, `loadSafeArea failed: ${JSON.stringify(e)}`);
       this.safeBottom = 24;
@@ -89,31 +92,59 @@ struct Index {
 
       if (this.bottomBarFloating) {
         if (this.bottomBarImmersiveLight) {
-          // 沉浸光感液态玻璃：系统级模糊 + 高饱和/提亮 + 高光渐变 + 边缘描边 + 底部投影
-          Row() {
-            this.BarItems()
+          if (this.apiLevel >= 23) {
+            // API 23+ (HarmonyOS 6.1+): 更强的系统级模糊 + 高饱和
+            Row() {
+              this.BarItems()
+            }
+            .width('92%')
+            .height(56)
+            .borderRadius(28)
+            .clip(true)
+            .margin({ bottom: this.safeBottom + 8 })
+            .backgroundBlurStyle(BlurStyle.Regular)
+            .backgroundEffect({
+              radius: 50,
+              saturation: 2.2,
+              brightness: 1.25
+            })
+            .linearGradient({
+              angle: 180,
+              colors: [
+                ['#55FFFFFF', 0.0],
+                ['#22FFFFFF', 0.30],
+                ['#00FFFFFF', 0.60]
+              ]
+            })
+            .border({ width: 0.7, color: '#66FFFFFF' })
+            .shadow({ radius: 30, color: '#33000000', offsetX: 0, offsetY: 10 })
+          } else {
+            // API 12-22: 基础液态玻璃效果
+            Row() {
+              this.BarItems()
+            }
+            .width('92%')
+            .height(56)
+            .borderRadius(28)
+            .clip(true)
+            .margin({ bottom: this.safeBottom + 8 })
+            .backgroundBlurStyle(BlurStyle.Regular)
+            .backgroundEffect({
+              radius: 40,
+              saturation: 1.8,
+              brightness: 1.15
+            })
+            .linearGradient({
+              angle: 180,
+              colors: [
+                ['#4DFFFFFF', 0.0],
+                ['#1AFFFFFF', 0.35],
+                ['#00FFFFFF', 0.65]
+              ]
+            })
+            .border({ width: 0.5, color: '#59FFFFFF' })
+            .shadow({ radius: 24, color: '#2E000000', offsetX: 0, offsetY: 8 })
           }
-          .width('92%')
-          .height(56)
-          .borderRadius(28)
-          .clip(true)
-          .margin({ bottom: this.safeBottom + 8 })
-          .backgroundBlurStyle(BlurStyle.regular)
-          .backgroundEffect({
-            radius: 40,
-            saturation: 1.8,
-            brightness: 1.15
-          })
-          .linearGradient({
-            angle: 180,
-            colors: [
-              ['#4DFFFFFF', 0.0],
-              ['#1AFFFFFF', 0.35],
-              ['#00FFFFFF', 0.65]
-            ]
-          })
-          .border({ width: 0.5, color: '#59FFFFFF' })
-          .shadow({ radius: 24, color: '#2E000000', offsetX: 0, offsetY: 8 })
         } else {
           Row() {
             this.BarItems()
