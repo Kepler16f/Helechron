@@ -28,6 +28,7 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
       'courseStatusTime': '',
       'progressPercent': '0',
       'progressColor': '#1E88E5',
+      'showProgress': '0',
       'hasCourse': '0'
     };
     return formBindingData.createFormBindingData(empty);

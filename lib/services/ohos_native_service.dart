@@ -285,19 +285,6 @@ class OhosNativeService {
     await updateCourseWidget(coursesJson: '[]', leadWindowMinutes: 120);
   }
 
-  /// 设置桌面小组件倒计时精度模式
-  /// [exact] true=精确到分(应用存活时)，false=粗略30分钟粒度(后台/冻结)
-  Future<void> setWidgetPrecision({required bool exact}) async {
-    try {
-      await _channel.invokeMethod('setWidgetData', {
-        'key': 'widgetPrecision',
-        'value': exact ? 'exact' : 'coarse',
-      });
-    } on PlatformException catch (e) {
-      debugPrint('setWidgetPrecision failed: $e');
-    } on MissingPluginException {}
-  }
-
   /// 设置底部 Tab 栏样式（鸿蒙原生 ArkTS 接口）
   Future<void> setBottomBarStyle({
     required bool floating,

@@ -3,11 +3,45 @@ import { FlutterPage } from '@ohos/flutter_ohos'
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { deviceInfo } from '@kit.BasicServicesKit';
+import { HdsTabs, HdsTabsController, hdsMaterial } from '@kit.UIDesignKit';
 
 let storage = LocalStorage.getShared()
 const EVENT_BACK_PRESS = 'EVENT_BACK_PRESS'
 const DOMAIN = 0x0000;
 const TAG = 'HelechronIndex';
+/// 悬浮底栏需要 HarmonyOS 6.0 (API 23) 及以上才支持系统沉浸材质
+const MIN_API_FOR_SYSTEM_MATERIAL = 23;
+const BAR_INDICES: number[] = [0, 1, 2, 3, 4];
+
+function barSymbol(index: number): Resource {
+  switch (index) {
+    case 0:
+      return $r('sys.symbol.clock');
+    case 1:
+      return $r('sys.symbol.calendar');
+    case 2:
+      return $r('sys.symbol.checkmark');
+    case 3:
+      return $r('sys.symbol.person');
+    default:
+      return $r('sys.symbol.gearshape');
+  }
+}
+
+function barTitle(index: number): string {
+  switch (index) {
+    case 0:
+      return '接下来';
+    case 1:
+      return '日程';
+    case 2:
+      return '任务';
+    case 3:
+      return '学业';
+    default:
+      return '设置';
+  }
+}
 
 @Entry(storage)
 @Component
@@ -16,12 +50,22 @@ struct Index {
   @LocalStorageLink('viewId') viewId: string = "";
   @StorageLink('bottomBarFloating') bottomBarFloating: boolean = false;
   @StorageLink('bottomBarImmersiveLight') bottomBarImmersiveLight: boolean = false;
-  @StorageLink('bottomBarCurrentTab') bottomBarCurrentTab: number = 0;
+  @StorageLink('bottomBarCurrentTab') @Watch('onCurrentTabChanged') bottomBarCurrentTab: number = 0;
   @State private safeBottom: number = 0;
   @State private apiLevel: number = 12;
+  private tabsController: HdsTabsController = new HdsTabsController();
 
   aboutToAppear(): void {
     this.loadSafeArea();
+  }
+
+  /// Flutter 侧滑动切页时同步 HdsTabs 内部选中态
+  onCurrentTabChanged(): void {
+    try {
+      this.tabsController.changeIndex(this.bottomBarCurrentTab);
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, `changeIndex failed: ${JSON.stringify(e)}`);
+    }
   }
 
   private async loadSafeArea(): Promise<void> {
@@ -40,6 +84,12 @@ struct Index {
     }
   }
 
+  /// 是否使用系统沉浸材质（官方 HdsTabs + systemMaterialEffect，跟随系统沉浸光感强度）
+  private useSystemMaterial(): boolean {
+    return this.bottomBarFloating && this.bottomBarImmersiveLight
+      && this.apiLevel >= MIN_API_FOR_SYSTEM_MATERIAL;
+  }
+
   private switchTab(index: number): void {
     if (index === this.bottomBarCurrentTab) {
       return;
@@ -52,15 +102,16 @@ struct Index {
     }
   }
 
+  /// 自绘底栏单元（低版本回退 / 非沉浸模式）
   @Builder
-  BottomBarItem(symbol: Resource, title: string, index: number) {
+  BottomBarItem(index: number) {
     Column() {
-      SymbolGlyph(symbol)
+      SymbolGlyph(barSymbol(index))
         .fontSize(this.bottomBarFloating ? 20 : 22)
         .fontColor([this.bottomBarCurrentTab === index
           ? $r('sys.color.ohos_id_color_emphasize')
           : $r('sys.color.ohos_id_color_text_secondary')])
-      Text(title)
+      Text(barTitle(index))
         .fontSize(this.bottomBarFloating ? 9 : 10)
         .margin({ top: this.bottomBarFloating ? 1 : 2 })
         .fontColor(this.bottomBarCurrentTab === index
@@ -75,13 +126,86 @@ struct Index {
     })
   }
 
+  /// HdsTabs 页签单元：宽度交由系统均分，不再使用 layoutWeight
+  @Builder
+  HdsBarItem(index: number) {
+    Column() {
+      SymbolGlyph(barSymbol(index))
+        .fontSize(22)
+        .fontColor([this.bottomBarCurrentTab === index
+          ? $r('sys.color.ohos_id_color_emphasize')
+          : $r('sys.color.ohos_id_color_text_secondary')])
+      Text(barTitle(index))
+        .fontSize(10.5)
+        .fontWeight(this.bottomBarCurrentTab === index ? FontWeight.Bold : FontWeight.Normal)
+        .margin({ top: 2 })
+        .fontColor(this.bottomBarCurrentTab === index
+          ? $r('sys.color.ohos_id_color_emphasize')
+          : $r('sys.color.ohos_id_color_text_secondary'))
+    }
+    .width('100%')
+    .justifyContent(FlexAlign.Center)
+  }
+
   @Builder
   BarItems() {
-    this.BottomBarItem($r('sys.symbol.clock'), '接下来', 0)
-    this.BottomBarItem($r('sys.symbol.calendar'), '日程', 1)
-    this.BottomBarItem($r('sys.symbol.checkmark'), '任务', 2)
-    this.BottomBarItem($r('sys.symbol.person'), '学业', 3)
-    this.BottomBarItem($r('sys.symbol.gearshape'), '设置', 4)
+    this.BottomBarItem(0)
+    this.BottomBarItem(1)
+    this.BottomBarItem(2)
+    this.BottomBarItem(3)
+    this.BottomBarItem(4)
+  }
+
+  /// 系统沉浸材质底栏：由 HdsTabs 承载，材质强度跟随系统"沉浸光感"设置。
+  /// materialLevel 使用 ADAPTIVE，由系统按设备算力与用户偏好自动分级。
+  @Builder
+  SystemMaterialBar() {
+    HdsTabs({ controller: this.tabsController }) {
+      ForEach(BAR_INDICES, (index: number) => {
+        TabContent() {
+        }
+        .tabBar(this.HdsBarItem(index))
+      }, (index: number) => index.toString())
+    }
+    .onTabBarClick((index: number) => {
+      this.switchTab(index);
+    })
+    .scrollable(false)
+    .barOverlap(true)
+    .barPosition(BarPosition.End)
+    .vertical(false)
+    .barHeight(56)
+    .barFloatingStyle({
+      barBottomMargin: this.safeBottom + 8,
+      adaptToHandedness: true,
+      systemMaterialEffect: {
+        materialType: hdsMaterial.MaterialType.IMMERSIVE,
+        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+      }
+    })
+    .align(Alignment.Bottom)
+    .hitTestBehavior(HitTestMode.Transparent)
+  }
+
+  /// 自绘沉浸光感底栏：纯背景模糊（无白色蒙版），仅 API 23 以下回退使用
+  @Builder
+  ImmersiveFallbackBar() {
+    Row() {
+      this.BarItems()
+    }
+    .width('92%')
+    .height(56)
+    .borderRadius(28)
+    .clip(true)
+    .margin({ bottom: this.safeBottom + 8 })
+    .backgroundColor(Color.Transparent)
+    .backgroundEffect({
+      radius: this.apiLevel >= MIN_API_FOR_SYSTEM_MATERIAL ? 40 : 30,
+      saturation: 2.0,
+      brightness: 1.1
+    })
+    .border({ width: 0.5, color: '#26FFFFFF' })
+    .shadow({ radius: 20, color: '#1A000000', offsetX: 0, offsetY: 6 })
   }
 
   build() {
@@ -92,45 +216,11 @@ struct Index {
       .width('100%')
       .height('100%')
 
-      if (this.bottomBarFloating) {
+      if (this.useSystemMaterial()) {
+        this.SystemMaterialBar()
+      } else if (this.bottomBarFloating) {
         if (this.bottomBarImmersiveLight) {
-          if (this.apiLevel >= 23) {
-            // API 23+ (HarmonyOS 6.1+): 纯透明液态玻璃 - 仅背景模糊，无白色蒙版
-            Row() {
-              this.BarItems()
-            }
-            .width('92%')
-            .height(56)
-            .borderRadius(28)
-            .clip(true)
-            .margin({ bottom: this.safeBottom + 8 })
-            .backgroundColor(Color.Transparent)
-            .backgroundEffect({
-              radius: 40,
-              saturation: 2.0,
-              brightness: 1.1
-            })
-            .border({ width: 0.5, color: '#26FFFFFF' })
-            .shadow({ radius: 20, color: '#1A000000', offsetX: 0, offsetY: 6 })
-          } else {
-            // API 12-22: 纯透明液态玻璃 - 基础背景模糊
-            Row() {
-              this.BarItems()
-            }
-            .width('92%')
-            .height(56)
-            .borderRadius(28)
-            .clip(true)
-            .margin({ bottom: this.safeBottom + 8 })
-            .backgroundColor(Color.Transparent)
-            .backgroundEffect({
-              radius: 30,
-              saturation: 1.8,
-              brightness: 1.05
-            })
-            .border({ width: 0.5, color: '#1FFFFFFF' })
-            .shadow({ radius: 16, color: '#14000000', offsetX: 0, offsetY: 4 })
-          }
+          this.ImmersiveFallbackBar()
         } else {
           Row() {
             this.BarItems()

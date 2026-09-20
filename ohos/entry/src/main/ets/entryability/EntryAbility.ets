@@ -10,7 +10,7 @@ import abilityAccessCtrl, { Permissions } from '@ohos.abilityAccessCtrl';
 import bundleManager from '@ohos.bundle.bundleManager';
 import hilog from '@ohos.hilog';
 import preferences from '@ohos.data.preferences';
-import { buildCourseFormData, scheduleNextBoundary } from '../widget/CourseStateHelper';
+import { buildCourseFormData, scheduleNextBoundary, refreshLiveMarker } from '../widget/CourseStateHelper';
 import { buildSimpleCourseFormData } from '../widget/SimpleCourseStateHelper';
 
 const DOMAIN = 0x0000;
@@ -897,6 +897,8 @@ export default class EntryAbility extends FlutterAbility {
       const leadWindowMinutes = typeof leadArg === 'number' ? leadArg : 120;
 
       const prefs = await this.getWidgetPrefs();
+      // Dart 侧高频推送说明应用存活，续期存活标记以启用精确倒计时
+      refreshLiveMarker(prefs);
       const prevJson = (await prefs.get('coursesJson', '')) as string;
       const prevLead = (await prefs.get('leadWindowMinutes', -1)) as number;
       const changed = prevJson !== coursesJson || prevLead !== leadWindowMinutes;

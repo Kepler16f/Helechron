@@ -12,6 +12,7 @@ struct CourseWidget {
   @LocalStorageProp('courseStatusTime') courseStatusTime: string = '';
   @LocalStorageProp('progressPercent') progressPercent: string = '0';
   @LocalStorageProp('progressColor') progressColor: string = '#1E88E5';
+  @LocalStorageProp('showProgress') showProgress: string = '0';
   @LocalStorageProp('hasCourse') hasCourse: string = '0';
 
   build() {
@@ -73,7 +74,7 @@ struct CourseWidget {
       .width('100%')
       .alignItems(VerticalAlign.Bottom)
 
-      if (this.hasCourse === '1') {
+      if (this.hasCourse === '1' && this.showProgress === '1') {
         Stack({ alignContent: Alignment.Start }) {
           Row() {
           }

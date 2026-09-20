@@ -1,4 +1,5 @@
 import 'package:celechron/page/scholar/course_list/course_brief_card.dart';
+import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/design/sub_title.dart';
 import 'package:celechron/design/custom_colors.dart';
 import 'package:celechron/design/persistent_headers.dart';
@@ -13,21 +14,43 @@ import 'package:celechron/model/session.dart';
 import 'package:celechron/model/scholar.dart';
 
 class CourseDetailPage extends StatelessWidget {
-  final _scholar = Get.find<Rx<Scholar>>(tag: 'scholar');
-  late final Course course;
+  final Course? course;
 
-  CourseDetailPage({required courseId, super.key}) {
-    Course? found;
-    for (final semester in _scholar.value.semesters) {
-      for (final c in semester.courses.values) {
-        if (c.id == courseId) {
-          found = c;
-          break;
+  CourseDetailPage({required String? courseId, super.key})
+      : course = _findCourse(courseId);
+
+  /// 依据不同来源的标识定位课程。
+  ///
+  /// 本科课程由 ZDBK 课表创建时没有课号（[Course.id] 为 null），只有成绩
+  /// 补全后才会带上选课课号，因此不能只用 [Course.id] 匹配：
+  /// - 课程表 / 日历：传入 [Session.id]（可能为 null）
+  /// - 成绩卡片：传入 [Grade.id]（选课课号，对应 [Course.grade])
+  /// - 课程列表：传入 [Course.id]
+  static Course? _findCourse(String? courseId) {
+    if (courseId == null || courseId.isEmpty) {
+      return null;
+    }
+    final scholar = Get.find<Rx<Scholar>>(tag: 'scholar');
+    for (final semester in scholar.value.semesters) {
+      final byKey = semester.courses[courseId];
+      if (byKey != null) {
+        return byKey;
+      }
+      for (final candidate in semester.courses.values) {
+        if (candidate.id == courseId) {
+          return candidate;
+        }
+        if (candidate.grade?.id == courseId) {
+          return candidate;
+        }
+        for (final session in candidate.sessions) {
+          if (session.id != null && session.id == courseId) {
+            return candidate;
+          }
         }
       }
-      if (found != null) break;
     }
-    course = found!;
+    return null;
   }
 
   Widget createSessionCard(context, List<Session> sessions) {
@@ -404,6 +427,31 @@ class CourseDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = course;
+    if (c == null) {
+      return CupertinoPageScaffold(
+        backgroundColor: CupertinoDynamicColor.resolve(
+            CupertinoColors.systemGroupedBackground, context),
+        child: CustomScrollView(
+          slivers: [
+            const CelechronSliverTextHeader(subtitle: '课程详情'),
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Text(
+                  '未找到该课程的信息',
+                  style: TextStyle(
+                    color: CupertinoDynamicColor.resolve(
+                        CupertinoColors.secondaryLabel, context),
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     return CupertinoPageScaffold(
       backgroundColor: CupertinoDynamicColor.resolve(
           CupertinoColors.systemGroupedBackground, context),
@@ -416,27 +464,30 @@ class CourseDetailPage extends StatelessWidget {
               child: Column(
                 children: [
                   SubSubtitleRow(subtitle: '基本信息'),
-                  CourseBriefCard(course: course),
+                  CourseBriefCard(course: c),
                 ],
               ),
             ),
           ),
-          if (course.sessions.isNotEmpty)
+          if (c.sessions.isNotEmpty)
             SliverToBoxAdapter(
               child: Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-                child: createSessionCard(context, course.sessions),
+                child: createSessionCard(context, c.sessions),
               ),
             ),
-          if (course.exams.isNotEmpty)
+          if (c.exams.isNotEmpty)
             SliverToBoxAdapter(
               child: Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-                child: createExamCard(context, course.exams),
+                child: createExamCard(context, c.exams),
               ),
             ),
+          const SliverToBoxAdapter(
+            child: NativeBottomBarSpacer(),
+          ),
         ],
       ),
     );

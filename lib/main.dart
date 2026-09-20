@@ -127,7 +127,6 @@ class CelechronApp extends StatefulWidget {
 class _CelechronAppState extends State<CelechronApp>
     with WidgetsBindingObserver {
   Timer? _foregroundLeaseHeartbeat;
-  Timer? _coarsePrecisionTimer;
 
   @override
   void initState() {
@@ -155,7 +154,6 @@ class _CelechronAppState extends State<CelechronApp>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _stopForegroundLease();
-    _coarsePrecisionTimer?.cancel();
     super.dispose();
   }
 
@@ -167,16 +165,12 @@ class _CelechronAppState extends State<CelechronApp>
       // 回到前台立即刷新一次（定时器可能已被系统挂起）
       ScholarWidgetSync.sync();
       unawaited(ECardWidgetMessenger.updatePaymentCode());
-      // 桌面小组件：回到前台切回精确显示
-      OhosNativeService.instance.setWidgetPrecision(exact: true);
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.detached) {
       _stopForegroundLease();
       // 离开前台时补一次推送
       ScholarWidgetSync.sync();
-      // 桌面小组件：进入后台 2 分钟后降级为粗略显示
-      _scheduleCoarsePrecision();
     }
     if (state == AppLifecycleState.paused) {
       ECardWidgetMessenger.update();
@@ -196,13 +190,6 @@ class _CelechronAppState extends State<CelechronApp>
     _foregroundLeaseHeartbeat?.cancel();
     _foregroundLeaseHeartbeat = null;
     unawaited(RefreshCoordinator.setForegroundActive(false));
-  }
-
-  void _scheduleCoarsePrecision() {
-    _coarsePrecisionTimer?.cancel();
-    _coarsePrecisionTimer = Timer(const Duration(minutes: 2), () {
-      OhosNativeService.instance.setWidgetPrecision(exact: false);
-    });
   }
 
   @override

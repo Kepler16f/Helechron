@@ -16,6 +16,14 @@ const BOUNDARY_LEAD_MINUTES = 1;
 /// 单次可调度的最长等待（分钟），超过则交由定时刷新兜底
 const MAX_NEXT_REFRESH_MINUTES = 60 * 24;
 
+/// 应用存活标记的有效期（毫秒）。Dart 侧高频推送会不断续期，
+/// 应用被冻结/杀死后停止续期，超过该时长即回退到粗略显示。
+const LIVE_TTL_MS = 150000;
+/// 距离上次落盘的存活标记不足该时长时重新落盘，避免每 5 秒写盘。
+const LIVE_REFRESH_MARGIN_MS = 60000;
+/// 判定"预刷新"的时间窗（毫秒）：系统刷新时刻落在调度时刻附近即视为边界预刷新。
+const PRE_REFRESH_WINDOW_MS = 120000;
+
 export interface CourseItem {
   s: number; // 开始时间戳(ms)
   e: number; // 结束时间戳(ms)
@@ -31,12 +39,21 @@ export interface CourseState {
   countdown: string;
   progress: string;
   progressColor: string;
+  showProgress: string;
   hasCourse: string;
   name: string;
   time: string;
   location: string;
   teacher: string;
 }
+
+/// 倒计时精度：
+/// - exact : 应用存活时，精确到分
+/// - hour  : 边界预刷新，开课前精确到时、上课中精确到 30 分钟
+/// - coarse: 系统后台刷新 / 应用已冻结，统一精确到 30 分钟
+const PRECISION_EXACT = 'exact';
+const PRECISION_HOUR = 'hour';
+const PRECISION_COARSE = 'coarse';
 
 function getStr(prefs: preferences.Preferences, key: string, def: string): string {
   const v = prefs.getSync(key, def);
@@ -100,6 +117,19 @@ function pickCurrentOrNext(items: CourseItem[], now: number): CourseItem | null 
   return best;
 }
 
+/// 依据应用存活标记与边界预刷新时刻判定倒计时精度。
+function resolvePrecision(prefs: preferences.Preferences, now: number): string {
+  const liveUntil = getNum(prefs, 'widgetLiveUntil', 0);
+  if (now < liveUntil) {
+    return PRECISION_EXACT;
+  }
+  const boundaryAt = getNum(prefs, 'nextBoundaryRefreshAt', 0);
+  if (boundaryAt > 0 && Math.abs(now - boundaryAt) < PRE_REFRESH_WINDOW_MS) {
+    return PRECISION_HOUR;
+  }
+  return PRECISION_COARSE;
+}
+
 function idleState(): CourseState {
   const idle: CourseState = {
     status: '全部结课',
@@ -107,6 +137,7 @@ function idleState(): CourseState {
     countdown: '',
     progress: '0',
     progressColor: COLOR_PROGRESS_DEFAULT,
+    showProgress: '0',
     hasCourse: '0',
     name: '今日暂无课程',
     time: '',
@@ -126,42 +157,44 @@ export function computeCourseState(prefs: preferences.Preferences): CourseState 
     return idleState();
   }
 
-  // 读取精度模式：'exact'=精确(时:分)，'coarse'=粗略(30分钟粒度)
-  const precision = getStr(prefs, 'widgetPrecision', 'exact');
+  const precision = resolvePrecision(prefs, now);
 
   let status = '';
   let statusColor = COLOR_SOON;
   let progress = 0;
+  let showProgress = '1';
   let countdown = '';
 
   if (now >= item.s && now < item.e) {
-    // 上课中
+    // 上课中：显示剩余时间，进度条按已上课比例
     const total = item.e - item.s;
     const elapsed = now - item.s;
     progress = total <= 0 ? 100 : (elapsed / total) * 100;
     status = '上课中';
     statusColor = COLOR_ONGOING;
     const remainMs = item.e - now;
-    if (precision === 'coarse') {
-      // 粗略模式：按 30 分钟粒度
-      const remainMin = Math.round(remainMs / 60000 / 30) * 30;
+    if (precision === PRECISION_EXACT) {
+      const remainMin = Math.floor(remainMs / 60000);
       countdown = `${pad2(Math.floor(remainMin / 60))}:${pad2(remainMin % 60)}`;
     } else {
-      // 精确模式：精确到分
-      const remainMin = Math.floor(remainMs / 60000);
+      // 预刷新 / 后台刷新：精确到 30 分钟
+      const remainMin = Math.round(remainMs / 60000 / 30) * 30;
       countdown = `${pad2(Math.floor(remainMin / 60))}:${pad2(remainMin % 60)}`;
     }
   } else {
-    // 开课前
+    // 开课前：只显示状态文案，不再重复 HH:MM
     const remainMs = item.s - now;
     const remainMin = Math.floor(remainMs / 60000);
 
     // 进度条：距开课 >2h 隐藏，≤2h 线性渐进
     if (remainMin > leadMin) {
+      showProgress = '0';
       progress = 0;
     } else if (remainMin <= 0) {
+      showProgress = '1';
       progress = 100;
     } else {
+      showProgress = '1';
       progress = (1 - remainMin / leadMin) * 100;
     }
 
@@ -169,22 +202,23 @@ export function computeCourseState(prefs: preferences.Preferences): CourseState 
       status = '即将开始';
       statusColor = COLOR_SOON;
     } else {
-      // 倒计时文本：始终显示"开始还有 X 时 X 分"，不再重复 HH:MM
-      if (precision === 'coarse') {
-        // 粗略模式：按 30 分钟粒度
+      if (precision === PRECISION_EXACT) {
+        const h = Math.floor(remainMin / 60);
+        const m = remainMin % 60;
+        status = m > 0 ? `开始还有 ${h} 小时 ${m} 分` : `开始还有 ${h} 小时`;
+      } else if (precision === PRECISION_HOUR) {
+        // 预刷新：开课前精确到时（不足 1 小时显示"即将开始"）
+        const h = Math.floor(remainMin / 60);
+        status = h > 0 ? `开始还有 ${h} 小时` : '即将开始';
+      } else {
+        // 后台刷新：精确到 30 分钟
         const rounded = Math.round(remainMin / 30) * 30;
         const h = Math.floor(rounded / 60);
         const m = rounded % 60;
         status = m > 0 ? `开始还有 ${h} 小时 ${m} 分` : `开始还有 ${h} 小时`;
-      } else {
-        // 精确模式
-        const h = Math.floor(remainMin / 60);
-        const m = remainMin % 60;
-        status = m > 0 ? `开始还有 ${h} 小时 ${m} 分` : `开始还有 ${h} 小时`;
       }
       statusColor = remainMin <= 30 ? COLOR_URGENT : COLOR_SOON;
     }
-    // 开课前不显示 HH:MM 倒计时（避免与状态文本重复）
     countdown = '';
   }
 
@@ -201,6 +235,7 @@ export function computeCourseState(prefs: preferences.Preferences): CourseState 
     countdown: countdown,
     progress: Math.round(progress).toString(),
     progressColor: statusColor,
+    showProgress: showProgress,
     hasCourse: '1',
     name: item.n,
     time: item.t,
@@ -223,9 +258,25 @@ export function buildCourseFormData(prefs: preferences.Preferences): Record<stri
     'courseStatusTime': state.countdown,
     'progressPercent': state.progress,
     'progressColor': state.progressColor,
+    'showProgress': state.showProgress,
     'hasCourse': state.hasCourse
   };
   return data;
+}
+
+/// 续期应用存活标记。Dart 侧高频推送时调用，只在标记即将过期时才落盘，
+/// 避免每 5 秒写一次磁盘；应用被冻结/杀死后标记自然过期。
+export function refreshLiveMarker(prefs: preferences.Preferences): void {
+  try {
+    const now = Date.now();
+    const stored = getNum(prefs, 'widgetLiveUntil', 0);
+    if (stored < now + LIVE_REFRESH_MARGIN_MS) {
+      prefs.putSync('widgetLiveUntil', now + LIVE_TTL_MS);
+      prefs.flush();
+    }
+  } catch (e) {
+    console.warn(`refreshLiveMarker failed: ${JSON.stringify(e)}`);
+  }
 }
 
 /// 距离最近课程边界（开课/下课，提前 BOUNDARY_LEAD_MINUTES 分钟）的分钟数。
@@ -262,6 +313,9 @@ export function minutesToNextBoundary(prefs: preferences.Preferences): number {
 /// 时间（后调用会覆盖先前的），无法一次性登记多个边界。正确做法是每次只登记
 /// 最近的一个边界，待其触发（`onUpdateForm`）后再登记下一个，形成链式预调度，
 /// 既能在边界处精确切换，又尽量节省 50 次/天的配额。
+///
+/// 同时把预计触发时刻写入 `nextBoundaryRefreshAt`，供 `computeCourseState`
+/// 区分"边界预刷新"与"系统后台刷新"。
 export function scheduleNextBoundary(formId: string, prefs: preferences.Preferences): void {
   const minutes = minutesToNextBoundary(prefs);
   if (minutes <= 0) {
@@ -273,6 +327,8 @@ export function scheduleNextBoundary(formId: string, prefs: preferences.Preferen
         console.warn(`setFormNextRefreshTime(${minutes}) failed: ${err.code} ${err.message}`);
       }
     });
+    prefs.putSync('nextBoundaryRefreshAt', Date.now() + minutes * 60000);
+    prefs.flush();
   } catch (e) {
     console.warn(`setFormNextRefreshTime exception: ${JSON.stringify(e)}`);
   }
