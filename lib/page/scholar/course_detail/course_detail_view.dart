@@ -4,6 +4,7 @@ import 'package:celechron/design/sub_title.dart';
 import 'package:celechron/design/custom_colors.dart';
 import 'package:celechron/design/persistent_headers.dart';
 import 'package:celechron/design/round_rectangle_card.dart';
+import 'package:celechron/services/diagnostic_log_service.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -30,25 +31,36 @@ class CourseDetailPage extends StatelessWidget {
     if (courseId == null || courseId.isEmpty) {
       return null;
     }
-    final scholar = Get.find<Rx<Scholar>>(tag: 'scholar');
-    for (final semester in scholar.value.semesters) {
-      final byKey = semester.courses[courseId];
-      if (byKey != null) {
-        return byKey;
-      }
-      for (final candidate in semester.courses.values) {
-        if (candidate.id == courseId) {
-          return candidate;
+    try {
+      final scholar = Get.find<Rx<Scholar>>(tag: 'scholar');
+      for (final semester in scholar.value.semesters) {
+        final byKey = semester.courses[courseId];
+        if (byKey != null) {
+          return byKey;
         }
-        if (candidate.grade?.id == courseId) {
-          return candidate;
-        }
-        for (final session in candidate.sessions) {
-          if (session.id != null && session.id == courseId) {
+        for (final candidate in semester.courses.values) {
+          if (candidate.id == courseId) {
             return candidate;
+          }
+          if (candidate.grade?.id == courseId) {
+            return candidate;
+          }
+          for (final session in candidate.sessions) {
+            if (session.id != null && session.id == courseId) {
+              return candidate;
+            }
           }
         }
       }
+    } catch (error, stackTrace) {
+      DiagnosticLogService.instance.record(
+        level: CelechronLogLevel.error,
+        module: 'course',
+        operation: 'findCourse',
+        message: 'courseId=$courseId',
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
     return null;
   }

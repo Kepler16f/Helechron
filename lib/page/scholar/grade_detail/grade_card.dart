@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:celechron/page/scholar/grade_detail/grade_detail_controller.dart';
+import 'package:celechron/services/diagnostic_log_service.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:get/get.dart';
 
@@ -54,6 +55,25 @@ class _GradeCardState extends State<GradeCard>
         (_gradeDetailController.customGpaSelected[widget.grade.id] ?? false);
   }
 
+  void _openCourseDetail(BuildContext context) {
+    try {
+      Navigator.of(context, rootNavigator: true).push(
+        CupertinoPageRoute(
+          builder: (_) => CourseDetailPage(courseId: widget.grade.id),
+        ),
+      );
+    } catch (error, stackTrace) {
+      DiagnosticLogService.instance.record(
+        level: CelechronLogLevel.error,
+        module: 'grade',
+        operation: 'openCourseDetail',
+        message: 'gradeId=${widget.grade.id}',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     var brightness = CupertinoTheme.of(context).brightness ??
@@ -75,28 +95,27 @@ class _GradeCardState extends State<GradeCard>
         isDown = false;
         if (isCancel) {
           if (!_gradeDetailController.customGpaMode.value) {
-            navigator!.push(CupertinoPageRoute(
-                builder: (context) =>
-                    CourseDetailPage(courseId: widget.grade.id)));
+            _openCourseDetail(context);
           }
-          _animationController.reverse();
+          if (mounted) _animationController.reverse();
           isCancel = false;
         }
       },
       onTapUp: (_) async {
         isCancel = true;
-        if (!isDown) _animationController.reverse();
+        if (!isDown && mounted) _animationController.reverse();
       },
-      onTapCancel: () async => _animationController.reverse(),
+      onTapCancel: () async {
+        if (mounted) _animationController.reverse();
+      },
       onLongPress: () async {
         isDown = true;
         isCancel = false;
         _animationController.forward();
         await Future.delayed(const Duration(milliseconds: 125));
         isDown = false;
-        navigator!.push(CupertinoPageRoute(
-            builder: (context) => CourseDetailPage(courseId: widget.grade.id)));
-        _animationController.reverse();
+        _openCourseDetail(context);
+        if (mounted) _animationController.reverse();
       },
       child: Obx(
         () => ScaleTransition(

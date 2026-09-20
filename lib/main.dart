@@ -21,6 +21,20 @@ import 'package:celechron/utils/platform_features.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 捕获 Flutter 未处理异常并写入诊断日志，便于定位闪退（可在「测试日志」查看）
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    DiagnosticLogService.instance.record(
+      level: CelechronLogLevel.error,
+      module: 'flutter',
+      operation: 'uncaughtError',
+      message: details.context?.toString(),
+      error: details.exception,
+      stackTrace: details.stack,
+    );
+  };
+
   ECardWidgetMessenger.installNativeHandler();
   OhosNativeService.instance.installWidgetRouteHandler(_handleWidgetRoute);
 
@@ -45,6 +59,7 @@ void main() async {
   OhosNativeService.instance.setBottomBarStyle(
     floating: option.bottomBarFloating.value,
     immersiveLight: option.bottomBarImmersiveLight.value,
+    materialLevel: option.bottomBarMaterialLevel.value,
   );
 
   Get.put(db.getFuse().obs, tag: 'fuse');

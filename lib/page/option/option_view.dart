@@ -491,6 +491,18 @@ class OptionPage extends StatelessWidget {
                                   : null,
                             ),
                           )),
+                      Obx(() => CupertinoListTile(
+                            title: const Text('光感强度'),
+                            subtitle: const Text('跟随系统策略，或手动指定材质精细度'),
+                            trailing: BackChervonRow(
+                                child: Text(
+                                    _materialLevelName(_optionController
+                                        .bottomBarMaterialLevel),
+                                    style: trailingTextStyle)),
+                            onTap: _optionController.bottomBarImmersiveLight
+                                ? () => _showMaterialLevelPicker(context)
+                                : null,
+                          )),
                     ])),
                 // 关于
                 SliverToBoxAdapter(
@@ -599,6 +611,48 @@ class OptionPage extends StatelessWidget {
                 ),
               ],
             )));
+  }
+
+  String _materialLevelName(int level) {
+    switch (level) {
+      case 0:
+        return '精致';
+      case 1:
+        return '柔和';
+      case 2:
+        return '流畅';
+      default:
+        return '跟随系统';
+    }
+  }
+
+  void _showMaterialLevelPicker(BuildContext context) {
+    const levels = <int, String>{
+      10: '跟随系统',
+      0: '精致',
+      1: '柔和',
+      2: '流畅',
+    };
+    showCupertinoModalPopup(
+      context: context,
+      builder: (BuildContext context) {
+        return CupertinoActionSheet(
+          actions: levels.entries
+              .map((entry) => CupertinoActionSheetAction(
+                    onPressed: () {
+                      _optionController.bottomBarMaterialLevel = entry.key;
+                      Navigator.pop(context);
+                    },
+                    child: Text(entry.value),
+                  ))
+              .toList(),
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+        );
+      },
+    );
   }
 
   void _showBrightnessPicker(BuildContext context) {

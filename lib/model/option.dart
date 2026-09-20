@@ -40,6 +40,9 @@ class Option {
   RxBool bottomBarFloating;
   RxBool bottomBarImmersiveLight;
 
+  /// 沉浸光感强度档位：10=跟随系统(自适应) 0=精致 1=柔和 2=流畅
+  RxInt bottomBarMaterialLevel;
+
   Option({
     required this.workTime,
     required this.restTime,
@@ -54,5 +57,6 @@ class Option {
     required this.calendarReminderMode,
     required this.bottomBarFloating,
     required this.bottomBarImmersiveLight,
+    required this.bottomBarMaterialLevel,
   });
 }

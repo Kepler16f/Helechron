@@ -83,16 +83,20 @@ export default class EntryAbility extends FlutterAbility {
       const prefs = await this.getWidgetPrefs();
       const floatingRaw = (await prefs.get('bottomBarFloating', '0')) as string;
       const immersiveRaw = (await prefs.get('bottomBarImmersiveLight', '0')) as string;
+      const levelRaw = (await prefs.get('bottomBarMaterialLevel', 10)) as number;
       const floating = floatingRaw === '1';
       const immersiveLight = immersiveRaw === '1' && floating;
+      const materialLevel = typeof levelRaw === 'number' ? levelRaw : 10;
       AppStorage.setOrCreate('bottomBarFloating', floating);
       AppStorage.setOrCreate('bottomBarImmersiveLight', immersiveLight);
+      AppStorage.setOrCreate('bottomBarMaterialLevel', materialLevel);
       AppStorage.setOrCreate('bottomBarCurrentTab', 0);
-      hilog.info(DOMAIN, TAG, `initAppStorageFromPrefs: floating=${floating}, immersiveLight=${immersiveLight}`);
+      hilog.info(DOMAIN, TAG, `initAppStorageFromPrefs: floating=${floating}, immersiveLight=${immersiveLight}, materialLevel=${materialLevel}`);
     } catch (e) {
       hilog.warn(DOMAIN, TAG, `initAppStorageFromPrefs failed: ${JSON.stringify(e)}`);
       AppStorage.setOrCreate('bottomBarFloating', false);
       AppStorage.setOrCreate('bottomBarImmersiveLight', false);
+      AppStorage.setOrCreate('bottomBarMaterialLevel', 10);
       AppStorage.setOrCreate('bottomBarCurrentTab', 0);
     }
   }
@@ -956,13 +960,17 @@ export default class EntryAbility extends FlutterAbility {
     try {
       const floating = call.argument('floating') === true;
       const immersiveLight = call.argument('immersiveLight') === true;
+      const levelArg = call.argument('materialLevel') as number;
+      const materialLevel = typeof levelArg === 'number' ? levelArg : 10;
       const prefs = await this.getWidgetPrefs();
       await prefs.put('bottomBarFloating', floating ? '1' : '0');
       await prefs.put('bottomBarImmersiveLight', immersiveLight ? '1' : '0');
+      await prefs.put('bottomBarMaterialLevel', materialLevel);
       await prefs.flush();
       AppStorage.setOrCreate('bottomBarFloating', floating);
       AppStorage.setOrCreate('bottomBarImmersiveLight', immersiveLight && floating);
-      hilog.info(DOMAIN, TAG, `setBottomBarStyle: floating=${floating}, immersiveLight=${immersiveLight}`);
+      AppStorage.setOrCreate('bottomBarMaterialLevel', materialLevel);
+      hilog.info(DOMAIN, TAG, `setBottomBarStyle: floating=${floating}, immersiveLight=${immersiveLight}, materialLevel=${materialLevel}`);
       result.success(true);
     } catch (e) {
       hilog.error(DOMAIN, TAG, `setBottomBarStyle failed: ${JSON.stringify(e)}`);

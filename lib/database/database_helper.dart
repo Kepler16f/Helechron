@@ -60,6 +60,7 @@ class DatabaseHelper {
   final String kCalendarReminderMode = 'calendarReminderMode';
   final String kBottomBarFloating = 'bottomBarFloating';
   final String kBottomBarImmersiveLight = 'bottomBarImmersiveLight';
+  final String kBottomBarMaterialLevel = 'bottomBarMaterialLevel';
 
   Option getOption() {
     return Option(
@@ -76,6 +77,7 @@ class DatabaseHelper {
       calendarReminderMode: getCalendarReminderMode().obs,
       bottomBarFloating: getBottomBarFloating().obs,
       bottomBarImmersiveLight: getBottomBarImmersiveLight().obs,
+      bottomBarMaterialLevel: getBottomBarMaterialLevel().obs,
     );
   }
 
@@ -214,6 +216,17 @@ class DatabaseHelper {
 
   Future<void> setBottomBarImmersiveLight(bool immersive) async {
     await optionsBox.put(kBottomBarImmersiveLight, immersive);
+  }
+
+  int getBottomBarMaterialLevel() {
+    if (optionsBox.get(kBottomBarMaterialLevel) == null) {
+      optionsBox.put(kBottomBarMaterialLevel, 10);
+    }
+    return optionsBox.get(kBottomBarMaterialLevel);
+  }
+
+  Future<void> setBottomBarMaterialLevel(int level) async {
+    await optionsBox.put(kBottomBarMaterialLevel, level);
   }
 
   List<CourseIdMap> getCourseIdMappingList() {

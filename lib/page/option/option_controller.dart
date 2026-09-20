@@ -140,6 +140,7 @@ class OptionController extends GetxController {
     OhosNativeService.instance.setBottomBarStyle(
       floating: bottomBarFloating,
       immersiveLight: bottomBarImmersiveLight,
+      materialLevel: bottomBarMaterialLevel,
     );
   }
 
@@ -151,6 +152,19 @@ class OptionController extends GetxController {
     OhosNativeService.instance.setBottomBarStyle(
       floating: bottomBarFloating,
       immersiveLight: bottomBarImmersiveLight,
+      materialLevel: bottomBarMaterialLevel,
+    );
+  }
+
+  int get bottomBarMaterialLevel => _option.bottomBarMaterialLevel.value;
+
+  set bottomBarMaterialLevel(int value) {
+    _option.bottomBarMaterialLevel.value = value;
+    _db.setBottomBarMaterialLevel(value);
+    OhosNativeService.instance.setBottomBarStyle(
+      floating: bottomBarFloating,
+      immersiveLight: bottomBarImmersiveLight,
+      materialLevel: bottomBarMaterialLevel,
     );
   }
 

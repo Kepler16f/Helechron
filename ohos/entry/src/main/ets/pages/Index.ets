@@ -50,33 +50,44 @@ struct Index {
   @LocalStorageLink('viewId') viewId: string = "";
   @StorageLink('bottomBarFloating') bottomBarFloating: boolean = false;
   @StorageLink('bottomBarImmersiveLight') bottomBarImmersiveLight: boolean = false;
+  /// 沉浸光感强度档位：10=跟随系统 0=精致 1=柔和 2=流畅
+  @StorageLink('bottomBarMaterialLevel') bottomBarMaterialLevel: number = 10;
   @StorageLink('bottomBarCurrentTab') @Watch('onCurrentTabChanged') bottomBarCurrentTab: number = 0;
   @State private safeBottom: number = 0;
   @State private apiLevel: number = 12;
+  @State private immersiveSupported: boolean = true;
   private tabsController: HdsTabsController = new HdsTabsController();
-  /// 沉浸材质类型与等级：默认沉浸式 + 自适应（由系统按设备算力与沉浸光感强度决定实际效果）
-  private materialType: hdsMaterial.MaterialType = hdsMaterial.MaterialType.IMMERSIVE;
-  private materialLevel: hdsMaterial.MaterialLevel = hdsMaterial.MaterialLevel.ADAPTIVE;
 
   aboutToAppear(): void {
     this.loadSafeArea();
-    this.resolveMaterialLevel();
+    this.resolveMaterialCapability();
   }
 
-  /// 查询设备支持的材质类型；不支持沉浸材质时降级，避免出现无效材质。
-  private resolveMaterialLevel(): void {
+  /// 查询设备是否支持沉浸材质；不支持时统一降级为 SMOOTH。
+  private resolveMaterialCapability(): void {
     try {
       const types = hdsMaterial.getSystemMaterialTypes();
-      if (types.indexOf(hdsMaterial.MaterialType.IMMERSIVE) >= 0) {
-        this.materialType = hdsMaterial.MaterialType.IMMERSIVE;
-        this.materialLevel = hdsMaterial.MaterialLevel.ADAPTIVE;
-      } else {
-        this.materialType = hdsMaterial.MaterialType.ADAPTIVE;
-        this.materialLevel = hdsMaterial.MaterialLevel.SMOOTH;
-      }
-      hilog.info(DOMAIN, TAG, `materialType=${this.materialType}, materialLevel=${this.materialLevel}`);
+      this.immersiveSupported = types.indexOf(hdsMaterial.MaterialType.IMMERSIVE) >= 0;
+      hilog.info(DOMAIN, TAG, `materialTypes=[${types.join(',')}], immersiveSupported=${this.immersiveSupported}`);
     } catch (e) {
-      hilog.warn(DOMAIN, TAG, `resolveMaterialLevel failed: ${JSON.stringify(e)}`);
+      hilog.warn(DOMAIN, TAG, `resolveMaterialCapability failed: ${JSON.stringify(e)}`);
+    }
+  }
+
+  /// 当前强度档位。应用内可覆盖系统自适应：10 交由系统策略决定。
+  private currentMaterialLevel(): hdsMaterial.MaterialLevel {
+    if (!this.immersiveSupported) {
+      return hdsMaterial.MaterialLevel.SMOOTH;
+    }
+    switch (this.bottomBarMaterialLevel) {
+      case 0:
+        return hdsMaterial.MaterialLevel.EXQUISITE;
+      case 1:
+        return hdsMaterial.MaterialLevel.GENTLE;
+      case 2:
+        return hdsMaterial.MaterialLevel.SMOOTH;
+      default:
+        return hdsMaterial.MaterialLevel.ADAPTIVE;
     }
   }
 
@@ -202,8 +213,8 @@ struct Index {
       // 关闭默认的浅灰渐变蒙层，避免遮住玻璃质感（注意不能用 Color.Transparent/0，HDS 会当作未设置）
       gradientMask: { maskColor: '#00000000', maskHeight: 1 },
       systemMaterialEffect: {
-        materialType: this.materialType,
-        materialLevel: this.materialLevel
+        materialType: hdsMaterial.MaterialType.ADAPTIVE,
+        materialLevel: this.currentMaterialLevel()
       }
     })
     .align(Alignment.Bottom)
