@@ -3,7 +3,7 @@
     "bundleName": "top.celechron.helechron",
     "vendor": "Helechron",
     "versionCode": 48,
-    "versionName": "0.1.0_dev15",
+    "versionName": "0.1.0",
     "icon": "$media:app_icon",
     "label": "$string:app_name"
   }
