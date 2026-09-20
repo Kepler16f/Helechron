@@ -43,6 +43,28 @@ function barTitle(index: number): string {
   }
 }
 
+/// 读取设备 API 级别。优先使用 deviceInfo.sdkApiVersion；
+/// 若不可用再尝试从 versionId（形如 "6.1.0(23)"）解析。
+function resolveApiLevel(): number {
+  try {
+    const api = deviceInfo.sdkApiVersion;
+    if (typeof api === 'number' && api > 0) {
+      return api;
+    }
+  } catch (e) {
+    // ignore
+  }
+  try {
+    const match = deviceInfo.versionId.match(/\((\d+)\)/);
+    if (match !== null) {
+      return Number(match[1]);
+    }
+  } catch (e) {
+    // ignore
+  }
+  return 12;
+}
+
 @Entry(storage)
 @Component
 struct Index {
@@ -52,6 +74,8 @@ struct Index {
   @StorageLink('bottomBarImmersiveLight') bottomBarImmersiveLight: boolean = false;
   /// 沉浸光感强度档位：10=跟随系统 0=精致 1=柔和 2=流畅
   @StorageLink('bottomBarMaterialLevel') bottomBarMaterialLevel: number = 10;
+  /// 弹出 Flutter 模态窗口时隐藏原生底栏，避免遮挡弹窗
+  @StorageLink('bottomBarHidden') bottomBarHidden: boolean = false;
   @StorageLink('bottomBarCurrentTab') @Watch('onCurrentTabChanged') bottomBarCurrentTab: number = 0;
   @State private safeBottom: number = 0;
   @State private apiLevel: number = 12;
@@ -106,10 +130,8 @@ struct Index {
       const area = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
       const h = px2vp(area.bottomRect.height);
       this.safeBottom = h > 0 ? h : 24;
-      // versionId 例如 "5.0.0(12)"，提取括号内的 API 级别
-      const match = deviceInfo.versionId.match(/\((\d+)\)/);
-      this.apiLevel = match ? Number(match[1]) : 12;
-      hilog.info(DOMAIN, TAG, `safeBottom=${this.safeBottom}, apiLevel=${this.apiLevel}`);
+      this.apiLevel = resolveApiLevel();
+      hilog.info(DOMAIN, TAG, `safeBottom=${this.safeBottom}, apiLevel=${this.apiLevel}, versionId=${deviceInfo.versionId}`);
     } catch (e) {
       hilog.warn(DOMAIN, TAG, `loadSafeArea failed: ${JSON.stringify(e)}`);
       this.safeBottom = 24;
@@ -250,31 +272,33 @@ struct Index {
       .width('100%')
       .height('100%')
 
-      if (this.useSystemMaterial()) {
-        this.SystemMaterialBar()
-      } else if (this.bottomBarFloating) {
-        if (this.bottomBarImmersiveLight) {
-          this.ImmersiveFallbackBar()
+      if (!this.bottomBarHidden) {
+        if (this.useSystemMaterial()) {
+          this.SystemMaterialBar()
+        } else if (this.bottomBarFloating) {
+          if (this.bottomBarImmersiveLight) {
+            this.ImmersiveFallbackBar()
+          } else {
+            Row() {
+              this.BarItems()
+            }
+            .width('92%')
+            .height(56)
+            .borderRadius(28)
+            .clip(true)
+            .margin({ bottom: this.safeBottom + 8 })
+            .backgroundColor($r('sys.color.ohos_id_color_bottom_tab_bg'))
+            .shadow({ radius: 16, color: '#1F000000', offsetX: 0, offsetY: 6 })
+          }
         } else {
           Row() {
             this.BarItems()
           }
-          .width('92%')
-          .height(56)
-          .borderRadius(28)
-          .clip(true)
-          .margin({ bottom: this.safeBottom + 8 })
+          .width('100%')
+          .height(56 + this.safeBottom)
+          .padding({ bottom: this.safeBottom })
           .backgroundColor($r('sys.color.ohos_id_color_bottom_tab_bg'))
-          .shadow({ radius: 16, color: '#1F000000', offsetX: 0, offsetY: 6 })
         }
-      } else {
-        Row() {
-          this.BarItems()
-        }
-        .width('100%')
-        .height(56 + this.safeBottom)
-        .padding({ bottom: this.safeBottom })
-        .backgroundColor($r('sys.color.ohos_id_color_bottom_tab_bg'))
       }
     }
     .width('100%')

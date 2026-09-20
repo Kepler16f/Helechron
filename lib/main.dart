@@ -132,6 +132,40 @@ Future<void> _refreshRestoredScholar(Rx<Scholar> scholar) async {
   }
 }
 
+/// 监听 Flutter 模态弹窗（ActionSheet / 对话框等 [PopupRoute]）的显隐，
+/// 弹窗出现时隐藏原生悬浮底栏，避免弹窗底部被原生覆盖层遮挡。
+class _NativeBarVisibilityObserver extends NavigatorObserver {
+  int _popupDepth = 0;
+
+  void _sync() {
+    OhosNativeService.instance.setBottomBarVisible(_popupDepth == 0);
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (route is PopupRoute) {
+      _popupDepth++;
+      _sync();
+    }
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (route is PopupRoute) {
+      _popupDepth = _popupDepth > 0 ? _popupDepth - 1 : 0;
+      _sync();
+    }
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (route is PopupRoute) {
+      _popupDepth = _popupDepth > 0 ? _popupDepth - 1 : 0;
+      _sync();
+    }
+  }
+}
+
 class CelechronApp extends StatefulWidget {
   const CelechronApp({super.key});
 
@@ -142,6 +176,7 @@ class CelechronApp extends StatefulWidget {
 class _CelechronAppState extends State<CelechronApp>
     with WidgetsBindingObserver {
   Timer? _foregroundLeaseHeartbeat;
+  final _nativeBarVisibilityObserver = _NativeBarVisibilityObserver();
 
   @override
   void initState() {
@@ -242,6 +277,7 @@ class _CelechronAppState extends State<CelechronApp>
           },
           debugShowCheckedModeBanner: false,
           navigatorKey: navigatorKey,
+          navigatorObservers: [_nativeBarVisibilityObserver],
         ));
   }
 

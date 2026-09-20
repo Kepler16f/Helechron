@@ -312,6 +312,15 @@ class OhosNativeService {
     } on MissingPluginException {}
   }
 
+  /// 显示/隐藏原生底栏（弹出 Flutter 模态窗口时隐藏，避免遮挡弹窗）
+  Future<void> setBottomBarVisible(bool visible) async {
+    try {
+      await _channel.invokeMethod('setBottomBarVisible', {'visible': visible});
+    } on PlatformException catch (e) {
+      debugPrint('setBottomBarVisible failed: $e');
+    } on MissingPluginException {}
+  }
+
   // ==================== Widget Routes & Native Tab ====================
 
   static void Function(String target)? _widgetRouteHandler;

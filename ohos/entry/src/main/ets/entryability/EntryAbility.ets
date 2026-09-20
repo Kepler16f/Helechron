@@ -258,6 +258,9 @@ export default class EntryAbility extends FlutterAbility {
       case 'setCurrentTab':
         this.setCurrentTab(call, result);
         break;
+      case 'setBottomBarVisible':
+        this.setBottomBarVisible(call, result);
+        break;
       case 'setPaymentCredentials':
         this.setPaymentCredentials(call, result);
         break;
@@ -986,6 +989,19 @@ export default class EntryAbility extends FlutterAbility {
       result.success(true);
     } catch (e) {
       hilog.error(DOMAIN, TAG, `setCurrentTab failed: ${JSON.stringify(e)}`);
+      result.success(false);
+    }
+  }
+
+  /// 弹出 Flutter 模态窗口时隐藏原生底栏，避免遮挡弹窗底部。
+  private setBottomBarVisible(call: MethodCall, result: MethodResult): void {
+    try {
+      const visible = call.argument('visible') === true;
+      AppStorage.setOrCreate('bottomBarHidden', !visible);
+      hilog.info(DOMAIN, TAG, `setBottomBarVisible: visible=${visible}`);
+      result.success(true);
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `setBottomBarVisible failed: ${JSON.stringify(e)}`);
       result.success(false);
     }
   }
