@@ -323,12 +323,12 @@ struct Index {
           AppStorage.setOrCreate('enlargedQrPaymentCode', '');
         })
 
-      // 居中的白色卡片
+      // 居中卡片：背景与文字跟随系统深/浅色，QR 区始终白色保证扫码对比度
       Column({ space: 20 }) {
         Text('付款码')
           .fontSize(20)
           .fontWeight(FontWeight.Bold)
-          .fontColor('#000000')
+          .fontColor($r('app.color.widget_text_primary'))
           .margin({ top: 20 })
 
         Column() {
@@ -349,7 +349,7 @@ struct Index {
           .fontFamily('monospace')
           .fontWeight(FontWeight.Medium)
           .letterSpacing(1.2)
-          .fontColor('#000000')
+          .fontColor($r('app.color.widget_text_primary'))
           .textAlign(TextAlign.Center)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -358,7 +358,7 @@ struct Index {
         Button('关闭')
           .width('70%')
           .height(40)
-          .backgroundColor('#0A59F7')
+          .backgroundColor($r('app.color.widget_accent'))
           .fontColor(Color.White)
           .fontSize(15)
           .fontWeight(FontWeight.Medium)
@@ -369,7 +369,7 @@ struct Index {
       }
       .width('88%')
       .constraintSize({ maxWidth: 380, maxHeight: 480 })
-      .backgroundColor(Color.White)
+      .backgroundColor($r('app.color.widget_background'))
       .borderRadius(20)
       .shadow({ radius: 24, color: '#33000000', offsetX: 0, offsetY: 8 })
       .alignItems(HorizontalAlign.Center)
