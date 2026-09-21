@@ -30,6 +30,7 @@ struct PaymentCodeWidget {
           .borderRadius(14)
           .backgroundColor($r('app.color.widget_accent'))
           .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
           .margin({ right: 6 })
           .onClick(() => {
             postCardAction(this, {
@@ -53,6 +54,7 @@ struct PaymentCodeWidget {
           .borderRadius(14)
           .backgroundColor($r('app.color.widget_accent'))
           .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
           .onClick(() => {
             postCardAction(this, {
               action: 'message',

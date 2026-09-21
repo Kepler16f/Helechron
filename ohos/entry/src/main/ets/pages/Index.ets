@@ -313,53 +313,69 @@ struct Index {
   /// 桌面小组件点击放大按钮触发的全屏付款码弹窗（ArkTS 原生渲染）
   @Builder
   EnlargedQrOverlay() {
-    Column({ space: 24 }) {
-      Text('付款码')
-        .fontSize(22)
-        .fontWeight(FontWeight.Bold)
-        .fontColor('#000000')
-        .margin({ top: 64 })
-
-      Column() {
-        QRCode(this.enlargedQrPaymentCode)
-          .width('100%')
-          .height('100%')
-          .color('#000000')
-      }
-      .width(320)
-      .height(320)
-      .padding(16)
-      .backgroundColor(Color.White)
-      .borderRadius(20)
-      .border({ width: 1, color: '#22000000' })
-
-      Text(this.enlargedQrPaymentCode)
-        .fontSize(18)
-        .fontFamily('monospace')
-        .fontWeight(FontWeight.Medium)
-        .letterSpacing(1.5)
-        .fontColor('#000000')
-        .textAlign(TextAlign.Center)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .padding({ left: 32, right: 32 })
-
-      Button('关闭')
-        .width('60%')
-        .height(44)
-        .backgroundColor('#0A59F7')
-        .fontColor(Color.White)
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
+    Stack({ alignContent: Alignment.Center }) {
+      // 半透明遮罩，点击关闭弹窗
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor('#80000000')
         .onClick(() => {
           AppStorage.setOrCreate('enlargedQrPaymentCode', '');
         })
-        .margin({ bottom: 24 })
+
+      // 居中的白色卡片
+      Column({ space: 20 }) {
+        Text('付款码')
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#000000')
+          .margin({ top: 20 })
+
+        Column() {
+          QRCode(this.enlargedQrPaymentCode)
+            .width('100%')
+            .height('100%')
+            .color('#000000')
+        }
+        .width(280)
+        .height(280)
+        .padding(12)
+        .backgroundColor(Color.White)
+        .borderRadius(16)
+        .border({ width: 1, color: '#22000000' })
+
+        Text(this.enlargedQrPaymentCode)
+          .fontSize(16)
+          .fontFamily('monospace')
+          .fontWeight(FontWeight.Medium)
+          .letterSpacing(1.2)
+          .fontColor('#000000')
+          .textAlign(TextAlign.Center)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .padding({ left: 16, right: 16 })
+
+        Button('关闭')
+          .width('70%')
+          .height(40)
+          .backgroundColor('#0A59F7')
+          .fontColor(Color.White)
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .margin({ bottom: 20 })
+          .onClick(() => {
+            AppStorage.setOrCreate('enlargedQrPaymentCode', '');
+          })
+      }
+      .width('88%')
+      .constraintSize({ maxWidth: 380, maxHeight: 480 })
+      .backgroundColor(Color.White)
+      .borderRadius(20)
+      .shadow({ radius: 24, color: '#33000000', offsetX: 0, offsetY: 8 })
+      .alignItems(HorizontalAlign.Center)
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(Color.White)
-    .alignItems(HorizontalAlign.Center)
   }
 
   onBackPress(): boolean {
