@@ -91,6 +91,7 @@ export default class EntryAbility extends FlutterAbility {
       AppStorage.setOrCreate('bottomBarImmersiveLight', immersiveLight);
       AppStorage.setOrCreate('bottomBarMaterialLevel', materialLevel);
       AppStorage.setOrCreate('bottomBarCurrentTab', 0);
+      AppStorage.setOrCreate('enlargedQrPaymentCode', '');
       hilog.info(DOMAIN, TAG, `initAppStorageFromPrefs: floating=${floating}, immersiveLight=${immersiveLight}, materialLevel=${materialLevel}`);
     } catch (e) {
       hilog.warn(DOMAIN, TAG, `initAppStorageFromPrefs failed: ${JSON.stringify(e)}`);
@@ -98,6 +99,7 @@ export default class EntryAbility extends FlutterAbility {
       AppStorage.setOrCreate('bottomBarImmersiveLight', false);
       AppStorage.setOrCreate('bottomBarMaterialLevel', 10);
       AppStorage.setOrCreate('bottomBarCurrentTab', 0);
+      AppStorage.setOrCreate('enlargedQrPaymentCode', '');
     }
   }
 
@@ -176,10 +178,18 @@ export default class EntryAbility extends FlutterAbility {
       return;
     }
     const target = params['target'] as string;
-    if (target !== undefined && target !== null && target.length > 0) {
-      this.pendingRoute = target;
-      hilog.info(DOMAIN, TAG, `captured widget route: ${target}`);
+    if (target === undefined || target === null || target.length === 0) {
+      return;
     }
+    // 桌面小组件放大付款码：直接走原生弹窗，不进入 Dart 路由
+    if (target === 'enlarged_qr') {
+      const code = (params['paymentCode'] as string) || '';
+      AppStorage.setOrCreate('enlargedQrPaymentCode', code);
+      hilog.info(DOMAIN, TAG, `captured widget route: enlarged_qr (code len=${code.length})`);
+      return;
+    }
+    this.pendingRoute = target;
+    hilog.info(DOMAIN, TAG, `captured widget route: ${target}`);
   }
 
   private flushPendingRoute(): void {
