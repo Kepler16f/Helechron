@@ -265,6 +265,30 @@ class _ECardPayPageState extends State<ECardPayPage> {
     }
   }
 
+  Widget _buildCodeValue() {
+    if (_code.value.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: CupertinoColors.systemGrey6,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: SelectableText(
+        _code.value,
+        textAlign: TextAlign.center,
+        maxLines: 1,
+        style: const TextStyle(
+          fontSize: 18,
+          fontFamily: 'monospace',
+          letterSpacing: 1.5,
+          fontWeight: FontWeight.w500,
+          color: CupertinoColors.black,
+        ),
+      ),
+    );
+  }
+
   Widget _buildRefreshButton(BuildContext context) {
     if (_viewState.value == _ViewState.notLoggedIn) {
       return const SizedBox.shrink();
@@ -315,13 +339,7 @@ class _ECardPayPageState extends State<ECardPayPage> {
                   const SizedBox(height: 16),
                   Obx(() => _buildSubtitle(context)),
                   const SizedBox(height: 12),
-                  Obx(() => Text(
-                        _code.value.isNotEmpty
-                            ? '码值：${_code.value.substring(0, _code.value.length.clamp(0, 6))}…'
-                            : '',
-                        style: const TextStyle(
-                            fontSize: 11, color: CupertinoColors.systemGrey),
-                      )),
+                  Obx(() => _buildCodeValue()),
                   const SizedBox(height: 24),
                   Obx(() => _buildRefreshButton(context)),
                   const Spacer(flex: 6),
