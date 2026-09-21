@@ -19,18 +19,18 @@ struct PaymentCodeWidget {
           .layoutWeight(1)
 
         if (this.hasCode === '1' && this.paymentCode.length > 0) {
-          Row() {
+          Stack() {
             Text('\u26F6')
-              .fontSize(16)
+              .fontSize(14)
               .fontWeight(FontWeight.Bold)
               .fontColor($r('app.color.widget_button_text'))
+              .textAlign(TextAlign.Center)
           }
           .width(28)
           .height(28)
           .borderRadius(14)
           .backgroundColor($r('app.color.widget_accent'))
-          .justifyContent(FlexAlign.Center)
-          .alignItems(VerticalAlign.Center)
+          .align(Alignment.Center)
           .margin({ right: 6 })
           .onClick(() => {
             postCardAction(this, {
@@ -43,18 +43,18 @@ struct PaymentCodeWidget {
             });
           })
 
-          Row() {
+          Stack() {
             Text('\u21BB')
-              .fontSize(16)
+              .fontSize(14)
               .fontWeight(FontWeight.Bold)
               .fontColor($r('app.color.widget_button_text'))
+              .textAlign(TextAlign.Center)
           }
           .width(28)
           .height(28)
           .borderRadius(14)
           .backgroundColor($r('app.color.widget_accent'))
-          .justifyContent(FlexAlign.Center)
-          .alignItems(VerticalAlign.Center)
+          .align(Alignment.Center)
           .onClick(() => {
             postCardAction(this, {
               action: 'message',

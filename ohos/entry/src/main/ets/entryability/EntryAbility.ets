@@ -1,6 +1,7 @@
 import { FlutterAbility, FlutterEngine, MethodChannel, MethodCall, MethodResult } from '@ohos/flutter_ohos';
 import { GeneratedPluginRegistrant } from '../plugins/GeneratedPluginRegistrant';
 import { Want, AbilityConstant } from '@kit.AbilityKit';
+import { window } from '@kit.ArkUI';
 import { formBindingData, formProvider } from '@kit.FormKit';
 import notificationManager from '@ohos.notificationManager';
 import { calendarManager } from '@kit.CalendarKit';
@@ -44,6 +45,8 @@ export default class EntryAbility extends FlutterAbility {
   private methodChannel: MethodChannel | null = null;
   private samplePayload: CalendarEventPayload | null = null;
   private pendingRoute: string = '';
+  /// 冷启动时是否优先渲染"付款码放大窗口"（不进入 Flutter）
+  private launchToEnlargedQr: boolean = false;
 
   configureFlutterEngine(flutterEngine: FlutterEngine) {
     super.configureFlutterEngine(flutterEngine);
@@ -124,6 +127,24 @@ export default class EntryAbility extends FlutterAbility {
     this.pushAllWidgets();
   }
 
+  /// 覆盖 FlutterAbility 默认加载 pages/Index 的行为：
+  /// 若冷启动时由小组件"放大付款码"拉起，跳过 Flutter 主页，直接渲染 EnlargedQRPage。
+  /// 关闭按钮调 terminateSelf() 退回桌面，不会落到 FlutterPage。
+  onWindowStageCreate(windowStage: window.WindowStage): void {
+    if (this.launchToEnlargedQr) {
+      // 重要：不调 super.configureFlutterEngine / 不走 FlutterPage
+      windowStage.loadContent('pages/EnlargedQRPage', (err: BusinessError) => {
+        if (err) {
+          hilog.error(DOMAIN, TAG, `loadContent EnlargedQRPage failed: ${JSON.stringify(err)}`);
+          // 失败兜底：走 FlutterAbility 默认加载（pages/Index）
+          super.onWindowStageCreate(windowStage);
+        }
+      });
+      return;
+    }
+    super.onWindowStageCreate(windowStage);
+  }
+
   /// 直接由原生把课程与付款码小组件刷新到最新状态（不经过 Dart）。
   private async pushAllWidgets(): Promise<void> {
     try {
@@ -185,6 +206,7 @@ export default class EntryAbility extends FlutterAbility {
     if (target === 'enlarged_qr') {
       const code = (params['paymentCode'] as string) || '';
       AppStorage.setOrCreate('enlargedQrPaymentCode', code);
+      this.launchToEnlargedQr = true;
       hilog.info(DOMAIN, TAG, `captured widget route: enlarged_qr (code len=${code.length})`);
       return;
     }
