@@ -1,7 +1,7 @@
 ﻿import common from '@ohos.app.ability.common';
 import { FlutterPage } from '@ohos/flutter_ohos'
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { window, QRCode } from '@kit.ArkUI';
+import { window } from '@kit.ArkUI';
 import { deviceInfo } from '@kit.BasicServicesKit';
 import { HdsTabs, HdsTabsController, hdsMaterial } from '@kit.UIDesignKit';
 
