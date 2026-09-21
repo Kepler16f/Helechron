@@ -132,7 +132,21 @@ export default class EntryAbility extends FlutterAbility {
   /// 关闭按钮调 terminateSelf() 退回桌面，不会落到 FlutterPage。
   onWindowStageCreate(windowStage: window.WindowStage): void {
     if (this.launchToEnlargedQr) {
-      // 重要：不调 super.configureFlutterEngine / 不走 FlutterPage
+      // 把窗口背景设为透明，让桌面壁纸透出，EnlargedQRPage 内再用 backgroundEffect 模糊
+      try {
+        windowStage.getMainWindow().then((mainWindow) => {
+          try {
+            mainWindow.setWindowBackgroundColor('#00000000');
+          } catch (e) {
+            hilog.warn(DOMAIN, TAG, `setWindowBackgroundColor failed: ${JSON.stringify(e)}`);
+          }
+        }).catch((e: BusinessError) => {
+          hilog.warn(DOMAIN, TAG, `getMainWindow failed: ${JSON.stringify(e)}`);
+        });
+      } catch (e) {
+        hilog.warn(DOMAIN, TAG, `setup transparent window failed: ${JSON.stringify(e)}`);
+      }
+      // 加载"付款码放大窗口"，不走 FlutterPage
       windowStage.loadContent('pages/EnlargedQRPage', (err: BusinessError) => {
         if (err) {
           hilog.error(DOMAIN, TAG, `loadContent EnlargedQRPage failed: ${JSON.stringify(err)}`);

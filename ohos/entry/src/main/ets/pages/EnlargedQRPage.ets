@@ -1,5 +1,5 @@
 /// 桌面小组件点击放大按钮后，EntryAbility 启动时优先加载的页面。
-/// 以"窗口/卡片"样式渲染付款码大图 + 关闭按钮（不占满全屏，四周留白），
+/// 以"窗口/卡片"样式渲染付款码大图 + 关闭按钮（不占满全屏，四周留白透明），
 /// 关闭后 terminateSelf() 退出应用，不进入 Flutter 主页。
 
 import common from '@ohos.app.ability.common';
@@ -15,40 +15,33 @@ struct EnlargedQRPage {
   @State private paymentCode: string = '';
 
   aboutToAppear(): void {
-    this.loadPaymentCode();
-  }
-
-  /// 码值从 AppStorage（EntryAbility 启动时已写入）或 Preferences 读取
-  private async loadPaymentCode(): Promise<void> {
+    // 码值由 EntryAbility 在冷启动阶段（captureRouteFromWant）写入 AppStorage
     try {
       const fromStorage = AppStorage.get<string>('enlargedQrPaymentCode');
       if (typeof fromStorage === 'string' && fromStorage.length > 0) {
         this.paymentCode = fromStorage;
-        return;
       }
     } catch (e) {
       hilog.warn(DOMAIN, TAG, `read AppStorage failed: ${JSON.stringify(e)}`);
     }
-    try {
-      const prefs = await preferences.getPreferences(this.context, 'celechron_widget_prefs');
-      const code = (await prefs.get('paymentCode', '')) as string;
-      this.paymentCode = code;
-    } catch (e) {
-      hilog.warn(DOMAIN, TAG, `read prefs failed: ${JSON.stringify(e)}`);
-    }
   }
 
   build() {
-    // 整屏 Stack：背景留白 + 居中的窗口卡片
     Stack({ alignContent: Alignment.Center }) {
+      // 背景模糊层：把桌面壁纸模糊化，点窗口外关闭
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor('#80000000')
+        .backgroundEffect({
+          radius: 60,
+          saturation: 1.6,
+          brightness: 1.0
+        })
         .onClick(() => {
           this.close();
         })
 
+      // 居中卡片
       Column({ space: 20 }) {
         Text('付款码')
           .fontSize(20)
