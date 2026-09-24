@@ -11,6 +11,7 @@ import 'grade_card.dart';
 import 'grade_detail_controller.dart';
 import 'package:celechron/utils/gpa_helper.dart';
 import 'weighted_gpa_view.dart';
+import 'package:celechron/design/native_bar_spacer.dart';
 
 class GradeDetailPage extends StatelessWidget {
   final _gradeDetailController = Get.put(GradeDetailController());
@@ -473,6 +474,7 @@ class GradeDetailPage extends StatelessWidget {
               ),
             ),
           ),
+          const SliverToBoxAdapter(child: NativeBottomBarSpacer()),
         ],
       ),
     );

@@ -4,7 +4,7 @@ let storagePaymentCode = new LocalStorage();
 @Component
 struct PaymentCodeWidget {
   @LocalStorageProp('paymentCode') paymentCode: string = '';
-  @LocalStorageProp('displayName') displayName: string = '浙大校园卡付款码';
+  @LocalStorageProp('displayName') displayName: string = '付款码';
   @LocalStorageProp('hasCode') hasCode: string = '0';
 
   build() {
@@ -19,9 +19,9 @@ struct PaymentCodeWidget {
           .layoutWeight(1)
 
         if (this.hasCode === '1' && this.paymentCode.length > 0) {
-          Stack() {
+          Row() {
             Text('\u26F6')
-              .fontSize(14)
+              .fontSize(13)
               .fontWeight(FontWeight.Bold)
               .fontColor($r('app.color.widget_button_text'))
               .textAlign(TextAlign.Center)
@@ -30,7 +30,9 @@ struct PaymentCodeWidget {
           .height(28)
           .borderRadius(14)
           .backgroundColor($r('app.color.widget_accent'))
-          .align(Alignment.Center)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+          .hitTestBehavior(HitTestMode.Block)
           .margin({ right: 6 })
           .onClick(() => {
             postCardAction(this, {
@@ -43,9 +45,9 @@ struct PaymentCodeWidget {
             });
           })
 
-          Stack() {
+          Row() {
             Text('\u21BB')
-              .fontSize(14)
+              .fontSize(13)
               .fontWeight(FontWeight.Bold)
               .fontColor($r('app.color.widget_button_text'))
               .textAlign(TextAlign.Center)
@@ -54,7 +56,9 @@ struct PaymentCodeWidget {
           .height(28)
           .borderRadius(14)
           .backgroundColor($r('app.color.widget_accent'))
-          .align(Alignment.Center)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+          .hitTestBehavior(HitTestMode.Block)
           .onClick(() => {
             postCardAction(this, {
               action: 'message',
@@ -66,6 +70,7 @@ struct PaymentCodeWidget {
         }
       }
       .width('100%')
+      .alignItems(VerticalAlign.Center)
       .margin({ bottom: 8 })
 
       if (this.hasCode === '1' && this.paymentCode.length > 0) {

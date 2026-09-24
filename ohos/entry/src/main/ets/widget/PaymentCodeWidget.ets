@@ -81,10 +81,10 @@ export default class PaymentCodeWidgetExtension extends FormExtensionAbility {
 
   private buildData(prefs: preferences.Preferences | null): Record<string, string> {
     let code = '';
-    let name = '浙大校园卡付款码';
+    let name = '付款码';
     if (prefs !== null) {
       code = prefs.getSync('paymentCode', '') as string;
-      name = prefs.getSync('displayName', '浙大校园卡付款码') as string;
+      name = prefs.getSync('displayName', '付款码') as string;
     }
     const data: Record<string, string> = {
       'paymentCode': code,

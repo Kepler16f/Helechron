@@ -47,6 +47,7 @@ export default class EntryAbility extends FlutterAbility {
   private pendingRoute: string = '';
   /// 冷启动时是否优先渲染"付款码放大窗口"（不进入 Flutter）
   private launchToEnlargedQr: boolean = false;
+  private windowStage: window.WindowStage | null = null;
 
   configureFlutterEngine(flutterEngine: FlutterEngine) {
     super.configureFlutterEngine(flutterEngine);
@@ -75,6 +76,16 @@ export default class EntryAbility extends FlutterAbility {
       });
     } catch (e) {
       hilog.warn(DOMAIN, TAG, `eventHub.on failed: ${JSON.stringify(e)}`);
+    }
+
+    // 监听大码弹窗关闭事件，重置标记
+    try {
+      this.context.eventHub.on('event_enlarged_qr_closed', () => {
+        hilog.info(DOMAIN, TAG, `event_enlarged_qr_closed received`);
+        this.launchToEnlargedQr = false;
+      });
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, `eventHub.on enlarged_qr_closed failed: ${JSON.stringify(e)}`);
     }
 
     // 冷启动时若由小组件拉起，记录目标路由，等待 Dart 侧主动领取
@@ -108,6 +119,18 @@ export default class EntryAbility extends FlutterAbility {
 
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     super.onNewWant(want, launchParam);
+    const target = want.parameters ? (want.parameters['target'] as string) : '';
+    if (target === 'enlarged_qr') {
+      this.captureRouteFromWant(want);
+      this.showEnlargedQrWindow();
+      return;
+    }
+
+    // 非小组件放大码启动（如点击桌面图标、最近任务等正常启动）：
+    // 若之前处于放大码状态，切回 Flutter 主页
+    if (this.launchToEnlargedQr) {
+      this.showFlutterMainWindow();
+    }
     this.captureRouteFromWant(want);
     // 热启动时 Flutter 引擎已就绪，直接推送给 Dart
     this.flushPendingRoute();
@@ -127,33 +150,76 @@ export default class EntryAbility extends FlutterAbility {
     this.pushAllWidgets();
   }
 
-  /// 覆盖 FlutterAbility 默认加载 pages/Index 的行为：
-  /// 若冷启动时由小组件"放大付款码"拉起，跳过 Flutter 主页，直接渲染 EnlargedQRPage。
-  /// 关闭按钮调 terminateSelf() 退回桌面，不会落到 FlutterPage。
-  onWindowStageCreate(windowStage: window.WindowStage): void {
-    if (this.launchToEnlargedQr) {
-      // 把窗口背景设为透明，让桌面壁纸透出，EnlargedQRPage 内再用 backgroundEffect 模糊
-      try {
-        windowStage.getMainWindow().then((mainWindow) => {
-          try {
-            mainWindow.setWindowBackgroundColor('#00000000');
-          } catch (e) {
-            hilog.warn(DOMAIN, TAG, `setWindowBackgroundColor failed: ${JSON.stringify(e)}`);
-          }
-        }).catch((e: BusinessError) => {
-          hilog.warn(DOMAIN, TAG, `getMainWindow failed: ${JSON.stringify(e)}`);
-        });
-      } catch (e) {
-        hilog.warn(DOMAIN, TAG, `setup transparent window failed: ${JSON.stringify(e)}`);
+  onDestroy(): void {
+    this.launchToEnlargedQr = false;
+    super.onDestroy();
+  }
+
+  /// 切换到 EnlargedQRPage，窗口背景设为透明，桌面壁纸模糊透出
+  private showEnlargedQrWindow(): void {
+    this.launchToEnlargedQr = true;
+    try {
+      const ws = this.windowStage;
+      if (!ws) {
+        hilog.warn(DOMAIN, TAG, `showEnlargedQrWindow: windowStage not ready`);
+        return;
       }
-      // 加载"付款码放大窗口"，不走 FlutterPage
-      windowStage.loadContent('pages/EnlargedQRPage', (err: BusinessError) => {
+      ws.getMainWindow().then((mainWindow) => {
+        try {
+          mainWindow.setWindowBackgroundColor('#00000000');
+        } catch (e) {
+          hilog.warn(DOMAIN, TAG, `setWindowBackgroundColor failed: ${JSON.stringify(e)}`);
+        }
+      }).catch((e: BusinessError) => {
+        hilog.warn(DOMAIN, TAG, `getMainWindow failed: ${JSON.stringify(e)}`);
+      });
+      ws.loadContent('pages/EnlargedQRPage', (err: BusinessError) => {
         if (err) {
           hilog.error(DOMAIN, TAG, `loadContent EnlargedQRPage failed: ${JSON.stringify(err)}`);
-          // 失败兜底：走 FlutterAbility 默认加载（pages/Index）
-          super.onWindowStageCreate(windowStage);
+          this.launchToEnlargedQr = false;
+          super.onWindowStageCreate(ws);
+        } else {
+          hilog.info(DOMAIN, TAG, `loaded EnlargedQRPage ok`);
         }
       });
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `showEnlargedQrWindow exception: ${JSON.stringify(e)}`);
+    }
+  }
+
+  /// 切回 Flutter 主页，恢复默认不透明背景
+  private showFlutterMainWindow(): void {
+    this.launchToEnlargedQr = false;
+    AppStorage.setOrCreate('enlargedQrPaymentCode', '');
+    try {
+      const ws = this.windowStage;
+      if (!ws) {
+        return;
+      }
+      ws.getMainWindow().then((mainWindow) => {
+        try {
+          mainWindow.setWindowBackgroundColor('#FFFFFFFF');
+        } catch (e) {}
+      }).catch(() => {});
+      ws.loadContent('pages/Index', (err: BusinessError) => {
+        if (err) {
+          hilog.error(DOMAIN, TAG, `loadContent pages/Index failed: ${JSON.stringify(err)}`);
+        } else {
+          hilog.info(DOMAIN, TAG, `switched to Flutter home (pages/Index)`);
+        }
+      });
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `showFlutterMainWindow exception: ${JSON.stringify(e)}`);
+    }
+  }
+
+  /// 覆盖 FlutterAbility 默认加载 pages/Index 的行为：
+  /// 若冷启动时由小组件"放大付款码"拉起，跳过 Flutter 主页，直接渲染 EnlargedQRPage。
+  /// 关闭按钮调 terminateSelf() 退回桌面，不会进入 FlutterPage。
+  onWindowStageCreate(windowStage: window.WindowStage): void {
+    this.windowStage = windowStage;
+    if (this.launchToEnlargedQr) {
+      this.showEnlargedQrWindow();
       return;
     }
     super.onWindowStageCreate(windowStage);
@@ -189,7 +255,7 @@ export default class EntryAbility extends FlutterAbility {
         .split(',').filter(id => id.length > 0);
       if (payIds.length > 0) {
         const code = (await prefs.get('paymentCode', '')) as string;
-        const name = (await prefs.get('displayName', '浙大校园卡付款码')) as string;
+        const name = (await prefs.get('displayName', '付款码')) as string;
         const payData: Record<string, string> = {
           'paymentCode': code,
           'displayName': name,
@@ -913,7 +979,7 @@ export default class EntryAbility extends FlutterAbility {
   private async updatePaymentCodeWidget(call: MethodCall, result: MethodResult): Promise<void> {
     try {
       const code = (call.argument('paymentCode') as string) || '';
-      const name = (call.argument('displayName') as string) || '浙大校园卡付款码';
+      const name = (call.argument('displayName') as string) || '付款码';
       const prefs = await this.getWidgetPrefs();
       await prefs.put('paymentCode', code);
       await prefs.put('displayName', name);

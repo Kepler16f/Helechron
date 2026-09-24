@@ -11,6 +11,7 @@ import 'package:celechron/design/round_rectangle_card.dart';
 import 'package:celechron/design/two_line_card.dart';
 import 'course_card.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:celechron/design/native_bar_spacer.dart';
 
 class CourseSchedulePage extends StatelessWidget {
   late final CourseScheduleController _courseScheduleController;
@@ -516,6 +517,7 @@ class CourseSchedulePage extends StatelessWidget {
               ),
             ),
           ),
+          const SliverToBoxAdapter(child: NativeBottomBarSpacer()),
         ],
       ),
     );

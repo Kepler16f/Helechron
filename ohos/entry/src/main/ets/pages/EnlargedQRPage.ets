@@ -4,6 +4,8 @@
 
 import common from '@ohos.app.ability.common';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { window } from '@kit.ArkUI';
+import preferences from '@ohos.data.preferences';
 
 const DOMAIN = 0x0000;
 const TAG = 'HelechronEnlargedQR';
@@ -15,14 +17,27 @@ struct EnlargedQRPage {
   @State private paymentCode: string = '';
 
   aboutToAppear(): void {
-    // 码值由 EntryAbility 在冷启动阶段（captureRouteFromWant）写入 AppStorage
+    try {
+      window.getLastWindow(this.context).then((mainWindow) => {
+        try {
+          mainWindow.setWindowBackgroundColor('#00000000');
+        } catch (e) {}
+      }).catch(() => {});
+    } catch (e) {}
+
     try {
       const fromStorage = AppStorage.get<string>('enlargedQrPaymentCode');
       if (typeof fromStorage === 'string' && fromStorage.length > 0) {
         this.paymentCode = fromStorage;
+        return;
+      }
+      const prefs = preferences.getPreferencesSync(this.context, { name: 'helechron_widget_data' });
+      const stored = prefs.getSync('paymentCode', '') as string;
+      if (stored.length > 0) {
+        this.paymentCode = stored;
       }
     } catch (e) {
-      hilog.warn(DOMAIN, TAG, `read AppStorage failed: ${JSON.stringify(e)}`);
+      hilog.warn(DOMAIN, TAG, `read initial code failed: ${JSON.stringify(e)}`);
     }
   }
 
@@ -106,6 +121,11 @@ struct EnlargedQRPage {
   private close(): void {
     try {
       AppStorage.setOrCreate('enlargedQrPaymentCode', '');
+    } catch (e) {
+      // ignore
+    }
+    try {
+      this.context.eventHub.emit('event_enlarged_qr_closed');
     } catch (e) {
       // ignore
     }

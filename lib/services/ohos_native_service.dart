@@ -225,7 +225,7 @@ class OhosNativeService {
   /// 更新付款码小组件数据
   Future<void> updatePaymentCodeWidget({
     required String code,
-    String displayName = '浙大校园卡付款码',
+    String displayName = '付款码',
   }) async {
     try {
       await _channel.invokeMethod('updatePaymentCodeWidget', {

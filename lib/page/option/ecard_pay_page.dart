@@ -167,7 +167,7 @@ class _ECardPayPageState extends State<ECardPayPage> {
     Get.snackbar(
       '付款码刷新失败',
       message,
-      snackPosition: SnackPosition.BOTTOM,
+      snackPosition: SnackPosition.TOP,
       duration: const Duration(seconds: 3),
     );
   }

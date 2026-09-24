@@ -132,37 +132,82 @@ Future<void> _refreshRestoredScholar(Rx<Scholar> scholar) async {
   }
 }
 
-/// 监听 Flutter 模态弹窗（ActionSheet / 对话框等 [PopupRoute]）的显隐，
-/// 弹窗出现时隐藏原生悬浮底栏，避免弹窗底部被原生覆盖层遮挡。
+/// 监听路由栈变化（弹窗 / 二级页面 / 对话框 / 底部选择器），精准同步原生底栏的显隐：
+/// 1. 仅在处于根页面 (HomePage) 且没有弹窗/对话框/底部选择器时才显示原生底栏
+/// 2. 进入任何二级页面 (PageRoute) 时自动隐藏原生底栏，避免遮挡二级页面底部内容及二级页面弹窗
+/// 3. 弹出任何模态弹窗 (PopupRoute: ActionSheet/对话框/时间选择器等) 时自动隐藏底栏
+/// 4. 模态窗口全部关闭且回到首页后，恢复底栏显示
 class _NativeBarVisibilityObserver extends NavigatorObserver {
-  int _popupDepth = 0;
+  static _NativeBarVisibilityObserver? instance;
+
+  final Set<Route<dynamic>> _popupRoutes = {};
+  final Set<Route<dynamic>> _pageRoutes = {};
+  bool _isSnackbarActive = false;
+
+  _NativeBarVisibilityObserver() {
+    instance = this;
+  }
+
+  void setSnackbarActive(bool active) {
+    if (_isSnackbarActive != active) {
+      _isSnackbarActive = active;
+      _sync();
+    }
+  }
 
   void _sync() {
-    OhosNativeService.instance.setBottomBarVisible(_popupDepth == 0);
+    // 只有在根页面（只有1个页面路由）且没有任何PopupRoute（弹窗/选择器/对话框）且无底层通知时，才显示原生底栏
+    final bool shouldShow = _pageRoutes.length <= 1 &&
+        _popupRoutes.isEmpty &&
+        !_isSnackbarActive;
+    OhosNativeService.instance.setBottomBarVisible(shouldShow);
   }
 
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPush(route, previousRoute);
     if (route is PopupRoute) {
-      _popupDepth++;
-      _sync();
+      _popupRoutes.add(route);
+    } else {
+      _pageRoutes.add(route);
     }
+    _sync();
   }
 
   @override
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPop(route, previousRoute);
     if (route is PopupRoute) {
-      _popupDepth = _popupDepth > 0 ? _popupDepth - 1 : 0;
-      _sync();
+      _popupRoutes.remove(route);
+    } else {
+      _pageRoutes.remove(route);
     }
+    _sync();
   }
 
   @override
   void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    if (route is PopupRoute) {
-      _popupDepth = _popupDepth > 0 ? _popupDepth - 1 : 0;
-      _sync();
+    super.didRemove(route, previousRoute);
+    _popupRoutes.remove(route);
+    _pageRoutes.remove(route);
+    _sync();
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+    if (oldRoute != null) {
+      _popupRoutes.remove(oldRoute);
+      _pageRoutes.remove(oldRoute);
     }
+    if (newRoute != null) {
+      if (newRoute is PopupRoute) {
+        _popupRoutes.add(newRoute);
+      } else {
+        _pageRoutes.add(newRoute);
+      }
+    }
+    _sync();
   }
 }
 
