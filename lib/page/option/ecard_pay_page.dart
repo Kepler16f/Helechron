@@ -93,7 +93,7 @@ class _ECardPayPageState extends State<ECardPayPage> {
       await secureStorage.write(key: _cacheKeyCode, value: code);
       await secureStorage.write(
           key: _cacheKeyTime, value: fetchedAt.toIso8601String());
-      _syncPaymentCode(code);
+      _syncPaymentCode(code, auth: synjonesAuth, account: account);
       _scheduleCountdown(fetchedAt);
     } catch (e) {
       // 失败时尝试读取缓存码
@@ -132,8 +132,14 @@ class _ECardPayPageState extends State<ECardPayPage> {
       RegExp(r'^[A-Za-z0-9+/=_\-]{14,64}$');
   static bool _isValidBarcode(String s) => _validBarcodePattern.hasMatch(s);
 
-  void _syncPaymentCode(String code) {
+  void _syncPaymentCode(String code, {String? auth, String? account}) {
     OhosNativeService.instance.updatePaymentCodeWidget(code: code);
+    if (auth != null && auth.isNotEmpty) {
+      OhosNativeService.instance.setPaymentCredentials(
+        synjonesAuth: auth,
+        eCardAccount: account ?? '',
+      );
+    }
   }
 
   void _scheduleCountdown(DateTime fetchedAt) {

@@ -34,6 +34,7 @@ export default class EnlargedQRAbility extends UIAbility {
       windowStage.getMainWindow().then((mainWindow: window.Window) => {
         try {
           mainWindow.setWindowBackgroundColor('#00000000');
+          mainWindow.setWindowLayoutFullScreen(true);
         } catch (e) {
           hilog.warn(DOMAIN, TAG, `setWindowBackgroundColor failed: ${JSON.stringify(e)}`);
         }

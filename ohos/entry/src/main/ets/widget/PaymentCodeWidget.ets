@@ -101,6 +101,24 @@ export default class PaymentCodeWidgetExtension extends FormExtensionAbility {
     });
   }
 
+  private pushToAllForms(prefs: preferences.Preferences, currentFormId?: string): void {
+    const formData = formBindingData.createFormBindingData(this.buildData(prefs));
+    if (currentFormId && currentFormId.length > 0) {
+      formProvider.updateForm(currentFormId, formData).catch((err: BusinessError) => {
+        console.error(`PaymentCodeWidget updateForm failed for ${currentFormId}: ${err.code} ${err.message}`);
+      });
+    }
+    const raw = prefs.getSync(FORM_IDS_KEY, '') as string;
+    if (raw.length > 0) {
+      const ids = raw.split(',').filter((id: string) => id.length > 0 && id !== currentFormId);
+      for (const id of ids) {
+        formProvider.updateForm(id, formData).catch((err: BusinessError) => {
+          console.error(`PaymentCodeWidget updateForm failed for ${id}: ${err.code} ${err.message}`);
+        });
+      }
+    }
+  }
+
   /// 点击刷新：重新取码并落盘 + 刷新卡片；失败时回退到本地缓存。
   private async refreshFromNetwork(formId: string): Promise<void> {
     const prefs = this.getPrefs();
@@ -115,10 +133,10 @@ export default class PaymentCodeWidgetExtension extends FormExtensionAbility {
       } catch (e) {
         // ignore
       }
-      this.pushData(formId, prefs);
+      this.pushToAllForms(prefs, formId);
     } else {
       // 取码失败：保持原有付款码，仅按本地缓存刷新
-      this.pushData(formId, prefs);
+      this.pushToAllForms(prefs, formId);
     }
   }
 
@@ -144,8 +162,8 @@ export default class PaymentCodeWidgetExtension extends FormExtensionAbility {
       const options: http.HttpRequestOptions = {
         method: http.RequestMethod.GET,
         header: header,
-        connectTimeout: 8000,
-        readTimeout: 8000,
+        connectTimeout: 3500,
+        readTimeout: 3500,
         expectDataType: http.HttpDataType.STRING
       };
       const response = await httpRequest.request(url, options);

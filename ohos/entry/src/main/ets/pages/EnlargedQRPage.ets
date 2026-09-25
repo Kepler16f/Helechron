@@ -1,6 +1,6 @@
 /// 桌面小组件点击放大按钮后，EnlargedQRAbility 启动时加载的页面。
 /// 以弹窗样式渲染付款码大图 + 刷新按钮 + 关闭按钮，
-/// 背景为半透明磨砂玻璃并对桌面壁纸应用系统级模糊。
+/// 背景全透明并使用 ArkTS 原生 backgroundEffect 呈现高质感液态玻璃模糊，无灰色半透明蒙版。
 /// 侧滑返回或点击关闭/背景均直接 terminateSelf() 退出回桌面，完全不涉及 Flutter 主页面。
 
 import common from '@ohos.app.ability.common';
@@ -33,6 +33,7 @@ struct EnlargedQRPage {
       window.getLastWindow(this.context).then((mainWindow: window.Window) => {
         try {
           mainWindow.setWindowBackgroundColor('#00000000');
+          mainWindow.setWindowLayoutFullScreen(true);
         } catch (e) {}
       }).catch(() => {});
     } catch (e) {}
@@ -55,12 +56,16 @@ struct EnlargedQRPage {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      // 背景模糊层：对桌面壁纸应用系统级模糊，点击窗口外区域退出
+      // 背景模糊层：纯透明背景配合 ArkTS 原生 backgroundEffect，无半透明灰色遮罩，点击窗口外区域退出
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor('#26000000')
-        .backgroundBlurStyle(BlurStyle.Regular)
+        .backgroundColor(Color.Transparent)
+        .backgroundEffect({
+          radius: 60,
+          saturation: 2.0,
+          brightness: 1.05
+        })
         .onClick(() => {
           this.close();
         })
@@ -76,8 +81,8 @@ struct EnlargedQRPage {
 
           Blank()
 
-          // 刷新按钮：带旋转动画与原生取码
-          Row() {
+          // 刷新按钮：带单次 360 度旋转动画与原生取码
+          Button({ type: ButtonType.Circle, stateEffect: true }) {
             Image($r('app.media.ic_widget_refresh'))
               .width(16)
               .height(16)
@@ -86,15 +91,11 @@ struct EnlargedQRPage {
           }
           .width(32)
           .height(32)
-          .borderRadius(16)
-          .backgroundColor('#10000000')
-          .justifyContent(FlexAlign.Center)
-          .alignItems(VerticalAlign.Center)
-          .hitTestBehavior(HitTestMode.Block)
+          .backgroundColor('#12000000')
+          .enabled(!this.isRefreshing)
+          .opacity(this.isRefreshing ? 0.6 : 1.0)
           .onClick(() => {
-            if (!this.isRefreshing) {
-              this.refreshPaymentCode();
-            }
+            this.refreshPaymentCode();
           })
         }
         .width('100%')
@@ -154,11 +155,22 @@ struct EnlargedQRPage {
     .height('100%')
   }
 
-  /// 刷新付款码：直接在原生发起网络请求，同步写入缓存并更新桌面小组件
+  /// 刷新付款码：触发单次 360 度平滑旋转动画，网络请求完成后动画平滑减速停止
   private async refreshPaymentCode(): Promise<void> {
+    if (this.isRefreshing) {
+      return;
+    }
     this.isRefreshing = true;
-    animateTo({ duration: 800, iterations: -1, curve: Curve.Linear }, () => {
-      this.refreshAngle = 360;
+
+    // 单次 360 度平滑旋转，结束后重置 isRefreshing，支持下次重新触发
+    animateTo({
+      duration: 700,
+      curve: Curve.EaseInOut,
+      onFinish: () => {
+        this.isRefreshing = false;
+      }
+    }, () => {
+      this.refreshAngle += 360;
     });
 
     try {
@@ -184,8 +196,8 @@ struct EnlargedQRPage {
           const options: http.HttpRequestOptions = {
             method: http.RequestMethod.GET,
             header: header,
-            connectTimeout: 8000,
-            readTimeout: 8000,
+            connectTimeout: 4000,
+            readTimeout: 4000,
             expectDataType: http.HttpDataType.STRING
           };
           const response: http.HttpResponse = await httpRequest.request(url, options);
@@ -211,7 +223,7 @@ struct EnlargedQRPage {
         prefs.putSync('paymentCode', newCode);
         prefs.flush();
 
-        // 同步刷新小组件
+        // 同步刷新所有已添加的桌面小组件
         const rawIds: string = prefs.getSync(FORM_IDS_KEY, '') as string;
         if (rawIds.length > 0) {
           const ids: string[] = rawIds.split(',').filter((id: string) => id.length > 0);
@@ -230,9 +242,6 @@ struct EnlargedQRPage {
       }
     } catch (e) {
       hilog.error(DOMAIN, TAG, `refreshPaymentCode failed: ${JSON.stringify(e)}`);
-    } finally {
-      this.isRefreshing = false;
-      this.refreshAngle = 0;
     }
   }
 

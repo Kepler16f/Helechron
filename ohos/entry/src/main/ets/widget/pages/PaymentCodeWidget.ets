@@ -19,7 +19,7 @@ struct PaymentCodeWidget {
           .layoutWeight(1)
 
         if (this.hasCode === '1' && this.paymentCode.length > 0) {
-          Row() {
+          Button({ type: ButtonType.Circle, stateEffect: true }) {
             Image($r('app.media.ic_widget_enlarge'))
               .width(14)
               .height(14)
@@ -27,10 +27,8 @@ struct PaymentCodeWidget {
           }
           .width(28)
           .height(28)
-          .borderRadius(14)
           .backgroundColor($r('app.color.widget_accent'))
-          .justifyContent(FlexAlign.Center)
-          .alignItems(VerticalAlign.Center)
+          .responseRegion({ x: -10, y: -10, width: 48, height: 48 })
           .hitTestBehavior(HitTestMode.Block)
           .margin({ right: 6 })
           .onClick(() => {
@@ -44,7 +42,7 @@ struct PaymentCodeWidget {
             });
           })
 
-          Row() {
+          Button({ type: ButtonType.Circle, stateEffect: true }) {
             Image($r('app.media.ic_widget_refresh'))
               .width(14)
               .height(14)
@@ -52,10 +50,8 @@ struct PaymentCodeWidget {
           }
           .width(28)
           .height(28)
-          .borderRadius(14)
           .backgroundColor($r('app.color.widget_accent'))
-          .justifyContent(FlexAlign.Center)
-          .alignItems(VerticalAlign.Center)
+          .responseRegion({ x: -10, y: -10, width: 48, height: 48 })
           .hitTestBehavior(HitTestMode.Block)
           .onClick(() => {
             postCardAction(this, {
