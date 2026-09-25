@@ -1,24 +1,36 @@
-/// 桌面小组件点击放大按钮后，EntryAbility 启动时优先加载的页面。
-/// 以"窗口/卡片"样式渲染付款码大图 + 关闭按钮（不占满全屏，四周留白透明），
-/// 关闭后 terminateSelf() 退出应用，不进入 Flutter 主页。
+/// 桌面小组件点击放大按钮后，EnlargedQRAbility 启动时加载的页面。
+/// 以弹窗样式渲染付款码大图 + 刷新按钮 + 关闭按钮，
+/// 背景为半透明磨砂玻璃并对桌面壁纸应用系统级模糊。
+/// 侧滑返回或点击关闭/背景均直接 terminateSelf() 退出回桌面，完全不涉及 Flutter 主页面。
 
 import common from '@ohos.app.ability.common';
-import { hilog } from '@kit.PerformanceAnalysisKit';
+import hilog from '@ohos.hilog';
 import { window } from '@kit.ArkUI';
+import { http } from '@kit.NetworkKit';
+import { formBindingData, formProvider } from '@kit.FormKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 import preferences from '@ohos.data.preferences';
 
 const DOMAIN = 0x0000;
 const TAG = 'HelechronEnlargedQR';
+const PREFS_NAME = 'helechron_widget_data';
+const FORM_IDS_KEY = 'payment_form_ids';
+const TEST_ACCOUNT = '3200000000';
+const BARCODE_URL_PREFIX =
+  'https://elife.zju.edu.cn/berserker-app/ykt/tsm/batchGetBarCodeGet?account=';
+const BARCODE_URL_SUFFIX = '&payacc=%23%23%23&paytype=1&synAccessSource=app';
 
 @Entry
 @Component
 struct EnlargedQRPage {
   private context = getContext(this) as common.UIAbilityContext;
   @State private paymentCode: string = '';
+  @State private isRefreshing: boolean = false;
+  @State private refreshAngle: number = 0;
 
   aboutToAppear(): void {
     try {
-      window.getLastWindow(this.context).then((mainWindow) => {
+      window.getLastWindow(this.context).then((mainWindow: window.Window) => {
         try {
           mainWindow.setWindowBackgroundColor('#00000000');
         } catch (e) {}
@@ -26,13 +38,13 @@ struct EnlargedQRPage {
     } catch (e) {}
 
     try {
-      const fromStorage = AppStorage.get<string>('enlargedQrPaymentCode');
+      const fromStorage: string | undefined = AppStorage.get<string>('enlargedQrPaymentCode');
       if (typeof fromStorage === 'string' && fromStorage.length > 0) {
         this.paymentCode = fromStorage;
         return;
       }
-      const prefs = preferences.getPreferencesSync(this.context, { name: 'helechron_widget_data' });
-      const stored = prefs.getSync('paymentCode', '') as string;
+      const prefs: preferences.Preferences = preferences.getPreferencesSync(this.context, { name: PREFS_NAME });
+      const stored: string = prefs.getSync('paymentCode', '') as string;
       if (stored.length > 0) {
         this.paymentCode = stored;
       }
@@ -43,26 +55,50 @@ struct EnlargedQRPage {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      // 背景模糊层：把桌面壁纸模糊化，点窗口外关闭
+      // 背景模糊层：对桌面壁纸应用系统级模糊，点击窗口外区域退出
       Column()
         .width('100%')
         .height('100%')
-        .backgroundEffect({
-          radius: 60,
-          saturation: 1.6,
-          brightness: 1.0
-        })
+        .backgroundColor('#26000000')
+        .backgroundBlurStyle(BlurStyle.Regular)
         .onClick(() => {
           this.close();
         })
 
-      // 居中卡片
-      Column({ space: 20 }) {
-        Text('付款码')
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.widget_text_primary'))
-          .margin({ top: 20 })
+      // 居中付款码卡片
+      Column({ space: 16 }) {
+        // 顶部标题与刷新按钮
+        Row() {
+          Text('付款码')
+            .fontSize(20)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.widget_text_primary'))
+
+          Blank()
+
+          // 刷新按钮：带旋转动画与原生取码
+          Row() {
+            Image($r('app.media.ic_widget_refresh'))
+              .width(16)
+              .height(16)
+              .fillColor(this.isRefreshing ? $r('app.color.widget_text_tertiary') : $r('app.color.widget_accent'))
+              .rotate({ angle: this.refreshAngle })
+          }
+          .width(32)
+          .height(32)
+          .borderRadius(16)
+          .backgroundColor('#10000000')
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+          .hitTestBehavior(HitTestMode.Block)
+          .onClick(() => {
+            if (!this.isRefreshing) {
+              this.refreshPaymentCode();
+            }
+          })
+        }
+        .width('100%')
+        .padding({ left: 24, right: 24, top: 18 })
 
         if (this.paymentCode.length > 0) {
           Column() {
@@ -96,7 +132,7 @@ struct EnlargedQRPage {
         }
 
         Button('关闭')
-          .width('70%')
+          .width('72%')
           .height(40)
           .backgroundColor($r('app.color.widget_accent'))
           .fontColor(Color.White)
@@ -107,8 +143,8 @@ struct EnlargedQRPage {
             this.close();
           })
       }
-      .width('82%')
-      .constraintSize({ maxWidth: 360, maxHeight: 460 })
+      .width('84%')
+      .constraintSize({ maxWidth: 360, maxHeight: 470 })
       .backgroundColor($r('app.color.widget_background'))
       .borderRadius(20)
       .shadow({ radius: 24, color: '#33000000', offsetX: 0, offsetY: 8 })
@@ -118,17 +154,92 @@ struct EnlargedQRPage {
     .height('100%')
   }
 
+  /// 刷新付款码：直接在原生发起网络请求，同步写入缓存并更新桌面小组件
+  private async refreshPaymentCode(): Promise<void> {
+    this.isRefreshing = true;
+    animateTo({ duration: 800, iterations: -1, curve: Curve.Linear }, () => {
+      this.refreshAngle = 360;
+    });
+
+    try {
+      const prefs: preferences.Preferences = preferences.getPreferencesSync(this.context, { name: PREFS_NAME });
+      const auth: string = (prefs.getSync('synjonesAuth', '') as string) || '';
+      const account: string = (prefs.getSync('eCardAccount', '') as string) || '';
+
+      if (auth.length === 0) {
+        hilog.warn(DOMAIN, TAG, 'refreshPaymentCode: no synjonesAuth in preferences');
+        return;
+      }
+
+      let newCode: string = '';
+      if (auth === TEST_ACCOUNT || account === TEST_ACCOUNT) {
+        for (let i = 0; i < 16; i++) {
+          newCode += Math.floor(Math.random() * 10).toString();
+        }
+      } else {
+        const httpRequest: http.HttpRequest = http.createHttp();
+        try {
+          const url: string = `${BARCODE_URL_PREFIX}${account}${BARCODE_URL_SUFFIX}`;
+          const header: Record<string, string> = { 'synjones-auth': `bearer ${auth}` };
+          const options: http.HttpRequestOptions = {
+            method: http.RequestMethod.GET,
+            header: header,
+            connectTimeout: 8000,
+            readTimeout: 8000,
+            expectDataType: http.HttpDataType.STRING
+          };
+          const response: http.HttpResponse = await httpRequest.request(url, options);
+          if (response.responseCode === 200) {
+            const text: string = response.result as string;
+            const payload: Record<string, Object> = JSON.parse(text) as Record<string, Object>;
+            const data: Record<string, Object> = payload['data'] as Record<string, Object>;
+            if (data !== undefined && data !== null) {
+              const barcodes: string[] = data['barcode'] as string[];
+              if (barcodes !== undefined && barcodes !== null && barcodes.length > 0) {
+                newCode = barcodes[0];
+              }
+            }
+          }
+        } finally {
+          httpRequest.destroy();
+        }
+      }
+
+      if (newCode.length > 0) {
+        this.paymentCode = newCode;
+        AppStorage.setOrCreate('enlargedQrPaymentCode', newCode);
+        prefs.putSync('paymentCode', newCode);
+        prefs.flush();
+
+        // 同步刷新小组件
+        const rawIds: string = prefs.getSync(FORM_IDS_KEY, '') as string;
+        if (rawIds.length > 0) {
+          const ids: string[] = rawIds.split(',').filter((id: string) => id.length > 0);
+          const payData: Record<string, string> = {
+            'paymentCode': newCode,
+            'displayName': '付款码',
+            'hasCode': '1'
+          };
+          const bindingData: formBindingData.FormBindingData = formBindingData.createFormBindingData(payData);
+          for (const formId of ids) {
+            formProvider.updateForm(formId, bindingData).catch((err: BusinessError) => {
+              hilog.warn(DOMAIN, TAG, `updateForm failed for ${formId}: ${err.message}`);
+            });
+          }
+        }
+      }
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `refreshPaymentCode failed: ${JSON.stringify(e)}`);
+    } finally {
+      this.isRefreshing = false;
+      this.refreshAngle = 0;
+    }
+  }
+
   private close(): void {
     try {
       AppStorage.setOrCreate('enlargedQrPaymentCode', '');
-    } catch (e) {
-      // ignore
-    }
-    try {
-      this.context.eventHub.emit('event_enlarged_qr_closed');
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) {}
     try {
       this.context.terminateSelf();
     } catch (e) {

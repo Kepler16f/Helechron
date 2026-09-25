@@ -45,8 +45,6 @@ export default class EntryAbility extends FlutterAbility {
   private methodChannel: MethodChannel | null = null;
   private samplePayload: CalendarEventPayload | null = null;
   private pendingRoute: string = '';
-  /// 冷启动时是否优先渲染"付款码放大窗口"（不进入 Flutter）
-  private launchToEnlargedQr: boolean = false;
   private windowStage: window.WindowStage | null = null;
 
   configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -75,17 +73,17 @@ export default class EntryAbility extends FlutterAbility {
         this.methodChannel?.invokeMethod('onNativeTabChanged', { index: index });
       });
     } catch (e) {
-      hilog.warn(DOMAIN, TAG, `eventHub.on failed: ${JSON.stringify(e)}`);
+      hilog.warn(DOMAIN, TAG, `eventHub.on bottomBarTabChanged failed: ${JSON.stringify(e)}`);
     }
 
-    // 监听大码弹窗关闭事件，重置标记
+    // 监听返回手势事件并转发给 Flutter 处理
     try {
-      this.context.eventHub.on('event_enlarged_qr_closed', () => {
-        hilog.info(DOMAIN, TAG, `event_enlarged_qr_closed received`);
-        this.launchToEnlargedQr = false;
+      this.context.eventHub.on('EVENT_BACK_PRESS', () => {
+        hilog.info(DOMAIN, TAG, 'EVENT_BACK_PRESS received, forwarding onBackPressed to Flutter');
+        this.methodChannel?.invokeMethod('onBackPressed', null);
       });
     } catch (e) {
-      hilog.warn(DOMAIN, TAG, `eventHub.on enlarged_qr_closed failed: ${JSON.stringify(e)}`);
+      hilog.warn(DOMAIN, TAG, `eventHub.on EVENT_BACK_PRESS failed: ${JSON.stringify(e)}`);
     }
 
     // 冷启动时若由小组件拉起，记录目标路由，等待 Dart 侧主动领取
@@ -105,7 +103,6 @@ export default class EntryAbility extends FlutterAbility {
       AppStorage.setOrCreate('bottomBarImmersiveLight', immersiveLight);
       AppStorage.setOrCreate('bottomBarMaterialLevel', materialLevel);
       AppStorage.setOrCreate('bottomBarCurrentTab', 0);
-      AppStorage.setOrCreate('enlargedQrPaymentCode', '');
       hilog.info(DOMAIN, TAG, `initAppStorageFromPrefs: floating=${floating}, immersiveLight=${immersiveLight}, materialLevel=${materialLevel}`);
     } catch (e) {
       hilog.warn(DOMAIN, TAG, `initAppStorageFromPrefs failed: ${JSON.stringify(e)}`);
@@ -113,24 +110,11 @@ export default class EntryAbility extends FlutterAbility {
       AppStorage.setOrCreate('bottomBarImmersiveLight', false);
       AppStorage.setOrCreate('bottomBarMaterialLevel', 10);
       AppStorage.setOrCreate('bottomBarCurrentTab', 0);
-      AppStorage.setOrCreate('enlargedQrPaymentCode', '');
     }
   }
 
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     super.onNewWant(want, launchParam);
-    const target = want.parameters ? (want.parameters['target'] as string) : '';
-    if (target === 'enlarged_qr') {
-      this.captureRouteFromWant(want);
-      this.showEnlargedQrWindow();
-      return;
-    }
-
-    // 非小组件放大码启动（如点击桌面图标、最近任务等正常启动）：
-    // 若之前处于放大码状态，切回 Flutter 主页
-    if (this.launchToEnlargedQr) {
-      this.showFlutterMainWindow();
-    }
     this.captureRouteFromWant(want);
     // 热启动时 Flutter 引擎已就绪，直接推送给 Dart
     this.flushPendingRoute();
@@ -151,77 +135,11 @@ export default class EntryAbility extends FlutterAbility {
   }
 
   onDestroy(): void {
-    this.launchToEnlargedQr = false;
     super.onDestroy();
   }
 
-  /// 切换到 EnlargedQRPage，窗口背景设为透明，桌面壁纸模糊透出
-  private showEnlargedQrWindow(): void {
-    this.launchToEnlargedQr = true;
-    try {
-      const ws = this.windowStage;
-      if (!ws) {
-        hilog.warn(DOMAIN, TAG, `showEnlargedQrWindow: windowStage not ready`);
-        return;
-      }
-      ws.getMainWindow().then((mainWindow) => {
-        try {
-          mainWindow.setWindowBackgroundColor('#00000000');
-        } catch (e) {
-          hilog.warn(DOMAIN, TAG, `setWindowBackgroundColor failed: ${JSON.stringify(e)}`);
-        }
-      }).catch((e: BusinessError) => {
-        hilog.warn(DOMAIN, TAG, `getMainWindow failed: ${JSON.stringify(e)}`);
-      });
-      ws.loadContent('pages/EnlargedQRPage', (err: BusinessError) => {
-        if (err) {
-          hilog.error(DOMAIN, TAG, `loadContent EnlargedQRPage failed: ${JSON.stringify(err)}`);
-          this.launchToEnlargedQr = false;
-          super.onWindowStageCreate(ws);
-        } else {
-          hilog.info(DOMAIN, TAG, `loaded EnlargedQRPage ok`);
-        }
-      });
-    } catch (e) {
-      hilog.error(DOMAIN, TAG, `showEnlargedQrWindow exception: ${JSON.stringify(e)}`);
-    }
-  }
-
-  /// 切回 Flutter 主页，恢复默认不透明背景
-  private showFlutterMainWindow(): void {
-    this.launchToEnlargedQr = false;
-    AppStorage.setOrCreate('enlargedQrPaymentCode', '');
-    try {
-      const ws = this.windowStage;
-      if (!ws) {
-        return;
-      }
-      ws.getMainWindow().then((mainWindow) => {
-        try {
-          mainWindow.setWindowBackgroundColor('#FFFFFFFF');
-        } catch (e) {}
-      }).catch(() => {});
-      ws.loadContent('pages/Index', (err: BusinessError) => {
-        if (err) {
-          hilog.error(DOMAIN, TAG, `loadContent pages/Index failed: ${JSON.stringify(err)}`);
-        } else {
-          hilog.info(DOMAIN, TAG, `switched to Flutter home (pages/Index)`);
-        }
-      });
-    } catch (e) {
-      hilog.error(DOMAIN, TAG, `showFlutterMainWindow exception: ${JSON.stringify(e)}`);
-    }
-  }
-
-  /// 覆盖 FlutterAbility 默认加载 pages/Index 的行为：
-  /// 若冷启动时由小组件"放大付款码"拉起，跳过 Flutter 主页，直接渲染 EnlargedQRPage。
-  /// 关闭按钮调 terminateSelf() 退回桌面，不会进入 FlutterPage。
   onWindowStageCreate(windowStage: window.WindowStage): void {
     this.windowStage = windowStage;
-    if (this.launchToEnlargedQr) {
-      this.showEnlargedQrWindow();
-      return;
-    }
     super.onWindowStageCreate(windowStage);
   }
 
@@ -282,12 +200,24 @@ export default class EntryAbility extends FlutterAbility {
     if (target === undefined || target === null || target.length === 0) {
       return;
     }
-    // 桌面小组件放大付款码：直接走原生弹窗，不进入 Dart 路由
+    // 桌面小组件放大付款码：若由旧小组件拉起 EntryAbility，转发给独立的 EnlargedQRAbility 处理
     if (target === 'enlarged_qr') {
       const code = (params['paymentCode'] as string) || '';
-      AppStorage.setOrCreate('enlargedQrPaymentCode', code);
-      this.launchToEnlargedQr = true;
-      hilog.info(DOMAIN, TAG, `captured widget route: enlarged_qr (code len=${code.length})`);
+      try {
+        const qrWant: Want = {
+          bundleName: this.context.abilityInfo.bundleName,
+          abilityName: 'EnlargedQRAbility',
+          parameters: {
+            target: 'enlarged_qr',
+            paymentCode: code
+          }
+        };
+        this.context.startAbility(qrWant).catch((err: BusinessError) => {
+          hilog.warn(DOMAIN, TAG, `start EnlargedQRAbility failed: ${err.message}`);
+        });
+      } catch (e) {
+        hilog.warn(DOMAIN, TAG, `startAbility EnlargedQRAbility exception: ${JSON.stringify(e)}`);
+      }
       return;
     }
     this.pendingRoute = target;

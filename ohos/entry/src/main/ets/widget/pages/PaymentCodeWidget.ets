@@ -20,11 +20,10 @@ struct PaymentCodeWidget {
 
         if (this.hasCode === '1' && this.paymentCode.length > 0) {
           Row() {
-            Text('\u26F6')
-              .fontSize(13)
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.widget_button_text'))
-              .textAlign(TextAlign.Center)
+            Image($r('app.media.ic_widget_enlarge'))
+              .width(14)
+              .height(14)
+              .fillColor($r('app.color.widget_button_text'))
           }
           .width(28)
           .height(28)
@@ -37,7 +36,7 @@ struct PaymentCodeWidget {
           .onClick(() => {
             postCardAction(this, {
               action: 'router',
-              abilityName: 'EntryAbility',
+              abilityName: 'EnlargedQRAbility',
               params: {
                 target: 'enlarged_qr',
                 paymentCode: this.paymentCode
@@ -46,11 +45,10 @@ struct PaymentCodeWidget {
           })
 
           Row() {
-            Text('\u21BB')
-              .fontSize(13)
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.widget_button_text'))
-              .textAlign(TextAlign.Center)
+            Image($r('app.media.ic_widget_refresh'))
+              .width(14)
+              .height(14)
+              .fillColor($r('app.color.widget_button_text'))
           }
           .width(28)
           .height(28)

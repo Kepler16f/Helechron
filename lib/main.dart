@@ -37,6 +37,7 @@ void main() async {
 
   ECardWidgetMessenger.installNativeHandler();
   OhosNativeService.instance.installWidgetRouteHandler(_handleWidgetRoute);
+  OhosNativeService.instance.installBackPressedHandler(_handleBackPressed);
 
   // 尽可能早地声明前台活跃
   await RefreshCoordinator.setForegroundActive(true);
@@ -102,6 +103,32 @@ void _handleWidgetRoute(String target) {
     navigator.popUntil((route) => route.isFirst);
     navigator.pushNamed('/ecardpaypage');
   }
+}
+
+/// 全面屏手势侧滑返回 / 系统返回键拦截：
+/// 1. 若当前有 GetX 弹窗 (Get.isDialogOpen) 或底部弹层 (Get.isBottomSheetOpen)，优先关闭它并返回 true
+/// 2. 若当前根导航器 (navigatorKey.currentState) 栈上有可 pop 的路由（包括所有 CupertinoDialog、CupertinoModalPopup、二级 PageRoute 等），
+///    调用 maybePop() 关闭上一级，返回 true
+/// 3. 若处于根页面首页且无弹窗，返回 false，交由系统退出或切入后台
+Future<bool> _handleBackPressed() async {
+  // 1. 优先关闭 GetX 弹窗或底部 Sheet
+  if (Get.isDialogOpen == true) {
+    Get.back();
+    return true;
+  }
+  if (Get.isBottomSheetOpen == true) {
+    Get.back();
+    return true;
+  }
+
+  // 2. 检查全局 NavigatorState 栈
+  final navigator = navigatorKey.currentState;
+  if (navigator != null && navigator.canPop()) {
+    return await navigator.maybePop();
+  }
+
+  // 3. 根页面且无弹窗，允许系统退出/退后台
+  return false;
 }
 
 Future<void> _consumePendingWidgetRoute() async {
@@ -250,6 +277,11 @@ class _CelechronAppState extends State<CelechronApp>
     WidgetsBinding.instance.removeObserver(this);
     _stopForegroundLease();
     super.dispose();
+  }
+
+  @override
+  Future<bool> didPopRoute() async {
+    return await _handleBackPressed();
   }
 
   @override

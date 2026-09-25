@@ -325,6 +325,7 @@ class OhosNativeService {
 
   static void Function(String target)? _widgetRouteHandler;
   static void Function(int index)? _nativeTabHandler;
+  static Future<bool> Function()? _backPressedHandler;
   static bool _routeHandlerInstalled = false;
 
   /// 注册小组件点击跳转回调（原生 -> Dart）。
@@ -336,6 +337,12 @@ class OhosNativeService {
   /// 注册原生底栏 Tab 切换回调（原生 -> Dart）。
   void installNativeTabHandler(void Function(int index) handler) {
     _nativeTabHandler = handler;
+    _ensureIncomingHandlerInstalled();
+  }
+
+  /// 注册返回手势回调（原生 -> Dart），返回 true 表示已消费（如关闭弹窗/回到上一级），false 表示在顶层允许退出应用。
+  void installBackPressedHandler(Future<bool> Function() handler) {
+    _backPressedHandler = handler;
     _ensureIncomingHandlerInstalled();
   }
 
@@ -356,6 +363,11 @@ class OhosNativeService {
             _nativeTabHandler?.call(args['index'] as int);
           }
           return null;
+        case 'onBackPressed':
+          if (_backPressedHandler != null) {
+            return await _backPressedHandler!();
+          }
+          return false;
         default:
           throw MissingPluginException(
               'Unsupported native method: ${call.method}');

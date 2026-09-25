@@ -39,6 +39,10 @@
     {
       "name": "widget_button_text",
       "value": "#FFFFFF"
+    },
+    {
+      "name": "start_window_background_transparent",
+      "value": "#00000000"
     }
   ]
 }

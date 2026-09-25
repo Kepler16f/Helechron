@@ -1,4 +1,4 @@
-﻿import common from '@ohos.app.ability.common';
+import common from '@ohos.app.ability.common';
 import { FlutterPage } from '@ohos/flutter_ohos'
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
@@ -77,7 +77,6 @@ struct Index {
   /// 弹出 Flutter 模态窗口时隐藏原生底栏，避免遮挡弹窗
   @StorageLink('bottomBarHidden') bottomBarHidden: boolean = false;
   @StorageLink('bottomBarCurrentTab') @Watch('onCurrentTabChanged') bottomBarCurrentTab: number = 0;
-  @StorageLink('enlargedQrPaymentCode') enlargedQrPaymentCode: string = '';
   @State private safeBottom: number = 0;
   @State private apiLevel: number = 12;
   @State private immersiveSupported: boolean = true;
@@ -301,89 +300,13 @@ struct Index {
           .backgroundColor($r('sys.color.ohos_id_color_bottom_tab_bg'))
         }
       }
-
-      if (this.enlargedQrPaymentCode.length > 0) {
-        this.EnlargedQrOverlay()
-      }
-    }
-    .width('100%')
-    .height('100%')
-  }
-
-  /// 桌面小组件点击放大按钮触发的全屏付款码弹窗（ArkTS 原生渲染）
-  @Builder
-  EnlargedQrOverlay() {
-    Stack({ alignContent: Alignment.Center }) {
-      // 半透明遮罩，点击关闭弹窗
-      Column()
-        .width('100%')
-        .height('100%')
-        .backgroundColor('#80000000')
-        .onClick(() => {
-          AppStorage.setOrCreate('enlargedQrPaymentCode', '');
-        })
-
-      // 居中卡片：背景与文字跟随系统深/浅色，QR 区始终白色保证扫码对比度
-      Column({ space: 20 }) {
-        Text('付款码')
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.widget_text_primary'))
-          .margin({ top: 20 })
-
-        Column() {
-          QRCode(this.enlargedQrPaymentCode)
-            .width('100%')
-            .height('100%')
-            .color('#000000')
-        }
-        .width(280)
-        .height(280)
-        .padding(12)
-        .backgroundColor(Color.White)
-        .borderRadius(16)
-        .border({ width: 1, color: '#22000000' })
-
-        Text(this.enlargedQrPaymentCode)
-          .fontSize(16)
-          .fontFamily('monospace')
-          .fontWeight(FontWeight.Medium)
-          .letterSpacing(1.2)
-          .fontColor($r('app.color.widget_text_primary'))
-          .textAlign(TextAlign.Center)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .padding({ left: 16, right: 16 })
-
-        Button('关闭')
-          .width('70%')
-          .height(40)
-          .backgroundColor($r('app.color.widget_accent'))
-          .fontColor(Color.White)
-          .fontSize(15)
-          .fontWeight(FontWeight.Medium)
-          .margin({ bottom: 20 })
-          .onClick(() => {
-            AppStorage.setOrCreate('enlargedQrPaymentCode', '');
-          })
-      }
-      .width('88%')
-      .constraintSize({ maxWidth: 380, maxHeight: 480 })
-      .backgroundColor($r('app.color.widget_background'))
-      .borderRadius(20)
-      .shadow({ radius: 24, color: '#33000000', offsetX: 0, offsetY: 8 })
-      .alignItems(HorizontalAlign.Center)
     }
     .width('100%')
     .height('100%')
   }
 
   onBackPress(): boolean {
-    if (this.enlargedQrPaymentCode.length > 0) {
-      AppStorage.setOrCreate('enlargedQrPaymentCode', '');
-      return true;
-    }
-    this.context.eventHub.emit(EVENT_BACK_PRESS)
-    return true
+    this.context.eventHub.emit(EVENT_BACK_PRESS);
+    return true;
   }
 }
