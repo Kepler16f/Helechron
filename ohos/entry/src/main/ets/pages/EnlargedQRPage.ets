@@ -91,7 +91,7 @@ struct EnlargedQRPage {
           }
           .width(32)
           .height(32)
-          .backgroundColor('#12000000')
+          .backgroundColor($r('app.color.widget_badge_background'))
           .enabled(!this.isRefreshing)
           .opacity(this.isRefreshing ? 0.6 : 1.0)
           .onClick(() => {

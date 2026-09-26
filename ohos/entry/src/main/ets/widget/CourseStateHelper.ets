@@ -50,7 +50,7 @@ export interface CourseState {
 /// 倒计时精度：
 /// - exact : 应用存活时，精确到分
 /// - hour  : 边界预刷新，开课前精确到时、上课中精确到 30 分钟
-/// - coarse: 系统后台刷新 / 应用已冻结，统一精确到 30 分钟
+/// - coarse: 系统后台刷新 / 应用已冻结，用模糊文案描述剩余时长
 const PRECISION_EXACT = 'exact';
 const PRECISION_HOUR = 'hour';
 const PRECISION_COARSE = 'coarse';
@@ -67,6 +67,26 @@ function getNum(prefs: preferences.Preferences, key: string, def: number): numbe
 
 function pad2(n: number): string {
   return n < 10 ? `0${n}` : `${n}`;
+}
+
+/// 系统模糊刷新（30 分钟粒度）下的模糊时长文案：
+/// 不足一刻钟 → "不到半小时"，一刻钟至三刻钟 → "约半小时"，
+/// 其余就近归整到 30 分钟，如 "约1小时"、"约1个半小时"、"约38小时"。
+function fuzzyRemainText(remainMs: number): string {
+  const remainMin = remainMs / 60000;
+  if (remainMin < 15) {
+    return '不到半小时';
+  }
+  if (remainMin < 45) {
+    return '约半小时';
+  }
+  const rounded = Math.round(remainMin / 30) * 30;
+  const h = Math.floor(rounded / 60);
+  const m = rounded % 60;
+  if (m === 0) {
+    return `约${h}小时`;
+  }
+  return h > 0 ? `约${h}个半小时` : '约半小时';
 }
 
 /// 解析 Dart 侧下发的课程时间表。
@@ -176,10 +196,14 @@ export function computeCourseState(prefs: preferences.Preferences): CourseState 
     if (precision === PRECISION_EXACT) {
       const remainMin = Math.floor(remainMs / 60000);
       countdown = `${pad2(Math.floor(remainMin / 60))}:${pad2(remainMin % 60)}`;
-    } else {
-      // 预刷新 / 后台刷新：精确到 30 分钟
+    } else if (precision === PRECISION_HOUR) {
+      // 边界预刷新：精确到 30 分钟
       const remainMin = Math.round(remainMs / 60000 / 30) * 30;
       countdown = `${pad2(Math.floor(remainMin / 60))}:${pad2(remainMin % 60)}`;
+    } else {
+      // 系统 30 分钟模糊刷新：整句模糊文案取代"上课中 + 倒计时"
+      status = `距离下课还有${fuzzyRemainText(remainMs)}`;
+      countdown = '';
     }
   } else {
     // 开课前：只显示状态文案，不再重复 HH:MM
@@ -211,11 +235,8 @@ export function computeCourseState(prefs: preferences.Preferences): CourseState 
         const h = Math.floor(remainMin / 60);
         status = h > 0 ? `开始还有 ${h} 小时` : '即将开始';
       } else {
-        // 后台刷新：精确到 30 分钟
-        const rounded = Math.round(remainMin / 30) * 30;
-        const h = Math.floor(rounded / 60);
-        const m = rounded % 60;
-        status = m > 0 ? `开始还有 ${h} 小时 ${m} 分` : `开始还有 ${h} 小时`;
+        // 系统 30 分钟模糊刷新：模糊描述剩余时长，临近开课仍显示"即将开始"
+        status = remainMin < 15 ? '即将开始' : `开始还有${fuzzyRemainText(remainMs)}`;
       }
       statusColor = remainMin <= 30 ? COLOR_URGENT : COLOR_SOON;
     }
