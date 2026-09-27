@@ -108,6 +108,8 @@ class Semester {
 
   void mergePartialFrom(Semester incoming) {
     // 用于部分刷新失败时补充新数据；空或不完整对象不得替换已有课程安排。
+    // 新增的 sessions 会影响 periods 缓存，必须先失效。
+    _invalidatePeriodsCache();
     Course? matchingCourse(Course incomingCourse) {
       for (final existing in _courses.values) {
         if (incomingCourse.id != null && existing.id == incomingCourse.id) {

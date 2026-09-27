@@ -193,6 +193,16 @@ class OptionPage extends StatelessWidget {
                                         }
                                       : null,
                                 )),
+                            CupertinoListTile(
+                                title: const Text('实况窗'),
+                                subtitle: const Text(
+                                    '上课与临近开课时在状态栏、锁屏展示倒计时（需系统支持实况窗）'),
+                                trailing: CupertinoSwitch(
+                                  value: _optionController.liveViewEnabled,
+                                  onChanged: (value) async {
+                                    _optionController.liveViewEnabled = value;
+                                  },
+                                )),
                           } else ...{
                             CupertinoListTile(
                               title: const Text('点击登录',
@@ -420,7 +430,41 @@ class OptionPage extends StatelessWidget {
                             onTap: () =>
                                 _optionController.showExportDialog(context),
                           ),
+                          CupertinoListTile(
+                            title: const Text('导入日程文件'),
+                            subtitle: const Text('从 .ics 日历文件导入日程与 DDL'),
+                            trailing: const BackChervonRow(),
+                            onTap: () => _optionController.importIcs(),
+                          ),
                         ]))),
+                // 备份与恢复
+                SliverToBoxAdapter(
+                    child: CupertinoListSection.insetGrouped(
+                        additionalDividerMargin: 2,
+                        margin: _defaultMargin,
+                        header: Container(
+                            padding: const EdgeInsets.only(left: 16),
+                            child: Text('备份与恢复',
+                                style: headerFooterTextStyle)),
+                        footer: Container(
+                            padding: const EdgeInsets.only(left: 16),
+                            child: Text(
+                                '备份包含学业数据、任务列表、课程号映射与提醒时段等配置，不含账号密码。',
+                                style: headerFooterTextStyle)),
+                        children: <Widget>[
+                      CupertinoListTile(
+                        title: const Text('导出备份'),
+                        subtitle: const Text('生成 JSON 备份文件并分享保存'),
+                        trailing: const BackChervonRow(),
+                        onTap: () => _optionController.exportBackup(),
+                      ),
+                      CupertinoListTile(
+                        title: const Text('导入备份'),
+                        subtitle: const Text('从备份文件恢复，将覆盖当前数据'),
+                        trailing: const BackChervonRow(),
+                        onTap: () => _optionController.importBackup(),
+                      ),
+                    ])),
                 // 工具
                 SliverToBoxAdapter(
                     child: CupertinoListSection.insetGrouped(

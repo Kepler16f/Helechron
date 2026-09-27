@@ -1,5 +1,6 @@
 import 'package:celechron/model/period.dart';
 import 'package:celechron/utils/utils.dart';
+import 'package:celechron/utils/json_utils.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:uuid/uuid.dart';
 import 'package:hive/hive.dart';
@@ -199,6 +200,64 @@ class Task {
 
   void genUid() {
     uid = const Uuid().v4();
+  }
+
+  /// 枚举按下标序列化；越界或缺失时回退到 [fallback]。
+  static T _enumFromIndex<T extends Enum>(
+      List<T> values, Object? raw, T fallback) {
+    final index = asInt(raw);
+    if (index == null || index < 0 || index >= values.length) {
+      return fallback;
+    }
+    return values[index];
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'uid': uid,
+      'status': status.index,
+      'description': description,
+      'timeSpentMinutes': timeSpent.inMinutes,
+      'timeNeededMinutes': timeNeeded.inMinutes,
+      'endTime': endTime.toIso8601String(),
+      'location': location,
+      'summary': summary,
+      'isBreakable': isBreakable,
+      'type': type.index,
+      'startTime': startTime.toIso8601String(),
+      'repeatType': repeatType.index,
+      'repeatPeriod': repeatPeriod,
+      'repeatEndsTime': repeatEndsTime.toIso8601String(),
+      'blockArrangements': blockArrangements,
+      'fromUid': fromUid,
+    };
+  }
+
+  /// 从备份 JSON 恢复。字段缺失或非法时取安全默认值；
+  /// 完全损坏的条目由调用方按 JSON 层面的异常逐条跳过。
+  factory Task.fromJson(Map<String, dynamic> json) {
+    final task = Task(
+      uid: asString(json['uid']) ?? '',
+      endTime: asDateTime(json['endTime']) ?? DateTime.now(),
+      startTime: asDateTime(json['startTime']) ?? DateTime.now(),
+      repeatEndsTime: asDateTime(json['repeatEndsTime']) ?? DateTime.now(),
+    );
+    task.status =
+        _enumFromIndex(TaskStatus.values, json['status'], TaskStatus.running);
+    task.description = asString(json['description']) ?? '';
+    task.timeSpent = Duration(minutes: asInt(json['timeSpentMinutes']) ?? 0);
+    task.timeNeeded = Duration(minutes: asInt(json['timeNeededMinutes']) ?? 0);
+    task.location = asString(json['location']) ?? '';
+    task.summary = asString(json['summary']) ?? '';
+    task.isBreakable = asBool(json['isBreakable']) ?? false;
+    task.type =
+        _enumFromIndex(TaskType.values, json['type'], TaskType.deadline);
+    task.repeatType = _enumFromIndex(
+        TaskRepeatType.values, json['repeatType'], TaskRepeatType.norepeat);
+    task.repeatPeriod = asInt(json['repeatPeriod']) ?? 1;
+    task.blockArrangements = asBool(json['blockArrangements']) ?? true;
+    task.fromUid = asString(json['fromUid']);
+    return task;
   }
 
   bool checkTimeValid() {

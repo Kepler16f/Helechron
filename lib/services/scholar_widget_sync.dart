@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:get/get.dart';
 
+import 'package:celechron/model/option.dart';
 import 'package:celechron/model/period.dart';
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/services/ohos_native_service.dart';
@@ -25,6 +26,9 @@ class ScholarWidgetSync {
 
   /// 下发到原生侧的课程条目上限（覆盖当天剩余与次日课程即可）
   static const int _maxCourses = 16;
+
+  /// 开课前多久开始展示"距上课"实况窗（分钟）
+  static const int _liveViewLeadMinutes = 30;
 
   /// 防止重入
   static bool _running = false;
@@ -58,6 +62,54 @@ class ScholarWidgetSync {
       ),
       leadWindowMinutes: leadWindowMinutes,
     );
+
+    _syncLiveView(now, upcoming);
+  }
+
+  /// 实况窗：上课中展示"距下课"原生倒计时；开课前 30 分钟内展示"距上课"。
+  /// 其余情况（无课/开关关闭）结束实况窗。原生侧按内容去重，计时由系统推进，
+  /// 5 秒级同步在普通上课期间不会产生实况窗更新。
+  static void _syncLiveView(DateTime now, List<Period> upcoming) {
+    bool enabled;
+    try {
+      enabled = Get.find<Option>(tag: 'option').liveViewEnabled.value;
+    } catch (_) {
+      // 选项尚未就绪（极早期同步）时不动实况窗
+      return;
+    }
+
+    Map<String, Object>? state;
+    if (enabled && upcoming.isNotEmpty) {
+      final first = upcoming.first;
+      final leadEnd = now.add(const Duration(minutes: _liveViewLeadMinutes));
+      final isOngoing = !first.startTime.isAfter(now);
+      if (isOngoing || first.startTime.isBefore(leadEnd)) {
+        final target = isOngoing ? first.endTime : first.startTime;
+        final pad = (int n) => n.toString().padLeft(2, '0');
+        final timeLabel =
+            '${pad(target.hour)}:${pad(target.minute)} ${isOngoing ? '下课' : '上课'}';
+        final locationLabel =
+            first.location.isEmpty ? timeLabel : '$timeLabel · ${first.location}';
+        state = {
+          'phase': isOngoing ? 'ongoing' : 'upcoming',
+          'title': first.summary,
+          'subtitle': locationLabel,
+          'targetTimestamp': target.millisecondsSinceEpoch,
+        };
+      }
+    }
+
+    final native = OhosNativeService.instance;
+    if (state == null) {
+      native.stopLiveView();
+    } else {
+      native.updateLiveView(
+        phase: state['phase']! as String,
+        title: state['title']! as String,
+        subtitle: state['subtitle']! as String,
+        targetTimestamp: state['targetTimestamp']! as int,
+      );
+    }
   }
 
   static Map<String, Object> _encodeCourse(Period period) {

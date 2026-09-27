@@ -3,6 +3,8 @@ import { GeneratedPluginRegistrant } from '../plugins/GeneratedPluginRegistrant'
 import { Want, AbilityConstant } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { formBindingData, formProvider } from '@kit.FormKit';
+import { picker, fileIo } from '@kit.CoreFileKit';
+import { util } from '@kit.ArkTS';
 import notificationManager from '@ohos.notificationManager';
 import { calendarManager } from '@kit.CalendarKit';
 import { BusinessError } from '@kit.BasicServicesKit';
@@ -13,6 +15,7 @@ import hilog from '@ohos.hilog';
 import preferences from '@ohos.data.preferences';
 import { buildCourseFormData, scheduleNextBoundary, refreshLiveMarker } from '../widget/CourseStateHelper';
 import { buildSimpleCourseFormData } from '../widget/SimpleCourseStateHelper';
+import { LiveViewHelper, LiveViewState } from '../liveview/LiveViewHelper';
 
 const DOMAIN = 0x0000;
 const TAG = 'HelechronNative';
@@ -39,6 +42,11 @@ interface AddEventResult {
 
 interface WidgetRouteParams {
   target: string;
+}
+
+interface PickedTextFile {
+  name: string;
+  content: string;
 }
 
 export default class EntryAbility extends FlutterAbility {
@@ -246,6 +254,73 @@ export default class EntryAbility extends FlutterAbility {
     result.success(route);
   }
 
+  /// 打开系统文档选择器读取一个文本文件（JSON 备份 / iCal 日程导入）。
+  /// 选择器自带临时读取授权，无需存储权限；用户取消时返回空内容，
+  /// Dart 侧以 content 为空判定取消。
+  private async pickTextFile(result: MethodResult): Promise<void> {
+    try {
+      const documentSelectOptions = new picker.DocumentSelectOptions();
+      documentSelectOptions.maxSelectNumber = 1;
+      const documentPicker = new picker.DocumentViewPicker();
+      const uris: Array<string> = await documentPicker.select(documentSelectOptions);
+      if (uris.length === 0) {
+        const cancelled: PickedTextFile = { name: '', content: '' };
+        result.success(cancelled);
+        return;
+      }
+      const uri = uris[0];
+      const file = await fileIo.open(uri, fileIo.OpenMode.READ_ONLY);
+      try {
+        const stat = await fileIo.stat(file.fd);
+        const maxBytes = 20 * 1024 * 1024;
+        if (stat.size <= 0 || stat.size > maxBytes) {
+          hilog.warn(DOMAIN, TAG, `pickTextFile: invalid file size ${stat.size}`);
+          result.error('PICK_FILE_ERROR', '文件为空或超过 20MB，无法导入', null);
+          return;
+        }
+        const buffer = new ArrayBuffer(stat.size);
+        await fileIo.read(file.fd, buffer);
+        const textDecoder = util.TextDecoder.create('utf-8');
+        const content = textDecoder.decodeToString(buffer);
+        let name = uri;
+        const slashIndex = uri.lastIndexOf('/');
+        if (slashIndex >= 0) {
+          name = uri.substring(slashIndex + 1);
+        }
+        try {
+          name = decodeURIComponent(name);
+        } catch (e) {
+          // 文件名不是合法百分号编码时保留原样
+        }
+        hilog.info(DOMAIN, TAG, `pickTextFile: picked ${name}, ${stat.size} bytes`);
+        const picked: PickedTextFile = { name: name, content: content };
+        result.success(picked);
+      } finally {
+        await fileIo.close(file);
+      }
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, `pickTextFile failed: ${JSON.stringify(err)}`);
+      result.error('PICK_FILE_ERROR', JSON.stringify(err), null);
+    }
+  }
+
+  /// 推送实况窗状态（上课中/即将上课）。去重与降级由 LiveViewHelper 处理。
+  private async updateLiveView(call: MethodCall, result: MethodResult): Promise<void> {
+    try {
+      const state: LiveViewState = {
+        phase: (call.argument('phase') as string) ?? '',
+        title: (call.argument('title') as string) ?? '',
+        subtitle: (call.argument('subtitle') as string) ?? '',
+        targetTimestamp: (call.argument('targetTimestamp') as number) ?? 0
+      };
+      await LiveViewHelper.sync(state);
+      result.success(true);
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, `updateLiveView failed: ${JSON.stringify(err)}`);
+      result.success(false);
+    }
+  }
+
   private handleMethodCall(call: MethodCall, result: MethodResult): void {
     hilog.info(DOMAIN, TAG, `Received method call: ${call.method}`);
     switch (call.method) {
@@ -308,6 +383,17 @@ export default class EntryAbility extends FlutterAbility {
         break;
       case 'consumePendingRoute':
         this.consumePendingRoute(result);
+        break;
+      case 'pickTextFile':
+        this.pickTextFile(result);
+        break;
+      case 'updateLiveView':
+        this.updateLiveView(call, result);
+        break;
+      case 'stopLiveView':
+        LiveViewHelper.stop().then(() => {
+          result.success(true);
+        });
         break;
       default:
         result.notImplemented();

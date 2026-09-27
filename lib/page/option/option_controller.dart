@@ -11,7 +11,9 @@ import 'package:celechron/worker/fuse.dart';
 import 'package:celechron/worker/background_app_refresh.dart';
 import 'package:celechron/model/calendar_to_system.dart';
 import 'package:celechron/model/calendar_to_ical.dart';
+import 'package:celechron/services/backup_service.dart';
 import 'package:celechron/services/ohos_native_service.dart';
+import 'package:celechron/services/scholar_widget_sync.dart';
 import 'package:celechron/utils/platform_features.dart';
 
 class OptionController extends GetxController {
@@ -34,6 +36,11 @@ class OptionController extends GetxController {
 
     ever(courseIdMappingList, (value) {
       _db.setCourseIdMappingList(value);
+    });
+
+    // 允许提醒时段变化（含备份恢复）时同步维护入口计数
+    ever(_option.allowTime, (value) {
+      allowTimeLength.value = value.length;
     });
 
     _calendarManager.checkInitialCalendarSyncStatus();
@@ -122,6 +129,18 @@ class OptionController extends GetxController {
     _updateBackgroundWorker();
   }
 
+  bool get liveViewEnabled => _option.liveViewEnabled.value;
+
+  set liveViewEnabled(bool value) {
+    _option.liveViewEnabled.value = value;
+    _db.setLiveViewEnabled(value);
+    if (value) {
+      ScholarWidgetSync.sync();
+    } else {
+      OhosNativeService.instance.stopLiveView();
+    }
+  }
+
   BrightnessMode get brightnessMode => _option.brightnessMode.value;
 
   set brightnessMode(BrightnessMode value) {
@@ -198,6 +217,14 @@ class OptionController extends GetxController {
   void showExportDialog(BuildContext context) {
     CalendarToIcal.showExportDialog(context, scholar.value);
   }
+
+  // ==================== 备份与恢复 / iCal 导入 ====================
+
+  Future<void> exportBackup() => BackupService.exportBackup();
+
+  Future<void> importBackup() => BackupService.importBackup();
+
+  Future<void> importIcs() => BackupService.importIcs();
 
   RxBool get calendarSyncEnabled => _calendarManager.calendarSyncEnabled;
 

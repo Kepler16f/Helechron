@@ -11,6 +11,12 @@ class OhosNativeService {
   /// 最近一次日历同步失败的原生错误信息，用于诊断与向用户展示
   String? lastCalendarError;
 
+  /// 最近一次文件选择/读取失败的原生错误信息
+  String? lastFilePickError;
+
+  /// 最近一次实况窗操作失败的原生错误信息
+  String? lastLiveViewError;
+
   // ==================== Calendar ====================
 
   /// 检查日历权限
@@ -318,6 +324,66 @@ class OhosNativeService {
       await _channel.invokeMethod('setBottomBarVisible', {'visible': visible});
     } on PlatformException catch (e) {
       debugPrint('setBottomBarVisible failed: $e');
+    } on MissingPluginException {}
+  }
+
+  // ==================== File Picker ====================
+
+  /// 打开系统文档选择器并读取一个文本文件（备份恢复 / iCal 导入用）。
+  /// 返回 {name, content}；用户取消、通道不可用或读取失败时返回 null。
+  /// 选择器由系统授予临时读取授权，无需额外存储权限。
+  Future<Map<String, String>?> pickTextFile() async {
+    try {
+      final result =
+          await _channel.invokeMethod<Map<Object, Object?>>('pickTextFile');
+      if (result == null) return null;
+      final name = result['name'];
+      final content = result['content'];
+      if (name is String && content is String && content.isNotEmpty) {
+        return {'name': name, 'content': content};
+      }
+      return null;
+    } on PlatformException catch (e) {
+      lastFilePickError = e.message ?? e.code;
+      debugPrint('pickTextFile failed: $e');
+      return null;
+    } on MissingPluginException {
+      debugPrint('pickTextFile: platform channel not available');
+      return null;
+    }
+  }
+
+  // ==================== Live View ====================
+
+  /// 推送实况窗状态（上课中/即将上课）。原生侧按 phase/title/目标时间去重：
+  /// 内容未变化时不产生更新，倒计时由系统原生推进，5 秒级同步≠实况窗更新频率。
+  /// [phase] 'ongoing' 上课中（target 为下课时间）/ 'upcoming' 即将上课。
+  Future<void> updateLiveView({
+    required String phase,
+    required String title,
+    required String subtitle,
+    required int targetTimestamp,
+  }) async {
+    try {
+      await _channel.invokeMethod('updateLiveView', {
+        'phase': phase,
+        'title': title,
+        'subtitle': subtitle,
+        'targetTimestamp': targetTimestamp,
+      });
+    } on PlatformException catch (e) {
+      lastLiveViewError = '${e.code}: ${e.message}';
+      debugPrint('updateLiveView failed: $e');
+    } on MissingPluginException {}
+  }
+
+  /// 结束实况窗（无课/开关关闭/已下课）。无活动实况窗时原生侧直接返回。
+  Future<void> stopLiveView() async {
+    try {
+      await _channel.invokeMethod('stopLiveView');
+    } on PlatformException catch (e) {
+      lastLiveViewError = '${e.code}: ${e.message}';
+      debugPrint('stopLiveView failed: $e');
     } on MissingPluginException {}
   }
 

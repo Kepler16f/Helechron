@@ -32,6 +32,7 @@ class Option {
   Rx<GpaStrategy> gpaStrategy;
   RxBool pushOnGradeChange;
   RxBool pushOnDdlReminder;
+  RxBool liveViewEnabled;
   Rx<BrightnessMode> brightnessMode;
   RxList<CourseIdMap> courseIdMappingList;
   RxBool hideHomeGpa;
@@ -50,6 +51,7 @@ class Option {
     required this.gpaStrategy,
     required this.pushOnGradeChange,
     required this.pushOnDdlReminder,
+    required this.liveViewEnabled,
     required this.brightnessMode,
     required this.courseIdMappingList,
     required this.hideHomeGpa,

@@ -281,7 +281,12 @@ class Scholar {
                       ? (partial) {
                           if (useAsyncRefresh) {
                             try {
-                              _applyFetchResult(partial, partial: true);
+                              final emptyGuardMessages =
+                                  _applyFetchResult(partial, partial: true);
+                              // 空课表保护的降级提示写入「课表」槽位后，
+                              // 状态上报与“更新于”时间戳都按“课表未成功”处理
+                              _injectEmptyGuardMessages(
+                                  partial.item2, emptyGuardMessages);
                               // 已成功板块立即打上“更新于”时间戳；
                               // 未完成/失败的板块被 updateLastUpdateTime 的
                               // 关键字守卫（“查询进行中”/“查询出错”）拦下
@@ -299,6 +304,8 @@ class Scholar {
                         }
                       : null)
               .then((value) async {
+            final emptyGuardMessages = _applyFetchResult(value);
+            _injectEmptyGuardMessages(value.item2, emptyGuardMessages);
             for (var e in value.item1) {
               if (e != null) {
                 DiagnosticLogService.instance.record(
@@ -324,7 +331,6 @@ class Scholar {
             if (value.item1.every((e) => e == null)) {
               updateLastUpdateTime(value.item2);
             }
-            _applyFetchResult(value);
 
             // 终态补发：最后完成的模块不会触发 onProgress，只能在这里定论
             emitStatuses(value.item2);
@@ -347,7 +353,10 @@ class Scholar {
   // 把一次抓取结果合并进当前对象。partial 为 true 表示异步刷新的中间态：
   // 空数据、有报错或尚未抓完的部分会被 setScholar 的守卫拦下，保留原值；
   // 实践学分成功与否要等全部抓完才能判定，中间态一律保持不变。
-  void _applyFetchResult(EverythingTuple value, {bool partial = false}) {
+  // 返回空课表保护触发的降级提示（通常为空或一条），由调用方注入抓取错误列表。
+  List<String> _applyFetchResult(EverythingTuple value,
+      {bool partial = false}) {
+    final emptyGuardMessages = <String>[];
     final tempGrades = <String, List<Grade>>{};
     final courseIdMappingList =
         Get.find<OptionController>(tag: 'optionController').courseIdMappingList;
@@ -380,7 +389,8 @@ class Scholar {
     }
 
     setScholar(value.item2, value.item3, tempGrades, value.item5, value.item6,
-        value.item7, tempPracticeSnapshot);
+        value.item7, tempPracticeSnapshot,
+        emptyGuardMessages: emptyGuardMessages);
 
     // 保研成绩，只取第一次
     var netGrades = grades.values.map((e) => e.first);
@@ -400,6 +410,7 @@ class Scholar {
     } else {
       credit = 0.0;
     }
+    return emptyGuardMessages;
   }
 
   void updateLastUpdateTime(List<String?> errorMessage) {
@@ -432,7 +443,8 @@ class Scholar {
       List<double> tempMajorGpaAndCredit,
       Map<DateTime, String> tempSpecialDates,
       List<Todo> tempTodos,
-      PracticeScoreSnapshot? tempPracticeSnapshot) {
+      PracticeScoreSnapshot? tempPracticeSnapshot,
+      {List<String>? emptyGuardMessages}) {
     // 各模块独立降级：某一来源失败时保留该模块旧数据，不阻断其它成功结果。
     var errorItems = ["成绩", "主修", "课表", "作业", "实践"];
     var errorResult = [false, false, false, false, false];
@@ -458,7 +470,7 @@ class Scholar {
       majorGpaAndCredit = tempMajorGpaAndCredit;
     }
     if (errorResult[2] == false && tempSemesters.isNotEmpty) {
-      semesters = tempSemesters;
+      semesters = _guardSemestersAgainstEmpty(tempSemesters, emptyGuardMessages);
     } else if (tempSemesters.isNotEmpty) {
       // 降级刷新只合并可用片段，避免不完整新对象覆盖已有课表明细。
       for (final incoming in tempSemesters) {
@@ -502,6 +514,73 @@ class Scholar {
         pt3 = summary.dsktJf;
         pt4 = summary.dsiktJf;
       }
+    }
+  }
+
+  /// 空课表保护：空数据不覆盖缓存。
+  ///
+  /// 教务网在选课期、限频或页面结构变化时可能对课表查询返回 200 + 空数据，
+  /// 抓取流程不报错，但拼出的学期会缺失全部课程安排，甚至被当作空学期整段
+  /// 丢弃（见上游 issue #174/#131/#129）。这里在整表替换前逐学期核对：
+  /// - 新结果里某学期完全没有课程安排，而本地缓存有 → 沿用缓存对象，
+  ///   并用 mergePartialFrom 吸收新结果里的成绩/考试等增量（只增不删）；
+  /// - 新结果整段缺失某学期，而本地缓存有课 → 原样补回缓存对象。
+  /// 全部退课导致的合法清空极为罕见，宁可短暂显示旧课表也不能清空用户课表。
+  /// 触发时向 [emptyGuardMessages] 写入降级文案，由刷新链路注入「课表」槽位。
+  List<Semester> _guardSemestersAgainstEmpty(
+      List<Semester> incoming, List<String>? emptyGuardMessages) {
+    if (semesters.isEmpty) return incoming;
+    var kept = 0;
+    var restored = 0;
+    final guarded = <Semester>[];
+    final incomingNames = incoming.map((e) => e.name).toSet();
+    for (final cached in semesters) {
+      if (cached.sessions.isNotEmpty && !incomingNames.contains(cached.name)) {
+        guarded.add(cached);
+        restored++;
+      }
+    }
+    for (final fresh in incoming) {
+      if (fresh.sessions.isEmpty) {
+        Semester? cached;
+        for (final e in semesters) {
+          if (e.name == fresh.name) {
+            cached = e;
+            break;
+          }
+        }
+        if (cached != null && cached.sessions.isNotEmpty) {
+          cached.mergePartialFrom(fresh);
+          guarded.add(cached);
+          kept++;
+          continue;
+        }
+      }
+      guarded.add(fresh);
+    }
+    if (kept == 0 && restored == 0) {
+      return incoming;
+    }
+    final parts = <String>[
+      if (kept > 0) '$kept 个学期沿用本地课表',
+      if (restored > 0) '$restored 个学期已从本地缓存补回',
+    ];
+    emptyGuardMessages?.add(degradedRefreshText(
+        '课表：教务网未返回课程数据，为防清空已保留缓存（${parts.join('，')}）'));
+    guarded.sort((a, b) => b.name.compareTo(a.name));
+    return guarded;
+  }
+
+  /// 把空课表保护的降级提示写入抓取错误列表的「课表」槽位。
+  /// moduleStatusesFromErrors 要求错误列表与 fetchLabels 等长，因此只覆盖不追加；
+  /// 仅当槽位原本是“成功”（null）时写入，已有错误/降级文本时保留原始信息。
+  void _injectEmptyGuardMessages(List<String?> errors, List<String> messages) {
+    if (messages.isEmpty) return;
+    final labels = _spider?.fetchLabels ?? const <String>[];
+    final index = labels.indexOf('课表');
+    if (index < 0 || index >= errors.length) return;
+    if (errors[index] == null) {
+      errors[index] = messages.first;
     }
   }
 
