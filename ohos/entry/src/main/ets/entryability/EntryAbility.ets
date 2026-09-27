@@ -281,7 +281,7 @@ export default class EntryAbility extends FlutterAbility {
         const buffer = new ArrayBuffer(stat.size);
         await fileIo.read(file.fd, buffer);
         const textDecoder = util.TextDecoder.create('utf-8');
-        const content = textDecoder.decodeToString(buffer);
+        const content = textDecoder.decodeToString(new Uint8Array(buffer));
         let name = uri;
         const slashIndex = uri.lastIndexOf('/');
         if (slashIndex >= 0) {
