@@ -195,13 +195,13 @@ class BackupService {
     final workTimeMinutes = asInt(options['workTimeMinutes']);
     if (workTimeMinutes != null && workTimeMinutes > 0) {
       final value = Duration(minutes: workTimeMinutes);
-      await db.setWorkTime(value);
+      db.setWorkTime(value);
       option.workTime.value = value;
     }
     final restTimeMinutes = asInt(options['restTimeMinutes']);
     if (restTimeMinutes != null && restTimeMinutes > 0) {
       final value = Duration(minutes: restTimeMinutes);
-      await db.setRestTime(value);
+      db.setRestTime(value);
       option.restTime.value = value;
     }
     final gpaStrategyIndex = asInt(options['gpaStrategy']);
