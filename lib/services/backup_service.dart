@@ -425,6 +425,9 @@ class BackupService {
 
   /// 打开系统文件选择器读取一个文本文件；用户取消或通道不可用时返回 null。
   static Future<({String name, String content})?> _pickTextFile() async {
+    // 稍作延迟，等待当前组件点击手势生命周期（PointerUp / TapUp）在 Flutter 侧正常派发完成，
+    // 避免原生文档选择器弹窗立即抢占窗口焦点后导致 ListTile 按压阴影状态卡死。
+    await Future.delayed(const Duration(milliseconds: 150));
     final result = await OhosNativeService.instance.pickTextFile();
     if (result == null) return null;
     final content = result['content'] ?? '';

@@ -203,6 +203,15 @@ class OptionPage extends StatelessWidget {
                                     _optionController.liveViewEnabled = value;
                                   },
                                 )),
+                            if (_optionController.liveViewEnabled)
+                              CupertinoListTile(
+                                title: const Text('测试实况窗'),
+                                subtitle: const Text(
+                                    '发送 5 分钟测试胶囊并在系统设置中激活本应用'),
+                                trailing: const BackChervonRow(),
+                                onTap: () => _optionController
+                                    .sendTestLiveView(context),
+                              ),
                           } else ...{
                             CupertinoListTile(
                               title: const Text('点击登录',
@@ -431,6 +440,7 @@ class OptionPage extends StatelessWidget {
                                 _optionController.showExportDialog(context),
                           ),
                           CupertinoListTile(
+                            key: ValueKey('import_ics_${_optionController.icsImportKey.value}'),
                             title: const Text('导入日程文件'),
                             subtitle: const Text('从 .ics 日历文件导入日程与 DDL'),
                             trailing: const BackChervonRow(),
@@ -438,7 +448,7 @@ class OptionPage extends StatelessWidget {
                           ),
                         ]))),
                 // 备份与恢复
-                SliverToBoxAdapter(
+                Obx(() => SliverToBoxAdapter(
                     child: CupertinoListSection.insetGrouped(
                         additionalDividerMargin: 2,
                         margin: _defaultMargin,
@@ -453,18 +463,20 @@ class OptionPage extends StatelessWidget {
                                 style: headerFooterTextStyle)),
                         children: <Widget>[
                       CupertinoListTile(
+                        key: ValueKey('export_backup_${_optionController.backupActionKey.value}'),
                         title: const Text('导出备份'),
                         subtitle: const Text('生成 JSON 备份文件并分享保存'),
                         trailing: const BackChervonRow(),
                         onTap: () => _optionController.exportBackup(),
                       ),
                       CupertinoListTile(
+                        key: ValueKey('import_backup_${_optionController.backupActionKey.value}'),
                         title: const Text('导入备份'),
                         subtitle: const Text('从备份文件恢复，将覆盖当前数据'),
                         trailing: const BackChervonRow(),
                         onTap: () => _optionController.importBackup(),
                       ),
-                    ])),
+                    ]))),
                 // 工具
                 SliverToBoxAdapter(
                     child: CupertinoListSection.insetGrouped(

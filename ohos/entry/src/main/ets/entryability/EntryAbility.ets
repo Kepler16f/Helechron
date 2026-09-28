@@ -313,11 +313,15 @@ export default class EntryAbility extends FlutterAbility {
         subtitle: (call.argument('subtitle') as string) ?? '',
         targetTimestamp: (call.argument('targetTimestamp') as number) ?? 0
       };
-      await LiveViewHelper.sync(state);
-      result.success(true);
+      const syncError = await LiveViewHelper.sync(state);
+      if (syncError !== null) {
+        result.error('LIVE_VIEW_ERROR', syncError, null);
+      } else {
+        result.success(true);
+      }
     } catch (err) {
       hilog.error(DOMAIN, TAG, `updateLiveView failed: ${JSON.stringify(err)}`);
-      result.success(false);
+      result.error('LIVE_VIEW_ERROR', JSON.stringify(err), null);
     }
   }
 
@@ -386,6 +390,13 @@ export default class EntryAbility extends FlutterAbility {
         break;
       case 'pickTextFile':
         this.pickTextFile(result);
+        break;
+      case 'checkLiveViewEnabled':
+        LiveViewHelper.isLiveViewSupported().then((supported: boolean) => {
+          result.success(supported);
+        }).catch((e: Object) => {
+          result.success(false);
+        });
         break;
       case 'updateLiveView':
         this.updateLiveView(call, result);

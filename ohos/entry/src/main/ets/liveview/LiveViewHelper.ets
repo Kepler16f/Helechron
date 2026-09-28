@@ -33,25 +33,27 @@ export class LiveViewHelper {
   private static sequence = 0;
   private static cachedWantAgent: WantAgent | null = null;
 
-  static async sync(state: LiveViewState | null): Promise<void> {
+  static async sync(state: LiveViewState | null): Promise<string | null> {
     try {
       if (state === null) {
         await LiveViewHelper.stop();
-        return;
+        return null;
       }
       const remaining = state.targetTimestamp - Date.now();
       if (remaining <= 0) {
         await LiveViewHelper.stop();
-        return;
+        return null;
       }
       if (LiveViewHelper.active !== null &&
         state.phase === LiveViewHelper.lastPhase &&
         state.title === LiveViewHelper.lastTitle &&
         state.targetTimestamp === LiveViewHelper.lastTarget) {
-        return;
+        return null;
       }
-      if (!(await LiveViewHelper.isEnabled())) {
-        return;
+      const isEnabled = await LiveViewHelper.isEnabled();
+      if (!isEnabled) {
+        hilog.warn(DOMAIN, TAG, 'sync failed: isLiveViewEnabled returned false');
+        return 'isLiveViewEnabled=false: 系统实况窗总开关未开启或当前设备不支持';
       }
       const view: liveViewManager.LiveView = {
         id: VIEW_ID,
@@ -94,11 +96,18 @@ export class LiveViewHelper {
       LiveViewHelper.lastPhase = state.phase;
       LiveViewHelper.lastTitle = state.title;
       LiveViewHelper.lastTarget = state.targetTimestamp;
+      return null;
     } catch (e) {
-      hilog.warn(DOMAIN, TAG, `sync failed: ${JSON.stringify(e)}`);
+      const errStr = JSON.stringify(e);
+      hilog.error(DOMAIN, TAG, `sync failed: ${errStr}`);
       // 置空以便下个同步周期重新尝试 start（权益未开通等场景重试开销很小）
       LiveViewHelper.active = null;
+      return errStr;
     }
+  }
+
+  static async isLiveViewSupported(): Promise<boolean> {
+    return await LiveViewHelper.isEnabled();
   }
 
   static async stop(): Promise<void> {

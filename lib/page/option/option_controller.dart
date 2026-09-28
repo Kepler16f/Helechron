@@ -135,10 +135,81 @@ class OptionController extends GetxController {
     _option.liveViewEnabled.value = value;
     _db.setLiveViewEnabled(value);
     if (value) {
+      if (PlatformFeatures.isOhos) {
+        OhosNativeService.instance.requestNotificationPermission();
+      }
       ScholarWidgetSync.sync();
     } else {
       OhosNativeService.instance.stopLiveView();
     }
+  }
+
+  /// 发送测试实况窗（5分钟倒计时），用于验证系统实况窗支持并在系统设置中激活本应用
+  Future<void> sendTestLiveView(BuildContext context) async {
+    final granted =
+        await OhosNativeService.instance.requestNotificationPermission();
+    if (!granted) {
+      final hasPerm =
+          await OhosNativeService.instance.isNotificationEnabled();
+      if (!hasPerm) {
+        _showAlertDialog(
+          context,
+          '提示',
+          '未授予通知权限。实况窗底层依赖通知服务体系，请在系统设置中允许 Helechron 发送通知。',
+        );
+        return;
+      }
+    }
+
+    final target = DateTime.now().add(const Duration(minutes: 5));
+    final ok = await OhosNativeService.instance.updateLiveView(
+      phase: 'ongoing',
+      title: 'Helechron 课表实况窗测试',
+      subtitle: '紫金港西区教学楼 · 5分钟后下课',
+      targetTimestamp: target.millisecondsSinceEpoch,
+    );
+
+    if (!context.mounted) return;
+
+    if (ok) {
+      _showAlertDialog(
+        context,
+        '测试成功',
+        '测试实况窗已发送！\n\n'
+        '1. 请查看手机顶部状态栏是否已出现胶囊图标，以及锁屏界面是否出现倒计时。\n\n'
+        '2. 成功发送后，系统已将 Helechron 注册至「设置 → 通知和状态栏 → 实况窗」，你现在即可在系统设置中找到并管理本应用。',
+      );
+    } else {
+      final err = OhosNativeService.instance.lastLiveViewError ?? '未知错误';
+      String explanation = '实况窗发送失败：\n$err\n\n';
+      if (err.contains('401')) {
+        explanation +=
+            '原因诊断：\nLive View Kit 是华为受限开放能力。需要在华为开发者联盟 (AppGallery Connect) 后台为应用包名 (top.celechron.helechron) 申请「实况窗服务」权益证书。\n当前调试安装包若未关联该权益证书，系统底层会直接返回 401 权限拦截。';
+      } else if (err.contains('isLiveViewEnabled=false')) {
+        explanation +=
+            '原因诊断：\n当前设备的实况窗总开关处于关闭状态，请前往「设置 → 通知和状态栏 → 实况窗」开启系统总开关。';
+      } else {
+        explanation +=
+            '请检查设备是否支持实况窗，以及通知权限是否已开启。';
+      }
+      _showAlertDialog(context, '实况窗未生效', explanation);
+    }
+  }
+
+  void _showAlertDialog(BuildContext context, String title, String message) {
+    showCupertinoDialog(
+      context: context,
+      builder: (BuildContext dialogContext) => CupertinoAlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('确定'),
+            onPressed: () => Navigator.of(dialogContext).pop(),
+          ),
+        ],
+      ),
+    );
   }
 
   BrightnessMode get brightnessMode => _option.brightnessMode.value;
@@ -220,11 +291,44 @@ class OptionController extends GetxController {
 
   // ==================== 备份与恢复 / iCal 导入 ====================
 
-  Future<void> exportBackup() => BackupService.exportBackup();
+  final RxInt icsImportKey = 0.obs;
+  final RxInt backupActionKey = 0.obs;
 
-  Future<void> importBackup() => BackupService.importBackup();
+  bool _isExportingBackup = false;
+  Future<void> exportBackup() async {
+    if (_isExportingBackup) return;
+    _isExportingBackup = true;
+    try {
+      await BackupService.exportBackup();
+    } finally {
+      _isExportingBackup = false;
+      backupActionKey.value++;
+    }
+  }
 
-  Future<void> importIcs() => BackupService.importIcs();
+  bool _isImportingBackup = false;
+  Future<void> importBackup() async {
+    if (_isImportingBackup) return;
+    _isImportingBackup = true;
+    try {
+      await BackupService.importBackup();
+    } finally {
+      _isImportingBackup = false;
+      backupActionKey.value++;
+    }
+  }
+
+  bool _isImportingIcs = false;
+  Future<void> importIcs() async {
+    if (_isImportingIcs) return;
+    _isImportingIcs = true;
+    try {
+      await BackupService.importIcs();
+    } finally {
+      _isImportingIcs = false;
+      icsImportKey.value++;
+    }
+  }
 
   RxBool get calendarSyncEnabled => _calendarManager.calendarSyncEnabled;
 

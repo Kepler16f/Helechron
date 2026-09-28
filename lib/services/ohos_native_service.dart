@@ -355,26 +355,45 @@ class OhosNativeService {
 
   // ==================== Live View ====================
 
+  /// 检查系统实况窗是否已开启
+  Future<bool> checkLiveViewEnabled() async {
+    try {
+      final result = await _channel.invokeMethod<bool>('checkLiveViewEnabled');
+      return result ?? false;
+    } on PlatformException catch (e) {
+      debugPrint('checkLiveViewEnabled failed: $e');
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
   /// 推送实况窗状态（上课中/即将上课）。原生侧按 phase/title/目标时间去重：
   /// 内容未变化时不产生更新，倒计时由系统原生推进，5 秒级同步≠实况窗更新频率。
   /// [phase] 'ongoing' 上课中（target 为下课时间）/ 'upcoming' 即将上课。
-  Future<void> updateLiveView({
+  Future<bool> updateLiveView({
     required String phase,
     required String title,
     required String subtitle,
     required int targetTimestamp,
   }) async {
     try {
+      lastLiveViewError = null;
       await _channel.invokeMethod('updateLiveView', {
         'phase': phase,
         'title': title,
         'subtitle': subtitle,
         'targetTimestamp': targetTimestamp,
       });
+      return true;
     } on PlatformException catch (e) {
       lastLiveViewError = '${e.code}: ${e.message}';
-      debugPrint('updateLiveView failed: $e');
-    } on MissingPluginException {}
+      debugPrint('updateLiveView failed: $lastLiveViewError');
+      return false;
+    } on MissingPluginException {
+      lastLiveViewError = 'MissingPluginException: not supported';
+      return false;
+    }
   }
 
   /// 结束实况窗（无课/开关关闭/已下课）。无活动实况窗时原生侧直接返回。
