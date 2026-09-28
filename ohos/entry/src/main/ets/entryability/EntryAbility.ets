@@ -15,7 +15,6 @@ import hilog from '@ohos.hilog';
 import preferences from '@ohos.data.preferences';
 import { buildCourseFormData, scheduleNextBoundary, refreshLiveMarker } from '../widget/CourseStateHelper';
 import { buildSimpleCourseFormData } from '../widget/SimpleCourseStateHelper';
-import { LiveViewHelper, LiveViewState } from '../liveview/LiveViewHelper';
 
 const DOMAIN = 0x0000;
 const TAG = 'HelechronNative';
@@ -304,27 +303,6 @@ export default class EntryAbility extends FlutterAbility {
     }
   }
 
-  /// 推送实况窗状态（上课中/即将上课）。去重与降级由 LiveViewHelper 处理。
-  private async updateLiveView(call: MethodCall, result: MethodResult): Promise<void> {
-    try {
-      const state: LiveViewState = {
-        phase: (call.argument('phase') as string) ?? '',
-        title: (call.argument('title') as string) ?? '',
-        subtitle: (call.argument('subtitle') as string) ?? '',
-        targetTimestamp: (call.argument('targetTimestamp') as number) ?? 0
-      };
-      const syncError = await LiveViewHelper.sync(state);
-      if (syncError !== null) {
-        result.error('LIVE_VIEW_ERROR', syncError, null);
-      } else {
-        result.success(true);
-      }
-    } catch (err) {
-      hilog.error(DOMAIN, TAG, `updateLiveView failed: ${JSON.stringify(err)}`);
-      result.error('LIVE_VIEW_ERROR', JSON.stringify(err), null);
-    }
-  }
-
   private handleMethodCall(call: MethodCall, result: MethodResult): void {
     hilog.info(DOMAIN, TAG, `Received method call: ${call.method}`);
     switch (call.method) {
@@ -390,21 +368,6 @@ export default class EntryAbility extends FlutterAbility {
         break;
       case 'pickTextFile':
         this.pickTextFile(result);
-        break;
-      case 'checkLiveViewEnabled':
-        LiveViewHelper.isLiveViewSupported().then((supported: boolean) => {
-          result.success(supported);
-        }).catch((e: Object) => {
-          result.success(false);
-        });
-        break;
-      case 'updateLiveView':
-        this.updateLiveView(call, result);
-        break;
-      case 'stopLiveView':
-        LiveViewHelper.stop().then(() => {
-          result.success(true);
-        });
         break;
       default:
         result.notImplemented();

@@ -53,7 +53,6 @@ class DatabaseHelper {
   final String kGpaStrategy = 'gpaStrategy';
   final String kPushOnGradeChange = 'pushOnGradeChange';
   final String kPushOnDdlReminder = 'pushOnDdlReminder';
-  final String kLiveViewEnabled = 'liveViewEnabled';
   final String kBrightnessMode = 'brightnessMode';
   final String kCourseIdMappingList = 'courseIdMappingList';
   final String kHideHomeGpa = 'hideHomeGpa';
@@ -71,7 +70,6 @@ class DatabaseHelper {
       gpaStrategy: getGpaStrategy().obs,
       pushOnGradeChange: getPushOnGradeChange().obs,
       pushOnDdlReminder: getPushOnDdlReminder().obs,
-      liveViewEnabled: getLiveViewEnabled().obs,
       brightnessMode: getBrightnessMode().obs,
       courseIdMappingList: getCourseIdMappingList().obs,
       hideHomeGpa: getHideHomeGpa().obs,
@@ -150,19 +148,6 @@ class DatabaseHelper {
 
   Future<void> setPushOnDdlReminder(bool pushOnDdlReminder) async {
     await optionsBox.put(kPushOnDdlReminder, pushOnDdlReminder);
-  }
-
-  /// 实况窗：上课/临近开课时在状态栏胶囊与锁屏展示倒计时。
-  /// 需要 Live View Kit 权益，未开通时静默无效果，默认开启。
-  bool getLiveViewEnabled() {
-    if (optionsBox.get(kLiveViewEnabled) == null) {
-      optionsBox.put(kLiveViewEnabled, true);
-    }
-    return optionsBox.get(kLiveViewEnabled);
-  }
-
-  Future<void> setLiveViewEnabled(bool liveViewEnabled) async {
-    await optionsBox.put(kLiveViewEnabled, liveViewEnabled);
   }
 
   Future<void> setBrightnessMode(BrightnessMode brightness) async {

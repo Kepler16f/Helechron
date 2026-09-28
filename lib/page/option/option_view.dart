@@ -192,26 +192,7 @@ class OptionPage extends StatelessWidget {
                                               value;
                                         }
                                       : null,
-                                )),
-                            CupertinoListTile(
-                                title: const Text('实况窗'),
-                                subtitle: const Text(
-                                    '上课与临近开课时在状态栏、锁屏展示倒计时（需系统支持实况窗）'),
-                                trailing: CupertinoSwitch(
-                                  value: _optionController.liveViewEnabled,
-                                  onChanged: (value) async {
-                                    _optionController.liveViewEnabled = value;
-                                  },
-                                )),
-                            if (_optionController.liveViewEnabled)
-                              CupertinoListTile(
-                                title: const Text('测试实况窗'),
-                                subtitle: const Text(
-                                    '发送 5 分钟测试胶囊并在系统设置中激活本应用'),
-                                trailing: const BackChervonRow(),
-                                onTap: () => _optionController
-                                    .sendTestLiveView(context),
-                              ),
+                                 )),
                           } else ...{
                             CupertinoListTile(
                               title: const Text('点击登录',
