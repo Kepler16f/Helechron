@@ -15,6 +15,8 @@ class Grade {
   late bool gpaIncluded;
   // 计入学分（弃修、待录、缓考的不计）
   late bool creditIncluded;
+  // 课程性质分类（例如：通识必修课、通识选修课、大类基础课、专业必修课、专业选修课等）
+  String category = '';
 
   // 获得的学分（挂科、不计学分的不计）
   double get earnedCredit =>
@@ -85,7 +87,11 @@ class Grade {
           .replaceAll(')', '）')
       ..credit = asDouble(json['xf']) ?? 0.0
       ..original = asString(json['cj']) ?? ''
-      ..fivePoint = asDouble(json['jd']) ?? 0.0;
+      ..fivePoint = asDouble(json['jd']) ?? 0.0
+      ..category = asString(json['kcxzmc']) ??
+          asString(json['kclbmc']) ??
+          asString(json['kcxz']) ??
+          '';
     grade._completeDerivedFields();
     return grade;
   }
@@ -104,6 +110,34 @@ class Grade {
         original != "合格" &&
         original != "不合格" &&
         !id.contains('xtwkc');
+
+    if (category.isEmpty) {
+      if (id.contains('xtwkc') ||
+          name.contains('体质健康') ||
+          name.contains('体育') ||
+          name.contains('体测')) {
+        category = '体育与体测';
+      } else if (name.contains('思想道德') ||
+          name.contains('马克思主义') ||
+          name.contains('中国近现代史') ||
+          name.contains('毛泽东思想') ||
+          name.contains('形式与政策') ||
+          name.contains('形势与政策') ||
+          name.contains('军训') ||
+          name.contains('军事理论') ||
+          name.contains('国家安全')) {
+        category = '通识必修课';
+      } else if (name.contains('毕业设计') ||
+          name.contains('毕业论文') ||
+          name.contains('实习') ||
+          name.contains('实训')) {
+        category = '实践与毕业环节';
+      } else if (major) {
+        category = '专业主修课';
+      } else {
+        category = '通识选修课';
+      }
+    }
   }
 
   // 从主修成绩查询处爬取，因此打上主修标记
@@ -153,6 +187,7 @@ class Grade {
         'hundredPoint': hundredPoint,
         'gpaIncluded': gpaIncluded,
         'creditIncluded': creditIncluded,
+        'category': category,
       };
 
   Grade.fromJson(Map<String, dynamic> json)
@@ -165,5 +200,6 @@ class Grade {
         fourPointLegacy = asDouble(json['fourPointLegacy']) ?? 0.0,
         hundredPoint = asInt(json['hundredPoint']) ?? 0,
         gpaIncluded = asBool(json['gpaIncluded']) ?? false,
-        creditIncluded = asBool(json['creditIncluded']) ?? false;
+        creditIncluded = asBool(json['creditIncluded']) ?? false,
+        category = asString(json['category']) ?? '';
 }

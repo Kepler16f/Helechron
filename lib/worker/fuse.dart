@@ -9,7 +9,7 @@ class Fuse {
 
   final bool isBeta = true;
   final version = [0, 1, 3];
-  final build = 66;
+  final build = 67;
   List<int>? remoteVersion;
   int? remoteBuild;
   bool hasNewVersion = false;

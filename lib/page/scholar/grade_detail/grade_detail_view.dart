@@ -11,6 +11,8 @@ import 'grade_card.dart';
 import 'grade_detail_controller.dart';
 import 'package:celechron/utils/gpa_helper.dart';
 import 'weighted_gpa_view.dart';
+import 'gpa_simulator_view.dart';
+import 'credit_progress_view.dart';
 import 'package:celechron/design/native_bar_spacer.dart';
 
 class GradeDetailPage extends StatelessWidget {
@@ -382,14 +384,31 @@ class GradeDetailPage extends StatelessWidget {
                       ),
                     if (_gradeDetailController.customGpaMode.value)
                       const SizedBox(width: 8),
-                    // 加权成绩与 GPA 模拟器入口按钮（仅在非自定义GPA模式下显示）
-                    // 点击后跳转到加权成绩页面，支持各课程加权测算以及 What-If 绩点推演与目标逆推
+                    // 学分看板入口按钮（P2：培养方案达成与分类看板）
+                    if (!_gradeDetailController.customGpaMode.value)
+                      CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        child: const Icon(
+                          CupertinoIcons.chart_pie_fill,
+                          semanticLabel: 'Credit Progress',
+                        ),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(
+                              builder: (context) => CreditProgressPage(),
+                            ),
+                          );
+                        },
+                      ),
+                    if (!_gradeDetailController.customGpaMode.value)
+                      const SizedBox(width: 8),
+                    // 加权成绩入口按钮（仅在非自定义GPA模式下显示）
                     if (!_gradeDetailController.customGpaMode.value)
                       CupertinoButton(
                         padding: EdgeInsets.zero,
                         child: const Icon(
                           CupertinoIcons.chart_bar_alt_fill,
-                          semanticLabel: 'Weighted GPA & Simulator',
+                          semanticLabel: 'Weighted GPA',
                         ),
                         onPressed: () {
                           Navigator.of(context).push(
@@ -399,8 +418,26 @@ class GradeDetailPage extends StatelessWidget {
                           );
                         },
                       ),
-                    // if (!_gradeDetailController.customGpaMode.value)
-                    //   const SizedBox(width: 8),
+                    if (!_gradeDetailController.customGpaMode.value)
+                      const SizedBox(width: 8),
+                    // GPA 模拟器入口按钮（仅在非自定义GPA模式下显示）
+                    if (!_gradeDetailController.customGpaMode.value)
+                      CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        child: const Icon(
+                          CupertinoIcons.slider_horizontal_3,
+                          semanticLabel: 'GPA Simulator',
+                        ),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(
+                              builder: (context) => GpaSimulatorPage(),
+                            ),
+                          );
+                        },
+                      ),
+                    if (!_gradeDetailController.customGpaMode.value)
+                      const SizedBox(width: 8),
                     CupertinoButton(
                       padding: EdgeInsets.zero,
                       child: Icon(
