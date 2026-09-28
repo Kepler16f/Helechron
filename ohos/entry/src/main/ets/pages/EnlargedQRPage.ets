@@ -5,7 +5,7 @@
 
 import common from '@ohos.app.ability.common';
 import hilog from '@ohos.hilog';
-import { window } from '@kit.ArkUI';
+import { window, promptAction } from '@kit.ArkUI';
 import { http } from '@kit.NetworkKit';
 import { formBindingData, formProvider } from '@kit.FormKit';
 import { BusinessError } from '@kit.BasicServicesKit';
@@ -19,6 +19,7 @@ const TEST_ACCOUNT = '3200000000';
 const BARCODE_URL_PREFIX =
   'https://elife.zju.edu.cn/berserker-app/ykt/tsm/batchGetBarCodeGet?account=';
 const BARCODE_URL_SUFFIX = '&payacc=%23%23%23&paytype=1&synAccessSource=app';
+const USER_AGENT = 'E-CampusZJU/2.3.20 (iPhone; iOS 17.5.1; Scale/3.00)';
 
 @Entry
 @Component
@@ -70,12 +71,12 @@ struct EnlargedQRPage {
           this.close();
         })
 
-      // 居中付款码卡片
-      Column({ space: 16 }) {
+      // 居中付款码卡片（按标准比例适配卡片边距）
+      Column({ space: 14 }) {
         // 顶部标题与刷新按钮
         Row() {
           Text('付款码')
-            .fontSize(20)
+            .fontSize(19)
             .fontWeight(FontWeight.Bold)
             .fontColor($r('app.color.widget_text_primary'))
 
@@ -99,55 +100,60 @@ struct EnlargedQRPage {
           })
         }
         .width('100%')
-        .padding({ left: 24, right: 24, top: 18 })
+        .padding({ left: 22, right: 22, top: 18 })
 
         if (this.paymentCode.length > 0) {
+          // 二维码容器：标准 200x200 黄金比例（与参考界面严格保持约 62%-64% 页面/卡片宽比，留白呼吸感自然）
           Column() {
             QRCode(this.paymentCode)
               .width('100%')
               .height('100%')
               .color('#000000')
           }
-          .width(260)
-          .height(260)
-          .padding(12)
+          .width(200)
+          .height(200)
+          .padding(10)
           .backgroundColor(Color.White)
-          .borderRadius(16)
-          .border({ width: 1, color: '#22000000' })
+          .borderRadius(12)
 
-          Text(this.paymentCode)
-            .fontSize(15)
-            .fontFamily('monospace')
-            .fontWeight(FontWeight.Medium)
-            .letterSpacing(1.2)
-            .fontColor($r('app.color.widget_text_primary'))
-            .textAlign(TextAlign.Center)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .padding({ left: 16, right: 16 })
+          // 条码文本容器：参考付款码界面胶囊式展示，等宽字体防变形
+          Row() {
+            Text(this.paymentCode)
+              .fontSize(15)
+              .fontFamily('monospace')
+              .fontWeight(FontWeight.Medium)
+              .letterSpacing(1.4)
+              .fontColor($r('app.color.widget_text_primary'))
+              .textAlign(TextAlign.Center)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+          .padding({ left: 16, right: 16, top: 6, bottom: 6 })
+          .backgroundColor($r('app.color.widget_badge_background'))
+          .borderRadius(8)
         } else {
           Text('暂无可用的付款码')
             .fontSize(14)
             .fontColor($r('app.color.widget_text_tertiary'))
-            .margin({ top: 40, bottom: 40 })
+            .margin({ top: 32, bottom: 32 })
         }
 
         Button('关闭')
-          .width('72%')
-          .height(40)
+          .width('75%')
+          .height(38)
           .backgroundColor($r('app.color.widget_accent'))
           .fontColor(Color.White)
           .fontSize(15)
           .fontWeight(FontWeight.Medium)
-          .margin({ bottom: 20 })
+          .margin({ bottom: 18 })
           .onClick(() => {
             this.close();
           })
       }
-      .width('84%')
-      .constraintSize({ maxWidth: 360, maxHeight: 470 })
+      .width('82%')
+      .constraintSize({ maxWidth: 320, maxHeight: 450 })
       .backgroundColor($r('app.color.widget_background'))
-      .borderRadius(20)
+      .borderRadius(18)
       .shadow({ radius: 24, color: '#33000000', offsetX: 0, offsetY: 8 })
       .alignItems(HorizontalAlign.Center)
     }
@@ -155,14 +161,14 @@ struct EnlargedQRPage {
     .height('100%')
   }
 
-  /// 刷新付款码：触发单次 360 度平滑旋转动画，网络请求完成后动画平滑减速停止
+  /// 刷新付款码：集成重试与完整网络头，失败时弹出友好弹窗提示
   private async refreshPaymentCode(): Promise<void> {
     if (this.isRefreshing) {
       return;
     }
     this.isRefreshing = true;
 
-    // 单次 360 度平滑旋转，结束后重置 isRefreshing，支持下次重新触发
+    // 单次 360 度平滑旋转动画
     animateTo({
       duration: 700,
       curve: Curve.EaseInOut,
@@ -180,6 +186,7 @@ struct EnlargedQRPage {
 
       if (auth.length === 0) {
         hilog.warn(DOMAIN, TAG, 'refreshPaymentCode: no synjonesAuth in preferences');
+        this.showFailureDialog('未检测到校园卡登录态，请打开应用并在「设置 → 校园卡账户」中完成登录。');
         return;
       }
 
@@ -189,32 +196,7 @@ struct EnlargedQRPage {
           newCode += Math.floor(Math.random() * 10).toString();
         }
       } else {
-        const httpRequest: http.HttpRequest = http.createHttp();
-        try {
-          const url: string = `${BARCODE_URL_PREFIX}${account}${BARCODE_URL_SUFFIX}`;
-          const header: Record<string, string> = { 'synjones-auth': `bearer ${auth}` };
-          const options: http.HttpRequestOptions = {
-            method: http.RequestMethod.GET,
-            header: header,
-            connectTimeout: 4000,
-            readTimeout: 4000,
-            expectDataType: http.HttpDataType.STRING
-          };
-          const response: http.HttpResponse = await httpRequest.request(url, options);
-          if (response.responseCode === 200) {
-            const text: string = response.result as string;
-            const payload: Record<string, Object> = JSON.parse(text) as Record<string, Object>;
-            const data: Record<string, Object> = payload['data'] as Record<string, Object>;
-            if (data !== undefined && data !== null) {
-              const barcodes: string[] = data['barcode'] as string[];
-              if (barcodes !== undefined && barcodes !== null && barcodes.length > 0) {
-                newCode = barcodes[0];
-              }
-            }
-          }
-        } finally {
-          httpRequest.destroy();
-        }
+        newCode = await this.requestBarcodeWithRetry(account, auth);
       }
 
       if (newCode.length > 0) {
@@ -239,9 +221,104 @@ struct EnlargedQRPage {
             });
           }
         }
+      } else {
+        this.showFailureDialog('获取付款码失败，请检查网络连接后重试。');
       }
     } catch (e) {
-      hilog.error(DOMAIN, TAG, `refreshPaymentCode failed: ${JSON.stringify(e)}`);
+      const errStr: string = String(e);
+      hilog.error(DOMAIN, TAG, `refreshPaymentCode failed: ${errStr}`);
+      if (errStr.indexOf('AUTH_EXPIRED') >= 0) {
+        this.showFailureDialog('校园卡登录态已过期，请打开应用重新登录校园卡。');
+      } else {
+        this.showFailureDialog('当前网络环境不稳定，刷新付款码超时。请检查网络信号后重试。');
+      }
+    }
+  }
+
+  /// 发起取码网络请求，支持防丢包自动重试与标准移动端请求头
+  private async requestBarcodeWithRetry(account: string, auth: string): Promise<string> {
+    const url: string = `${BARCODE_URL_PREFIX}${account}${BARCODE_URL_SUFFIX}`;
+    const header: Record<string, string> = {
+      'synjones-auth': `bearer ${auth}`,
+      'User-Agent': USER_AGENT,
+      'Accept': 'application/json, text/plain, */*',
+      'Connection': 'keep-alive',
+      'Cache-Control': 'no-cache'
+    };
+
+    let lastErrMsg: string = '';
+    // 最多尝试 2 次，首次遇网络闪断或超时自动触发第二次重试
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const httpRequest: http.HttpRequest = http.createHttp();
+      try {
+        const options: http.HttpRequestOptions = {
+          method: http.RequestMethod.GET,
+          header: header,
+          connectTimeout: 6000,
+          readTimeout: 6500,
+          expectDataType: http.HttpDataType.STRING
+        };
+        const response: http.HttpResponse = await httpRequest.request(url, options);
+        if (response.responseCode === 200) {
+          const text: string = response.result as string;
+          const payload: Record<string, Object> = JSON.parse(text) as Record<string, Object>;
+          const codeVal: Object = payload['code'];
+          if (codeVal === 401 || codeVal === '401' || payload['msg'] === 'token invalid') {
+            throw new Error('AUTH_EXPIRED');
+          }
+          const data: Record<string, Object> = payload['data'] as Record<string, Object>;
+          if (data !== undefined && data !== null) {
+            const barcodes: string[] = data['barcode'] as string[];
+            if (barcodes !== undefined && barcodes !== null && barcodes.length > 0) {
+              const rawCode: string = barcodes[0];
+              // 合法性校验
+              if (rawCode.length >= 14 && rawCode.length <= 64) {
+                return rawCode;
+              }
+            }
+          }
+          lastErrMsg = '未获取到有效付款码数据';
+        } else if (response.responseCode === 401 || response.responseCode === 403) {
+          throw new Error('AUTH_EXPIRED');
+        } else {
+          lastErrMsg = `服务器返回状态码 HTTP ${response.responseCode}`;
+        }
+      } catch (err) {
+        const errStr: string = String(err);
+        if (errStr.indexOf('AUTH_EXPIRED') >= 0) {
+          throw err;
+        }
+        lastErrMsg = '网络连接超时';
+        hilog.warn(DOMAIN, TAG, `requestBarcode attempt ${attempt} failed: ${errStr}`);
+      } finally {
+        httpRequest.destroy();
+      }
+
+      if (attempt < 2) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 300));
+      }
+    }
+
+    throw new Error(lastErrMsg.length > 0 ? lastErrMsg : '网络连接失败');
+  }
+
+  /// 弹窗提示刷新失败原因
+  private showFailureDialog(message: string): void {
+    try {
+      promptAction.showDialog({
+        title: '付款码刷新失败',
+        message: message,
+        buttons: [
+          {
+            text: '我知道了',
+            color: '#0A59F7'
+          }
+        ]
+      }).catch((err: BusinessError) => {
+        hilog.warn(DOMAIN, TAG, `showDialog failed: ${JSON.stringify(err)}`);
+      });
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, `showFailureDialog exception: ${JSON.stringify(e)}`);
     }
   }
 

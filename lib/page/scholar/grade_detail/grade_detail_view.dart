@@ -382,14 +382,14 @@ class GradeDetailPage extends StatelessWidget {
                       ),
                     if (_gradeDetailController.customGpaMode.value)
                       const SizedBox(width: 8),
-                    // 加权绩点入口按钮（仅在非自定义GPA模式下显示）
-                    // 点击后跳转到加权绩点页面，可设置各课程的加权比例（0.8-1.2）
+                    // 加权成绩与 GPA 模拟器入口按钮（仅在非自定义GPA模式下显示）
+                    // 点击后跳转到加权成绩页面，支持各课程加权测算以及 What-If 绩点推演与目标逆推
                     if (!_gradeDetailController.customGpaMode.value)
                       CupertinoButton(
                         padding: EdgeInsets.zero,
                         child: const Icon(
                           CupertinoIcons.chart_bar_alt_fill,
-                          semanticLabel: 'Weighted GPA',
+                          semanticLabel: 'Weighted GPA & Simulator',
                         ),
                         onPressed: () {
                           Navigator.of(context).push(

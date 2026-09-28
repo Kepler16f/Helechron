@@ -72,11 +72,13 @@ class ECard {
     request = await httpClient
         .getUrl(Uri.parse(
             "https://elife.zju.edu.cn/berserker-app/ykt/tsm/getCampusCards"))
-        .timeout(const Duration(seconds: 8),
+        .timeout(const Duration(seconds: 10),
             onTimeout: () => throw ExceptionWithMessage("请求超时"));
     request.headers.add("Synjones-Auth", "Bearer $synjonesAuth");
+    request.headers.add("User-Agent", "E-CampusZJU/2.3.20 (iPhone; iOS 17.5.1; Scale/3.00)");
+    request.headers.add("Accept", "application/json, text/plain, */*");
     request.followRedirects = false;
-    response = await request.close().timeout(const Duration(seconds: 8),
+    response = await request.close().timeout(const Duration(seconds: 10),
         onTimeout: () => throw ExceptionWithMessage("请求超时"));
 
     var accountJson =
@@ -108,41 +110,57 @@ class ECard {
 
   static Future<String> getBarcode(
       HttpClient httpClient, String synjonesAuth, String eCardAccount) async {
-    late HttpClientRequest request;
-    late HttpClientResponse response;
+    Object? lastError;
+    for (int attempt = 1; attempt <= 2; attempt++) {
+      try {
+        final request = await httpClient
+            .getUrl(Uri.parse(
+                "https://elife.zju.edu.cn/berserker-app/ykt/tsm/batchGetBarCodeGet?account=$eCardAccount&payacc=%23%23%23&paytype=1&synAccessSource=app"))
+            .timeout(const Duration(seconds: 10),
+                onTimeout: () => throw ExceptionWithMessage("请求超时"));
+        request.headers.add("synjones-auth", "bearer $synjonesAuth");
+        request.headers.add("User-Agent", "E-CampusZJU/2.3.20 (iPhone; iOS 17.5.1; Scale/3.00)");
+        request.headers.add("Accept", "application/json, text/plain, */*");
+        request.followRedirects = false;
+        final response = await request.close().timeout(const Duration(seconds: 10),
+            onTimeout: () => throw ExceptionWithMessage("请求超时"));
 
-    request = await httpClient
-        .getUrl(Uri.parse(
-            "https://elife.zju.edu.cn/berserker-app/ykt/tsm/batchGetBarCodeGet?account=$eCardAccount&payacc=%23%23%23&paytype=1&synAccessSource=app"))
-        .timeout(const Duration(seconds: 8),
-            onTimeout: () => throw ExceptionWithMessage("请求超时1"));
-    request.headers.add("synjones-auth", "bearer $synjonesAuth");
-    request.followRedirects = false;
-    response = await request.close().timeout(const Duration(seconds: 8),
-        onTimeout: () => throw ExceptionWithMessage("请求超时"));
-
-    var barcodeJson =
-        await readResponseText(response, context: '校园卡付款码接口', expectJson: true);
-    final payload = decodeJsonMap(barcodeJson,
-        context: '校园卡付款码接口；HTTP ${response.statusCode}');
-    if (jsonIndicatesAuthenticationFailure(payload)) {
-      throw AuthenticationExpiredException('校园卡付款码接口：登录态已失效');
+        var barcodeJson =
+            await readResponseText(response, context: '校园卡付款码接口', expectJson: true);
+        final payload = decodeJsonMap(barcodeJson,
+            context: '校园卡付款码接口；HTTP ${response.statusCode}');
+        if (jsonIndicatesAuthenticationFailure(payload)) {
+          throw AuthenticationExpiredException('校园卡付款码接口：登录态已失效');
+        }
+        final data = asStringMap(payload['data']);
+        final barcodes = asDynamicList(data?['barcode']) ?? const [];
+        final barcode = barcodes.isEmpty ? null : asString(barcodes.first);
+        if (barcode == null || barcode.isEmpty) {
+          throw ExceptionWithMessage(
+              '校园卡付款码接口：未返回有效付款码；响应摘要：${responseSummary(barcodeJson)}');
+        }
+        // 捕获降级码：返回内容长度/字符集异常时通常是鉴权失败或接口降级
+        // 返回的"假"码看上去是字符串，但扫码会被 POS 拒绝。
+        // 这种情况应触发上层自动重登，而非继续展示无效码。
+        if (!_isValidBarcode(barcode)) {
+          throw AuthenticationExpiredException(
+              '校园卡付款码接口：返回内容疑似降级码（长度=${barcode.length}）；响应摘要：${responseSummary(barcodeJson)}');
+        }
+        return barcode;
+      } catch (e) {
+        lastError = e;
+        if (e is AuthenticationExpiredException) {
+          rethrow;
+        }
+        if (attempt < 2) {
+          await Future.delayed(const Duration(milliseconds: 300));
+        }
+      }
     }
-    final data = asStringMap(payload['data']);
-    final barcodes = asDynamicList(data?['barcode']) ?? const [];
-    final barcode = barcodes.isEmpty ? null : asString(barcodes.first);
-    if (barcode == null || barcode.isEmpty) {
-      throw ExceptionWithMessage(
-          '校园卡付款码接口：未返回有效付款码；响应摘要：${responseSummary(barcodeJson)}');
+    if (lastError != null) {
+      throw lastError;
     }
-    // 捕获降级码：返回内容长度/字符集异常时通常是鉴权失败或接口降级
-    // 返回的"假"码看上去是字符串，但扫码会被 POS 拒绝。
-    // 这种情况应触发上层自动重登，而非继续展示无效码。
-    if (!_isValidBarcode(barcode)) {
-      throw AuthenticationExpiredException(
-          '校园卡付款码接口：返回内容疑似降级码（长度=${barcode.length}）；响应摘要：${responseSummary(barcodeJson)}');
-    }
-    return barcode;
+    throw ExceptionWithMessage("获取付款码失败");
   }
 
   /// 合法付款码：长度 14-64，字符集限定为字母数字 + base64/QR 常见符号。

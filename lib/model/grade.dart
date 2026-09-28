@@ -112,6 +112,36 @@ class Grade {
     return grade;
   }
 
+  static String fivePointToLetter(double fp) {
+    if (fp >= 5.0) return 'A+';
+    if (fp >= 4.8) return 'A';
+    if (fp >= 4.5) return 'A-';
+    if (fp >= 4.2) return 'B+';
+    if (fp >= 3.9) return 'B';
+    if (fp >= 3.6) return 'B-';
+    if (fp >= 3.3) return 'C+';
+    if (fp >= 3.0) return 'C';
+    if (fp >= 2.5) return 'C-';
+    if (fp >= 2.0) return 'D';
+    return 'F';
+  }
+
+  factory Grade.fromSimulated({
+    required String id,
+    required String name,
+    required double credit,
+    required double fivePoint,
+  }) {
+    final grade = Grade.empty()
+      ..id = id
+      ..name = name
+      ..credit = credit
+      ..fivePoint = fivePoint
+      ..original = fivePointToLetter(fivePoint);
+    grade._completeDerivedFields();
+    return grade;
+  }
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,

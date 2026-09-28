@@ -17,11 +17,43 @@ export default class EnlargedQRAbility extends UIAbility {
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     hilog.info(DOMAIN, TAG, 'EnlargedQRAbility onNewWant');
     this.extractPaymentCode(want);
+    if (this.windowStage) {
+      try {
+        this.windowStage.getMainWindow().then((mainWindow: window.Window) => {
+          try {
+            mainWindow.setWindowBackgroundColor('#00000000');
+            mainWindow.setWindowLayoutFullScreen(true);
+            mainWindow.showWindow();
+          } catch (e) {}
+        }).catch(() => {});
+
+        this.windowStage.loadContent('pages/EnlargedQRPage', (err: BusinessError) => {
+          if (err) {
+            hilog.error(DOMAIN, TAG, `onNewWant loadContent failed: ${JSON.stringify(err)}`);
+          } else {
+            hilog.info(DOMAIN, TAG, 'onNewWant reloadContent success');
+          }
+        });
+      } catch (e) {
+        hilog.error(DOMAIN, TAG, `onNewWant exception: ${JSON.stringify(e)}`);
+      }
+    }
   }
 
   private extractPaymentCode(want: Want): void {
     if (want.parameters) {
-      const code: string = (want.parameters['paymentCode'] as string) || '';
+      let code: string = (want.parameters['paymentCode'] as string) || '';
+      if (!code && want.parameters['params']) {
+        const inner = want.parameters['params'] as Record<string, Object> | string;
+        if (typeof inner === 'object' && inner !== null) {
+          code = (inner['paymentCode'] as string) || '';
+        } else if (typeof inner === 'string') {
+          try {
+            const parsed = JSON.parse(inner) as Record<string, Object>;
+            code = (parsed['paymentCode'] as string) || '';
+          } catch (e) {}
+        }
+      }
       if (code.length > 0) {
         AppStorage.setOrCreate('enlargedQrPaymentCode', code);
       }

@@ -10,6 +10,7 @@ const TEST_ACCOUNT = '3200000000';
 const BARCODE_URL_PREFIX =
   'https://elife.zju.edu.cn/berserker-app/ykt/tsm/batchGetBarCodeGet?account=';
 const BARCODE_URL_SUFFIX = '&payacc=%23%23%23&paytype=1&synAccessSource=app';
+const USER_AGENT = 'E-CampusZJU/2.3.20 (iPhone; iOS 17.5.1; Scale/3.00)';
 
 export default class PaymentCodeWidgetExtension extends FormExtensionAbility {
   onAddForm(want: Want): formBindingData.FormBindingData {
@@ -38,6 +39,18 @@ export default class PaymentCodeWidgetExtension extends FormExtensionAbility {
   onFormEvent(formId: string, message: string): void {
     console.info(`PaymentCodeWidget onFormEvent: formId=${formId}, message=${message}`);
     if (message.indexOf('refresh_payment_code') >= 0) {
+      // 1. 立即给卡片推送“刷新中...”反馈，确保墓碑唤醒或后台点击时有即时视觉响应
+      const prefs = this.getPrefs();
+      if (prefs !== null) {
+        const curCode = prefs.getSync('paymentCode', '') as string;
+        const pendingData: Record<string, string> = {
+          'paymentCode': curCode,
+          'displayName': '刷新中...',
+          'hasCode': curCode.length > 0 ? '1' : '0'
+        };
+        formProvider.updateForm(formId, formBindingData.createFormBindingData(pendingData)).catch(() => {});
+      }
+      // 2. 异步发起网络取码并推送
       this.refreshFromNetwork(formId);
     } else {
       const prefs = this.getPrefs();
@@ -125,17 +138,34 @@ export default class PaymentCodeWidgetExtension extends FormExtensionAbility {
     if (prefs === null) {
       return;
     }
+    const auth = prefs.getSync('synjonesAuth', '') as string;
+    if (auth.length === 0) {
+      const curCode = prefs.getSync('paymentCode', '') as string;
+      const noAuthData: Record<string, string> = {
+        'paymentCode': curCode,
+        'displayName': '请先打开应用登录',
+        'hasCode': curCode.length > 0 ? '1' : '0'
+      };
+      formProvider.updateForm(formId, formBindingData.createFormBindingData(noAuthData)).catch(() => {});
+      return;
+    }
+
     const code = await this.fetchBarcode(prefs);
     if (code.length > 0) {
       try {
         prefs.putSync('paymentCode', code);
+        prefs.putSync('displayName', '付款码');
         prefs.flush();
       } catch (e) {
         // ignore
       }
       this.pushToAllForms(prefs, formId);
     } else {
-      // 取码失败：保持原有付款码，仅按本地缓存刷新
+      // 取码失败：保持原有付款码，恢复标题
+      try {
+        prefs.putSync('displayName', '付款码');
+        prefs.flush();
+      } catch (e) {}
       this.pushToAllForms(prefs, formId);
     }
   }
@@ -155,39 +185,53 @@ export default class PaymentCodeWidgetExtension extends FormExtensionAbility {
       return code;
     }
 
-    const httpRequest = http.createHttp();
-    try {
-      const url = `${BARCODE_URL_PREFIX}${account}${BARCODE_URL_SUFFIX}`;
-      const header: Record<string, string> = { 'synjones-auth': `bearer ${auth}` };
-      const options: http.HttpRequestOptions = {
-        method: http.RequestMethod.GET,
-        header: header,
-        connectTimeout: 3500,
-        readTimeout: 3500,
-        expectDataType: http.HttpDataType.STRING
-      };
-      const response = await httpRequest.request(url, options);
-      if (response.responseCode !== 200) {
-        console.error(`PaymentCodeWidget fetchBarcode http ${response.responseCode}`);
-        return '';
+    const url = `${BARCODE_URL_PREFIX}${account}${BARCODE_URL_SUFFIX}`;
+    const header: Record<string, string> = {
+      'synjones-auth': `bearer ${auth}`,
+      'User-Agent': USER_AGENT,
+      'Accept': 'application/json, text/plain, */*',
+      'Connection': 'keep-alive',
+      'Cache-Control': 'no-cache'
+    };
+
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const httpRequest = http.createHttp();
+      try {
+        const options: http.HttpRequestOptions = {
+          method: http.RequestMethod.GET,
+          header: header,
+          connectTimeout: 6000,
+          readTimeout: 6500,
+          expectDataType: http.HttpDataType.STRING
+        };
+        const response = await httpRequest.request(url, options);
+        if (response.responseCode === 200) {
+          const text = response.result as string;
+          const payload = JSON.parse(text) as Record<string, Object>;
+          const data = payload['data'] as Record<string, Object>;
+          if (data !== undefined && data !== null) {
+            const barcodes = data['barcode'] as string[];
+            if (barcodes !== undefined && barcodes !== null && barcodes.length > 0) {
+              const barcode = barcodes[0];
+              if (barcode.length >= 14 && barcode.length <= 64) {
+                return barcode;
+              }
+            }
+          }
+        } else {
+          console.error(`PaymentCodeWidget fetchBarcode http ${response.responseCode}`);
+        }
+      } catch (e) {
+        console.error(`PaymentCodeWidget fetchBarcode attempt ${attempt} failed: ${JSON.stringify(e)}`);
+      } finally {
+        httpRequest.destroy();
       }
-      const text = response.result as string;
-      const payload = JSON.parse(text) as Record<string, Object>;
-      const data = payload['data'] as Record<string, Object>;
-      if (data === undefined || data === null) {
-        return '';
+
+      if (attempt < 2) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 300));
       }
-      const barcodes = data['barcode'] as string[];
-      if (barcodes !== undefined && barcodes !== null && barcodes.length > 0) {
-        return barcodes[0];
-      }
-      return '';
-    } catch (e) {
-      console.error(`PaymentCodeWidget fetchBarcode failed: ${JSON.stringify(e)}`);
-      return '';
-    } finally {
-      httpRequest.destroy();
     }
+    return '';
   }
 
   private saveFormId(prefs: preferences.Preferences, formId: string): void {

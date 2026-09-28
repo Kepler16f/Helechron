@@ -48,7 +48,15 @@
         "startWindowIcon": "$media:icon",
         "startWindowBackground": "$color:start_window_background_transparent",
         "exported": true,
-        "removeMissionAfterTerminate": true
+        "launchType": "standard",
+        "removeMissionAfterTerminate": true,
+        "skills": [
+          {
+            "actions": [
+              "action.helechron.enlarged_qr"
+            ]
+          }
+        ]
       }
     ],
     "extensionAbilities": [

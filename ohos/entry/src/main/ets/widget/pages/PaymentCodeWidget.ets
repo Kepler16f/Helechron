@@ -28,12 +28,11 @@ struct PaymentCodeWidget {
           .width(28)
           .height(28)
           .backgroundColor($r('app.color.widget_accent'))
-          .responseRegion({ x: -10, y: -10, width: 48, height: 48 })
-          .hitTestBehavior(HitTestMode.Block)
-          .margin({ right: 6 })
+          .margin({ right: 8 })
           .onClick(() => {
             postCardAction(this, {
               action: 'router',
+              bundleName: 'top.celechron.helechron',
               abilityName: 'EnlargedQRAbility',
               params: {
                 target: 'enlarged_qr',
@@ -51,8 +50,6 @@ struct PaymentCodeWidget {
           .width(28)
           .height(28)
           .backgroundColor($r('app.color.widget_accent'))
-          .responseRegion({ x: -10, y: -10, width: 48, height: 48 })
-          .hitTestBehavior(HitTestMode.Block)
           .onClick(() => {
             postCardAction(this, {
               action: 'message',
@@ -85,6 +82,7 @@ struct PaymentCodeWidget {
         .onClick(() => {
           postCardAction(this, {
             action: 'router',
+            bundleName: 'top.celechron.helechron',
             abilityName: 'EntryAbility',
             params: {
               target: 'ecardpaypage'
@@ -108,6 +106,7 @@ struct PaymentCodeWidget {
         .onClick(() => {
           postCardAction(this, {
             action: 'router',
+            bundleName: 'top.celechron.helechron',
             abilityName: 'EntryAbility',
             params: {
               target: 'ecardpaypage'
