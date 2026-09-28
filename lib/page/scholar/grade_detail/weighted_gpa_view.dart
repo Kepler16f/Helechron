@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show Divider;
 import 'package:get/get.dart';
 import 'package:celechron/design/custom_colors.dart';
 import 'package:celechron/design/round_rectangle_card.dart';
