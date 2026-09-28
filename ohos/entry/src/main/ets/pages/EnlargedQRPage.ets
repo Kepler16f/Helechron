@@ -286,7 +286,7 @@ struct EnlargedQRPage {
       } catch (err) {
         const errStr: string = String(err);
         if (errStr.indexOf('AUTH_EXPIRED') >= 0) {
-          throw err;
+          throw new Error('AUTH_EXPIRED');
         }
         lastErrMsg = '网络连接超时';
         hilog.warn(DOMAIN, TAG, `requestBarcode attempt ${attempt} failed: ${errStr}`);
