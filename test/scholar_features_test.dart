@@ -74,5 +74,27 @@ void main() {
       expect(ZhiyunService.buildPortalUrl(), 'https://classroom.zju.edu.cn');
       expect(ZhiyunService.buildSsoLoginUrl().contains('zjuam.zju.edu.cn'), isTrue);
     });
+
+    test('ZhiyunService isRecordableCourse correctly filters non-recordable courses', () {
+      // 体育、身体素质课、体测等显然不可能有录播
+      expect(ZhiyunService.isRecordableCourse('身体素质与健康课堂'), isFalse);
+      expect(ZhiyunService.isRecordableCourse('体育(1)'), isFalse);
+      expect(ZhiyunService.isRecordableCourse('国家学生体质健康标准测试'), isFalse);
+      expect(ZhiyunService.isRecordableCourse('军训'), isFalse);
+      expect(ZhiyunService.isRecordableCourse('生产实习'), isFalse);
+
+      // 理论课、专业课属于录播课程
+      expect(ZhiyunService.isRecordableCourse('线性代数'), isTrue);
+      expect(ZhiyunService.isRecordableCourse('微积分(甲)Ⅰ'), isTrue);
+      expect(ZhiyunService.isRecordableCourse('大学物理(甲)Ⅰ'), isTrue);
+    });
+
+    test('ZhiyunService buildLivingroomUrl constructs precise livingroom URL', () {
+      final url = ZhiyunService.buildLivingroomUrl('85940', '1973989');
+      expect(
+        url,
+        'https://classroom.zju.edu.cn/livingroom?course_id=85940&sub_id=1973989&tenant_code=112',
+      );
+    });
   });
 }

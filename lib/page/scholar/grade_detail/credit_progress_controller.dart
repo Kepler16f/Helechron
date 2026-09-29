@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:celechron/database/database_helper.dart';
@@ -5,11 +6,13 @@ import 'package:celechron/model/grade.dart';
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/utils/tuple.dart';
 import 'package:celechron/utils/gpa_helper.dart';
+import 'package:celechron/utils/json_utils.dart';
 
 /// 单个课程类别的学分与成绩聚合模型
 class CourseCategoryGroup {
   final String name;
   final double earnedCredits;
+  final double? targetCredits;
   final int courseCount;
   final List<Grade> courses;
   final double averageGpa;
@@ -19,12 +22,18 @@ class CourseCategoryGroup {
   CourseCategoryGroup({
     required this.name,
     required this.earnedCredits,
+    this.targetCredits,
     required this.courseCount,
     required this.courses,
     required this.averageGpa,
     required this.excellentRate,
     bool initiallyExpanded = false,
   }) : isExpanded = initiallyExpanded.obs;
+
+  double get completionRate {
+    if (targetCredits == null || targetCredits! <= 0) return 1.0;
+    return (earnedCredits / targetCredits!).clamp(0.0, 1.0);
+  }
 }
 
 /// 培养方案与学分进度控制器
@@ -35,14 +44,34 @@ class CreditProgressController extends GetxController {
   /// 目标毕业学分（默认浙大本科标准 160.0，支持自定义）
   final targetGraduationCredits = 160.0.obs;
 
+  /// 用户主修专业名称（从教务网拉取或手动填写）
+  final userMajor = ''.obs;
+
+  /// 专业信息来源：'zdbk'（教务网自动拉取） | 'manual'（用户手动填写） | 'none'（未设置）
+  final majorSource = 'none'.obs;
+
+  /// 是否已配置或拉取到主修专业
+  bool get hasMajor => userMajor.value.isNotEmpty;
+
+  /// 各分类目标学分要求（根据专业培养方案映射）
+  final categoryTargetCredits = <String, double>{}.obs;
+
   static const String _kTargetCreditsKey = 'graduation_target_credits';
+  static const String _kUserMajorKey = 'user_major';
+  static const String _kMajorSourceKey = 'user_major_source';
+  static const String _kZdbkMajorCacheKey = 'zdbk_user_major';
 
   @override
   void onInit() {
     super.onInit();
     _loadTargetCredits();
+    loadUserMajorAndScheme();
 
     ever(scholar, (callback) {
+      // 课表或成绩更新时，尝试再次检测专业
+      if (!hasMajor || majorSource.value == 'none') {
+        loadUserMajorAndScheme();
+      }
       update();
     });
   }
@@ -56,6 +85,130 @@ class CreditProgressController extends GetxController {
     } catch (e) {
       debugPrint('读取目标毕业学分配置失败: $e');
     }
+  }
+
+  /// 加载或从 ZDBK 自动拉取用户专业与培养方案要求
+  void loadUserMajorAndScheme() {
+    try {
+      // 1. 优先检查用户手动保存的专业
+      final savedManualMajor = _db.optionsBox.get(_kUserMajorKey);
+      final savedSource = _db.optionsBox.get(_kMajorSourceKey);
+      if (savedManualMajor is String && savedManualMajor.trim().isNotEmpty) {
+        userMajor.value = savedManualMajor.trim();
+        majorSource.value = (savedSource as String?) ?? 'manual';
+        _applySchemeForMajor(userMajor.value);
+        return;
+      }
+
+      // 2. 检查 ZDBK 缓存中拉取的专业
+      final zdbkMajor = _db.getCachedWebPage(_kZdbkMajorCacheKey);
+      if (zdbkMajor != null && zdbkMajor.trim().isNotEmpty) {
+        userMajor.value = zdbkMajor.trim();
+        majorSource.value = 'zdbk';
+        _applySchemeForMajor(userMajor.value);
+        return;
+      }
+
+      // 3. 尝试从教务网成绩/主修成绩缓存中动态解析 zymc
+      final majorFromGrade = _extractMajorFromZdbkCaches();
+      if (majorFromGrade != null && majorFromGrade.isNotEmpty) {
+        userMajor.value = majorFromGrade;
+        majorSource.value = 'zdbk';
+        _db.setCachedWebPage(_kZdbkMajorCacheKey, majorFromGrade);
+        _applySchemeForMajor(userMajor.value);
+        return;
+      }
+
+      // 4. 无法获取专业，标记为 none，在界面引导用户填写
+      majorSource.value = 'none';
+      _applyDefaultScheme();
+    } catch (e) {
+      debugPrint('加载用户专业与培养方案失败: $e');
+      majorSource.value = 'none';
+      _applyDefaultScheme();
+    }
+  }
+
+  String? _extractMajorFromZdbkCaches() {
+    for (final cacheKey in ['zdbk_MajorGrade', 'zdbk_Transcript']) {
+      final cachedJson = _db.getCachedWebPage(cacheKey);
+      if (cachedJson != null && cachedJson.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(cachedJson);
+          final items =
+              asDynamicList(decoded is Map ? decoded['items'] : decoded);
+          if (items != null && items.isNotEmpty) {
+            for (final item in items) {
+              final map = asStringMap(item);
+              if (map != null) {
+                final zymc = asString(map['zymc']) ?? asString(map['zyfxmc']);
+                if (zymc != null && zymc.trim().isNotEmpty && zymc != '未知') {
+                  return zymc.trim();
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    }
+    return null;
+  }
+
+  /// 用户手动设置/更改主修专业培养方案
+  void setUserMajor(String major, {double? targetCredits}) {
+    final cleaned = major.trim();
+    if (cleaned.isEmpty) return;
+
+    userMajor.value = cleaned;
+    majorSource.value = 'manual';
+    try {
+      _db.optionsBox.put(_kUserMajorKey, cleaned);
+      _db.optionsBox.put(_kMajorSourceKey, 'manual');
+    } catch (e) {
+      debugPrint('保存用户专业失败: $e');
+    }
+
+    _applySchemeForMajor(cleaned, overrideTarget: targetCredits);
+    update();
+  }
+
+  /// 根据专业配置学分要求分布（支持标准四年制及五年制医学/建筑）
+  void _applySchemeForMajor(String major, {double? overrideTarget}) {
+    final isFiveYear = major.contains('建筑') ||
+        major.contains('临床') ||
+        major.contains('口腔') ||
+        major.contains('医学') ||
+        major.contains('规划');
+
+    if (overrideTarget != null && overrideTarget > 0) {
+      setTargetCredits(overrideTarget);
+    } else {
+      setTargetCredits(isFiveYear ? 210.0 : 160.0);
+    }
+
+    if (isFiveYear) {
+      categoryTargetCredits.value = {
+        '通识必修课': 38.0,
+        '通识选修课': 10.0,
+        '大类基础课': 40.0,
+        '专业必修课': 65.0,
+        '专业选修课': 35.0,
+        '实践与毕业设计': 22.0,
+      };
+    } else {
+      categoryTargetCredits.value = {
+        '通识必修课': 34.0,
+        '通识选修课': 10.0,
+        '大类基础课': 35.0,
+        '专业必修课': 40.0,
+        '专业选修课': 25.0,
+        '实践与毕业设计': 16.0,
+      };
+    }
+  }
+
+  void _applyDefaultScheme() {
+    _applySchemeForMajor('');
   }
 
   void setTargetCredits(double credits) {
@@ -137,7 +290,10 @@ class CreditProgressController extends GetxController {
     if (cat.contains('专业选修') || cat.contains('专业方向')) {
       return '专业选修课';
     }
-    if (cat.contains('实践') || cat.contains('实习') || cat.contains('毕业论文') || cat.contains('毕业设计')) {
+    if (cat.contains('实践') ||
+        cat.contains('实习') ||
+        cat.contains('毕业论文') ||
+        cat.contains('毕业设计')) {
       return '实践与毕业设计';
     }
     if (cat.contains('体育') || cat.contains('体测') || g.id.contains('xtwkc')) {
@@ -196,6 +352,7 @@ class CreditProgressController extends GetxController {
         result.add(CourseCategoryGroup(
           name: catName,
           earnedCredits: earned,
+          targetCredits: categoryTargetCredits[catName],
           courseCount: list.length,
           courses: list,
           averageGpa: avgGpa,
@@ -221,6 +378,7 @@ class CreditProgressController extends GetxController {
         result.add(CourseCategoryGroup(
           name: key,
           earnedCredits: earned,
+          targetCredits: categoryTargetCredits[key],
           courseCount: list.length,
           courses: list,
           averageGpa: avgGpa,

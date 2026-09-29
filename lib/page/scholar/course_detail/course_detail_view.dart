@@ -17,8 +17,9 @@ import 'package:celechron/services/zhiyun_service.dart';
 
 class CourseDetailPage extends StatelessWidget {
   final Course? course;
+  final Period? period;
 
-  CourseDetailPage({required String? courseId, super.key})
+  CourseDetailPage({required String? courseId, this.period, super.key})
       : course = _findCourse(courseId);
 
   /// 依据不同来源的标识定位课程。
@@ -439,154 +440,173 @@ class CourseDetailPage extends StatelessWidget {
   }
 
   Widget createZhiyunCard(BuildContext context, Course c) {
-    return Column(
-      children: [
-        SubSubtitleRow(subtitle: '智云课堂'),
-        RoundRectangleCard(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: CupertinoDynamicColor.resolve(
-                            CustomCupertinoDynamicColors.sakura, context),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        CupertinoIcons.play_rectangle_fill,
-                        size: 18,
-                        color: CupertinoColors.white,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+    return FutureBuilder<ZhiyunReplayInfo?>(
+      future: ZhiyunService.getLessonReplay(course: c, period: period),
+      builder: (context, snapshot) {
+        final info = snapshot.data;
+        // 如果未上课、未生成录播回放、或为体育/身体素质等非录播课程，自动隐藏该入口
+        if (info == null || !info.hasReplay) {
+          return const SizedBox.shrink();
+        }
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+          child: Column(
+            children: [
+              SubSubtitleRow(subtitle: '智云课堂'),
+              RoundRectangleCard(
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          Row(
-                            children: [
-                              Text(
-                                '录播回放与讲义',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  color: CupertinoDynamicColor.resolve(
-                                      CupertinoColors.label, context),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: CupertinoDynamicColor.resolve(
-                                      CupertinoColors.tertiarySystemFill,
-                                      context),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  'ZJU Classroom',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: CupertinoDynamicColor.resolve(
-                                        CupertinoColors.secondaryLabel,
-                                        context),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '一键直达浙大智云课堂观看本课录播与课件',
-                            style: TextStyle(
-                              fontSize: 12,
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
                               color: CupertinoDynamicColor.resolve(
-                                  CupertinoColors.secondaryLabel, context),
+                                  CustomCupertinoDynamicColors.sakura, context),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              CupertinoIcons.play_rectangle_fill,
+                              size: 18,
+                              color: CupertinoColors.white,
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: CupertinoButton(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        color: CupertinoDynamicColor.resolve(
-                            CustomCupertinoDynamicColors.sakura, context),
-                        borderRadius: BorderRadius.circular(8),
-                        minSize: 36,
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(CupertinoIcons.arrow_up_right_square, size: 16),
-                            SizedBox(width: 6),
-                            Text(
-                              '直达课程空间',
-                              style: TextStyle(
-                                  fontSize: 14, fontWeight: FontWeight.w600),
-                            ),
-                          ],
-                        ),
-                        onPressed: () => ZhiyunService.openCourse(c.name),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    CupertinoButton(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      color: CupertinoDynamicColor.resolve(
-                          CupertinoColors.secondarySystemFill, context),
-                      borderRadius: BorderRadius.circular(8),
-                      minSize: 36,
-                      child: const Row(
-                        children: [
-                          Icon(CupertinoIcons.link, size: 16),
-                          SizedBox(width: 4),
-                          Text(
-                            '复制链接',
-                            style: TextStyle(fontSize: 13),
-                          ),
-                        ],
-                      ),
-                      onPressed: () async {
-                        await ZhiyunService.copyCourseLink(context, c.name);
-                        if (context.mounted) {
-                          showCupertinoDialog(
-                            context: context,
-                            builder: (dialogCtx) => CupertinoAlertDialog(
-                              title: const Text('已复制直达链接'),
-                              content: Text(
-                                  '课程「${c.name}」的智云课堂检索链接已复制到剪贴板，可粘贴至浏览器访问。'),
-                              actions: [
-                                CupertinoDialogAction(
-                                  child: const Text('好'),
-                                  onPressed: () =>
-                                      Navigator.of(dialogCtx).pop(),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      '本节录播回放',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                        color: CupertinoDynamicColor.resolve(
+                                            CupertinoColors.label, context),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: CupertinoDynamicColor.resolve(
+                                            CupertinoColors.tertiarySystemFill,
+                                            context),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        info.lessonTitle,
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                          color: CupertinoDynamicColor.resolve(
+                                              CupertinoColors.secondaryLabel,
+                                              context),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '本节录播已就绪，点击可直接进入回放房间观看',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: CupertinoDynamicColor.resolve(
+                                        CupertinoColors.secondaryLabel, context),
+                                  ),
                                 ),
                               ],
                             ),
-                          );
-                        }
-                      },
-                    ),
-                  ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: CupertinoButton(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              color: CupertinoDynamicColor.resolve(
+                                  CustomCupertinoDynamicColors.sakura, context),
+                              borderRadius: BorderRadius.circular(8),
+                              minSize: 36,
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(CupertinoIcons.play_arrow_solid, size: 16),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    '直达本节录播',
+                                    style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                              onPressed: () =>
+                                  ZhiyunService.openUrl(info.livingroomUrl),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          CupertinoButton(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.secondarySystemFill, context),
+                            borderRadius: BorderRadius.circular(8),
+                            minSize: 36,
+                            child: const Row(
+                              children: [
+                                Icon(CupertinoIcons.link, size: 16),
+                                SizedBox(width: 4),
+                                Text(
+                                  '复制链接',
+                                  style: TextStyle(fontSize: 13),
+                                ),
+                              ],
+                            ),
+                            onPressed: () async {
+                              await Clipboard.setData(
+                                  ClipboardData(text: info.livingroomUrl));
+                              if (context.mounted) {
+                                showCupertinoDialog(
+                                  context: context,
+                                  builder: (dialogCtx) => CupertinoAlertDialog(
+                                    title: const Text('已复制回放链接'),
+                                    content: Text(
+                                        '课程「${c.name}」(${info.lessonTitle}) 的智云课堂回放直达链接已复制到剪贴板。'),
+                                    actions: [
+                                      CupertinoDialogAction(
+                                        child: const Text('好'),
+                                        onPressed: () =>
+                                            Navigator.of(dialogCtx).pop(),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -635,11 +655,7 @@ class CourseDetailPage extends StatelessWidget {
             ),
           ),
           SliverToBoxAdapter(
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-              child: createZhiyunCard(context, c),
-            ),
+            child: createZhiyunCard(context, c),
           ),
           if (c.sessions.isNotEmpty)
             SliverToBoxAdapter(

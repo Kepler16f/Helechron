@@ -358,8 +358,10 @@ class CalendarPage extends StatelessWidget {
           (period.type == PeriodType.classes || period.type == PeriodType.test)
               ? () async => Navigator.of(context, rootNavigator: true).push(
                   CupertinoPageRoute(
-                      builder: (context) =>
-                          CourseDetailPage(courseId: period.fromUid)))
+                      builder: (context) => CourseDetailPage(
+                            courseId: period.fromUid,
+                            period: period,
+                          )))
               : (period.type == PeriodType.user
                   ? (() async {
                       Task? deadline;

@@ -13,7 +13,7 @@ import abilityAccessCtrl, { Permissions } from '@ohos.abilityAccessCtrl';
 import bundleManager from '@ohos.bundle.bundleManager';
 import hilog from '@ohos.hilog';
 import preferences from '@ohos.data.preferences';
-import { buildCourseFormData, scheduleNextBoundary, refreshLiveMarker } from '../widget/CourseStateHelper';
+import { buildCourseFormData, scheduleNextBoundary, refreshLiveMarker, PRECISION_EXACT } from '../widget/CourseStateHelper';
 import { buildSimpleCourseFormData } from '../widget/SimpleCourseStateHelper';
 
 const DOMAIN = 0x0000;
@@ -157,7 +157,8 @@ export default class EntryAbility extends FlutterAbility {
       const courseIds = ((await prefs.get('course_form_ids', '')) as string)
         .split(',').filter(id => id.length > 0);
       if (courseIds.length > 0) {
-        const bindingData = formBindingData.createFormBindingData(buildCourseFormData(prefs));
+        refreshLiveMarker(prefs);
+        const bindingData = formBindingData.createFormBindingData(buildCourseFormData(prefs, PRECISION_EXACT));
         for (const id of courseIds) {
           formProvider.updateForm(id, bindingData).catch((err: BusinessError) => {
             hilog.warn(DOMAIN, TAG, `pushAllWidgets course failed for ${id}: ${err.message}`);
@@ -1022,7 +1023,7 @@ export default class EntryAbility extends FlutterAbility {
       const formIdsStr = (await prefs.get('course_form_ids', '')) as string;
       if (formIdsStr.length > 0) {
         const formIds = formIdsStr.split(',').filter(id => id.length > 0);
-        const data = buildCourseFormData(prefs);
+        const data = buildCourseFormData(prefs, PRECISION_EXACT);
         const bindingData = formBindingData.createFormBindingData(data);
         for (const id of formIds) {
           formProvider.updateForm(id, bindingData).catch((err: BusinessError) => {

@@ -353,6 +353,155 @@ class GradeDetailPage extends StatelessWidget {
     );
   }
 
+  void _showMoreActions(BuildContext context) {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (BuildContext sheetCtx) => CupertinoActionSheet(
+        title: const Text('成绩分析与工具'),
+        actions: <CupertinoActionSheetAction>[
+          CupertinoActionSheetAction(
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(CupertinoIcons.chart_pie_fill, size: 20),
+                SizedBox(width: 8),
+                Text('学分看板（培养方案）'),
+              ],
+            ),
+            onPressed: () {
+              Navigator.of(sheetCtx).pop();
+              Navigator.of(context).push(
+                CupertinoPageRoute(builder: (_) => CreditProgressPage()),
+              );
+            },
+          ),
+          CupertinoActionSheetAction(
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(CupertinoIcons.chart_bar_alt_fill, size: 20),
+                SizedBox(width: 8),
+                Text('加权成绩分析'),
+              ],
+            ),
+            onPressed: () {
+              Navigator.of(sheetCtx).pop();
+              Navigator.of(context).push(
+                CupertinoPageRoute(builder: (_) => WeightedGpaPage()),
+              );
+            },
+          ),
+          CupertinoActionSheetAction(
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(CupertinoIcons.slider_horizontal_3, size: 20),
+                SizedBox(width: 8),
+                Text('GPA 模拟器'),
+              ],
+            ),
+            onPressed: () {
+              Navigator.of(sheetCtx).pop();
+              Navigator.of(context).push(
+                CupertinoPageRoute(builder: (_) => GpaSimulatorPage()),
+              );
+            },
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          isDefaultAction: true,
+          child: const Text('取消'),
+          onPressed: () => Navigator.of(sheetCtx).pop(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActionRow(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildQuickActionButton(
+              context: context,
+              icon: CupertinoIcons.chart_pie_fill,
+              label: '学分看板',
+              color: CustomCupertinoDynamicColors.sakura,
+              onTap: () {
+                Navigator.of(context).push(
+                  CupertinoPageRoute(builder: (_) => CreditProgressPage()),
+                );
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildQuickActionButton(
+              context: context,
+              icon: CupertinoIcons.chart_bar_alt_fill,
+              label: '加权成绩',
+              color: CustomCupertinoDynamicColors.cyan,
+              onTap: () {
+                Navigator.of(context).push(
+                  CupertinoPageRoute(builder: (_) => WeightedGpaPage()),
+                );
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildQuickActionButton(
+              context: context,
+              icon: CupertinoIcons.slider_horizontal_3,
+              label: 'GPA模拟器',
+              color: CustomCupertinoDynamicColors.peach,
+              onTap: () {
+                Navigator.of(context).push(
+                  CupertinoPageRoute(builder: (_) => GpaSimulatorPage()),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActionButton({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required CupertinoDynamicColor color,
+    required VoidCallback onTap,
+  }) {
+    return RoundRectangleCard(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+      animate: true,
+      onTap: onTap,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            size: 16,
+            color: CupertinoDynamicColor.resolve(color, context),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: CupertinoDynamicColor.resolve(
+                  CupertinoColors.label, context),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
@@ -370,7 +519,7 @@ class GradeDetailPage extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.end,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    if (_gradeDetailController.customGpaMode.value)
+                    if (_gradeDetailController.customGpaMode.value) ...[
                       GestureDetector(
                         child: CupertinoButton(
                           padding: EdgeInsets.zero,
@@ -382,62 +531,20 @@ class GradeDetailPage extends StatelessWidget {
                           _gradeDetailController.refreshCustomGpa();
                         },
                       ),
-                    if (_gradeDetailController.customGpaMode.value)
                       const SizedBox(width: 8),
-                    // 学分看板入口按钮（P2：培养方案达成与分类看板）
-                    if (!_gradeDetailController.customGpaMode.value)
+                    ] else ...[
+                      // 更多工具入口（收纳加权、模拟、看板，彻底解决标题遮挡冲突）
                       CupertinoButton(
                         padding: EdgeInsets.zero,
                         child: const Icon(
-                          CupertinoIcons.chart_pie_fill,
-                          semanticLabel: 'Credit Progress',
+                          CupertinoIcons.ellipsis_circle,
+                          semanticLabel: 'More Tools',
                         ),
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            CupertinoPageRoute(
-                              builder: (context) => CreditProgressPage(),
-                            ),
-                          );
-                        },
+                        onPressed: () => _showMoreActions(context),
                       ),
-                    if (!_gradeDetailController.customGpaMode.value)
-                      const SizedBox(width: 8),
-                    // 加权成绩入口按钮（仅在非自定义GPA模式下显示）
-                    if (!_gradeDetailController.customGpaMode.value)
-                      CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        child: const Icon(
-                          CupertinoIcons.chart_bar_alt_fill,
-                          semanticLabel: 'Weighted GPA',
-                        ),
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            CupertinoPageRoute(
-                              builder: (context) => WeightedGpaPage(),
-                            ),
-                          );
-                        },
-                      ),
-                    if (!_gradeDetailController.customGpaMode.value)
-                      const SizedBox(width: 8),
-                    // GPA 模拟器入口按钮（仅在非自定义GPA模式下显示）
-                    if (!_gradeDetailController.customGpaMode.value)
-                      CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        child: const Icon(
-                          CupertinoIcons.slider_horizontal_3,
-                          semanticLabel: 'GPA Simulator',
-                        ),
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            CupertinoPageRoute(
-                              builder: (context) => GpaSimulatorPage(),
-                            ),
-                          );
-                        },
-                      ),
-                    if (!_gradeDetailController.customGpaMode.value)
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
+                    ],
+                    // 自定义 GPA 开关
                     CupertinoButton(
                       padding: EdgeInsets.zero,
                       child: Icon(
@@ -469,6 +576,9 @@ class GradeDetailPage extends StatelessWidget {
                           Obx(() => _gradeDetailController.customGpaMode.value
                               ? _buildCustomGpaBrief(context)
                               : _buildGradeBrief(context)),
+                          Obx(() => !_gradeDetailController.customGpaMode.value
+                              ? _buildQuickActionRow(context)
+                              : const SizedBox.shrink()),
                           _buildHistory(context),
                         ],
                       ),

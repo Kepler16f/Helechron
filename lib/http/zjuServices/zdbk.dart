@@ -310,6 +310,20 @@ class Zdbk {
     return grades;
   }
 
+  /// 从教务网成绩/课程记录中提取用户主修专业名称
+  String? _extractMajor(List<dynamic> items) {
+    for (final raw in items) {
+      final item = asStringMap(raw);
+      if (item != null) {
+        final major = asString(item['zymc']) ?? asString(item['zyfxmc']);
+        if (major != null && major.trim().isNotEmpty && major != '未知') {
+          return major.trim();
+        }
+      }
+    }
+    return null;
+  }
+
   List<Session> _parseSessions(Object? raw, String context) {
     final items = asDynamicList(raw) ?? const [];
     final sessions = <Session>[];
@@ -394,6 +408,10 @@ class Zdbk {
         }
         final grades = _parseGrades(items, context, major: true);
         var majorGpa = GpaHelper.calculateGpa(grades);
+        final major = _extractMajor(items);
+        if (major != null) {
+          _writeCache('zdbk_user_major', major);
+        }
         _writeCache('zdbk_MajorGrade', jsonEncode(items));
         return Tuple(
             null, Tuple([majorGpa.item1[0], majorGpa.item2], responseText));
@@ -458,6 +476,10 @@ class Zdbk {
               '；响应摘要：${responseSummary(responseText)}');
         }
         final grades = _parseGrades(items, context);
+        final major = _extractMajor(items);
+        if (major != null) {
+          _writeCache('zdbk_user_major', major);
+        }
         _writeCache('zdbk_Transcript', jsonEncode(items));
         return Tuple(null, grades);
       } on Object catch (error, stackTrace) {
@@ -820,6 +842,28 @@ class Zdbk {
           '；响应摘要：${responseSummary(body)}');
     }
     return bytes;
+  }
+
+  /// 获取用户主修专业名称（从本地缓存或各成绩接口中解析）
+  Future<Tuple<Exception?, String?>> getStudentMajor(
+      HttpClient httpClient) async {
+    final cached = _db?.getCachedWebPage('zdbk_user_major');
+    if (cached != null && cached.trim().isNotEmpty) {
+      return Tuple(null, cached.trim());
+    }
+    final transcriptCache = _cachedList('zdbk_Transcript', '教务网成绩缓存');
+    final major1 = _extractMajor(transcriptCache.data);
+    if (major1 != null) {
+      _writeCache('zdbk_user_major', major1);
+      return Tuple(null, major1);
+    }
+    final majorCache = _cachedList('zdbk_MajorGrade', '教务网主修成绩缓存');
+    final major2 = _extractMajor(majorCache.data);
+    if (major2 != null) {
+      _writeCache('zdbk_user_major', major2);
+      return Tuple(null, major2);
+    }
+    return const Tuple(null, null);
   }
 
   Future<String> solveCaptcha(HttpClient httpClient) async {

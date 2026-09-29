@@ -23,17 +23,15 @@ struct CourseWidget {
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.widget_text_tertiary'))
         Blank()
-        Row() {
-          Text('\u21BB')
-            .fontSize(16)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.widget_button_text'))
+        Button({ type: ButtonType.Circle, stateEffect: true }) {
+          Image($r('app.media.ic_widget_refresh'))
+            .width(14)
+            .height(14)
+            .fillColor($r('app.color.widget_button_text'))
         }
         .width(28)
         .height(28)
-        .borderRadius(14)
         .backgroundColor($r('app.color.widget_accent'))
-        .justifyContent(FlexAlign.Center)
         .onClick(() => {
           postCardAction(this, {
             action: 'message',

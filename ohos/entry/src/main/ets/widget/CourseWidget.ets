@@ -2,7 +2,7 @@ import { Want, Configuration } from '@kit.AbilityKit';
 import { formBindingData, FormExtensionAbility, formInfo, formProvider } from '@kit.FormKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import preferences from '@ohos.data.preferences';
-import { buildCourseFormData, scheduleNextBoundary } from './CourseStateHelper';
+import { buildCourseFormData, scheduleNextBoundary, PRECISION_EXACT, PRECISION_FUZZY } from './CourseStateHelper';
 
 const PREFS_NAME = 'helechron_widget_data';
 const FORM_IDS_KEY = 'course_form_ids';
@@ -19,7 +19,7 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
         this.saveFormId(prefs, formId);
         scheduleNextBoundary(formId, prefs);
       }
-      return formBindingData.createFormBindingData(buildCourseFormData(prefs));
+      return formBindingData.createFormBindingData(buildCourseFormData(prefs, PRECISION_EXACT));
     }
     const empty: Record<string, string> = {
       'courseName': '今日暂无课程',
@@ -39,7 +39,8 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
     if (prefs === null) {
       return;
     }
-    this.pushFormData(formId, prefs);
+    // 后台预调度边界自动刷新 / 系统定时唤醒刷新：必须显示模糊时间
+    this.pushFormData(formId, prefs, PRECISION_FUZZY);
     // 系统刷新后，重新预调度下一个课程边界
     scheduleNextBoundary(formId, prefs);
   }
@@ -50,7 +51,11 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
       return;
     }
     console.info(`CourseWidget onFormEvent: formId=${formId}, message=${message}`);
-    this.pushFormData(formId, prefs);
+    // 桌面小卡片主动点击刷新：必须显示准确时间
+    const now = Date.now();
+    prefs.putSync('widgetLiveUntil', now + 60000);
+    prefs.flush();
+    this.pushAllCourseForms(prefs, PRECISION_EXACT);
     // 用户交互后，重新预调度下一个课程边界
     scheduleNextBoundary(formId, prefs);
   }
@@ -67,14 +72,7 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
     if (prefs === null) {
       return;
     }
-    const raw = prefs.getSync(FORM_IDS_KEY, '') as string;
-    if (!raw) {
-      return;
-    }
-    const ids = raw.split(',').filter((id: string) => id.length > 0);
-    for (const id of ids) {
-      this.pushFormData(id, prefs);
-    }
+    this.pushAllCourseForms(prefs);
   }
 
   private getPrefs(): preferences.Preferences | null {
@@ -86,11 +84,22 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
     }
   }
 
-  private pushFormData(formId: string, prefs: preferences.Preferences): void {
-    const formData = formBindingData.createFormBindingData(buildCourseFormData(prefs));
+  private pushFormData(formId: string, prefs: preferences.Preferences, precision?: string): void {
+    const formData = formBindingData.createFormBindingData(buildCourseFormData(prefs, precision));
     formProvider.updateForm(formId, formData).catch((err: BusinessError) => {
       console.error(`CourseWidget updateForm failed: ${err.code} ${err.message}`);
     });
+  }
+
+  private pushAllCourseForms(prefs: preferences.Preferences, precision?: string): void {
+    const raw = prefs.getSync(FORM_IDS_KEY, '') as string;
+    if (!raw) {
+      return;
+    }
+    const ids = raw.split(',').filter((id: string) => id.length > 0);
+    for (const id of ids) {
+      this.pushFormData(id, prefs, precision);
+    }
   }
 
   private saveFormId(prefs: preferences.Preferences, formId: string): void {

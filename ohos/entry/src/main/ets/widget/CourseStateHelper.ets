@@ -48,12 +48,10 @@ export interface CourseState {
 }
 
 /// 倒计时精度：
-/// - exact : 应用存活时，精确到分
-/// - hour  : 边界预刷新，开课前精确到时、上课中精确到 30 分钟
-/// - coarse: 系统后台刷新 / 应用已冻结，用模糊文案描述剩余时长
-const PRECISION_EXACT = 'exact';
-const PRECISION_HOUR = 'hour';
-const PRECISION_COARSE = 'coarse';
+/// - exact : 桌面小卡片主动点击刷新、应用内点击刷新、应用存活时 5s 自动刷新，精确到分
+/// - fuzzy : 后台预调度边界自动刷新 / 系统后台唤醒刷新，用模糊文案描述剩余时长
+export const PRECISION_EXACT = 'exact';
+export const PRECISION_FUZZY = 'fuzzy';
 
 function getStr(prefs: preferences.Preferences, key: string, def: string): string {
   const v = prefs.getSync(key, def);
@@ -137,17 +135,16 @@ function pickCurrentOrNext(items: CourseItem[], now: number): CourseItem | null 
   return best;
 }
 
-/// 依据应用存活标记与边界预刷新时刻判定倒计时精度。
-function resolvePrecision(prefs: preferences.Preferences, now: number): string {
+/// 依据应用存活标记或强制指定判定倒计时精度。
+function resolvePrecision(prefs: preferences.Preferences, now: number, forcedPrecision?: string): string {
+  if (forcedPrecision === PRECISION_EXACT || forcedPrecision === PRECISION_FUZZY) {
+    return forcedPrecision;
+  }
   const liveUntil = getNum(prefs, 'widgetLiveUntil', 0);
   if (now < liveUntil) {
     return PRECISION_EXACT;
   }
-  const boundaryAt = getNum(prefs, 'nextBoundaryRefreshAt', 0);
-  if (boundaryAt > 0 && Math.abs(now - boundaryAt) < PRE_REFRESH_WINDOW_MS) {
-    return PRECISION_HOUR;
-  }
-  return PRECISION_COARSE;
+  return PRECISION_FUZZY;
 }
 
 function idleState(): CourseState {
@@ -168,7 +165,7 @@ function idleState(): CourseState {
 }
 
 /// 依据课程时间表与当前时间计算状态、倒计时与进度。
-export function computeCourseState(prefs: preferences.Preferences): CourseState {
+export function computeCourseState(prefs: preferences.Preferences, forcedPrecision?: string): CourseState {
   const items = parseCourses(prefs);
   const leadMin = getNum(prefs, 'leadWindowMinutes', DEFAULT_LEAD_MINUTES);
   const now = Date.now();
@@ -177,7 +174,7 @@ export function computeCourseState(prefs: preferences.Preferences): CourseState 
     return idleState();
   }
 
-  const precision = resolvePrecision(prefs, now);
+  const precision = resolvePrecision(prefs, now, forcedPrecision);
 
   let status = '';
   let statusColor = COLOR_SOON;
@@ -190,18 +187,15 @@ export function computeCourseState(prefs: preferences.Preferences): CourseState 
     const total = item.e - item.s;
     const elapsed = now - item.s;
     progress = total <= 0 ? 100 : (elapsed / total) * 100;
-    status = '上课中';
     statusColor = COLOR_ONGOING;
     const remainMs = item.e - now;
     if (precision === PRECISION_EXACT) {
+      // 准确时间：桌面小卡片点击刷新、应用内点击刷新、应用存活时 5s 自动刷新
+      status = '上课中';
       const remainMin = Math.floor(remainMs / 60000);
       countdown = `${pad2(Math.floor(remainMin / 60))}:${pad2(remainMin % 60)}`;
-    } else if (precision === PRECISION_HOUR) {
-      // 边界预刷新：精确到 30 分钟
-      const remainMin = Math.round(remainMs / 60000 / 30) * 30;
-      countdown = `${pad2(Math.floor(remainMin / 60))}:${pad2(remainMin % 60)}`;
     } else {
-      // 系统 30 分钟模糊刷新：整句模糊文案取代"上课中 + 倒计时"
+      // 模糊时间：后台预调度边界自动刷新 / 系统定时唤醒
       status = `距离下课还有${fuzzyRemainText(remainMs)}`;
       countdown = '';
     }
@@ -225,22 +219,24 @@ export function computeCourseState(prefs: preferences.Preferences): CourseState 
     if (remainMin <= 0) {
       status = '即将开始';
       statusColor = COLOR_SOON;
+      countdown = '';
     } else {
       if (precision === PRECISION_EXACT) {
+        // 准确时间：桌面小卡片点击刷新、应用内点击刷新、应用存活时 5s 自动刷新
         const h = Math.floor(remainMin / 60);
         const m = remainMin % 60;
-        status = m > 0 ? `开始还有 ${h} 小时 ${m} 分` : `开始还有 ${h} 小时`;
-      } else if (precision === PRECISION_HOUR) {
-        // 预刷新：开课前精确到时（不足 1 小时显示"即将开始"）
-        const h = Math.floor(remainMin / 60);
-        status = h > 0 ? `开始还有 ${h} 小时` : '即将开始';
+        if (h > 0) {
+          status = m > 0 ? `开始还有 ${h} 小时 ${m} 分` : `开始还有 ${h} 小时`;
+        } else {
+          status = `开始还有 ${m} 分`;
+        }
       } else {
-        // 系统 30 分钟模糊刷新：模糊描述剩余时长，临近开课仍显示"即将开始"
+        // 模糊时间：后台预调度边界自动刷新 / 系统定时唤醒，不足 15 分钟显示"即将开始"
         status = remainMin < 15 ? '即将开始' : `开始还有${fuzzyRemainText(remainMs)}`;
       }
       statusColor = remainMin <= 30 ? COLOR_URGENT : COLOR_SOON;
+      countdown = '';
     }
-    countdown = '';
   }
 
   if (progress < 0) {
@@ -267,8 +263,8 @@ export function computeCourseState(prefs: preferences.Preferences): CourseState 
 }
 
 /// 构造可下发给卡片页面的完整数据。
-export function buildCourseFormData(prefs: preferences.Preferences): Record<string, string> {
-  const state = computeCourseState(prefs);
+export function buildCourseFormData(prefs: preferences.Preferences, forcedPrecision?: string): Record<string, string> {
+  const state = computeCourseState(prefs, forcedPrecision);
   const data: Record<string, string> = {
     'courseName': state.name,
     'courseTime': state.time,
@@ -308,7 +304,7 @@ export function minutesToNextBoundary(prefs: preferences.Preferences): number {
   const leadMs = BOUNDARY_LEAD_MINUTES * 60000;
   let best = 0;
   for (const item of items) {
-    const candidates: number[] = [item.s - leadMs, item.e - leadMs];
+    const candidates: number[] = [item.s - leadMs, item.s, item.e - leadMs, item.e];
     for (const c of candidates) {
       if (c <= now) {
         continue;

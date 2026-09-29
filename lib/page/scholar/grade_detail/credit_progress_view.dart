@@ -15,6 +15,159 @@ class CreditProgressPage extends StatelessWidget {
 
   CreditProgressPage({super.key});
 
+  // ==================== 顶部专业状态与引导卡片 ====================
+
+  Widget _buildMajorCard(BuildContext context) {
+    return Obx(() {
+      final hasMajor = _controller.hasMajor;
+      final major = _controller.userMajor.value;
+      final source = _controller.majorSource.value;
+
+      if (hasMajor) {
+        return RoundRectangleCard(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: CupertinoDynamicColor.resolve(
+                      CustomCupertinoDynamicColors.sakura, context),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  CupertinoIcons.book_fill,
+                  size: 16,
+                  color: CupertinoColors.white,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            major,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: CupertinoDynamicColor.resolve(
+                                  CupertinoColors.label, context),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: CupertinoDynamicColor.resolve(
+                              source == 'zdbk'
+                                  ? CustomCupertinoDynamicColors.spring
+                                  : CupertinoColors.tertiarySystemFill,
+                              context,
+                            ),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            source == 'zdbk' ? '教务网同步' : '手动设置',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: CupertinoDynamicColor.resolve(
+                                  CupertinoColors.label, context),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '培养方案要求：${_controller.targetGraduationCredits.value.toStringAsFixed(1)} 学分',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.secondaryLabel, context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                onPressed: () => _showSetMajorDialog(context),
+                child: const Icon(
+                  CupertinoIcons.pencil_circle,
+                  size: 22,
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+
+      // 未检测到专业时的引导填写卡片
+      return RoundRectangleCard(
+        onTap: () => _showSetMajorDialog(context),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: CupertinoDynamicColor.resolve(
+                    CustomCupertinoDynamicColors.sand, context),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                CupertinoIcons.exclamationmark,
+                size: 18,
+                color: CupertinoColors.white,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '未检测到专业培养方案',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: CupertinoDynamicColor.resolve(
+                          CupertinoColors.label, context),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '点击填写主修专业与目标学分，获取精确分类进度 >',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: CupertinoDynamicColor.resolve(
+                          CupertinoColors.secondaryLabel, context),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              CupertinoIcons.right_chevron,
+              size: 14,
+              color: CupertinoColors.systemGrey,
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
   // ==================== 顶部进度大卡片 ====================
 
   Widget _buildOverviewProgressCard(BuildContext context) {
@@ -282,6 +435,51 @@ class CreditProgressPage extends StatelessWidget {
                               CupertinoColors.secondaryLabel, context),
                         ),
                       ),
+                      // 若有该分类的目标学分要求，显示模块达成进度条
+                      if (group.targetCredits != null &&
+                          group.targetCredits! > 0) ...[
+                        const SizedBox(height: 6),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(3),
+                          child: SizedBox(
+                            height: 4,
+                            child: LinearProgressIndicator(
+                              value: group.completionRate,
+                              backgroundColor: CupertinoDynamicColor.resolve(
+                                  CupertinoColors.tertiarySystemFill, context),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                CupertinoDynamicColor.resolve(
+                                    CustomCupertinoDynamicColors.sakura,
+                                    context),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '已修 ${group.earnedCredits.toStringAsFixed(1)} / 要求 ${group.targetCredits!.toStringAsFixed(1)} 学分',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: CupertinoDynamicColor.resolve(
+                                    CupertinoColors.secondaryLabel, context),
+                              ),
+                            ),
+                            Text(
+                              '${(group.completionRate * 100).toStringAsFixed(0)}%',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: CupertinoDynamicColor.resolve(
+                                    CustomCupertinoDynamicColors.sakura,
+                                    context),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -311,17 +509,22 @@ class CreditProgressPage extends StatelessWidget {
                   color: CupertinoDynamicColor.resolve(
                       CupertinoColors.separator, context),
                 ),
-                for (int i = 0; i < group.courses.length; i++) ...[
-                  _buildCourseItemTile(context, group.courses[i]),
-                  if (i != group.courses.length - 1)
-                    Divider(
-                      height: 1,
-                      indent: 14,
-                      endIndent: 14,
-                      color: CupertinoDynamicColor.resolve(
-                          CupertinoColors.separator, context),
-                    ),
-                ],
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  itemCount: group.courses.length,
+                  separatorBuilder: (context, index) => Divider(
+                    height: 1,
+                    color: CupertinoDynamicColor.resolve(
+                        CupertinoColors.separator, context),
+                  ),
+                  itemBuilder: (context, index) {
+                    final grade = group.courses[index];
+                    return _buildCourseItemRow(context, grade);
+                  },
+                ),
               ],
             );
           }),
@@ -330,9 +533,11 @@ class CreditProgressPage extends StatelessWidget {
     );
   }
 
-  Widget _buildCourseItemTile(BuildContext context, Grade grade) {
+  // ==================== 单门课程行 ====================
+
+  Widget _buildCourseItemRow(BuildContext context, Grade grade) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
           Expanded(
@@ -389,65 +594,170 @@ class CreditProgressPage extends StatelessWidget {
     );
   }
 
-  // ==================== 弹窗：自定义毕业学分 ====================
+  // ==================== 弹窗：设置主修专业与培养方案 ====================
 
-  void _showSetTargetDialog(BuildContext context) {
-    final textController = TextEditingController(
+  void _showSetMajorDialog(BuildContext context) {
+    final majorTextController =
+        TextEditingController(text: _controller.userMajor.value);
+    final creditsTextController = TextEditingController(
       text: _controller.targetGraduationCredits.value.toStringAsFixed(1),
     );
 
-    showCupertinoDialog(
+    const popularMajors = [
+      '计算机科学与技术',
+      '软件工程',
+      '信息与电子工程',
+      '自动化',
+      '电气工程及其自动化',
+      '人工智能',
+      '机械工程',
+      '数学与应用数学',
+      '物理学',
+      '经济学',
+      '临床医学',
+      '建筑学',
+      '竺可桢学院荣誉课程',
+    ];
+
+    showCupertinoModalPopup<void>(
       context: context,
-      builder: (dialogCtx) => CupertinoAlertDialog(
-        title: const Text('设置毕业目标总学分'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 12),
-          child: Column(
-            children: [
-              Text(
-                '浙大本科常规毕业学分要求为 160.0，部分专业（如医学、建筑、交叉双学位等）可按培养方案微调：',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.secondaryLabel, dialogCtx),
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          return CupertinoActionSheet(
+            title: const Text('设置主修专业与培养方案'),
+            message: const Text('从教务网同步或选择你的专业，将自动匹配该专业的毕业学分和各模块分类要求：'),
+            actions: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '主修专业名称',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.label, dialogCtx),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    CupertinoTextField(
+                      controller: majorTextController,
+                      placeholder: '请输入专业名称（例如：计算机科学与技术）',
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      '常见专业快捷选择：',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.secondaryLabel, dialogCtx),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: popularMajors.map((m) {
+                        final isSelected = majorTextController.text == m;
+                        return GestureDetector(
+                          onTap: () {
+                            setModalState(() {
+                              majorTextController.text = m;
+                              final isFiveYear = m.contains('建筑') ||
+                                  m.contains('医学') ||
+                                  m.contains('临床');
+                              creditsTextController.text = (isFiveYear
+                                      ? 210.0
+                                      : 160.0)
+                                  .toStringAsFixed(1);
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: CupertinoDynamicColor.resolve(
+                                isSelected
+                                    ? CustomCupertinoDynamicColors.sakura
+                                    : CupertinoColors.tertiarySystemFill,
+                                dialogCtx,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              m,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                color: CupertinoDynamicColor.resolve(
+                                  isSelected
+                                      ? CupertinoColors.white
+                                      : CupertinoColors.label,
+                                  dialogCtx,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      '毕业目标学分要求',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.label, dialogCtx),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    CupertinoTextField(
+                      controller: creditsTextController,
+                      placeholder: '常规专业为 160.0，五年制医学/建筑为 210.0',
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: CupertinoButton.filled(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            child: const Text('保存培养方案'),
+                            onPressed: () {
+                              final major = majorTextController.text.trim();
+                              if (major.isNotEmpty) {
+                                final credits = double.tryParse(
+                                    creditsTextController.text.trim());
+                                _controller.setUserMajor(major,
+                                    targetCredits: credits);
+                              }
+                              Navigator.of(dialogCtx).pop();
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 10),
-              CupertinoTextField(
-                controller: textController,
-                placeholder: '目标总学分 (例如: 160.0)',
-                autofocus: true,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-              ),
             ],
-          ),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('重置为 160.0'),
-            onPressed: () {
-              _controller.setTargetCredits(160.0);
-              Navigator.of(dialogCtx).pop();
-            },
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.of(dialogCtx).pop(),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () {
-              final val = double.tryParse(textController.text.trim());
-              if (val != null && val > 0) {
-                _controller.setTargetCredits(val);
-              }
-              Navigator.of(dialogCtx).pop();
-            },
-            child: const Text('保存'),
-          ),
-        ],
+            cancelButton: CupertinoActionSheetAction(
+              child: const Text('取消'),
+              onPressed: () => Navigator.of(dialogCtx).pop(),
+            ),
+          );
+        },
       ),
     );
   }
@@ -468,11 +778,18 @@ class CreditProgressPage extends StatelessWidget {
               child: CupertinoButton(
                 padding: EdgeInsets.zero,
                 child: const Text(
-                  '目标设置',
+                  '方案设置',
                   style: TextStyle(fontSize: 16),
                 ),
-                onPressed: () => _showSetTargetDialog(context),
+                onPressed: () => _showSetMajorDialog(context),
               ),
+            ),
+          ),
+          // 专业培养方案状态与引导卡片
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+              child: _buildMajorCard(context),
             ),
           ),
           // 总体进度与统计
