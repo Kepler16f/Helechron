@@ -7,8 +7,10 @@ import 'package:celechron/design/round_rectangle_card.dart';
 import 'package:celechron/services/diagnostic_log_service.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:celechron/model/course.dart';
+import 'package:celechron/model/period.dart';
 
 import 'package:celechron/model/exam.dart';
 import 'package:celechron/model/session.dart';
