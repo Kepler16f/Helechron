@@ -315,7 +315,13 @@ class Zdbk {
     for (final raw in items) {
       final item = asStringMap(raw);
       if (item != null) {
-        final major = asString(item['zymc']) ?? asString(item['zyfxmc']);
+        final major = asString(item['zymc']) ??
+            asString(item['ZYMC']) ??
+            asString(item['zyfxmc']) ??
+            asString(item['ZYFXMC']) ??
+            asString(item['xymc']) ??
+            asString(item['XYMC']) ??
+            asString(item['major']);
         if (major != null && major.trim().isNotEmpty && major != '未知') {
           return major.trim();
         }
@@ -569,6 +575,20 @@ class Zdbk {
           }
           final sessions = _parseSessions(items, context);
           _writeCache('zdbk_Timetable$year$semester', jsonEncode(items));
+
+          final xsxx = asStringMap(payload['xsxx']);
+          if (xsxx != null) {
+            _writeCache('zdbk_student_info', jsonEncode(xsxx));
+            final major = asString(xsxx['ZYMC']) ??
+                asString(xsxx['zymc']) ??
+                asString(xsxx['ZYFXMC']) ??
+                asString(xsxx['zyfxmc']) ??
+                asString(xsxx['XYMC']) ??
+                asString(xsxx['xymc']);
+            if (major != null && major.trim().isNotEmpty && major != '未知') {
+              _writeCache('zdbk_user_major', major.trim());
+            }
+          }
           return Tuple(null, sessions);
         }
         throw ExceptionWithMessage("验证码识别失败");
@@ -844,13 +864,36 @@ class Zdbk {
     return bytes;
   }
 
-  /// 获取用户主修专业名称（从本地缓存或各成绩接口中解析）
+  /// 获取用户主修专业/大类名称（从本地缓存、学籍接口或各教务接口中解析）
   Future<Tuple<Exception?, String?>> getStudentMajor(
       HttpClient httpClient) async {
     final cached = _db?.getCachedWebPage('zdbk_user_major');
     if (cached != null && cached.trim().isNotEmpty) {
       return Tuple(null, cached.trim());
     }
+
+    // 1. 检查学生个人信息缓存
+    final studentInfo = _db?.getCachedWebPage('zdbk_student_info');
+    if (studentInfo != null && studentInfo.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(studentInfo);
+        final map = asStringMap(decoded);
+        if (map != null) {
+          final major = asString(map['ZYMC']) ??
+              asString(map['zymc']) ??
+              asString(map['ZYFXMC']) ??
+              asString(map['zyfxmc']) ??
+              asString(map['XYMC']) ??
+              asString(map['xymc']);
+          if (major != null && major.trim().isNotEmpty && major != '未知') {
+            _writeCache('zdbk_user_major', major.trim());
+            return Tuple(null, major.trim());
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 2. 检查成绩单与主修成绩缓存
     final transcriptCache = _cachedList('zdbk_Transcript', '教务网成绩缓存');
     final major1 = _extractMajor(transcriptCache.data);
     if (major1 != null) {
@@ -863,7 +906,76 @@ class Zdbk {
       _writeCache('zdbk_user_major', major2);
       return Tuple(null, major2);
     }
-    return Tuple(null, null);
+
+    // 3. 尝试主动请求教务网学籍信息维护接口（新正方标准学籍查询入口）
+    try {
+      return await _withAutoRelogin(httpClient, (relogged, retried) async {
+        late HttpClientRequest request;
+        late HttpClientResponse response;
+        final uri = Uri.parse(
+            "https://zdbk.zju.edu.cn/jwglxt/xsxxxggl/xsgrxxwh_cxXsgrxx.html?gnmkdm=N100801&layout=default");
+
+        try {
+          request = await httpClient.getUrl(uri).timeout(
+              const Duration(seconds: 8),
+              onTimeout: () => throw requestTimeout());
+          request.headers
+            ..add("Referer",
+                "https://zdbk.zju.edu.cn/jwglxt/xtgl/index_initMenu.html")
+            ..set('Connection', 'close')
+            ..add('User-Agent',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
+            ..add('Accept',
+                'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
+          request.cookies.add(_jSessionId!);
+          request.cookies.add(_route!);
+          request.followRedirects = false;
+          response = await request.close().timeout(const Duration(seconds: 8),
+              onTimeout: () => throw requestTimeout());
+
+          var responseText =
+              await readResponseBody(response, context: '教务网学籍信息接口');
+          _validateResponse(response, responseText,
+              context: '教务网学籍信息接口',
+              requestUri: uri,
+              relogged: relogged,
+              retried: retried,
+              expectJson: false);
+
+          // 正则提取专业/大类或学院信息
+          final patterns = [
+            RegExp('id=[\"\']col_zy(?:fx)?_id[\"\'][^>]*>\\s*<p[^>]*>([^<]+)</p>',
+                caseSensitive: false),
+            RegExp('name=[\"\']zy(?:mc|fxmc)?[\"\'][^>]*value=[\"\']([^\"\']+)[\"\']',
+                caseSensitive: false),
+            RegExp('id=[\"\']col_jg_id[\"\'][^>]*>\\s*<p[^>]*>([^<]+)</p>',
+                caseSensitive: false),
+            RegExp('id=[\"\']col_bh_id[\"\'][^>]*>\\s*<p[^>]*>([^<]+)</p>',
+                caseSensitive: false),
+          ];
+
+          for (final p in patterns) {
+            final m = p.firstMatch(responseText);
+            final text = m?.group(1)?.trim();
+            if (text != null &&
+                text.isNotEmpty &&
+                text != '未知' &&
+                text != '无' &&
+                !text.contains('&nbsp;')) {
+              _writeCache('zdbk_user_major', text);
+              return Tuple(null, text);
+            }
+          }
+
+          return Tuple(null, null);
+        } on Object catch (e) {
+          if (e is AuthenticationExpiredException) rethrow;
+          return Tuple(null, null);
+        }
+      });
+    } catch (_) {
+      return Tuple(null, null);
+    }
   }
 
   Future<String> solveCaptcha(HttpClient httpClient) async {

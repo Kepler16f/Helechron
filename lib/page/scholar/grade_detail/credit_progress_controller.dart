@@ -53,6 +53,12 @@ class CreditProgressController extends GetxController {
   /// 是否已配置或拉取到主修专业
   bool get hasMajor => userMajor.value.isNotEmpty;
 
+  /// 正在从教务网同步专业中
+  final isSyncingMajor = false.obs;
+
+  /// 基于本学期课程智能推测的候选大类/专业名称
+  final inferredMajor = ''.obs;
+
   /// 各分类目标学分要求（根据专业培养方案映射）
   final categoryTargetCredits = <String, double>{}.obs;
 
@@ -109,7 +115,7 @@ class CreditProgressController extends GetxController {
         return;
       }
 
-      // 3. 尝试从教务网成绩/主修成绩缓存中动态解析 zymc
+      // 3. 尝试从学生信息、课表及各成绩缓存中动态解析 zymc
       final majorFromGrade = _extractMajorFromZdbkCaches();
       if (majorFromGrade != null && majorFromGrade.isNotEmpty) {
         userMajor.value = majorFromGrade;
@@ -119,7 +125,14 @@ class CreditProgressController extends GetxController {
         return;
       }
 
-      // 4. 无法获取专业，标记为 none，在界面引导用户填写
+      // 4. 根据当前已选修的课程推测候选大类/专业
+      inferredMajor.value = inferMajorFromCourses() ?? '';
+
+      // 5. 若已登录，尝试后台异步主动向教务网查询个人学籍专业
+      if (scholar.value.isLogan) {
+        syncMajorFromZdbk();
+      }
+
       majorSource.value = 'none';
       _applyDefaultScheme();
     } catch (e) {
@@ -129,8 +142,91 @@ class CreditProgressController extends GetxController {
     }
   }
 
+  /// 主动向教务网拉取并同步学生学籍专业与培养方案
+  Future<void> syncMajorFromZdbk() async {
+    if (isSyncingMajor.value) return;
+    isSyncingMajor.value = true;
+    try {
+      final remoteMajor = await scholar.value.fetchStudentMajor();
+      if (remoteMajor != null && remoteMajor.trim().isNotEmpty) {
+        userMajor.value = remoteMajor.trim();
+        majorSource.value = 'zdbk';
+        _db.setCachedWebPage(_kZdbkMajorCacheKey, remoteMajor.trim());
+        _applySchemeForMajor(remoteMajor.trim());
+        inferredMajor.value = '';
+        update();
+      }
+    } catch (e) {
+      debugPrint('主动同步教务网专业失败: $e');
+    } finally {
+      isSyncingMajor.value = false;
+    }
+  }
+
+  /// 根据修读课程智能推断大类或专业
+  String? inferMajorFromCourses() {
+    final allCourseNames = <String>{};
+    for (final s in scholar.value.semesters) {
+      for (final c in s.courses.values) {
+        if (c.name.isNotEmpty) allCourseNames.add(c.name);
+      }
+      for (final p in s.periods) {
+        if (p.summary.isNotEmpty) allCourseNames.add(p.summary);
+      }
+    }
+
+    final hasMathAlpha = allCourseNames
+        .any((c) => c.contains('微积分（甲）') || c.contains('微积分(甲)'));
+    final hasLinAlgAlpha = allCourseNames
+        .any((c) => c.contains('线性代数（甲）') || c.contains('线性代数(甲)'));
+    final hasEngDrawing = allCourseNames.any((c) => c.contains('工程图学'));
+    final hasProgramming = allCourseNames.any(
+        (c) => c.contains('程序设计') || c.contains('C语言') || c.contains('Python'));
+    final hasMed = allCourseNames.any((c) =>
+        c.contains('解剖') ||
+        c.contains('生理') ||
+        c.contains('基础医学') ||
+        c.contains('临床'));
+    final hasArch = allCourseNames.any((c) => c.contains('建筑设计') || c.contains('建筑学'));
+
+    if (hasArch) return '建筑学';
+    if (hasMed) return '临床医学';
+    if (hasMathAlpha && (hasEngDrawing || hasProgramming || hasLinAlgAlpha)) {
+      return '工科试验班（信息）';
+    }
+    if (hasMathAlpha || hasLinAlgAlpha) {
+      return '工科试验班';
+    }
+    return null;
+  }
+
   String? _extractMajorFromZdbkCaches() {
-    for (final cacheKey in ['zdbk_MajorGrade', 'zdbk_Transcript']) {
+    // 检查学生个人信息缓存（由课表或学籍接口写入）
+    final studentInfo = _db.getCachedWebPage('zdbk_student_info');
+    if (studentInfo != null && studentInfo.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(studentInfo);
+        final map = asStringMap(decoded);
+        if (map != null) {
+          final major = asString(map['ZYMC']) ??
+              asString(map['zymc']) ??
+              asString(map['ZYFXMC']) ??
+              asString(map['zyfxmc']) ??
+              asString(map['XYMC']) ??
+              asString(map['xymc']);
+          if (major != null && major.trim().isNotEmpty && major != '未知') {
+            return major.trim();
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 检查各成绩接口缓存
+    for (final cacheKey in [
+      'zdbk_MajorGrade',
+      'zdbk_Transcript',
+      'zdbk_exams',
+    ]) {
       final cachedJson = _db.getCachedWebPage(cacheKey);
       if (cachedJson != null && cachedJson.isNotEmpty) {
         try {
@@ -141,7 +237,13 @@ class CreditProgressController extends GetxController {
             for (final item in items) {
               final map = asStringMap(item);
               if (map != null) {
-                final zymc = asString(map['zymc']) ?? asString(map['zyfxmc']);
+                final zymc = asString(map['zymc']) ??
+                    asString(map['ZYMC']) ??
+                    asString(map['zyfxmc']) ??
+                    asString(map['ZYFXMC']) ??
+                    asString(map['xymc']) ??
+                    asString(map['XYMC']) ??
+                    asString(map['major']);
                 if (zymc != null && zymc.trim().isNotEmpty && zymc != '未知') {
                   return zymc.trim();
                 }

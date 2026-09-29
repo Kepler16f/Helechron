@@ -442,174 +442,7 @@ class CourseDetailPage extends StatelessWidget {
   }
 
   Widget createZhiyunCard(BuildContext context, Course c) {
-    return FutureBuilder<ZhiyunReplayInfo?>(
-      future: ZhiyunService.getLessonReplay(course: c, period: period),
-      builder: (context, snapshot) {
-        final info = snapshot.data;
-        // 如果未上课、未生成录播回放、或为体育/身体素质等非录播课程，自动隐藏该入口
-        if (info == null || !info.hasReplay) {
-          return const SizedBox.shrink();
-        }
-
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-          child: Column(
-            children: [
-              SubSubtitleRow(subtitle: '智云课堂'),
-              RoundRectangleCard(
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: CupertinoDynamicColor.resolve(
-                                  CustomCupertinoDynamicColors.sakura, context),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              CupertinoIcons.play_rectangle_fill,
-                              size: 18,
-                              color: CupertinoColors.white,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      '本节录播回放',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: CupertinoDynamicColor.resolve(
-                                            CupertinoColors.label, context),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: CupertinoDynamicColor.resolve(
-                                            CupertinoColors.tertiarySystemFill,
-                                            context),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        info.lessonTitle,
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                          color: CupertinoDynamicColor.resolve(
-                                              CupertinoColors.secondaryLabel,
-                                              context),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '本节录播已就绪，点击可直接进入回放房间观看',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: CupertinoDynamicColor.resolve(
-                                        CupertinoColors.secondaryLabel, context),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: CupertinoButton(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              color: CupertinoDynamicColor.resolve(
-                                  CustomCupertinoDynamicColors.sakura, context),
-                              borderRadius: BorderRadius.circular(8),
-                              minSize: 36,
-                              child: const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(CupertinoIcons.play_arrow_solid, size: 16),
-                                  SizedBox(width: 6),
-                                  Text(
-                                    '直达本节录播',
-                                    style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600),
-                                  ),
-                                ],
-                              ),
-                              onPressed: () =>
-                                  ZhiyunService.openUrl(info.livingroomUrl),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          CupertinoButton(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.secondarySystemFill, context),
-                            borderRadius: BorderRadius.circular(8),
-                            minSize: 36,
-                            child: const Row(
-                              children: [
-                                Icon(CupertinoIcons.link, size: 16),
-                                SizedBox(width: 4),
-                                Text(
-                                  '复制链接',
-                                  style: TextStyle(fontSize: 13),
-                                ),
-                              ],
-                            ),
-                            onPressed: () async {
-                              await Clipboard.setData(
-                                  ClipboardData(text: info.livingroomUrl));
-                              if (context.mounted) {
-                                showCupertinoDialog(
-                                  context: context,
-                                  builder: (dialogCtx) => CupertinoAlertDialog(
-                                    title: const Text('已复制回放链接'),
-                                    content: Text(
-                                        '课程「${c.name}」(${info.lessonTitle}) 的智云课堂回放直达链接已复制到剪贴板。'),
-                                    actions: [
-                                      CupertinoDialogAction(
-                                        child: const Text('好'),
-                                        onPressed: () =>
-                                            Navigator.of(dialogCtx).pop(),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+    return ZhiyunCard(course: c, period: period);
   }
 
   @override
@@ -680,6 +513,478 @@ class CourseDetailPage extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class ZhiyunCard extends StatefulWidget {
+  final Course course;
+  final Period? period;
+
+  const ZhiyunCard({super.key, required this.course, this.period});
+
+  @override
+  State<ZhiyunCard> createState() => _ZhiyunCardState();
+}
+
+class _ZhiyunCardState extends State<ZhiyunCard> {
+  late Future<ZhiyunReplayInfo?> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant ZhiyunCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.course.name != widget.course.name ||
+        oldWidget.period?.startTime != widget.period?.startTime) {
+      _load();
+    }
+  }
+
+  void _load() {
+    _future = ZhiyunService.getLessonReplay(
+      course: widget.course,
+      period: widget.period,
+    );
+  }
+
+  void _showBindDialog(BuildContext context, String currentId) {
+    final textController = TextEditingController(text: currentId);
+    showCupertinoDialog(
+      context: context,
+      builder: (dialogCtx) => CupertinoAlertDialog(
+        title: const Text('绑定智云课堂ID'),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 8.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '在浏览器打开智云课堂对应课程后，复制网页链接或直接输入课程ID（例如 85940）：',
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              CupertinoTextField(
+                controller: textController,
+                placeholder: '85940 或 粘贴课程网页链接',
+                autofocus: true,
+                clearButtonMode: OverlayVisibilityMode.editing,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          if (currentId.isNotEmpty)
+            CupertinoDialogAction(
+              isDestructiveAction: true,
+              child: const Text('解绑'),
+              onPressed: () async {
+                Navigator.of(dialogCtx).pop();
+                await ZhiyunService.deleteCourseId(
+                  widget.course.name,
+                  courseCode: widget.course.id,
+                );
+                setState(() {
+                  _load();
+                });
+              },
+            ),
+          CupertinoDialogAction(
+            child: const Text('取消'),
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            child: const Text('确认'),
+            onPressed: () async {
+              final raw = textController.text.trim();
+              final cid = ZhiyunService.extractCourseId(raw);
+              if (cid == null || cid.isEmpty) {
+                return;
+              }
+              Navigator.of(dialogCtx).pop();
+              await ZhiyunService.saveCourseId(
+                widget.course.name,
+                cid,
+                courseCode: widget.course.id,
+              );
+              setState(() {
+                _load();
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCard({
+    required BuildContext context,
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String tag,
+    VoidCallback? onTagTap,
+    required String subtitle,
+    required List<Widget> buttons,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+      child: Column(
+        children: [
+          SubSubtitleRow(subtitle: '智云课堂'),
+          RoundRectangleCard(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: CupertinoDynamicColor.resolve(
+                              iconColor, context),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          icon,
+                          size: 18,
+                          color: CupertinoColors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  title,
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: CupertinoDynamicColor.resolve(
+                                        CupertinoColors.label, context),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                GestureDetector(
+                                  onTap: onTagTap,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: CupertinoDynamicColor.resolve(
+                                          CupertinoColors.tertiarySystemFill,
+                                          context),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      tag,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: CupertinoDynamicColor.resolve(
+                                            CupertinoColors.secondaryLabel,
+                                            context),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              subtitle,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: CupertinoDynamicColor.resolve(
+                                    CupertinoColors.secondaryLabel, context),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: buttons,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCopyButton(BuildContext context, String url, String courseName,
+      String detailName) {
+    return CupertinoButton(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      color: CupertinoDynamicColor.resolve(
+          CupertinoColors.secondarySystemFill, context),
+      borderRadius: BorderRadius.circular(8),
+      minSize: 36,
+      child: const Row(
+        children: [
+          Icon(CupertinoIcons.link, size: 16),
+          SizedBox(width: 4),
+          Text('复制链接', style: TextStyle(fontSize: 13)),
+        ],
+      ),
+      onPressed: () async {
+        await Clipboard.setData(ClipboardData(text: url));
+        if (context.mounted) {
+          showCupertinoDialog(
+            context: context,
+            builder: (dialogCtx) => CupertinoAlertDialog(
+              title: const Text('已复制链接'),
+              content: Text('课程「$courseName」($detailName) 的智云课堂直达链接已复制到剪贴板。'),
+              actions: [
+                CupertinoDialogAction(
+                  child: const Text('好'),
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                ),
+              ],
+            ),
+          );
+        }
+      },
+    );
+  }
+
+  Widget _buildMyCoursesButton(BuildContext context) {
+    return CupertinoButton(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      color: CupertinoDynamicColor.resolve(
+          CupertinoColors.secondarySystemFill, context),
+      borderRadius: BorderRadius.circular(8),
+      minSize: 36,
+      child: const Row(
+        children: [
+          Icon(CupertinoIcons.person_crop_square, size: 16),
+          SizedBox(width: 4),
+          Text('我的课程', style: TextStyle(fontSize: 13)),
+        ],
+      ),
+      onPressed: () => ZhiyunService.openUrl(ZhiyunService.buildMyCoursesUrl()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.course;
+    return FutureBuilder<ZhiyunReplayInfo?>(
+      future: _future,
+      builder: (context, snapshot) {
+        final info = snapshot.data;
+        // 如果是体育、身体素质课等非录播课程，坚决不展示（自动隐藏）
+        if (info == null) {
+          return const SizedBox.shrink();
+        }
+
+        // 状态一：本节课录播已就绪 (hasReplay && isLessonSpecific)
+        if (info.isLessonSpecific && info.hasReplay) {
+          return _buildCard(
+            context: context,
+            icon: CupertinoIcons.play_rectangle_fill,
+            iconColor: CustomCupertinoDynamicColors.sakura,
+            title: '本节录播回放',
+            tag: info.lessonTitle,
+            subtitle: '本节录播已就绪，点击可直接进入回放房间观看',
+            buttons: [
+              Expanded(
+                child: CupertinoButton(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  color: CupertinoDynamicColor.resolve(
+                      CustomCupertinoDynamicColors.sakura, context),
+                  borderRadius: BorderRadius.circular(8),
+                  minSize: 36,
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(CupertinoIcons.play_arrow_solid, size: 16),
+                      SizedBox(width: 6),
+                      Text(
+                        '直达本节录播',
+                        style: TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                  onPressed: () => ZhiyunService.openUrl(info.livingroomUrl),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _buildCopyButton(
+                  context, info.livingroomUrl, c.name, info.lessonTitle),
+            ],
+          );
+        }
+
+        // 状态二：本节课未生成录播（未上课、转码中或无需录播）
+        if (info.isLessonSpecific && !info.hasReplay) {
+          return _buildCard(
+            context: context,
+            icon: CupertinoIcons.play_rectangle,
+            iconColor: CupertinoColors.secondaryLabel,
+            title: '本节录播回放',
+            tag: '未生成回放',
+            subtitle: '该节课录播尚未转码生成，或未到录播时间',
+            buttons: [
+              Expanded(
+                child: CupertinoButton(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.secondarySystemFill, context),
+                  borderRadius: BorderRadius.circular(8),
+                  minSize: 36,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(CupertinoIcons.tv,
+                          size: 16,
+                          color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.label, context)),
+                      const SizedBox(width: 6),
+                      Text(
+                        '进入课程房间',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.label, context),
+                        ),
+                      ),
+                    ],
+                  ),
+                  onPressed: () => ZhiyunService.openUrl(info.livingroomUrl),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _buildMyCoursesButton(context),
+            ],
+          );
+        }
+
+        // 状态三：整门课程智云房间直达（已绑定 ID）
+        if (info.courseId != null) {
+          return _buildCard(
+            context: context,
+            icon: CupertinoIcons.play_rectangle_fill,
+            iconColor: CustomCupertinoDynamicColors.sakura,
+            title: '智云课堂房间',
+            tag: 'ID: ${info.courseId}',
+            onTagTap: () => _showBindDialog(context, info.courseId!),
+            subtitle: '点击进入该课程专属房间，查看所有课节与回放',
+            buttons: [
+              Expanded(
+                child: CupertinoButton(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  color: CupertinoDynamicColor.resolve(
+                      CustomCupertinoDynamicColors.sakura, context),
+                  borderRadius: BorderRadius.circular(8),
+                  minSize: 36,
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(CupertinoIcons.arrow_up_right_square, size: 16),
+                      SizedBox(width: 6),
+                      Text(
+                        '进入课程房间',
+                        style: TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                  onPressed: () => ZhiyunService.openUrl(info.livingroomUrl),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _buildCopyButton(
+                  context, info.livingroomUrl, c.name, '课程主页'),
+              const SizedBox(width: 8),
+              CupertinoButton(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.secondarySystemFill, context),
+                borderRadius: BorderRadius.circular(8),
+                minSize: 36,
+                child: const Icon(CupertinoIcons.pencil, size: 16),
+                onPressed: () => _showBindDialog(context, info.courseId!),
+              ),
+            ],
+          );
+        }
+
+        // 状态四：未绑定课程 ID（提供检索、我的课程与一键绑定）
+        return _buildCard(
+          context: context,
+          icon: CupertinoIcons.compass,
+          iconColor: CustomCupertinoDynamicColors.sakura,
+          title: '智云课堂',
+          tag: '未绑定',
+          onTagTap: () => _showBindDialog(context, ''),
+          subtitle: '点击前往智云课堂检索或进入我的课程，亦可一键绑定课程ID',
+          buttons: [
+            Expanded(
+              child: CupertinoButton(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                color: CupertinoDynamicColor.resolve(
+                    CustomCupertinoDynamicColors.sakura, context),
+                borderRadius: BorderRadius.circular(8),
+                minSize: 36,
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(CupertinoIcons.search, size: 16),
+                    SizedBox(width: 6),
+                    Text(
+                      '智云课堂检索',
+                      style: TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+                onPressed: () => ZhiyunService.openUrl(
+                    ZhiyunService.buildSearchContentUrl(c.name)),
+              ),
+            ),
+            const SizedBox(width: 8),
+            _buildMyCoursesButton(context),
+            const SizedBox(width: 8),
+            CupertinoButton(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              color: CupertinoDynamicColor.resolve(
+                  CupertinoColors.secondarySystemFill, context),
+              borderRadius: BorderRadius.circular(8),
+              minSize: 36,
+              child: const Row(
+                children: [
+                  Icon(CupertinoIcons.link, size: 16),
+                  SizedBox(width: 4),
+                  Text('绑定ID', style: TextStyle(fontSize: 13)),
+                ],
+              ),
+              onPressed: () => _showBindDialog(context, ''),
+            ),
+          ],
+        );
+      },
     );
   }
 }

@@ -807,4 +807,23 @@ class Scholar {
     }
     isLogan = true;
   }
+
+  /// 尝试从教务网主动拉取用户主修专业/大类名称
+  Future<String?> fetchStudentMajor() async {
+    if (_spider is UgrsSpider) {
+      final spider = _spider as UgrsSpider;
+      try {
+        final res = await spider.zdbk.getStudentMajor(spider.httpClient);
+        if (res.item2 != null && res.item2!.trim().isNotEmpty) {
+          return res.item2!.trim();
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('fetchStudentMajor 失败: $e');
+        }
+      }
+    }
+    return null;
+  }
 }
+

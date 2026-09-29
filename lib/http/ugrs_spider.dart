@@ -90,6 +90,9 @@ class UgrsSpider implements Spider {
     return client;
   }
 
+  Zdbk get zdbk => _zdbk;
+  HttpClient get httpClient => _httpClient;
+
   @override
   set db(DatabaseHelper? db) {
     _courses.db = db;

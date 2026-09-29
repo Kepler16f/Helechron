@@ -111,6 +111,152 @@ class CreditProgressPage extends StatelessWidget {
         );
       }
 
+      // 正在从教务网同步
+      if (_controller.isSyncingMajor.value) {
+        return RoundRectangleCard(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              const CupertinoActivityIndicator(),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '正在从教务网同步主修专业与培养方案...',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: CupertinoDynamicColor.resolve(
+                        CupertinoColors.secondaryLabel, context),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+
+      // 未配置专业，但已根据修读课程推测出候选大类/专业
+      if (_controller.inferredMajor.value.isNotEmpty) {
+        final inferred = _controller.inferredMajor.value;
+        return RoundRectangleCard(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: CupertinoDynamicColor.resolve(
+                          CustomCupertinoDynamicColors.sakura, context),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.sparkles,
+                      size: 18,
+                      color: CupertinoColors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              '智能识别大类方案：',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: CupertinoDynamicColor.resolve(
+                                    CupertinoColors.label, context),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: CupertinoDynamicColor.resolve(
+                                        CustomCupertinoDynamicColors.sakura,
+                                        context)
+                                    .withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                inferred,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: CupertinoDynamicColor.resolve(
+                                      CustomCupertinoDynamicColors.sakura,
+                                      context),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '根据您本学期修读的通识与大类基础课自动匹配',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.secondaryLabel, context),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: CupertinoButton(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      color: CupertinoDynamicColor.resolve(
+                          CustomCupertinoDynamicColors.sakura, context),
+                      borderRadius: BorderRadius.circular(8),
+                      onPressed: () {
+                        _controller.setUserMajor(inferred);
+                      },
+                      child: Text(
+                        '确认采纳【$inferred】方案',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: CupertinoColors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  CupertinoButton(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    color: CupertinoDynamicColor.resolve(
+                        CupertinoColors.tertiarySystemFill, context),
+                    borderRadius: BorderRadius.circular(8),
+                    onPressed: () => _showSetMajorDialog(context),
+                    child: Text(
+                      '更换',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.label, context),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      }
+
       // 未检测到专业时的引导填写卡片
       return RoundRectangleCard(
         onTap: () => _showSetMajorDialog(context),
@@ -147,7 +293,7 @@ class CreditProgressPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '点击填写主修专业与目标学分，获取精确分类进度 >',
+                    '点击从教务网同步或选择您的主修专业 >',
                     style: TextStyle(
                       fontSize: 12,
                       color: CupertinoDynamicColor.resolve(
@@ -604,16 +750,21 @@ class CreditProgressPage extends StatelessWidget {
     );
 
     const popularMajors = [
+      '工科试验班（信息）',
       '计算机科学与技术',
       '软件工程',
+      '人工智能',
+      '工科试验班',
       '信息与电子工程',
       '自动化',
       '电气工程及其自动化',
-      '人工智能',
       '机械工程',
+      '理科试验班',
       '数学与应用数学',
       '物理学',
       '经济学',
+      '社会科学试验班',
+      '人文科学试验班',
       '临床医学',
       '建筑学',
       '竺可桢学院荣誉课程',
@@ -633,25 +784,77 @@ class CreditProgressPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '主修专业名称',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: CupertinoDynamicColor.resolve(
-                            CupertinoColors.label, dialogCtx),
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '主修专业/大类名称',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.label, dialogCtx),
+                          ),
+                        ),
+                        CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          minSize: 0,
+                          onPressed: _controller.isSyncingMajor.value
+                              ? null
+                              : () async {
+                                  await _controller.syncMajorFromZdbk();
+                                  setModalState(() {
+                                    if (_controller.userMajor.value.isNotEmpty) {
+                                      majorTextController.text =
+                                          _controller.userMajor.value;
+                                      creditsTextController.text = _controller
+                                          .targetGraduationCredits.value
+                                          .toStringAsFixed(1);
+                                    }
+                                  });
+                                },
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_controller.isSyncingMajor.value) ...[
+                                const CupertinoActivityIndicator(radius: 6),
+                                const SizedBox(width: 4),
+                              ] else ...[
+                                Icon(
+                                  CupertinoIcons.arrow_2_circlepath,
+                                  size: 13,
+                                  color: CupertinoDynamicColor.resolve(
+                                      CustomCupertinoDynamicColors.sakura,
+                                      dialogCtx),
+                                ),
+                                const SizedBox(width: 2),
+                              ],
+                              Text(
+                                _controller.isSyncingMajor.value
+                                    ? '正在同步...'
+                                    : '从教务网同步',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: CupertinoDynamicColor.resolve(
+                                      CustomCupertinoDynamicColors.sakura,
+                                      dialogCtx),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 6),
                     CupertinoTextField(
                       controller: majorTextController,
-                      placeholder: '请输入专业名称（例如：计算机科学与技术）',
+                      placeholder: '请输入专业名称（例如：工科试验班（信息））',
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 8),
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      '常见专业快捷选择：',
+                      '常见大类与专业快捷选择：',
                       style: TextStyle(
                         fontSize: 12,
                         color: CupertinoDynamicColor.resolve(
