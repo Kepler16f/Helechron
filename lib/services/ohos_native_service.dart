@@ -419,4 +419,15 @@ class OhosNativeService {
       return null;
     }
   }
+
+  /// 请求原生端退出应用（关闭 Ability 并退回桌面）。
+  Future<void> exitApp() async {
+    try {
+      await _channel.invokeMethod('exitApp');
+    } on PlatformException catch (e) {
+      debugPrint('exitApp failed: $e');
+    } on MissingPluginException {
+      // ignore
+    }
+  }
 }

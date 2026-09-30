@@ -81,6 +81,7 @@ class CourseListPage extends StatelessWidget {
                     child: CourseBriefCard(
                       course: _courseListController.courses[index],
                       allowDirect: true,
+                      showZhiyunInDetail: false,
                     ),
                   ),
                   childCount: _courseListController.courses.length,

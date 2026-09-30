@@ -14,6 +14,7 @@ import 'package:celechron/model/calendar_to_ical.dart';
 import 'package:celechron/services/backup_service.dart';
 import 'package:celechron/services/ohos_native_service.dart';
 import 'package:celechron/services/scholar_widget_sync.dart';
+import 'package:celechron/services/zhiyun_service.dart';
 import 'package:celechron/utils/platform_features.dart';
 
 class OptionController extends GetxController {
@@ -197,6 +198,7 @@ class OptionController extends GetxController {
 
   Future<void> logout() async {
     await scholar.value.logout();
+    await ZhiyunService.clearCache();
     scholar.refresh();
     pushOnGradeChange = false;
     ECardWidgetMessenger.logout();

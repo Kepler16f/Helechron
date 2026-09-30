@@ -132,9 +132,60 @@ class ZhiyunService {
     return cleaned.trim();
   }
 
+  /// 判断课程是否为荣誉课程（带 (H)、（H）、[H]、荣誉等标记）
+  static bool isHonorsCourse(String name) {
+    final lower = name.toLowerCase();
+    return lower.contains('(h)') ||
+        lower.contains('（h）') ||
+        lower.contains('[h]') ||
+        lower.contains('【h】') ||
+        lower.contains('(荣誉)') ||
+        lower.contains('（荣誉）') ||
+        lower.contains('荣誉课程') ||
+        RegExp(r'[\(（\[【]\s*h\s*[\)）\]】]', caseSensitive: false).hasMatch(name) ||
+        RegExp(r'\bh\b', caseSensitive: false).hasMatch(name) ||
+        RegExp(r'[\u4e00-\u9fa5]h$', caseSensitive: false).hasMatch(name.trim());
+  }
+
+  /// 移除课程名称中的荣誉课程 (H) 标记（用于在两者均为荣誉课程时进一步比对核心名称）
+  static String stripHonorsTag(String name) {
+    return name
+        .replaceAll(RegExp(r'[\(（\[【]\s*h\s*[\)）\]】]', caseSensitive: false), '')
+        .replaceAll(RegExp(r'[\(（\[【]\s*荣誉\s*[\)）\]】]'), '')
+        .replaceAll('荣誉课程', '')
+        .replaceAll('荣誉', '')
+        .replaceAll(RegExp(r'\bh\b', caseSensitive: false), '')
+        .trim();
+  }
+
+  /// 提取课程等级（甲、乙、丙、丁），若无则返回 null
+  static String? extractCourseTier(String name) {
+    final m = RegExp(r'[\(（]([甲乙丙丁])[\)）]').firstMatch(name);
+    if (m != null) return m.group(1);
+    final m2 = RegExp(r'([甲乙丙丁])(?=[ⅠⅡⅢⅣ1-4一二三四\s\(\)（）]|$)').firstMatch(name);
+    return m2?.group(1);
+  }
+
+  /// 提取课程序号（1, 2, 3, 4 或 Ⅰ, Ⅱ, Ⅲ, Ⅳ），若无则返回 null
+  static String? extractCourseSequence(String name) {
+    if (name.contains(RegExp(r'[Ⅰⅰ]'))) return '1';
+    if (name.contains(RegExp(r'[Ⅱⅱ]'))) return '2';
+    if (name.contains(RegExp(r'[Ⅲⅲ]'))) return '3';
+    if (name.contains(RegExp(r'[Ⅳⅳ]'))) return '4';
+    final m = RegExp(r'[\(（\s]([1-4一二三四])[\)）\s]?$').firstMatch(name);
+    if (m != null) {
+      final s = m.group(1)!;
+      if (s == '1' || s == '一') return '1';
+      if (s == '2' || s == '二') return '2';
+      if (s == '3' || s == '三') return '3';
+      if (s == '4' || s == '四') return '4';
+    }
+    return null;
+  }
+
   /// 对课程名进行多维度归一化处理（用于智能模糊匹配教务网课程与智云“我的课程”）
   static String normalizeCourseName(String name) {
-    var s = name.trim().toLowerCase();
+    var s = stripHonorsTag(name).trim().toLowerCase();
     // 替换中文全角括号为半角
     s = s.replaceAll('（', '(').replaceAll('）', ')');
     // 去除末尾诸如 (01), (02), (1) 的教学班编号
@@ -164,18 +215,37 @@ class ZhiyunService {
 
   /// 智能判断教务网课程名称与智云课堂课程名称是否匹配
   static bool matchesCourseName(String scheduleName, String zhiyunName) {
+    // 1. 荣誉课程 (H) 严格互斥：一带 (H) 另一不带 (H) 坚决不匹配，绝不混淆
+    if (isHonorsCourse(scheduleName) != isHonorsCourse(zhiyunName)) {
+      return false;
+    }
+
+    // 2. 课程等级（甲/乙/丙/丁）严格互斥：等级不同坚决不匹配
+    final tier1 = extractCourseTier(scheduleName);
+    final tier2 = extractCourseTier(zhiyunName);
+    if (tier1 != null && tier2 != null && tier1 != tier2) {
+      return false;
+    }
+
+    // 3. 课程序号（Ⅰ/Ⅱ/Ⅲ/Ⅳ 或 1/2/3/4）严格互斥：序号不同坚决不匹配
+    final seq1 = extractCourseSequence(scheduleName);
+    final seq2 = extractCourseSequence(zhiyunName);
+    if (seq1 != null && seq2 != null && seq1 != seq2) {
+      return false;
+    }
+
     final s1 = normalizeCourseName(scheduleName);
     final s2 = normalizeCourseName(zhiyunName);
 
-    // 1. 归一化完全一致
+    // 4. 归一化完全一致
     if (s1 == s2) return true;
 
-    // 2. Python 课程识别（如 面向对象程序设计(Python)、程序设计基础(Python)、Python程序设计）
+    // 5. Python 课程识别（如 面向对象程序设计(Python)、程序设计基础(Python)、Python程序设计）
     if (s1.contains('python') && s2.contains('python')) {
       return true;
     }
 
-    // 3. 大学英语 / 英语课程（分级匹配 1/2/3/4 或通用大学英语/学术英语等）
+    // 6. 大学英语 / 英语课程（分级匹配 1/2/3/4 或通用大学英语/学术英语等）
     if ((s1.contains('英语') || s1.contains('english')) &&
         (s2.contains('英语') || s2.contains('english'))) {
       for (final level in ['1', '2', '3', '4']) {
@@ -186,11 +256,12 @@ class ZhiyunService {
       if (!s1.contains(RegExp(r'[1-4]')) && !s2.contains(RegExp(r'[1-4]'))) {
         return true;
       }
+      return false;
     }
 
-    // 4. 线性代数与微积分等基础课包含关系
-    if (s1.length >= 3 && s2.contains(s1)) return true;
-    if (s2.length >= 3 && s1.contains(s2)) return true;
+    // 7. 线性代数与微积分等基础课包含关系（要求长度足够，且必须在等级和序号不冲突的前提下）
+    if (s1.length >= 4 && s2.contains(s1)) return true;
+    if (s2.length >= 4 && s1.contains(s2)) return true;
 
     return false;
   }
@@ -288,8 +359,10 @@ class ZhiyunService {
     final box = _getHiveBox();
     if (box == null) return false;
     final cleaned = cleanCourseName(courseName);
+    final normalized = normalizeCourseName(courseName);
     return box.get('zhiyun_unbind_$cleaned') == true ||
-        box.get('zhiyun_unbind_$courseName') == true;
+        box.get('zhiyun_unbind_$courseName') == true ||
+        box.get('zhiyun_unbind_$normalized') == true;
   }
 
   /// 查询指定课程的智云 course_id
@@ -301,18 +374,24 @@ class ZhiyunService {
     String? teacher,
   }) {
     final cleaned = cleanCourseName(courseName);
+    final normalized = normalizeCourseName(courseName);
 
     // 0. 特殊历史脏数据清洗：如果是思想文化素养/素质类课程，清除错误绑定的 86975
     if (cleaned.contains('思想文化素养') || cleaned.contains('思想素质')) {
       final box = _getHiveBox();
       final savedCid = box?.get('zhiyun_cid_$cleaned')?.toString() ??
-          box?.get('zhiyun_cid_$courseName')?.toString();
+          box?.get('zhiyun_cid_$courseName')?.toString() ??
+          box?.get('zhiyun_cid_$normalized')?.toString();
       if (savedCid == '86975') {
         box?.delete('zhiyun_cid_$cleaned');
         box?.delete('zhiyun_cid_$courseName');
+        box?.delete('zhiyun_cid_$normalized');
         box?.put('zhiyun_unbind_$cleaned', true);
+        box?.put('zhiyun_unbind_$courseName', true);
+        box?.put('zhiyun_unbind_$normalized', true);
         _userCourseIds.remove(cleaned);
         _userCourseIds.remove(courseName);
+        _userCourseIds.remove(normalized);
         return null;
       }
     }
@@ -329,20 +408,55 @@ class ZhiyunService {
     if (_userCourseIds.containsKey(courseName)) {
       return _userCourseIds[courseName];
     }
+    if (_userCourseIds.containsKey(normalized)) {
+      return _userCourseIds[normalized];
+    }
     if (courseCode != null && _userCourseIds.containsKey(courseCode)) {
       return _userCourseIds[courseCode];
     }
 
     // 3. 检查持久化存储 (Hive 用户显式保存的 ID 或上次同步的 ID)
     final box = _getHiveBox();
+    final myCourses = getMySyncedCourses();
     if (box != null) {
       final savedCid = box.get('zhiyun_cid_$cleaned') ??
           box.get('zhiyun_cid_$courseName') ??
+          box.get('zhiyun_cid_$normalized') ??
           (courseCode != null ? box.get('zhiyun_cid_$courseCode') : null);
       if (savedCid != null && savedCid.toString().isNotEmpty) {
         final cidStr = savedCid.toString();
-        _userCourseIds[cleaned] = cidStr;
-        return cidStr;
+
+        // 脏数据与错配校验：若在已同步课程中能找到此 CID，但课程名称/荣誉类型不匹配，立即清洗
+        if (myCourses.isNotEmpty) {
+          Map<String, dynamic>? matchedInMy;
+          for (final c in myCourses) {
+            if (c['course_id']?.toString() == cidStr) {
+              matchedInMy = c;
+              break;
+            }
+          }
+          if (matchedInMy != null) {
+            final tTitle = matchedInMy['course_title']?.toString() ?? '';
+            if (tTitle.isNotEmpty && !matchesCourseName(courseName, tTitle)) {
+              box.delete('zhiyun_cid_$cleaned');
+              box.delete('zhiyun_cid_$courseName');
+              box.delete('zhiyun_cid_$normalized');
+              if (courseCode != null) box.delete('zhiyun_cid_$courseCode');
+              _userCourseIds.remove(cleaned);
+              _userCourseIds.remove(courseName);
+              _userCourseIds.remove(normalized);
+            } else {
+              _userCourseIds[cleaned] = cidStr;
+              return cidStr;
+            }
+          } else {
+            _userCourseIds[cleaned] = cidStr;
+            return cidStr;
+          }
+        } else {
+          _userCourseIds[cleaned] = cidStr;
+          return cidStr;
+        }
       }
     }
 
@@ -693,8 +807,10 @@ class ZhiyunService {
     String? courseCode,
   }) async {
     final cleaned = cleanCourseName(courseName);
+    final normalized = normalizeCourseName(courseName);
     _userCourseIds[cleaned] = courseId;
     _userCourseIds[courseName] = courseId;
+    _userCourseIds[normalized] = courseId;
     if (courseCode != null && courseCode.isNotEmpty) {
       _userCourseIds[courseCode] = courseId;
     }
@@ -704,12 +820,14 @@ class ZhiyunService {
       // 重新绑定时清除主动解绑标记
       await box.delete('zhiyun_unbind_$cleaned');
       await box.delete('zhiyun_unbind_$courseName');
+      await box.delete('zhiyun_unbind_$normalized');
       if (courseCode != null && courseCode.isNotEmpty) {
         await box.delete('zhiyun_unbind_$courseCode');
       }
 
       await box.put('zhiyun_cid_$cleaned', courseId);
       await box.put('zhiyun_cid_$courseName', courseId);
+      await box.put('zhiyun_cid_$normalized', courseId);
       if (courseCode != null && courseCode.isNotEmpty) {
         await box.put('zhiyun_cid_$courseCode', courseId);
       }
@@ -723,13 +841,18 @@ class ZhiyunService {
     String? courseId,
   }) async {
     final cleaned = cleanCourseName(courseName);
-    final cid = courseId ?? _userCourseIds[cleaned] ?? _userCourseIds[courseName];
+    final normalized = normalizeCourseName(courseName);
+    final cid = courseId ??
+        _userCourseIds[cleaned] ??
+        _userCourseIds[courseName] ??
+        _userCourseIds[normalized];
     if (cid != null) {
       _catalogueCache.remove(cid);
       _catalogueCacheTime.remove(cid);
     }
     _userCourseIds.remove(cleaned);
     _userCourseIds.remove(courseName);
+    _userCourseIds.remove(normalized);
     if (courseCode != null) {
       _userCourseIds.remove(courseCode);
     }
@@ -738,6 +861,7 @@ class ZhiyunService {
     if (box != null) {
       await box.delete('zhiyun_cid_$cleaned');
       await box.delete('zhiyun_cid_$courseName');
+      await box.delete('zhiyun_cid_$normalized');
       if (courseCode != null) {
         await box.delete('zhiyun_cid_$courseCode');
       }
@@ -745,9 +869,61 @@ class ZhiyunService {
       // 持久化记录用户显式解绑标记，防止后续自动搜索或后台同步再次错误关联
       await box.put('zhiyun_unbind_$cleaned', true);
       await box.put('zhiyun_unbind_$courseName', true);
+      await box.put('zhiyun_unbind_$normalized', true);
       if (courseCode != null) {
         await box.put('zhiyun_unbind_$courseCode', true);
       }
+    }
+  }
+
+  /// 清空智云课堂所有内存与持久化缓存（用于切换账号或注销时彻底隔离多用户数据）
+  static Future<void> clearCache() async {
+    _userCourseIds.clear();
+    _knownSubIds.clear();
+    _catalogueCache.clear();
+    _catalogueCacheTime.clear();
+    _cachedZhiyunToken = null;
+    _cachedZhiyunAccount = null;
+    _cachedZhiyunUserId = null;
+    _syncFuture = null;
+
+    final box = _getHiveBox();
+    if (box != null) {
+      final keysToDelete = <dynamic>[];
+      for (final key in box.keys) {
+        if (key is String && key.startsWith('zhiyun_')) {
+          keysToDelete.add(key);
+        }
+      }
+      for (final key in keysToDelete) {
+        await box.delete(key);
+      }
+    }
+    debugPrint('[ZhiyunService] 已成功清理智云课堂所有账号缓存');
+  }
+
+  /// 同步清空智云课堂内存缓存
+  static void clearCacheSync() {
+    _userCourseIds.clear();
+    _knownSubIds.clear();
+    _catalogueCache.clear();
+    _catalogueCacheTime.clear();
+    _cachedZhiyunToken = null;
+    _cachedZhiyunAccount = null;
+    _cachedZhiyunUserId = null;
+    _syncFuture = null;
+  }
+
+  /// 校验当前登录账号与智云缓存账号是否一致，若账号发生变化则自动触发重置
+  static Future<void> ensureAccountScope(String? currentUsername) async {
+    if (currentUsername == null || currentUsername.isEmpty) return;
+    final cachedAccount = _getCachedAccount();
+    if (cachedAccount != null &&
+        cachedAccount.isNotEmpty &&
+        cachedAccount.toLowerCase() != currentUsername.toLowerCase()) {
+      debugPrint(
+          '[ZhiyunService] 检测到当前账号 ($currentUsername) 与智云缓存账号 ($cachedAccount) 不一致，正在执行数据重置隔离...');
+      await clearCache();
     }
   }
 
@@ -1117,23 +1293,29 @@ class ZhiyunService {
     String? username,
     String? password,
   }) async {
-    final client = httpClient ?? createHttpClient();
+    // 始终使用专用的 DIRECT 直连客户端，绕过系统代理，防止校园网内网握手失败
+    final client = createHttpClient();
 
     try {
+      String? u = username;
+      String? p = password;
+      if (u == null || p == null) {
+        try {
+          if (Get.isRegistered<DatabaseHelper>(tag: 'db')) {
+            final db = Get.find<DatabaseHelper>(tag: 'db');
+            final scholar = await db.getScholar();
+            u = scholar.username;
+            p = scholar.password;
+          }
+        } catch (_) {}
+      }
+
+      if (u != null && u.isNotEmpty) {
+        await ensureAccountScope(u);
+      }
+
       Cookie? cookie = ssoCookie;
       if (cookie == null) {
-        String? u = username;
-        String? p = password;
-        if (u == null || p == null) {
-          try {
-            if (Get.isRegistered<DatabaseHelper>(tag: 'db')) {
-              final db = Get.find<DatabaseHelper>(tag: 'db');
-              final scholar = await db.getScholar();
-              u = scholar.username;
-              p = scholar.password;
-            }
-          } catch (_) {}
-        }
         if (u != null && u.isNotEmpty && p != null && p.isNotEmpty) {
           cookie = await ZjuAm.getSsoCookie(client, u, p);
         }
@@ -1147,22 +1329,22 @@ class ZhiyunService {
       }
 
       final now = DateTime.now();
-      // 查询当前学期所有相关月份（格式必须为带前导零的 YYYY-MM）
+      // 动态生成本学年涉及的所有月份（格式带前导零 YYYY-MM）
       final monthsToQuery = <String>{
         '${now.year}-${now.month.toString().padLeft(2, '0')}',
         '${now.year}-${(now.month == 1 ? 12 : now.month - 1).toString().padLeft(2, '0')}',
         '${now.year}-${(now.month == 12 ? 1 : now.month + 1).toString().padLeft(2, '0')}',
-        '${now.year}-09',
-        '${now.year}-10',
-        '${now.year}-11',
-        '${now.year}-12',
-        '${now.year + 1}-01',
-        '${now.year}-02',
-        '${now.year}-03',
-        '${now.year}-04',
-        '${now.year}-05',
-        '${now.year}-06',
       };
+      final academicStartYear = now.month >= 8 ? now.year : now.year - 1;
+      final academicEndYear = academicStartYear + 1;
+      // 秋学期 9-12月
+      for (int m = 9; m <= 12; m++) {
+        monthsToQuery.add('$academicStartYear-${m.toString().padLeft(2, '0')}');
+      }
+      // 冬/春/夏学期 1-7月
+      for (int m = 1; m <= 7; m++) {
+        monthsToQuery.add('$academicEndYear-${m.toString().padLeft(2, '0')}');
+      }
 
       final foundCoursesMap = <String, Map<String, dynamic>>{};
 
@@ -1293,17 +1475,22 @@ class ZhiyunService {
         final cid = entry['course_id'] as String;
         final title = entry['course_title'] as String;
         final cleaned = cleanCourseName(title);
+        final normalized = normalizeCourseName(title);
 
-        if (isExplicitlyUnbound(title) || isExplicitlyUnbound(cleaned)) {
+        if (isExplicitlyUnbound(title) ||
+            isExplicitlyUnbound(cleaned) ||
+            isExplicitlyUnbound(normalized)) {
           continue;
         }
 
         _userCourseIds[cleaned] = cid;
         _userCourseIds[title] = cid;
+        _userCourseIds[normalized] = cid;
 
         if (box != null) {
           await box.put('zhiyun_cid_$cleaned', cid);
           await box.put('zhiyun_cid_$title', cid);
+          await box.put('zhiyun_cid_$normalized', cid);
         }
         count++;
       }
@@ -1319,9 +1506,7 @@ class ZhiyunService {
       debugPrint('[ZhiyunService] 同步“我的课程”发生异常: $e\n$stack');
       return 0;
     } finally {
-      if (httpClient == null) {
-        client.close(force: true);
-      }
+      client.close(force: true);
     }
   }
 

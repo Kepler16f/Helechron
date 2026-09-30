@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -105,30 +106,53 @@ void _handleWidgetRoute(String target) {
   }
 }
 
+DateTime? _lastBackPressTime;
+bool _isHandlingBack = false;
+
 /// 全面屏手势侧滑返回 / 系统返回键拦截：
 /// 1. 若当前有 GetX 弹窗 (Get.isDialogOpen) 或底部弹层 (Get.isBottomSheetOpen)，优先关闭它并返回 true
 /// 2. 若当前根导航器 (navigatorKey.currentState) 栈上有可 pop 的路由（包括所有 CupertinoDialog、CupertinoModalPopup、二级 PageRoute 等），
 ///    调用 maybePop() 关闭上一级，返回 true
-/// 3. 若处于根页面首页且无弹窗，返回 false，交由系统退出或切入后台
+/// 3. 若处于一级界面且无弹窗，执行退出应用，返回 false
 Future<bool> _handleBackPressed() async {
-  // 1. 优先关闭 GetX 弹窗或底部 Sheet
-  if (Get.isDialogOpen == true) {
-    Get.back();
+  final now = DateTime.now();
+  if (_isHandlingBack ||
+      (_lastBackPressTime != null &&
+          now.difference(_lastBackPressTime!).inMilliseconds < 300)) {
     return true;
   }
-  if (Get.isBottomSheetOpen == true) {
-    Get.back();
-    return true;
-  }
+  _isHandlingBack = true;
+  _lastBackPressTime = now;
+  try {
+    // 1. 优先关闭 GetX 弹窗或底部 Sheet
+    if (Get.isDialogOpen == true) {
+      Get.back();
+      return true;
+    }
+    if (Get.isBottomSheetOpen == true) {
+      Get.back();
+      return true;
+    }
 
-  // 2. 检查全局 NavigatorState 栈
-  final navigator = navigatorKey.currentState;
-  if (navigator != null && navigator.canPop()) {
-    return await navigator.maybePop();
-  }
+    // 2. 检查全局 NavigatorState 栈
+    final navigator = navigatorKey.currentState ?? Get.key.currentState;
+    if (navigator != null && navigator.canPop()) {
+      final didPop = await navigator.maybePop();
+      if (didPop) {
+        return true;
+      }
+    }
 
-  // 3. 根页面且无弹窗，允许系统退出/退后台
-  return false;
+    // 3. 根页面且无弹窗：侧滑返回退出应用
+    if (PlatformFeatures.isOhos) {
+      await OhosNativeService.instance.exitApp();
+    } else {
+      await SystemNavigator.pop();
+    }
+    return false;
+  } finally {
+    _isHandlingBack = false;
+  }
 }
 
 Future<void> _consumePendingWidgetRoute() async {

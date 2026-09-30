@@ -20,9 +20,14 @@ import 'package:celechron/services/zhiyun_service.dart';
 class CourseDetailPage extends StatelessWidget {
   final Course? course;
   final Period? period;
+  final bool showZhiyun;
 
-  CourseDetailPage({required String? courseId, this.period, super.key})
-      : course = _findCourse(courseId);
+  CourseDetailPage({
+    required String? courseId,
+    this.period,
+    this.showZhiyun = true,
+    super.key,
+  }) : course = _findCourse(courseId);
 
   /// 依据不同来源的标识定位课程。
   ///
@@ -489,9 +494,10 @@ class CourseDetailPage extends StatelessWidget {
               ),
             ),
           ),
-          SliverToBoxAdapter(
-            child: createZhiyunCard(context, c),
-          ),
+          if (showZhiyun)
+            SliverToBoxAdapter(
+              child: createZhiyunCard(context, c),
+            ),
           if (c.sessions.isNotEmpty)
             SliverToBoxAdapter(
               child: Container(

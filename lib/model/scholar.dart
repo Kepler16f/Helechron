@@ -17,6 +17,7 @@ import 'package:celechron/http/spider.dart';
 import 'package:celechron/http/ugrs_spider.dart';
 import 'package:celechron/http/grs_spider.dart';
 import 'package:celechron/database/database_helper.dart';
+import 'package:celechron/services/zhiyun_service.dart';
 
 class Scholar {
   Scholar();
@@ -150,6 +151,7 @@ class Scholar {
       _spider = GrsSpider(username!, password!);
     }
     _spider!.db = _db;
+    await ZhiyunService.ensureAccountScope(username);
     var loginErrorMessage = await _spider!.login();
     if (loginErrorMessage.every((e) => e == null)) {
       isLogan = true;
@@ -188,6 +190,7 @@ class Scholar {
     _spider?.logout();
     await _db?.removeScholar();
     await _db?.removeAllCachedWebPage();
+    await ZhiyunService.clearCache();
     return true;
   }
 

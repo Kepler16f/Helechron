@@ -21,6 +21,7 @@ import 'package:celechron/model/semester.dart';
 // import 'zjuServices/appservice.dart';
 import 'zjuServices/zjuam.dart';
 import 'zjuServices/zdbk.dart';
+import 'package:celechron/services/zhiyun_service.dart';
 
 /// 研究生完整刷新编排器，同时兼容研究生院课程与已选本科课程。
 class GrsSpider implements Spider {
@@ -146,6 +147,16 @@ class GrsSpider implements Spider {
                     .catchError((e) => "无法登录钉钉工作台，$e"), */
       captureLogin(_zdbk.login(candidateClient, candidateSsoCookie), "教务网",
           ignoreError: true),
+      captureLogin(
+        ZhiyunService.syncFromMyCourses(
+          httpClient: candidateClient,
+          ssoCookie: candidateSsoCookie,
+          username: _username,
+          password: _password,
+        ),
+        "智云课堂",
+        ignoreError: true,
+      ),
     ]);
     loginErrorMessages.addAll(serviceErrors);
 

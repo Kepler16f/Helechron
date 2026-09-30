@@ -7,16 +7,24 @@ import 'package:celechron/page/scholar/course_detail/course_detail_view.dart';
 class CourseBriefCard extends StatelessWidget {
   final Course course;
   final bool allowDirect;
+  final bool showZhiyunInDetail;
 
-  const CourseBriefCard(
-      {required this.course, this.allowDirect = false, super.key});
+  const CourseBriefCard({
+    required this.course,
+    this.allowDirect = false,
+    this.showZhiyunInDetail = true,
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
     return RoundRectangleCard(
         onTap: allowDirect
             ? () async => Navigator.of(context).push(CupertinoPageRoute(
-                builder: (context) => CourseDetailPage(courseId: course.id)))
+                builder: (context) => CourseDetailPage(
+                      courseId: course.id,
+                      showZhiyun: showZhiyunInDetail,
+                    )))
             : null,
         child: Padding(
           padding: const EdgeInsets.only(left: 8, right: 8),

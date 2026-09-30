@@ -169,6 +169,8 @@ class UgrsSpider implements Spider {
         ZhiyunService.syncFromMyCourses(
           httpClient: candidateClient,
           ssoCookie: candidateSsoCookie,
+          username: _username,
+          password: _password,
         ),
         "智云课堂",
         ignoreError: true,

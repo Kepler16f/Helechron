@@ -87,7 +87,43 @@ export default class EntryAbility extends FlutterAbility {
     try {
       this.context.eventHub.on('EVENT_BACK_PRESS', () => {
         hilog.info(DOMAIN, TAG, 'EVENT_BACK_PRESS received, forwarding onBackPressed to Flutter');
-        this.methodChannel?.invokeMethod('onBackPressed', null);
+        const res: MethodResult = {
+          success: (data: Object | null) => {
+            hilog.info(DOMAIN, TAG, `onBackPressed success callback: ${data}`);
+            if (data === false) {
+              try {
+                this.context.terminateSelf();
+              } catch (e) {
+                hilog.error(DOMAIN, TAG, `terminateSelf failed: ${JSON.stringify(e)}`);
+              }
+            }
+          },
+          error: (code: string, message: string, details: Object | null) => {
+            hilog.warn(DOMAIN, TAG, `onBackPressed error callback: ${code} ${message}`);
+          },
+          notImplemented: () => {
+            hilog.warn(DOMAIN, TAG, 'onBackPressed not implemented');
+          }
+        };
+        try {
+          const ret = (this.methodChannel as any)?.invokeMethod('onBackPressed', null, res);
+          if (ret && typeof ret.then === 'function') {
+            ret.then((data: Object) => {
+              hilog.info(DOMAIN, TAG, `onBackPressed Promise resolved: ${data}`);
+              if (data === false) {
+                try {
+                  this.context.terminateSelf();
+                } catch (e) {
+                  hilog.error(DOMAIN, TAG, `terminateSelf failed: ${JSON.stringify(e)}`);
+                }
+              }
+            }).catch((err: BusinessError) => {
+              hilog.warn(DOMAIN, TAG, `onBackPressed Promise rejected: ${JSON.stringify(err)}`);
+            });
+          }
+        } catch (e) {
+          hilog.warn(DOMAIN, TAG, `invokeMethod onBackPressed failed: ${JSON.stringify(e)}`);
+        }
       });
     } catch (e) {
       hilog.warn(DOMAIN, TAG, `eventHub.on EVENT_BACK_PRESS failed: ${JSON.stringify(e)}`);
@@ -369,6 +405,20 @@ export default class EntryAbility extends FlutterAbility {
         break;
       case 'pickTextFile':
         this.pickTextFile(result);
+        break;
+      case 'exitApp':
+        hilog.info(DOMAIN, TAG, 'exitApp requested from Dart');
+        try {
+          this.context.terminateSelf().then(() => {
+            result.success(true);
+          }).catch((err: BusinessError) => {
+            hilog.error(DOMAIN, TAG, `terminateSelf failed: ${JSON.stringify(err)}`);
+            result.success(false);
+          });
+        } catch (e) {
+          hilog.error(DOMAIN, TAG, `terminateSelf exception: ${JSON.stringify(e)}`);
+          result.success(false);
+        }
         break;
       default:
         result.notImplemented();
