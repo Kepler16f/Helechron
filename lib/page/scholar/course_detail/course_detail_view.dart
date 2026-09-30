@@ -552,6 +552,45 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
     );
   }
 
+  Future<void> _handleSyncMyCourses(BuildContext context) async {
+    final count = await ZhiyunService.syncFromMyCourses();
+    if (context.mounted) {
+      if (count > 0) {
+        showCupertinoDialog(
+          context: context,
+          builder: (dialogCtx) => CupertinoAlertDialog(
+            title: const Text('同步完成'),
+            content: Text('已从智云课堂「我的课程」成功同步并智能匹配了 $count 门专属课程。'),
+            actions: [
+              CupertinoDialogAction(
+                child: const Text('好'),
+                onPressed: () => Navigator.of(dialogCtx).pop(),
+              ),
+            ],
+          ),
+        );
+        setState(() {
+          _load();
+        });
+      } else {
+        showCupertinoDialog(
+          context: context,
+          builder: (dialogCtx) => CupertinoAlertDialog(
+            title: const Text('同步提示'),
+            content: const Text(
+                '未获取到课程更新，请确保已登录浙大统一身份认证或稍后重试。您亦可直接输入课程ID完成绑定。'),
+            actions: [
+              CupertinoDialogAction(
+                child: const Text('好'),
+                onPressed: () => Navigator.of(dialogCtx).pop(),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+  }
+
   void _showBindDialog(BuildContext context, String currentId) {
     final textController = TextEditingController(text: currentId);
     showCupertinoDialog(
@@ -574,6 +613,29 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                 placeholder: '85940 或 粘贴课程网页链接',
                 autofocus: true,
                 clearButtonMode: OverlayVisibilityMode.editing,
+              ),
+              const SizedBox(height: 12),
+              Center(
+                child: CupertinoButton(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.secondarySystemFill, context),
+                  borderRadius: BorderRadius.circular(8),
+                  minSize: 32,
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(CupertinoIcons.arrow_2_circlepath, size: 14),
+                      SizedBox(width: 4),
+                      Text('从「我的课程」自动同步匹配', style: TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                  onPressed: () async {
+                    Navigator.of(dialogCtx).pop();
+                    await _handleSyncMyCourses(context);
+                  },
+                ),
               ),
             ],
           ),
@@ -732,17 +794,21 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
   Widget _buildCopyButton(BuildContext context, String url, String courseName,
       String detailName) {
     return CupertinoButton(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       color: CupertinoDynamicColor.resolve(
           CupertinoColors.secondarySystemFill, context),
       borderRadius: BorderRadius.circular(8),
       minSize: 36,
-      child: const Row(
-        children: [
-          Icon(CupertinoIcons.link, size: 16),
-          SizedBox(width: 4),
-          Text('复制链接', style: TextStyle(fontSize: 13)),
-        ],
+      child: const FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(CupertinoIcons.link, size: 16),
+            SizedBox(width: 4),
+            Text('复制链接', style: TextStyle(fontSize: 13)),
+          ],
+        ),
       ),
       onPressed: () async {
         await Clipboard.setData(ClipboardData(text: url));
@@ -767,17 +833,21 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
 
   Widget _buildMyCoursesButton(BuildContext context) {
     return CupertinoButton(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       color: CupertinoDynamicColor.resolve(
           CupertinoColors.secondarySystemFill, context),
       borderRadius: BorderRadius.circular(8),
       minSize: 36,
-      child: const Row(
-        children: [
-          Icon(CupertinoIcons.person_crop_square, size: 16),
-          SizedBox(width: 4),
-          Text('我的课程', style: TextStyle(fontSize: 13)),
-        ],
+      child: const FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(CupertinoIcons.person_crop_square, size: 16),
+            SizedBox(width: 4),
+            Text('我的课程', style: TextStyle(fontSize: 13)),
+          ],
+        ),
       ),
       onPressed: () => ZhiyunService.openUrl(ZhiyunService.buildMyCoursesUrl()),
     );
@@ -807,22 +877,26 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
             buttons: [
               Expanded(
                 child: CupertinoButton(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                   color: CupertinoDynamicColor.resolve(
                       CustomCupertinoDynamicColors.sakura, context),
                   borderRadius: BorderRadius.circular(8),
                   minSize: 36,
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(CupertinoIcons.play_arrow_solid, size: 16),
-                      SizedBox(width: 6),
-                      Text(
-                        '直达本节录播',
-                        style: TextStyle(
-                            fontSize: 14, fontWeight: FontWeight.w600),
-                      ),
-                    ],
+                  child: const FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(CupertinoIcons.play_arrow_solid, size: 16),
+                        SizedBox(width: 6),
+                        Text(
+                          '直达本节录播',
+                          style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
                   ),
                   onPressed: () => ZhiyunService.openUrl(info.livingroomUrl),
                 ),
@@ -846,29 +920,33 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
             buttons: [
               Expanded(
                 child: CupertinoButton(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                   color: CupertinoDynamicColor.resolve(
                       CupertinoColors.secondarySystemFill, context),
                   borderRadius: BorderRadius.circular(8),
                   minSize: 36,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(CupertinoIcons.tv,
-                          size: 16,
-                          color: CupertinoDynamicColor.resolve(
-                              CupertinoColors.label, context)),
-                      const SizedBox(width: 6),
-                      Text(
-                        '进入课程房间',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: CupertinoDynamicColor.resolve(
-                              CupertinoColors.label, context),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(CupertinoIcons.tv,
+                            size: 16,
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.label, context)),
+                        const SizedBox(width: 6),
+                        Text(
+                          '进入课程房间',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.label, context),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   onPressed: () => ZhiyunService.openUrl(info.livingroomUrl),
                 ),
@@ -892,22 +970,26 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
             buttons: [
               Expanded(
                 child: CupertinoButton(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                   color: CupertinoDynamicColor.resolve(
                       CustomCupertinoDynamicColors.sakura, context),
                   borderRadius: BorderRadius.circular(8),
                   minSize: 36,
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(CupertinoIcons.arrow_up_right_square, size: 16),
-                      SizedBox(width: 6),
-                      Text(
-                        '进入课程房间',
-                        style: TextStyle(
-                            fontSize: 14, fontWeight: FontWeight.w600),
-                      ),
-                    ],
+                  child: const FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(CupertinoIcons.arrow_up_right_square, size: 16),
+                        SizedBox(width: 6),
+                        Text(
+                          '进入课程房间',
+                          style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
                   ),
                   onPressed: () => ZhiyunService.openUrl(info.livingroomUrl),
                 ),
@@ -918,7 +1000,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
               const SizedBox(width: 8),
               CupertinoButton(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 color: CupertinoDynamicColor.resolve(
                     CupertinoColors.secondarySystemFill, context),
                 borderRadius: BorderRadius.circular(8),
@@ -942,22 +1024,26 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
           buttons: [
             Expanded(
               child: CupertinoButton(
-                padding: const EdgeInsets.symmetric(vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                 color: CupertinoDynamicColor.resolve(
                     CustomCupertinoDynamicColors.sakura, context),
                 borderRadius: BorderRadius.circular(8),
                 minSize: 36,
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(CupertinoIcons.search, size: 16),
-                    SizedBox(width: 6),
-                    Text(
-                      '智云课堂检索',
-                      style: TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w600),
-                    ),
-                  ],
+                child: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(CupertinoIcons.search, size: 16),
+                      SizedBox(width: 4),
+                      Text(
+                        '智云搜索',
+                        style: TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
                 ),
                 onPressed: () => ZhiyunService.openUrl(
                     ZhiyunService.buildSearchContentUrl(c.name)),
@@ -968,17 +1054,20 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
             const SizedBox(width: 8),
             CupertinoButton(
               padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               color: CupertinoDynamicColor.resolve(
                   CupertinoColors.secondarySystemFill, context),
               borderRadius: BorderRadius.circular(8),
               minSize: 36,
-              child: const Row(
-                children: [
-                  Icon(CupertinoIcons.link, size: 16),
-                  SizedBox(width: 4),
-                  Text('绑定ID', style: TextStyle(fontSize: 13)),
-                ],
+              child: const FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  children: [
+                    Icon(CupertinoIcons.link, size: 16),
+                    SizedBox(width: 4),
+                    Text('绑定ID', style: TextStyle(fontSize: 13)),
+                  ],
+                ),
               ),
               onPressed: () => _showBindDialog(context, ''),
             ),

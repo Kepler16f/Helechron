@@ -24,6 +24,7 @@ import 'package:celechron/services/diagnostic_log_service.dart';
 import 'zjuServices/zjuam.dart';
 import 'zjuServices/zdbk.dart';
 import 'zjuServices/sztz.dart';
+import 'package:celechron/services/zhiyun_service.dart';
 
 /// 本科完整刷新编排器；各站点共享统一认证，但独立登录、缓存和降级。
 class UgrsSpider implements Spider {
@@ -164,6 +165,14 @@ class UgrsSpider implements Spider {
           onSuccess: () {
         fetchGrs = true;
       }, ignoreError: true),
+      captureLogin(
+        ZhiyunService.syncFromMyCourses(
+          httpClient: candidateClient,
+          ssoCookie: candidateSsoCookie,
+        ),
+        "智云课堂",
+        ignoreError: true,
+      ),
     ]);
     loginErrorMessages.addAll(serviceErrors);
 
