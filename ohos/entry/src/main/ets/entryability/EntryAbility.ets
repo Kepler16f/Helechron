@@ -83,47 +83,11 @@ export default class EntryAbility extends FlutterAbility {
       hilog.warn(DOMAIN, TAG, `eventHub.on bottomBarTabChanged failed: ${JSON.stringify(e)}`);
     }
 
-    // 监听返回手势事件并转发给 Flutter 处理
+    // 监听返回手势事件并转发给 Flutter 处理（Flutter 侧在根页面时会主动调用 exitApp 原生通道退出）
     try {
       this.context.eventHub.on('EVENT_BACK_PRESS', () => {
         hilog.info(DOMAIN, TAG, 'EVENT_BACK_PRESS received, forwarding onBackPressed to Flutter');
-        const res: MethodResult = {
-          success: (data: Object | null) => {
-            hilog.info(DOMAIN, TAG, `onBackPressed success callback: ${data}`);
-            if (data === false) {
-              try {
-                this.context.terminateSelf();
-              } catch (e) {
-                hilog.error(DOMAIN, TAG, `terminateSelf failed: ${JSON.stringify(e)}`);
-              }
-            }
-          },
-          error: (code: string, message: string, details: Object | null) => {
-            hilog.warn(DOMAIN, TAG, `onBackPressed error callback: ${code} ${message}`);
-          },
-          notImplemented: () => {
-            hilog.warn(DOMAIN, TAG, 'onBackPressed not implemented');
-          }
-        };
-        try {
-          const ret = (this.methodChannel as any)?.invokeMethod('onBackPressed', null, res);
-          if (ret && typeof ret.then === 'function') {
-            ret.then((data: Object) => {
-              hilog.info(DOMAIN, TAG, `onBackPressed Promise resolved: ${data}`);
-              if (data === false) {
-                try {
-                  this.context.terminateSelf();
-                } catch (e) {
-                  hilog.error(DOMAIN, TAG, `terminateSelf failed: ${JSON.stringify(e)}`);
-                }
-              }
-            }).catch((err: BusinessError) => {
-              hilog.warn(DOMAIN, TAG, `onBackPressed Promise rejected: ${JSON.stringify(err)}`);
-            });
-          }
-        } catch (e) {
-          hilog.warn(DOMAIN, TAG, `invokeMethod onBackPressed failed: ${JSON.stringify(e)}`);
-        }
+        this.methodChannel?.invokeMethod('onBackPressed', null);
       });
     } catch (e) {
       hilog.warn(DOMAIN, TAG, `eventHub.on EVENT_BACK_PRESS failed: ${JSON.stringify(e)}`);
