@@ -19,6 +19,7 @@ class ZhiyunReplayInfo {
   final String lessonTitle;
   final DateTime? lessonDate;
   final bool hasReplay;
+  final bool isLive;
   final bool isLessonSpecific;
   final String livingroomUrl;
 
@@ -29,6 +30,7 @@ class ZhiyunReplayInfo {
     required this.lessonTitle,
     this.lessonDate,
     this.hasReplay = true,
+    this.isLive = false,
     this.isLessonSpecific = false,
     required this.livingroomUrl,
   });
@@ -281,6 +283,15 @@ class ZhiyunService {
     return null;
   }
 
+  /// 判断用户是否对该课程执行过显式解绑
+  static bool isExplicitlyUnbound(String courseName) {
+    final box = _getHiveBox();
+    if (box == null) return false;
+    final cleaned = cleanCourseName(courseName);
+    return box.get('zhiyun_unbind_$cleaned') == true ||
+        box.get('zhiyun_unbind_$courseName') == true;
+  }
+
   /// 查询指定课程的智云 course_id
   /// 优先级：1. 内存运行时缓存 > 2. 用户持久化手动绑定 > 3. 动态同步的“我的课程”
   /// 坚决不使用任何死板硬编码，完全按用户实际账号数据匹配
@@ -291,7 +302,27 @@ class ZhiyunService {
   }) {
     final cleaned = cleanCourseName(courseName);
 
-    // 1. 检查内存缓存 (已成功解析或用户手动绑定)
+    // 0. 特殊历史脏数据清洗：如果是思想文化素养/素质类课程，清除错误绑定的 86975
+    if (cleaned.contains('思想文化素养') || cleaned.contains('思想素质')) {
+      final box = _getHiveBox();
+      final savedCid = box?.get('zhiyun_cid_$cleaned')?.toString() ??
+          box?.get('zhiyun_cid_$courseName')?.toString();
+      if (savedCid == '86975') {
+        box?.delete('zhiyun_cid_$cleaned');
+        box?.delete('zhiyun_cid_$courseName');
+        box?.put('zhiyun_unbind_$cleaned', true);
+        _userCourseIds.remove(cleaned);
+        _userCourseIds.remove(courseName);
+        return null;
+      }
+    }
+
+    // 1. 若用户主动解绑过该课程，且未显式重新绑定，坚决返回 null
+    if (isExplicitlyUnbound(courseName)) {
+      return null;
+    }
+
+    // 2. 检查内存缓存 (已成功解析或用户手动绑定)
     if (_userCourseIds.containsKey(cleaned)) {
       return _userCourseIds[cleaned];
     }
@@ -302,7 +333,7 @@ class ZhiyunService {
       return _userCourseIds[courseCode];
     }
 
-    // 2. 检查持久化存储 (Hive 用户显式保存的 ID 或上次同步的 ID)
+    // 3. 检查持久化存储 (Hive 用户显式保存的 ID 或上次同步的 ID)
     final box = _getHiveBox();
     if (box != null) {
       final savedCid = box.get('zhiyun_cid_$cleaned') ??
@@ -315,7 +346,7 @@ class ZhiyunService {
       }
     }
 
-    // 3. 核心：从用户专属“我的课程”列表中动态智能匹配（千人千面，不死板硬编码）
+    // 4. 核心：从用户专属“我的课程”列表中动态智能匹配（千人千面，不死板硬编码）
     final myCourses = getMySyncedCourses();
     if (myCourses.isNotEmpty) {
       // 优先：课程名匹配且教师匹配（精准匹配特定教师的教学班，区分如陈锦辉与谈之奕）
@@ -356,6 +387,9 @@ class ZhiyunService {
     String? teacher,
     HttpClient? httpClient,
   }) async {
+    // 若已被显式解绑，跳过在线检索
+    if (isExplicitlyUnbound(courseName)) return null;
+
     final token = getCachedZhiyunToken();
     if (token == null || token.isEmpty) return null;
 
@@ -390,6 +424,7 @@ class ZhiyunService {
           final total = json['total'];
           final list = total is Map ? total['list'] : null;
           if (list is List && list.isNotEmpty) {
+            // 优先：课程名称严格/规范匹配，且教师一致
             for (final item in list) {
               if (item is Map) {
                 final cid =
@@ -398,37 +433,37 @@ class ZhiyunService {
                 final itemTeacher = item['realname']?.toString() ?? '';
 
                 if (cid != null && cid.isNotEmpty) {
-                  // 如果指定了教师，优先匹配教师
-                  if (teacher != null &&
-                      teacher.trim().isNotEmpty &&
-                      itemTeacher.isNotEmpty) {
-                    if (itemTeacher.contains(teacher.trim()) ||
-                        teacher.trim().contains(itemTeacher)) {
+                  if (matchesCourseName(courseName, title)) {
+                    if (teacher != null &&
+                        teacher.trim().isNotEmpty &&
+                        itemTeacher.isNotEmpty &&
+                        (itemTeacher.contains(teacher.trim()) ||
+                            teacher.trim().contains(itemTeacher))) {
                       _userCourseIds[cleaned] = cid;
                       _userCourseIds[courseName] = cid;
                       _getHiveBox()?.put('zhiyun_cid_$cleaned', cid);
                       return cid;
                     }
-                  } else if (matchesCourseName(courseName, title)) {
-                    _userCourseIds[cleaned] = cid;
-                    _userCourseIds[courseName] = cid;
-                    _getHiveBox()?.put('zhiyun_cid_$cleaned', cid);
-                    return cid;
                   }
                 }
               }
             }
 
-            // 兜底采用第一条搜索结果
-            final first = list.first;
-            if (first is Map) {
-              final cid =
-                  first['course_id']?.toString() ?? first['id']?.toString();
-              if (cid != null && cid.isNotEmpty) {
-                _userCourseIds[cleaned] = cid;
-                _userCourseIds[courseName] = cid;
-                _getHiveBox()?.put('zhiyun_cid_$cleaned', cid);
-                return cid;
+            // 次优：课程名称智能匹配（不盲目依赖第一项，杜绝误绑无关课程）
+            for (final item in list) {
+              if (item is Map) {
+                final cid =
+                    item['course_id']?.toString() ?? item['id']?.toString();
+                final title = item['title']?.toString() ?? '';
+
+                if (cid != null &&
+                    cid.isNotEmpty &&
+                    matchesCourseName(courseName, title)) {
+                  _userCourseIds[cleaned] = cid;
+                  _userCourseIds[courseName] = cid;
+                  _getHiveBox()?.put('zhiyun_cid_$cleaned', cid);
+                  return cid;
+                }
               }
             }
           }
@@ -666,6 +701,13 @@ class ZhiyunService {
 
     final box = _getHiveBox();
     if (box != null) {
+      // 重新绑定时清除主动解绑标记
+      await box.delete('zhiyun_unbind_$cleaned');
+      await box.delete('zhiyun_unbind_$courseName');
+      if (courseCode != null && courseCode.isNotEmpty) {
+        await box.delete('zhiyun_unbind_$courseCode');
+      }
+
       await box.put('zhiyun_cid_$cleaned', courseId);
       await box.put('zhiyun_cid_$courseName', courseId);
       if (courseCode != null && courseCode.isNotEmpty) {
@@ -678,8 +720,14 @@ class ZhiyunService {
   static Future<void> deleteCourseId(
     String courseName, {
     String? courseCode,
+    String? courseId,
   }) async {
     final cleaned = cleanCourseName(courseName);
+    final cid = courseId ?? _userCourseIds[cleaned] ?? _userCourseIds[courseName];
+    if (cid != null) {
+      _catalogueCache.remove(cid);
+      _catalogueCacheTime.remove(cid);
+    }
     _userCourseIds.remove(cleaned);
     _userCourseIds.remove(courseName);
     if (courseCode != null) {
@@ -692,6 +740,13 @@ class ZhiyunService {
       await box.delete('zhiyun_cid_$courseName');
       if (courseCode != null) {
         await box.delete('zhiyun_cid_$courseCode');
+      }
+
+      // 持久化记录用户显式解绑标记，防止后续自动搜索或后台同步再次错误关联
+      await box.put('zhiyun_unbind_$cleaned', true);
+      await box.put('zhiyun_unbind_$courseName', true);
+      if (courseCode != null) {
+        await box.put('zhiyun_unbind_$courseCode', true);
       }
     }
   }
@@ -712,7 +767,131 @@ class ZhiyunService {
     _knownSubIds['${courseId}_$dateStr'] = subId;
   }
 
-  /// 解析指定课程/节次的回放信息。若为体育/素质课等非录播课程，返回 null（自动隐藏入口）
+  /// 智能检测课程或特定课节当前是否正在智云课堂直播
+  static bool checkIsLive({
+    Map<String, dynamic>? item,
+    DateTime? targetDate,
+    Period? period,
+  }) {
+    // 1. 检查 item 中的状态标记
+    if (item != null) {
+      final statusLabel = item['status_label']?.toString() ?? '';
+      if (statusLabel == '直播' ||
+          statusLabel.contains('直播') ||
+          statusLabel.toLowerCase() == 'live') {
+        return true;
+      }
+      final isLiveField = item['is_live'];
+      if (isLiveField == true ||
+          isLiveField == 1 ||
+          isLiveField == '1' ||
+          isLiveField == 'true') {
+        return true;
+      }
+      final status = item['status']?.toString();
+      // 智云状态码 2 表示直播中
+      if (status == '2') {
+        return true;
+      }
+      final liveType = item['live_type']?.toString();
+      if (liveType == 'live') {
+        return true;
+      }
+    }
+
+    // 2. 时间维度辅助判断：如果当前正处于该节课的上课时间窗口内
+    final now = DateTime.now();
+    if (period != null) {
+      final start = period.startTime;
+      final end = period.endTime;
+      // 节次开始前 10 分钟到结束后 10 分钟
+      if (now.isAfter(start.subtract(const Duration(minutes: 10))) &&
+          now.isBefore(end.add(const Duration(minutes: 10)))) {
+        final statusLabel = item?['status_label']?.toString() ?? '';
+        final status = item?['status']?.toString();
+        // 若已生成回放或已明确结束，则不算直播
+        if (statusLabel != '回放' && statusLabel != '已结束' && status != '4') {
+          return true;
+        }
+      }
+    } else if (targetDate != null) {
+      if (targetDate.year == now.year &&
+          targetDate.month == now.month &&
+          targetDate.day == now.day) {
+        final startAt = int.tryParse(item?['start_at']?.toString() ?? '');
+        final endAt = int.tryParse(item?['end_at']?.toString() ?? '');
+        if (startAt != null && endAt != null && startAt > 0 && endAt > 0) {
+          final sDt = DateTime.fromMillisecondsSinceEpoch(startAt * 1000);
+          final eDt = DateTime.fromMillisecondsSinceEpoch(endAt * 1000);
+          if (now.isAfter(sDt.subtract(const Duration(minutes: 10))) &&
+              now.isBefore(eDt.add(const Duration(minutes: 10)))) {
+            final statusLabel = item?['status_label']?.toString() ?? '';
+            final status = item?['status']?.toString();
+            if (statusLabel != '回放' && statusLabel != '已结束' && status != '4') {
+              return true;
+            }
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  /// 智能检测课程或特定课节是否已在智云课堂生成录播回放
+  static bool checkHasReplay({
+    Map<String, dynamic>? item,
+    DateTime? targetDate,
+  }) {
+    if (item == null) return false;
+
+    // 1. 检查 item 中的状态标记
+    final statusLabel = item['status_label']?.toString() ?? '';
+    if (statusLabel == '回放' || statusLabel.contains('回放')) {
+      return true;
+    }
+    final status = item['status']?.toString();
+    if (status == '4' || status == '3') {
+      return true;
+    }
+    final playback = item['playback'];
+    if (playback != null &&
+        playback != false &&
+        playback != 'false' &&
+        playback.toString().isNotEmpty) {
+      return true;
+    }
+    final videoUrl = item['video_url'] ?? item['play_url'] ?? item['m3u8'];
+    if (videoUrl != null && videoUrl.toString().isNotEmpty) {
+      return true;
+    }
+
+    // 2. 时间维度：如果是未来的课节，绝无回放
+    final now = DateTime.now();
+    final lessonDate = targetDate ??
+        (item['start_at'] != null && int.tryParse(item['start_at'].toString()) != null
+            ? DateTime.fromMillisecondsSinceEpoch(int.parse(item['start_at'].toString()) * 1000)
+            : null);
+    if (lessonDate != null && lessonDate.isAfter(now)) {
+      return false;
+    }
+
+    // 3. 如果状态为未开始或正在直播，无回放
+    if (statusLabel == '未开始' || statusLabel.contains('直播') || status == '2' || status == '1') {
+      return false;
+    }
+
+    // 4. 如果过去发生且有 sub_id，且距离开课已超过 1 小时
+    final subId = item['sub_id']?.toString() ?? item['id']?.toString();
+    if (subId != null && subId.isNotEmpty && lessonDate != null) {
+      if (now.difference(lessonDate) > const Duration(hours: 1)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /// 解析指定课程/节次的回放或直播信息。若为体育/素质课等非录播课程，返回 null（自动隐藏入口）
   static Future<ZhiyunReplayInfo?> getLessonReplay({
     required Course course,
     Period? period,
@@ -721,6 +900,24 @@ class ZhiyunService {
     // 1. 若为体育、身体素质、实践等非录播课程，坚决不展示回放入口（自动隐藏）
     if (!isRecordableCourse(course.name)) {
       return null;
+    }
+
+    // 确定目标节次日期
+    final targetDate = period?.startTime ?? lessonDate;
+
+    // 若用户显式解绑过该课程，不进行静默自动同步或在线匹配，保持未绑定状态
+    if (isExplicitlyUnbound(course.name)) {
+      return ZhiyunReplayInfo(
+        courseId: null,
+        subId: null,
+        courseName: course.name,
+        lessonTitle: '${course.name} 智云课堂',
+        lessonDate: targetDate,
+        hasReplay: false,
+        isLive: false,
+        isLessonSpecific: false,
+        livingroomUrl: buildSearchContentUrl(course.name),
+      );
     }
 
     // 2. 解析 course_id（从手动绑定、已同步课程动态匹配）
@@ -748,18 +945,17 @@ class ZhiyunService {
       teacher: course.teacher,
     );
 
-    // 确定目标节次日期
-    final targetDate = period?.startTime ?? lessonDate;
-
     // 3. 如果成功匹配到 course_id
     if (courseId != null) {
+      // 尝试拉取智云课程目录
+      final catalogue = await fetchCourseCatalogue(courseId);
+
       if (targetDate != null) {
         final dateKey =
             '${targetDate.year}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}';
         final shortDateKey = '${targetDate.month}月${targetDate.day}日';
 
-        // 尝试拉取目录匹配具体节次
-        final catalogue = await fetchCourseCatalogue(courseId);
+        // 尝试从目录匹配具体节次
         Map<String, dynamic>? matchedItem;
         for (final item in catalogue) {
           final title = item['title']?.toString() ??
@@ -788,6 +984,16 @@ class ZhiyunService {
             matchedItem?['id']?.toString() ??
             _knownSubIds['${courseId}_$dateKey'];
 
+        final isLive = checkIsLive(
+          item: matchedItem,
+          targetDate: targetDate,
+          period: period,
+        );
+        final hasReplay = checkHasReplay(
+          item: matchedItem,
+          targetDate: targetDate,
+        );
+
         if (subId != null && subId.isNotEmpty) {
           return ZhiyunReplayInfo(
             courseId: courseId,
@@ -795,25 +1001,72 @@ class ZhiyunService {
             courseName: course.name,
             lessonTitle: matchedItem?['title']?.toString() ??
                 matchedItem?['sub_title']?.toString() ??
-                '$shortDateKey 课堂录播',
+                (isLive ? '$shortDateKey 课堂直播' : '$shortDateKey 课堂录播'),
             lessonDate: targetDate,
-            hasReplay: true,
+            hasReplay: hasReplay,
+            isLive: isLive,
             isLessonSpecific: true,
             livingroomUrl: buildLivingroomUrl(courseId, subId),
+          );
+        } else if (isLive) {
+          // 当前时段正在直播，但未拿到特定 subId，直达整门课程房间
+          return ZhiyunReplayInfo(
+            courseId: courseId,
+            subId: null,
+            courseName: course.name,
+            lessonTitle: '$shortDateKey 课堂直播',
+            lessonDate: targetDate,
+            hasReplay: false,
+            isLive: true,
+            isLessonSpecific: true,
+            livingroomUrl: buildCourseLivingroomUrl(courseId),
+          );
+        } else if (period != null || lessonDate != null) {
+          // 明确选定课节，未找到录播回放
+          return ZhiyunReplayInfo(
+            courseId: courseId,
+            subId: null,
+            courseName: course.name,
+            lessonTitle: '$shortDateKey 课堂录播',
+            lessonDate: targetDate,
+            hasReplay: false,
+            isLive: false,
+            isLessonSpecific: true,
+            livingroomUrl: buildCourseLivingroomUrl(courseId),
           );
         }
       }
 
       // 如果节次未匹配上或尚未生成，返回整门课程专属房间直达
+      // 检查整门课是否有任何正在直播的节次
+      bool courseHasLive = false;
+      String? liveSubId;
+      for (final item in catalogue) {
+        if (checkIsLive(item: item)) {
+          courseHasLive = true;
+          liveSubId = item['sub_id']?.toString() ?? item['id']?.toString();
+          break;
+        }
+      }
+
+      // 检查整门课是否有任何已生成的回放
+      final courseHasAnyReplay =
+          catalogue.any((item) => checkHasReplay(item: item));
+
       return ZhiyunReplayInfo(
         courseId: courseId,
-        subId: null,
+        subId: liveSubId,
         courseName: course.name,
-        lessonTitle: '${course.name} 智云课程房间',
+        lessonTitle: courseHasLive
+            ? '${course.name} 课堂直播'
+            : '${course.name} 智云课程房间',
         lessonDate: targetDate,
-        hasReplay: true,
+        hasReplay: courseHasAnyReplay,
+        isLive: courseHasLive,
         isLessonSpecific: false,
-        livingroomUrl: buildCourseLivingroomUrl(courseId),
+        livingroomUrl: liveSubId != null
+            ? buildLivingroomUrl(courseId, liveSubId)
+            : buildCourseLivingroomUrl(courseId),
       );
     }
 
@@ -825,6 +1078,7 @@ class ZhiyunService {
       lessonTitle: '${course.name} 智云课堂',
       lessonDate: targetDate,
       hasReplay: false,
+      isLive: false,
       isLessonSpecific: false,
       livingroomUrl: buildSearchContentUrl(course.name),
     );
@@ -1039,6 +1293,10 @@ class ZhiyunService {
         final cid = entry['course_id'] as String;
         final title = entry['course_title'] as String;
         final cleaned = cleanCourseName(title);
+
+        if (isExplicitlyUnbound(title) || isExplicitlyUnbound(cleaned)) {
+          continue;
+        }
 
         _userCourseIds[cleaned] = cid;
         _userCourseIds[title] = cid;
