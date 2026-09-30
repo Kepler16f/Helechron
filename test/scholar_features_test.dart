@@ -84,6 +84,8 @@ void main() {
       expect(ZhiyunService.isRecordableCourse('生产实习'), isFalse);
 
       // 理论课、专业课属于录播课程
+      expect(ZhiyunService.isRecordableCourse('军事理论'), isTrue);
+      expect(ZhiyunService.isRecordableCourse('军事理论(网络)'), isTrue);
       expect(ZhiyunService.isRecordableCourse('线性代数'), isTrue);
       expect(ZhiyunService.isRecordableCourse('微积分(甲)Ⅰ'), isTrue);
       expect(ZhiyunService.isRecordableCourse('大学物理(甲)Ⅰ'), isTrue);

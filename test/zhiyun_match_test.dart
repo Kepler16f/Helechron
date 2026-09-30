@@ -78,12 +78,45 @@ void main() {
       );
     });
 
+    test('核心课程名称提取与模式修饰去除', () {
+      expect(ZhiyunService.extractCoreCourseName('军事理论(网络)'), equals('军事理论'));
+      expect(ZhiyunService.extractCoreCourseName('军事理论（01班）'), equals('军事理论'));
+      expect(ZhiyunService.extractCoreCourseName('大学英语(双语)(02)'), equals('大学英语'));
+      expect(ZhiyunService.extractCoreCourseName('微积分(MOOC)'), equals('微积分'));
+      expect(ZhiyunService.extractCoreCourseName('线性代数(线上)'), equals('线性代数'));
+    });
+
+    test('军事理论与通识理论课程智能匹配', () {
+      expect(
+        ZhiyunService.matchesCourseName('军事理论(网络)', '军事理论'),
+        isTrue,
+      );
+      expect(
+        ZhiyunService.matchesCourseName('军事理论', '军事理论(网络)'),
+        isTrue,
+      );
+      expect(
+        ZhiyunService.matchesCourseName('军事理论（01班）', '军事理论'),
+        isTrue,
+      );
+      expect(
+        ZhiyunService.matchesCourseName('思想道德与法治(01)', '思想道德与法治'),
+        isTrue,
+      );
+    });
+
     test('非录播课程自动识别与过滤', () {
       expect(ZhiyunService.isRecordableCourse('身体素质课(01)'), isFalse);
       expect(ZhiyunService.isRecordableCourse('大学体育(乒乓球)'), isFalse);
       expect(ZhiyunService.isRecordableCourse('体质健康测试'), isFalse);
       expect(ZhiyunService.isRecordableCourse('金工实习'), isFalse);
       expect(ZhiyunService.isRecordableCourse('形式与政策'), isFalse);
+      expect(ZhiyunService.isRecordableCourse('军训'), isFalse);
+      expect(ZhiyunService.isRecordableCourse('军事技能'), isFalse);
+      expect(ZhiyunService.isRecordableCourse('军事理论'), isTrue);
+      expect(ZhiyunService.isRecordableCourse('军事理论(网络)'), isTrue);
+      expect(ZhiyunService.isRecordableCourse('毛泽东思想和中国特色社会主义理论体系概论'), isTrue);
+      expect(ZhiyunService.isRecordableCourse('思想道德与法治'), isTrue);
       expect(ZhiyunService.isRecordableCourse('微积分(甲)Ⅰ'), isTrue);
       expect(ZhiyunService.isRecordableCourse('线性代数(乙)'), isTrue);
       expect(ZhiyunService.isRecordableCourse('面向对象程序设计(Python)'), isTrue);

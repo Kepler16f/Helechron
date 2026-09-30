@@ -122,14 +122,32 @@ class ZhiyunService {
     return null;
   }
 
-  /// 提取纯净课程名称（去除（甲）、（乙）、教学班序号等，提高智云课堂检索命中率）
+  /// 提取纯净课程名称（去除末尾教学班编号、括号编号等，提高智云课堂检索命中率）
   static String cleanCourseName(String courseName) {
     var cleaned = courseName.trim();
     // 替换中文全角括号为半角便于统一处理
     cleaned = cleaned.replaceAll('（', '(').replaceAll('）', ')');
-    // 去除末尾诸如 (01), (02) 的班级编号
-    cleaned = cleaned.replaceAll(RegExp(r'\(\d+\)$'), '');
+    cleaned = cleaned.replaceAll('【', '[').replaceAll('】', ']');
+    // 去除末尾诸如 (01), (02), (01班), [01], [01班] 的班级编号
+    cleaned = cleaned.replaceAll(RegExp(r'[\(\[]\s*\d+\s*(班)?\s*[\)\]]$'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'-\d+$'), '');
     return cleaned.trim();
+  }
+
+  /// 提取核心课程名称（去除荣誉 (H) 标记、班级号、以及 (网络)/(线上)/(双语)/(全英文)/(MOOC)/(慕课) 等模式标签）
+  static String extractCoreCourseName(String name) {
+    var s = stripHonorsTag(name).trim();
+    s = s.replaceAll('（', '(').replaceAll('）', ')');
+    s = s.replaceAll('【', '[').replaceAll('】', ']');
+    // 移除常见教学修饰标签
+    s = s.replaceAll(
+        RegExp(r'[\(\[]\s*(网络|线上|线下|双语|全英文|英文|mooc|MOOC|慕课|研讨|实验|翻转|翻转课堂|理论|通识|通识核心|选修|必修)\s*[\)\]]',
+            caseSensitive: false),
+        '');
+    // 移除班级号如 (01), (01班)
+    s = s.replaceAll(RegExp(r'[\(\[]\s*\d+\s*(班)?\s*[\)\]]'), '');
+    s = s.replaceAll(RegExp(r'-\d+$'), '');
+    return s.trim();
   }
 
   /// 判断课程是否为荣誉课程（带 (H)、（H）、[H]、荣誉等标记）
@@ -240,6 +258,11 @@ class ZhiyunService {
     // 4. 归一化完全一致
     if (s1 == s2) return true;
 
+    // 4.1 核心课程名称一致（去除 (网络)、(慕课)、(全英文)、班级号等修饰后）
+    final core1 = normalizeCourseName(extractCoreCourseName(scheduleName));
+    final core2 = normalizeCourseName(extractCoreCourseName(zhiyunName));
+    if (core1.isNotEmpty && core1 == core2) return true;
+
     // 5. Python 课程识别（如 面向对象程序设计(Python)、程序设计基础(Python)、Python程序设计）
     if (s1.contains('python') && s2.contains('python')) {
       return true;
@@ -259,9 +282,11 @@ class ZhiyunService {
       return false;
     }
 
-    // 7. 线性代数与微积分等基础课包含关系（要求长度足够，且必须在等级和序号不冲突的前提下）
-    if (s1.length >= 4 && s2.contains(s1)) return true;
-    if (s2.length >= 4 && s1.contains(s2)) return true;
+    // 7. 线性代数、微积分与各专业课包含关系（要求长度 >= 3，如“电工学”、“运筹学”等，且等级序号已排除冲突）
+    if (s1.length >= 3 && s2.contains(s1)) return true;
+    if (s2.length >= 3 && s1.contains(s2)) return true;
+    if (core1.length >= 3 && s2.contains(core1)) return true;
+    if (core2.length >= 3 && s1.contains(core2)) return true;
 
     return false;
   }
@@ -286,9 +311,28 @@ class ZhiyunService {
     return const [];
   }
 
-  /// 判断该课程是否属于非录播课程（例如身体素质课、体育课、实践课等显然不可能有智云回放的课程）
-  static bool isRecordableCourse(String courseName) {
+  /// 判断该课程是否属于非录播课程（例如身体素质课、体育课、体测等显然不可能有智云回放的课程）
+  static bool isRecordableCourse(String courseName, {String? courseCode}) {
+    // 1. 若本地已知/已绑定 courseId，或智云已同步存在该课程，则必定为可录播课程，绝不拦截
+    if (getKnownCourseId(courseName, courseCode: courseCode) != null) {
+      return true;
+    }
+
     final name = cleanCourseName(courseName);
+
+    // 明确属于录播/理论类课程，绝不误拦截（军事理论必定属于课堂理论讲授录播）
+    if (name.contains('军事理论') ||
+        name.contains('理论') ||
+        name.contains('概论') ||
+        name.contains('研讨') ||
+        name.contains('素养') ||
+        name.contains('思修') ||
+        name.contains('马原') ||
+        name.contains('毛概') ||
+        name.contains('史纲')) {
+      return true;
+    }
+
     const nonRecordableKeywords = [
       '体育',
       '身体素质',
@@ -318,7 +362,6 @@ class ZhiyunService {
       '形式与政策',
       '形势与政策',
       '军训',
-      '军事理论',
       '军事技能',
       '生产实习',
       '认知实习',
@@ -360,9 +403,14 @@ class ZhiyunService {
     if (box == null) return false;
     final cleaned = cleanCourseName(courseName);
     final normalized = normalizeCourseName(courseName);
+    final core = extractCoreCourseName(courseName);
+    final coreNormalized = normalizeCourseName(core);
     return box.get('zhiyun_unbind_$cleaned') == true ||
         box.get('zhiyun_unbind_$courseName') == true ||
-        box.get('zhiyun_unbind_$normalized') == true;
+        box.get('zhiyun_unbind_$normalized') == true ||
+        (core.isNotEmpty && box.get('zhiyun_unbind_$core') == true) ||
+        (coreNormalized.isNotEmpty &&
+            box.get('zhiyun_unbind_$coreNormalized') == true);
   }
 
   /// 查询指定课程的智云 course_id
@@ -375,23 +423,31 @@ class ZhiyunService {
   }) {
     final cleaned = cleanCourseName(courseName);
     final normalized = normalizeCourseName(courseName);
+    final core = extractCoreCourseName(courseName);
+    final coreNormalized = normalizeCourseName(core);
 
     // 0. 特殊历史脏数据清洗：如果是思想文化素养/素质类课程，清除错误绑定的 86975
     if (cleaned.contains('思想文化素养') || cleaned.contains('思想素质')) {
       final box = _getHiveBox();
       final savedCid = box?.get('zhiyun_cid_$cleaned')?.toString() ??
           box?.get('zhiyun_cid_$courseName')?.toString() ??
-          box?.get('zhiyun_cid_$normalized')?.toString();
+          box?.get('zhiyun_cid_$normalized')?.toString() ??
+          box?.get('zhiyun_cid_$core')?.toString() ??
+          box?.get('zhiyun_cid_$coreNormalized')?.toString();
       if (savedCid == '86975') {
         box?.delete('zhiyun_cid_$cleaned');
         box?.delete('zhiyun_cid_$courseName');
         box?.delete('zhiyun_cid_$normalized');
+        box?.delete('zhiyun_cid_$core');
+        box?.delete('zhiyun_cid_$coreNormalized');
         box?.put('zhiyun_unbind_$cleaned', true);
         box?.put('zhiyun_unbind_$courseName', true);
         box?.put('zhiyun_unbind_$normalized', true);
         _userCourseIds.remove(cleaned);
         _userCourseIds.remove(courseName);
         _userCourseIds.remove(normalized);
+        _userCourseIds.remove(core);
+        _userCourseIds.remove(coreNormalized);
         return null;
       }
     }
@@ -411,6 +467,12 @@ class ZhiyunService {
     if (_userCourseIds.containsKey(normalized)) {
       return _userCourseIds[normalized];
     }
+    if (core.isNotEmpty && _userCourseIds.containsKey(core)) {
+      return _userCourseIds[core];
+    }
+    if (coreNormalized.isNotEmpty && _userCourseIds.containsKey(coreNormalized)) {
+      return _userCourseIds[coreNormalized];
+    }
     if (courseCode != null && _userCourseIds.containsKey(courseCode)) {
       return _userCourseIds[courseCode];
     }
@@ -422,6 +484,10 @@ class ZhiyunService {
       final savedCid = box.get('zhiyun_cid_$cleaned') ??
           box.get('zhiyun_cid_$courseName') ??
           box.get('zhiyun_cid_$normalized') ??
+          (core.isNotEmpty ? box.get('zhiyun_cid_$core') : null) ??
+          (coreNormalized.isNotEmpty
+              ? box.get('zhiyun_cid_$coreNormalized')
+              : null) ??
           (courseCode != null ? box.get('zhiyun_cid_$courseCode') : null);
       if (savedCid != null && savedCid.toString().isNotEmpty) {
         final cidStr = savedCid.toString();
@@ -511,71 +577,118 @@ class ZhiyunService {
       final account = _getCachedAccount();
       final userId = _getCachedUserId();
       final cleaned = cleanCourseName(courseName);
+      final coreName = extractCoreCourseName(courseName);
 
-      final uri = Uri.parse(
-        '$_kZhiyunBaseUrl/pptnote/v1/searchlist?tenant_id=$_kTenantCode'
-        '&user_id=${userId ?? ''}'
-        '&user_name=${account ?? ''}'
-        '&page=1&per_page=16'
-        '&title=${Uri.encodeComponent(cleaned)}'
-        '${teacher != null && teacher.trim().isNotEmpty ? '&realname=${Uri.encodeComponent(teacher.trim())}' : ''}'
-        '&trans=&tenant_code=$_kTenantCode'
-        '&randomKey=${DateTime.now().millisecondsSinceEpoch}',
-      );
+      // 候选标题：先查 cleanCourseName，若不同再查 extractCoreCourseName（例如 军事理论(网络) -> 军事理论）
+      final titleCandidates = <String>[cleaned];
+      if (coreName.isNotEmpty && coreName != cleaned) {
+        titleCandidates.add(coreName);
+      }
 
-      final req = await client.getUrl(uri);
-      req.headers.set('Authorization', 'Bearer $token');
-      req.headers.set('Cookie', '_token=$token; token=$token');
-      req.headers.set('User-Agent',
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36');
+      // 提取主讲教师名（智云 realname 参数不支持多个教师拼接，如 '张三,李四' 会导致 0 结果）
+      String? singleTeacher;
+      if (teacher != null && teacher.trim().isNotEmpty) {
+        final parts = teacher
+            .trim()
+            .split(RegExp(r'[,，/、\s+]'))
+            .where((s) => s.isNotEmpty)
+            .toList();
+        if (parts.isNotEmpty) {
+          singleTeacher = parts.first;
+        }
+      }
 
-      final resp = await req.close().timeout(const Duration(seconds: 6));
-      if (resp.statusCode == 200) {
-        final body = await resp.transform(utf8.decoder).join();
-        final json = jsonDecode(body);
-        if (json is Map && (json['code'] == 0 || json['code'] == '0')) {
-          final total = json['total'];
-          final list = total is Map ? total['list'] : null;
-          if (list is List && list.isNotEmpty) {
-            // 优先：课程名称严格/规范匹配，且教师一致
-            for (final item in list) {
-              if (item is Map) {
-                final cid =
-                    item['course_id']?.toString() ?? item['id']?.toString();
-                final title = item['title']?.toString() ?? '';
-                final itemTeacher = item['realname']?.toString() ?? '';
+      for (final titleKeyword in titleCandidates) {
+        // 如果有教师，先尝试带 realname 检索；若无结果或未提供教师，尝试无教师过滤检索
+        final teacherCandidates = <String?>[];
+        if (singleTeacher != null && singleTeacher.isNotEmpty) {
+          teacherCandidates.add(singleTeacher);
+        }
+        teacherCandidates.add(null);
 
-                if (cid != null && cid.isNotEmpty) {
-                  if (matchesCourseName(courseName, title)) {
-                    if (teacher != null &&
-                        teacher.trim().isNotEmpty &&
-                        itemTeacher.isNotEmpty &&
-                        (itemTeacher.contains(teacher.trim()) ||
-                            teacher.trim().contains(itemTeacher))) {
-                      _userCourseIds[cleaned] = cid;
-                      _userCourseIds[courseName] = cid;
-                      _getHiveBox()?.put('zhiyun_cid_$cleaned', cid);
-                      return cid;
+        for (final t in teacherCandidates) {
+          final uri = Uri.parse(
+            '$_kZhiyunBaseUrl/pptnote/v1/searchlist?tenant_id=$_kTenantCode'
+            '&user_id=${userId ?? ''}'
+            '&user_name=${account ?? ''}'
+            '&page=1&per_page=16'
+            '&title=${Uri.encodeComponent(titleKeyword)}'
+            '${t != null && t.isNotEmpty ? '&realname=${Uri.encodeComponent(t)}' : ''}'
+            '&trans=&tenant_code=$_kTenantCode'
+            '&randomKey=${DateTime.now().millisecondsSinceEpoch}',
+          );
+
+          final req = await client.getUrl(uri);
+          req.headers.set('Authorization', 'Bearer $token');
+          req.headers.set('Cookie', '_token=$token; token=$token');
+          req.headers.set('User-Agent',
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36');
+
+          final resp = await req.close().timeout(const Duration(seconds: 6));
+          if (resp.statusCode == 200) {
+            final body = await resp.transform(utf8.decoder).join();
+            final json = jsonDecode(body);
+            if (json is Map && (json['code'] == 0 || json['code'] == '0')) {
+              final total = json['total'];
+              final list = total is Map ? total['list'] : null;
+              if (list is List && list.isNotEmpty) {
+                // 优先：课程名称严格/规范匹配，且教师一致
+                for (final item in list) {
+                  if (item is Map) {
+                    final cid =
+                        item['course_id']?.toString() ?? item['id']?.toString();
+                    final title = item['title']?.toString() ?? '';
+                    final itemTeacher = item['realname']?.toString() ?? '';
+
+                    if (cid != null && cid.isNotEmpty) {
+                      if (matchesCourseName(courseName, title)) {
+                        if (teacher != null &&
+                            teacher.trim().isNotEmpty &&
+                            itemTeacher.isNotEmpty &&
+                            (itemTeacher.contains(teacher.trim()) ||
+                                teacher.trim().contains(itemTeacher) ||
+                                (singleTeacher != null &&
+                                    itemTeacher.contains(singleTeacher)))) {
+                          _userCourseIds[cleaned] = cid;
+                          _userCourseIds[courseName] = cid;
+                          if (coreName.isNotEmpty) {
+                            _userCourseIds[coreName] = cid;
+                          }
+                          _getHiveBox()?.put('zhiyun_cid_$cleaned', cid);
+                          _getHiveBox()?.put('zhiyun_cid_$courseName', cid);
+                          if (coreName.isNotEmpty) {
+                            _getHiveBox()?.put('zhiyun_cid_$coreName', cid);
+                          }
+                          return cid;
+                        }
+                      }
                     }
                   }
                 }
-              }
-            }
 
-            // 次优：课程名称智能匹配（不盲目依赖第一项，杜绝误绑无关课程）
-            for (final item in list) {
-              if (item is Map) {
-                final cid =
-                    item['course_id']?.toString() ?? item['id']?.toString();
-                final title = item['title']?.toString() ?? '';
+                // 次优：课程名称智能匹配（不盲目依赖第一项，杜绝误绑无关课程）
+                for (final item in list) {
+                  if (item is Map) {
+                    final cid =
+                        item['course_id']?.toString() ?? item['id']?.toString();
+                    final title = item['title']?.toString() ?? '';
 
-                if (cid != null &&
-                    cid.isNotEmpty &&
-                    matchesCourseName(courseName, title)) {
-                  _userCourseIds[cleaned] = cid;
-                  _userCourseIds[courseName] = cid;
-                  _getHiveBox()?.put('zhiyun_cid_$cleaned', cid);
-                  return cid;
+                    if (cid != null &&
+                        cid.isNotEmpty &&
+                        matchesCourseName(courseName, title)) {
+                      _userCourseIds[cleaned] = cid;
+                      _userCourseIds[courseName] = cid;
+                      if (coreName.isNotEmpty) {
+                        _userCourseIds[coreName] = cid;
+                      }
+                      _getHiveBox()?.put('zhiyun_cid_$cleaned', cid);
+                      _getHiveBox()?.put('zhiyun_cid_$courseName', cid);
+                      if (coreName.isNotEmpty) {
+                        _getHiveBox()?.put('zhiyun_cid_$coreName', cid);
+                      }
+                      return cid;
+                    }
+                  }
                 }
               }
             }
@@ -807,9 +920,13 @@ class ZhiyunService {
   }) async {
     final cleaned = cleanCourseName(courseName);
     final normalized = normalizeCourseName(courseName);
+    final core = extractCoreCourseName(courseName);
+    final coreNormalized = normalizeCourseName(core);
     _userCourseIds[cleaned] = courseId;
     _userCourseIds[courseName] = courseId;
     _userCourseIds[normalized] = courseId;
+    if (core.isNotEmpty) _userCourseIds[core] = courseId;
+    if (coreNormalized.isNotEmpty) _userCourseIds[coreNormalized] = courseId;
     if (courseCode != null && courseCode.isNotEmpty) {
       _userCourseIds[courseCode] = courseId;
     }
@@ -820,6 +937,10 @@ class ZhiyunService {
       await box.delete('zhiyun_unbind_$cleaned');
       await box.delete('zhiyun_unbind_$courseName');
       await box.delete('zhiyun_unbind_$normalized');
+      if (core.isNotEmpty) await box.delete('zhiyun_unbind_$core');
+      if (coreNormalized.isNotEmpty) {
+        await box.delete('zhiyun_unbind_$coreNormalized');
+      }
       if (courseCode != null && courseCode.isNotEmpty) {
         await box.delete('zhiyun_unbind_$courseCode');
       }
@@ -827,6 +948,10 @@ class ZhiyunService {
       await box.put('zhiyun_cid_$cleaned', courseId);
       await box.put('zhiyun_cid_$courseName', courseId);
       await box.put('zhiyun_cid_$normalized', courseId);
+      if (core.isNotEmpty) await box.put('zhiyun_cid_$core', courseId);
+      if (coreNormalized.isNotEmpty) {
+        await box.put('zhiyun_cid_$coreNormalized', courseId);
+      }
       if (courseCode != null && courseCode.isNotEmpty) {
         await box.put('zhiyun_cid_$courseCode', courseId);
       }
@@ -841,10 +966,14 @@ class ZhiyunService {
   }) async {
     final cleaned = cleanCourseName(courseName);
     final normalized = normalizeCourseName(courseName);
+    final core = extractCoreCourseName(courseName);
+    final coreNormalized = normalizeCourseName(core);
     final cid = courseId ??
         _userCourseIds[cleaned] ??
         _userCourseIds[courseName] ??
-        _userCourseIds[normalized];
+        _userCourseIds[normalized] ??
+        _userCourseIds[core] ??
+        _userCourseIds[coreNormalized];
     if (cid != null) {
       _catalogueCache.remove(cid);
       _catalogueCacheTime.remove(cid);
@@ -852,6 +981,8 @@ class ZhiyunService {
     _userCourseIds.remove(cleaned);
     _userCourseIds.remove(courseName);
     _userCourseIds.remove(normalized);
+    _userCourseIds.remove(core);
+    _userCourseIds.remove(coreNormalized);
     if (courseCode != null) {
       _userCourseIds.remove(courseCode);
     }
@@ -861,6 +992,8 @@ class ZhiyunService {
       await box.delete('zhiyun_cid_$cleaned');
       await box.delete('zhiyun_cid_$courseName');
       await box.delete('zhiyun_cid_$normalized');
+      await box.delete('zhiyun_cid_$core');
+      await box.delete('zhiyun_cid_$coreNormalized');
       if (courseCode != null) {
         await box.delete('zhiyun_cid_$courseCode');
       }
@@ -869,6 +1002,8 @@ class ZhiyunService {
       await box.put('zhiyun_unbind_$cleaned', true);
       await box.put('zhiyun_unbind_$courseName', true);
       await box.put('zhiyun_unbind_$normalized', true);
+      await box.put('zhiyun_unbind_$core', true);
+      await box.put('zhiyun_unbind_$coreNormalized', true);
       if (courseCode != null) {
         await box.put('zhiyun_unbind_$courseCode', true);
       }
@@ -929,11 +1064,14 @@ class ZhiyunService {
   /// 注册/更新课程的 Zhiyun course_id 映射
   static void registerCourseMapping(String courseName, String courseId) {
     final cleaned = cleanCourseName(courseName);
+    final core = extractCoreCourseName(courseName);
     _userCourseIds[cleaned] = courseId;
     _userCourseIds[courseName] = courseId;
+    if (core.isNotEmpty) _userCourseIds[core] = courseId;
     final box = _getHiveBox();
     box?.put('zhiyun_cid_$cleaned', courseId);
     box?.put('zhiyun_cid_$courseName', courseId);
+    if (core.isNotEmpty) box?.put('zhiyun_cid_$core', courseId);
   }
 
   /// 注册/更新课节的 Zhiyun sub_id 映射
@@ -1073,7 +1211,7 @@ class ZhiyunService {
     DateTime? lessonDate,
   }) async {
     // 1. 若为体育、身体素质、实践等非录播课程，坚决不展示回放入口（自动隐藏）
-    if (!isRecordableCourse(course.name)) {
+    if (!isRecordableCourse(course.name, courseCode: course.id)) {
       return null;
     }
 
@@ -1336,6 +1474,8 @@ class ZhiyunService {
       };
       final academicStartYear = now.month >= 8 ? now.year : now.year - 1;
       final academicEndYear = academicStartYear + 1;
+      // 8月（夏学期末/新生军训与军事理论课集中开展月份）
+      monthsToQuery.add('$academicStartYear-08');
       // 秋学期 9-12月
       for (int m = 9; m <= 12; m++) {
         monthsToQuery.add('$academicStartYear-${m.toString().padLeft(2, '0')}');
@@ -1361,15 +1501,27 @@ class ZhiyunService {
             final body = await resp.transform(utf8.decoder).join();
             final json = jsonDecode(body);
             if (json is Map) {
-              // 兼容根级 list 与 data.list
-              final list = json['list'] ??
+              // 兼容根级 list 与 data.list，并兼容 PHP 关联数组序列化为 Map 的情况
+              final rawList = json['list'] ??
                   (json['data'] is Map ? json['data']['list'] : null);
-              if (list is List) {
-                for (final dayItem in list) {
+              Iterable? dayItems;
+              if (rawList is List) {
+                dayItems = rawList;
+              } else if (rawList is Map) {
+                dayItems = rawList.values;
+              }
+              if (dayItems != null) {
+                for (final dayItem in dayItems) {
                   if (dayItem is Map) {
-                    final courses = dayItem['course'] ?? dayItem['courses'];
-                    if (courses is List) {
-                      for (final c in courses) {
+                    final rawCourses = dayItem['course'] ?? dayItem['courses'];
+                    Iterable? coursesList;
+                    if (rawCourses is List) {
+                      coursesList = rawCourses;
+                    } else if (rawCourses is Map) {
+                      coursesList = rawCourses.values;
+                    }
+                    if (coursesList != null) {
+                      for (final c in coursesList) {
                         if (c is Map) {
                           final cid = c['id']?.toString() ??
                               c['course_id']?.toString();
@@ -1475,21 +1627,32 @@ class ZhiyunService {
         final title = entry['course_title'] as String;
         final cleaned = cleanCourseName(title);
         final normalized = normalizeCourseName(title);
+        final core = extractCoreCourseName(title);
+        final coreNormalized = normalizeCourseName(core);
 
         if (isExplicitlyUnbound(title) ||
             isExplicitlyUnbound(cleaned) ||
-            isExplicitlyUnbound(normalized)) {
+            isExplicitlyUnbound(normalized) ||
+            (core.isNotEmpty && isExplicitlyUnbound(core)) ||
+            (coreNormalized.isNotEmpty &&
+                isExplicitlyUnbound(coreNormalized))) {
           continue;
         }
 
         _userCourseIds[cleaned] = cid;
         _userCourseIds[title] = cid;
         _userCourseIds[normalized] = cid;
+        if (core.isNotEmpty) _userCourseIds[core] = cid;
+        if (coreNormalized.isNotEmpty) _userCourseIds[coreNormalized] = cid;
 
         if (box != null) {
           await box.put('zhiyun_cid_$cleaned', cid);
           await box.put('zhiyun_cid_$title', cid);
           await box.put('zhiyun_cid_$normalized', cid);
+          if (core.isNotEmpty) await box.put('zhiyun_cid_$core', cid);
+          if (coreNormalized.isNotEmpty) {
+            await box.put('zhiyun_cid_$coreNormalized', cid);
+          }
         }
         count++;
       }

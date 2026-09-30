@@ -887,7 +887,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
     return FutureBuilder<ZhiyunReplayInfo?>(
       future: _future,
       builder: (context, snapshot) {
-        if (!ZhiyunService.isRecordableCourse(c.name)) {
+        if (!ZhiyunService.isRecordableCourse(c.name, courseCode: c.id)) {
           return const SizedBox.shrink();
         }
 
