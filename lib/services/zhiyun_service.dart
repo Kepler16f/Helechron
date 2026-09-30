@@ -461,7 +461,6 @@ class ZhiyunService {
     }
 
     // 4. 核心：从用户专属“我的课程”列表中动态智能匹配（千人千面，不死板硬编码）
-    final myCourses = getMySyncedCourses();
     if (myCourses.isNotEmpty) {
       // 优先：课程名匹配且教师匹配（精准匹配特定教师的教学班，区分如陈锦辉与谈之奕）
       if (teacher != null && teacher.trim().isNotEmpty) {
