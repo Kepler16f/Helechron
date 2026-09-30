@@ -853,14 +853,42 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
     );
   }
 
+  Widget _buildLoadingCard(BuildContext context) {
+    return _buildCard(
+      context: context,
+      icon: CupertinoIcons.play_rectangle,
+      iconColor: CustomCupertinoDynamicColors.sakura,
+      title: '智云课堂',
+      tag: '正在匹配',
+      subtitle: '正在从智云课堂动态匹配课程房间与节次回放...',
+      buttons: [
+        const Expanded(
+          child: SizedBox(
+            height: 36,
+            child: Center(
+              child: CupertinoActivityIndicator(),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = widget.course;
     return FutureBuilder<ZhiyunReplayInfo?>(
       future: _future,
       builder: (context, snapshot) {
+        if (!ZhiyunService.isRecordableCourse(c.name)) {
+          return const SizedBox.shrink();
+        }
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildLoadingCard(context);
+        }
+
         final info = snapshot.data;
-        // 如果是体育、身体素质课等非录播课程，坚决不展示（自动隐藏）
         if (info == null) {
           return const SizedBox.shrink();
         }
@@ -1013,6 +1041,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
         }
 
         // 状态四：未绑定课程 ID（提供检索、我的课程与一键绑定）
+        // 采用比例分配按钮宽度，避免在窄屏或大字号下溢出粉色框
         return _buildCard(
           context: context,
           icon: CupertinoIcons.compass,
@@ -1023,6 +1052,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
           subtitle: '点击前往智云课堂检索或进入我的课程，亦可一键绑定课程ID',
           buttons: [
             Expanded(
+              flex: 5,
               child: CupertinoButton(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
@@ -1035,12 +1065,12 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(CupertinoIcons.search, size: 16),
+                      Icon(CupertinoIcons.search, size: 15),
                       SizedBox(width: 4),
                       Text(
                         '智云搜索',
                         style: TextStyle(
-                            fontSize: 14, fontWeight: FontWeight.w600),
+                            fontSize: 13, fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
@@ -1049,27 +1079,57 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                     ZhiyunService.buildSearchContentUrl(c.name)),
               ),
             ),
-            const SizedBox(width: 8),
-            _buildMyCoursesButton(context),
-            const SizedBox(width: 8),
-            CupertinoButton(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              color: CupertinoDynamicColor.resolve(
-                  CupertinoColors.secondarySystemFill, context),
-              borderRadius: BorderRadius.circular(8),
-              minSize: 36,
-              child: const FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Row(
-                  children: [
-                    Icon(CupertinoIcons.link, size: 16),
-                    SizedBox(width: 4),
-                    Text('绑定ID', style: TextStyle(fontSize: 13)),
-                  ],
+            const SizedBox(width: 6),
+            Expanded(
+              flex: 5,
+              child: CupertinoButton(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.secondarySystemFill, context),
+                borderRadius: BorderRadius.circular(8),
+                minSize: 36,
+                child: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(CupertinoIcons.person_crop_square, size: 15),
+                      SizedBox(width: 4),
+                      Text(
+                        '我的课程',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                    ],
+                  ),
                 ),
+                onPressed: () =>
+                    ZhiyunService.openUrl(ZhiyunService.buildMyCoursesUrl()),
               ),
-              onPressed: () => _showBindDialog(context, ''),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              flex: 4,
+              child: CupertinoButton(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.secondarySystemFill, context),
+                borderRadius: BorderRadius.circular(8),
+                minSize: 36,
+                child: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(CupertinoIcons.link, size: 15),
+                      SizedBox(width: 3),
+                      Text('绑定ID', style: TextStyle(fontSize: 13)),
+                    ],
+                  ),
+                ),
+                onPressed: () => _showBindDialog(context, ''),
+              ),
             ),
           ],
         );

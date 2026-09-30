@@ -9,7 +9,7 @@ class Fuse {
 
   final bool isBeta = true;
   final version = [0, 1, 4];
-  final build = 70;
+  final build = 71;
   List<int>? remoteVersion;
   int? remoteBuild;
   bool hasNewVersion = false;
@@ -17,7 +17,7 @@ class Fuse {
   final HttpClient _httpClient = HttpClient();
   final DatabaseHelper _db = Get.find<DatabaseHelper>(tag: 'db');
 
-  String get displayVersion => '0.1.4_dev3';
+  String get displayVersion => '0.1.4_dev4';
 
   Fuse() {
     lastUpdateTime = DateTime(2001, 1, 1);
