@@ -67,7 +67,7 @@ void main() {
 
     test('ZhiyunService buildSearchUrl constructs valid URL', () {
       final url = ZhiyunService.buildSearchUrl('大学计算机基础');
-      expect(url.startsWith('https://classroom.zju.edu.cn/search?keywords='), isTrue);
+      expect(url.startsWith('https://classroom.zju.edu.cn/#/searchContent?title='), isTrue);
       expect(url.contains(Uri.encodeComponent('大学计算机基础')), isTrue);
     });
 

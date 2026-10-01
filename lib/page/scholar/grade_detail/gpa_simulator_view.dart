@@ -1,5 +1,5 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors, Divider;
+import 'package:flutter/material.dart' show Divider;
 import 'package:get/get.dart';
 import 'package:celechron/design/custom_colors.dart';
 import 'package:celechron/design/round_rectangle_card.dart';
@@ -46,99 +46,65 @@ class GpaSimulatorPage extends StatelessWidget {
       final deltaStr = delta >= 0
           ? '+${delta.toStringAsFixed(3)}'
           : delta.toStringAsFixed(3);
-      final deltaColor = delta > 0.0001
-          ? CupertinoColors.activeGreen
-          : (delta < -0.0001
-              ? CupertinoColors.destructiveRed
-              : CupertinoColors.secondaryLabel);
 
-      return Column(
-        children: [
-          RoundRectangleCard(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Column(
+      return RoundRectangleCard(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TwoLineCard(
-                          title: '模拟后总 GPA (${scale.label})',
-                          content: scale == GpaScaleType.hundredPoint
-                              ? simGpa.toStringAsFixed(1)
-                              : simGpa.toStringAsFixed(2),
-                          backgroundColor:
-                              CustomCupertinoDynamicColors.sakura,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TwoLineCard(
-                          title: '当前实际总 GPA',
-                          content: scale == GpaScaleType.hundredPoint
-                              ? currGpa.toStringAsFixed(1)
-                              : currGpa.toStringAsFixed(2),
-                          backgroundColor: CustomCupertinoDynamicColors.sand,
-                        ),
-                      ),
-                    ],
+                  Expanded(
+                    child: TwoLineCard(
+                      title: '模拟后总 GPA (${scale.label})',
+                      content: scale == GpaScaleType.hundredPoint
+                          ? simGpa.toStringAsFixed(1)
+                          : simGpa.toStringAsFixed(2),
+                      backgroundColor:
+                          CustomCupertinoDynamicColors.sakura,
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TwoLineCard(
-                          title: '模拟学期自身 GPA',
-                          content: scale == GpaScaleType.hundredPoint
-                              ? simSemGpa.toStringAsFixed(1)
-                              : simSemGpa.toStringAsFixed(2),
-                          backgroundColor: CustomCupertinoDynamicColors.cyan,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.tertiarySystemFill, context),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                '总绩点浮动 Δ',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: CupertinoDynamicColor.resolve(
-                                      CupertinoColors.secondaryLabel, context),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                deltaStr,
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: CupertinoDynamicColor.resolve(
-                                      deltaColor, context),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TwoLineCard(
+                      title: '当前实际总 GPA',
+                      content: scale == GpaScaleType.hundredPoint
+                          ? currGpa.toStringAsFixed(1)
+                          : currGpa.toStringAsFixed(2),
+                      backgroundColor: CustomCupertinoDynamicColors.sand,
+                    ),
                   ),
                 ],
               ),
-            ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TwoLineCard(
+                      title: '模拟学期自身 GPA',
+                      content: scale == GpaScaleType.hundredPoint
+                          ? simSemGpa.toStringAsFixed(1)
+                          : simSemGpa.toStringAsFixed(2),
+                      backgroundColor: CustomCupertinoDynamicColors.cyan,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TwoLineCard(
+                      title: '总绩点浮动 Δ',
+                      content: deltaStr,
+                      backgroundColor: delta > 0.0001
+                          ? CustomCupertinoDynamicColors.sakura
+                          : (delta < -0.0001
+                              ? CustomCupertinoDynamicColors.magenta
+                              : CustomCupertinoDynamicColors.sand),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-        ],
+        ),
       );
     });
   }
@@ -150,10 +116,8 @@ class GpaSimulatorPage extends StatelessWidget {
       final goal = _controller.calculateGoalSeek();
       final target = _controller.targetGpa.value;
 
-      return Column(
-        children: [
-          RoundRectangleCard(
-            child: Padding(
+      return RoundRectangleCard(
+        child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -271,18 +235,15 @@ class GpaSimulatorPage extends StatelessWidget {
                 ],
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-        ],
-      );
-    });
-  }
+          );
+        });
+      }
 
   // ==================== 快捷操作栏 ====================
 
   Widget _buildPresetActions(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -686,7 +647,7 @@ class GpaSimulatorPage extends StatelessWidget {
           SliverToBoxAdapter(
             child: Padding(
               padding:
-                  const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: SizedBox(
                 width: double.infinity,
                 child: Obx(
@@ -726,7 +687,7 @@ class GpaSimulatorPage extends StatelessWidget {
               }
               return Padding(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: SizedBox(
                   width: double.infinity,
                   child: CupertinoSlidingSegmentedControl<GpaScaleType>(
@@ -761,13 +722,16 @@ class GpaSimulatorPage extends StatelessWidget {
           ),
           // 推演核心结果卡片
           SliverToBoxAdapter(
-            child: Obx(() {
-              if (_controller.simulatorSubTab.value == SimulatorSubTab.whatIf) {
-                return _buildSimulatorSummaryCard(context);
-              } else {
-                return _buildTargetGpaCard(context);
-              }
-            }),
+            child: Padding(
+              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+              child: Obx(() {
+                if (_controller.simulatorSubTab.value == SimulatorSubTab.whatIf) {
+                  return _buildSimulatorSummaryCard(context);
+                } else {
+                  return _buildTargetGpaCard(context);
+                }
+              }),
+            ),
           ),
           // 快捷操作栏
           SliverToBoxAdapter(
@@ -778,7 +742,10 @@ class GpaSimulatorPage extends StatelessWidget {
           ),
           // 模拟课程列表
           SliverToBoxAdapter(
-            child: _buildSimulatedCourseList(context),
+            child: Padding(
+              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+              child: _buildSimulatedCourseList(context),
+            ),
           ),
           const SliverToBoxAdapter(
             child: NativeBottomBarSpacer(),

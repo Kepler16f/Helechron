@@ -4,7 +4,6 @@ import 'package:get/get.dart';
 import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/model/grade.dart';
 import 'package:celechron/model/scholar.dart';
-import 'package:celechron/http/zjuServices/zdbk.dart';
 import 'package:celechron/utils/tuple.dart';
 import 'package:celechron/utils/gpa_helper.dart';
 import 'package:celechron/utils/json_utils.dart';
@@ -63,9 +62,6 @@ class CreditProgressController extends GetxController {
   /// 正在从教务网拉取培养方案中
   final isSyncingTrainingPlan = false.obs;
 
-  /// 基于本学期课程智能推测的候选大类/专业名称
-  final inferredMajor = ''.obs;
-
   /// 各分类目标学分要求（根据专业培养方案映射）
   final categoryTargetCredits = <String, double>{}.obs;
 
@@ -100,7 +96,7 @@ class CreditProgressController extends GetxController {
     }
   }
 
-  /// 加载或从 ZDBK 自动拉取用户专业与培养方案要求
+  /// 加载或从 ZDBK 自动拉取用户真实专业与培养方案要求
   void loadUserMajorAndScheme() {
     try {
       // 1. 优先检查用户手动保存的专业
@@ -110,34 +106,40 @@ class CreditProgressController extends GetxController {
         userMajor.value = savedManualMajor.trim();
         majorSource.value = (savedSource as String?) ?? 'manual';
         _applySchemeForMajor(userMajor.value);
+        if (scholar.value.isLogan && majorSource.value != 'zdbk_pyfa') {
+          fetchAndApplyTrainingPlan(userMajor.value);
+        }
         return;
       }
 
-      // 2. 检查 ZDBK 缓存中拉取的专业
+      // 2. 检查 ZDBK 缓存中拉取的真实专业
       final zdbkMajor = _db.getCachedWebPage(_kZdbkMajorCacheKey);
       if (zdbkMajor != null && zdbkMajor.trim().isNotEmpty) {
         userMajor.value = zdbkMajor.trim();
         majorSource.value = 'zdbk';
         _applySchemeForMajor(userMajor.value);
+        if (scholar.value.isLogan) {
+          fetchAndApplyTrainingPlan(userMajor.value);
+        }
         return;
       }
 
-      // 3. 尝试从学生信息、课表及各成绩缓存中动态解析 zymc
+      // 3. 尝试从学生信息、课表及各成绩缓存中动态解析真实 zymc
       final majorFromGrade = _extractMajorFromZdbkCaches();
       if (majorFromGrade != null && majorFromGrade.isNotEmpty) {
         userMajor.value = majorFromGrade;
         majorSource.value = 'zdbk';
         _db.setCachedWebPage(_kZdbkMajorCacheKey, majorFromGrade);
         _applySchemeForMajor(userMajor.value);
+        if (scholar.value.isLogan) {
+          fetchAndApplyTrainingPlan(userMajor.value);
+        }
         return;
       }
 
-      // 4. 根据当前已选修的课程推测候选大类/专业
-      inferredMajor.value = inferMajorFromCourses() ?? '';
-
-      // 5. 若已登录，尝试后台异步主动向教务网查询个人学籍专业
+      // 4. 若已登录，尝试后台异步主动向教务网与学工系统查询个人真实学籍专业与培养方案
       if (scholar.value.isLogan) {
-        syncMajorFromZdbk();
+        syncMajorFromZdbk(fetchPlan: true);
       }
 
       majorSource.value = 'none';
@@ -149,7 +151,7 @@ class CreditProgressController extends GetxController {
     }
   }
 
-  /// 主动向教务网与学工系统拉取并同步学生学籍专业与培养方案
+  /// 主动向教务网与学工系统拉取并同步学生真实学籍专业与培养方案
   Future<void> syncMajorFromZdbk({bool fetchPlan = true}) async {
     if (isSyncingMajor.value) return;
     isSyncingMajor.value = true;
@@ -160,7 +162,6 @@ class CreditProgressController extends GetxController {
         userMajor.value = cleaned;
         majorSource.value = 'zdbk';
         _db.setCachedWebPage(_kZdbkMajorCacheKey, cleaned);
-        inferredMajor.value = '';
 
         if (fetchPlan) {
           await fetchAndApplyTrainingPlan(cleaned);
@@ -176,7 +177,7 @@ class CreditProgressController extends GetxController {
     }
   }
 
-  /// 依据专业名称从教务网培养方案管理系统（pyfagl）拉取官方培养方案与学分要求
+  /// 依据真实专业名称从教务网培养方案管理系统（pyfagl）拉取官方培养方案与学分要求
   Future<void> fetchAndApplyTrainingPlan(String major) async {
     if (isSyncingTrainingPlan.value) return;
     final cleaned = major.trim();
@@ -204,43 +205,6 @@ class CreditProgressController extends GetxController {
     }
 
     _applySchemeForMajor(cleaned);
-  }
-
-  /// 根据修读课程智能推断大类或专业
-  String? inferMajorFromCourses() {
-    final allCourseNames = <String>{};
-    for (final s in scholar.value.semesters) {
-      for (final c in s.courses.values) {
-        if (c.name.isNotEmpty) allCourseNames.add(c.name);
-      }
-      for (final p in s.periods) {
-        if (p.summary.isNotEmpty) allCourseNames.add(p.summary);
-      }
-    }
-
-    final hasMathAlpha = allCourseNames
-        .any((c) => c.contains('微积分（甲）') || c.contains('微积分(甲)'));
-    final hasLinAlgAlpha = allCourseNames
-        .any((c) => c.contains('线性代数（甲）') || c.contains('线性代数(甲)'));
-    final hasEngDrawing = allCourseNames.any((c) => c.contains('工程图学'));
-    final hasProgramming = allCourseNames.any(
-        (c) => c.contains('程序设计') || c.contains('C语言') || c.contains('Python'));
-    final hasMed = allCourseNames.any((c) =>
-        c.contains('解剖') ||
-        c.contains('生理') ||
-        c.contains('基础医学') ||
-        c.contains('临床'));
-    final hasArch = allCourseNames.any((c) => c.contains('建筑设计') || c.contains('建筑学'));
-
-    if (hasArch) return '建筑学';
-    if (hasMed) return '临床医学';
-    if (hasMathAlpha && (hasEngDrawing || hasProgramming || hasLinAlgAlpha)) {
-      return '工科试验班（信息）';
-    }
-    if (hasMathAlpha || hasLinAlgAlpha) {
-      return '工科试验班';
-    }
-    return null;
   }
 
   String? _extractMajorFromZdbkCaches() {

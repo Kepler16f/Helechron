@@ -866,6 +866,9 @@ class ZhiyunService {
     return '$_kZhiyunBaseUrl/#/searchContent?title=${Uri.encodeComponent(keyword)}&tenant_code=$_kTenantCode';
   }
 
+  /// 别名兼容
+  static String buildSearchUrl(String courseName) => buildSearchContentUrl(courseName);
+
   /// 智云课堂首页门户 URL
   static String buildPortalUrl() {
     return _kZhiyunBaseUrl;

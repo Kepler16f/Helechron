@@ -158,129 +158,6 @@ class CreditProgressPage extends StatelessWidget {
         );
       }
 
-      // 未配置专业，但已根据修读课程推测出候选大类/专业
-      if (_controller.inferredMajor.value.isNotEmpty) {
-        final inferred = _controller.inferredMajor.value;
-        return RoundRectangleCard(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: CupertinoDynamicColor.resolve(
-                          CustomCupertinoDynamicColors.sakura, context),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      CupertinoIcons.sparkles,
-                      size: 18,
-                      color: CupertinoColors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              '智能识别大类方案：',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: CupertinoDynamicColor.resolve(
-                                    CupertinoColors.label, context),
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: CupertinoDynamicColor.resolve(
-                                        CustomCupertinoDynamicColors.sakura,
-                                        context)
-                                    .withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                inferred,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: CupertinoDynamicColor.resolve(
-                                      CustomCupertinoDynamicColors.sakura,
-                                      context),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '根据您本学期修读的通识与大类基础课自动匹配',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.secondaryLabel, context),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: CupertinoButton(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      color: CupertinoDynamicColor.resolve(
-                          CustomCupertinoDynamicColors.sakura, context),
-                      borderRadius: BorderRadius.circular(8),
-                      onPressed: () {
-                        _controller.setUserMajor(inferred);
-                      },
-                      child: Text(
-                        '确认采纳【$inferred】方案',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: CupertinoColors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  CupertinoButton(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    color: CupertinoDynamicColor.resolve(
-                        CupertinoColors.tertiarySystemFill, context),
-                    borderRadius: BorderRadius.circular(8),
-                    onPressed: () => _showSetMajorDialog(context),
-                    child: Text(
-                      '更换',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: CupertinoDynamicColor.resolve(
-                            CupertinoColors.label, context),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      }
-
       // 未检测到专业时的引导填写卡片
       return RoundRectangleCard(
         onTap: () => _showSetMajorDialog(context),
@@ -1063,17 +940,20 @@ class CreditProgressPage extends StatelessWidget {
           ),
           // 总体进度与统计
           SliverToBoxAdapter(
-            child: _buildOverviewProgressCard(context),
-          ),
-          const SliverToBoxAdapter(
-            child: SizedBox(height: 8),
+            child: Padding(
+              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+              child: _buildOverviewProgressCard(context),
+            ),
           ),
           // 建议提示卡片
           SliverToBoxAdapter(
-            child: _buildAdviceCard(context),
+            child: Padding(
+              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+              child: _buildAdviceCard(context),
+            ),
           ),
           const SliverToBoxAdapter(
-            child: SizedBox(height: 12),
+            child: SizedBox(height: 4),
           ),
           // 分类标题
           SliverToBoxAdapter(
@@ -1108,15 +988,18 @@ class CreditProgressPage extends StatelessWidget {
             final groups = _controller.getCategoryGroups();
             if (groups.isEmpty) {
               return SliverToBoxAdapter(
-                child: RoundRectangleCard(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Center(
-                      child: Text(
-                        '暂无课程成绩记录',
-                        style: TextStyle(
-                          color: CupertinoDynamicColor.resolve(
-                              CupertinoColors.secondaryLabel, context),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: RoundRectangleCard(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Center(
+                        child: Text(
+                          '暂无课程成绩记录',
+                          style: TextStyle(
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.secondaryLabel, context),
+                          ),
                         ),
                       ),
                     ),
@@ -1129,7 +1012,7 @@ class CreditProgressPage extends StatelessWidget {
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
                     child: _buildCategoryGroupCard(context, groups[index]),
                   );
                 },
