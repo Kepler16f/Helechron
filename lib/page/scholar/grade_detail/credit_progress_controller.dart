@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/model/grade.dart';
 import 'package:celechron/model/scholar.dart';
+import 'package:celechron/http/zjuServices/zdbk.dart';
 import 'package:celechron/utils/tuple.dart';
 import 'package:celechron/utils/gpa_helper.dart';
 import 'package:celechron/utils/json_utils.dart';
@@ -47,14 +48,20 @@ class CreditProgressController extends GetxController {
   /// 用户主修专业名称（从教务网拉取或手动填写）
   final userMajor = ''.obs;
 
-  /// 专业信息来源：'zdbk'（教务网自动拉取） | 'manual'（用户手动填写） | 'none'（未设置）
+  /// 专业信息来源：'zdbk_pyfa'（官方培养方案） | 'zdbk'（教务网自动拉取） | 'manual'（用户手动填写） | 'none'（未设置）
   final majorSource = 'none'.obs;
+
+  /// 培养方案名称（例如：2024级工科试验班（信息）培养方案）
+  final trainingPlanName = ''.obs;
 
   /// 是否已配置或拉取到主修专业
   bool get hasMajor => userMajor.value.isNotEmpty;
 
   /// 正在从教务网同步专业中
   final isSyncingMajor = false.obs;
+
+  /// 正在从教务网拉取培养方案中
+  final isSyncingTrainingPlan = false.obs;
 
   /// 基于本学期课程智能推测的候选大类/专业名称
   final inferredMajor = ''.obs;
@@ -142,18 +149,24 @@ class CreditProgressController extends GetxController {
     }
   }
 
-  /// 主动向教务网拉取并同步学生学籍专业与培养方案
-  Future<void> syncMajorFromZdbk() async {
+  /// 主动向教务网与学工系统拉取并同步学生学籍专业与培养方案
+  Future<void> syncMajorFromZdbk({bool fetchPlan = true}) async {
     if (isSyncingMajor.value) return;
     isSyncingMajor.value = true;
     try {
       final remoteMajor = await scholar.value.fetchStudentMajor();
       if (remoteMajor != null && remoteMajor.trim().isNotEmpty) {
-        userMajor.value = remoteMajor.trim();
+        final cleaned = remoteMajor.trim();
+        userMajor.value = cleaned;
         majorSource.value = 'zdbk';
-        _db.setCachedWebPage(_kZdbkMajorCacheKey, remoteMajor.trim());
-        _applySchemeForMajor(remoteMajor.trim());
+        _db.setCachedWebPage(_kZdbkMajorCacheKey, cleaned);
         inferredMajor.value = '';
+
+        if (fetchPlan) {
+          await fetchAndApplyTrainingPlan(cleaned);
+        } else {
+          _applySchemeForMajor(cleaned);
+        }
         update();
       }
     } catch (e) {
@@ -161,6 +174,36 @@ class CreditProgressController extends GetxController {
     } finally {
       isSyncingMajor.value = false;
     }
+  }
+
+  /// 依据专业名称从教务网培养方案管理系统（pyfagl）拉取官方培养方案与学分要求
+  Future<void> fetchAndApplyTrainingPlan(String major) async {
+    if (isSyncingTrainingPlan.value) return;
+    final cleaned = major.trim();
+    if (cleaned.isEmpty) return;
+
+    isSyncingTrainingPlan.value = true;
+    try {
+      final plan = await scholar.value.fetchTrainingPlan(cleaned);
+      if (plan != null) {
+        trainingPlanName.value = plan.planName;
+        majorSource.value = 'zdbk_pyfa';
+        setTargetCredits(plan.totalCredits);
+        if (plan.categoryCredits.isNotEmpty) {
+          categoryTargetCredits.value = Map.from(plan.categoryCredits);
+        } else {
+          _applyDefaultCategoriesForMajor(cleaned);
+        }
+        update();
+        return;
+      }
+    } catch (e) {
+      debugPrint('获取官方培养方案失败: $e');
+    } finally {
+      isSyncingTrainingPlan.value = false;
+    }
+
+    _applySchemeForMajor(cleaned);
   }
 
   /// 根据修读课程智能推断大类或专业
@@ -256,12 +299,33 @@ class CreditProgressController extends GetxController {
     return null;
   }
 
+  /// 删除/清除手动添加的专业与自定义学分，恢复为自动检测或默认方案
+  Future<void> resetManualMajor({bool clearCache = false}) async {
+    try {
+      await _db.optionsBox.delete(_kUserMajorKey);
+      await _db.optionsBox.delete(_kMajorSourceKey);
+      await _db.optionsBox.delete(_kTargetCreditsKey);
+      if (clearCache) {
+        await _db.removeCachedWebPage(_kZdbkMajorCacheKey);
+      }
+    } catch (e) {
+      debugPrint('清除手动专业与学分配置失败: $e');
+    }
+    userMajor.value = '';
+    trainingPlanName.value = '';
+    majorSource.value = 'none';
+    categoryTargetCredits.clear();
+    loadUserMajorAndScheme();
+    update();
+  }
+
   /// 用户手动设置/更改主修专业培养方案
   void setUserMajor(String major, {double? targetCredits}) {
     final cleaned = major.trim();
     if (cleaned.isEmpty) return;
 
     userMajor.value = cleaned;
+    trainingPlanName.value = '';
     majorSource.value = 'manual';
     try {
       _db.optionsBox.put(_kUserMajorKey, cleaned);
@@ -287,6 +351,17 @@ class CreditProgressController extends GetxController {
     } else {
       setTargetCredits(isFiveYear ? 210.0 : 160.0);
     }
+
+    _applyDefaultCategoriesForMajor(major);
+  }
+
+  /// 依据专业分配默认各模块学分要求模板
+  void _applyDefaultCategoriesForMajor(String major) {
+    final isFiveYear = major.contains('建筑') ||
+        major.contains('临床') ||
+        major.contains('口腔') ||
+        major.contains('医学') ||
+        major.contains('规划');
 
     if (isFiveYear) {
       categoryTargetCredits.value = {

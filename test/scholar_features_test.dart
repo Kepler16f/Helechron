@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:celechron/model/grade.dart';
 import 'package:celechron/page/scholar/grade_detail/credit_progress_controller.dart';
 import 'package:celechron/services/zhiyun_service.dart';
+import 'package:celechron/http/zjuServices/zdbk.dart';
 
 void main() {
   group('P2: Grade Category and Credit Progress tests', () {
@@ -97,6 +98,99 @@ void main() {
         url,
         'https://classroom.zju.edu.cn/livingroom?course_id=85940&sub_id=1973989&tenant_code=112',
       );
+    });
+  });
+
+  group('P4: Training Plan (pyfagl) & Credit Dashboard tests', () {
+    test('TrainingPlanInfo serializes and deserializes properly', () {
+      final plan = TrainingPlanInfo(
+        pyfaId: '2024080901001',
+        planName: '2024级工科试验班（信息）培养方案',
+        majorName: '工科试验班（信息）',
+        grade: '2024',
+        collegeName: '信息与电子工程学院',
+        totalCredits: 165.5,
+        categoryCredits: {
+          '通识必修课': 34.0,
+          '通识选修课': 10.0,
+          '大类基础课': 35.0,
+          '专业必修课': 40.0,
+          '专业选修课': 25.0,
+          '实践与毕业设计': 16.0,
+        },
+        isFiveYear: false,
+      );
+
+      final json = plan.toJson();
+      expect(json['pyfaId'], '2024080901001');
+      expect(json['totalCredits'], 165.5);
+      expect(json['majorName'], '工科试验班（信息）');
+
+      final reconstructed = TrainingPlanInfo.fromJson(json);
+      expect(reconstructed.pyfaId, '2024080901001');
+      expect(reconstructed.planName, '2024级工科试验班（信息）培养方案');
+      expect(reconstructed.totalCredits, 165.5);
+      expect(reconstructed.categoryCredits['通识必修课'], 34.0);
+      expect(reconstructed.isFiveYear, isFalse);
+    });
+
+    test('Training plan credit extraction regex patterns parse various formats', () {
+      final testSnippets = [
+        '本专业最低毕业学分要求：165.5 学分，其中通识必修 34 学分',
+        '<tr><td>毕业最低学分</td><td>160.0</td></tr>',
+        '本专业毕业总学分要求为 160 学分',
+        '最低修读学分: 168.0',
+        '总学分：210.0（五年制医学）',
+        '学生在学期间需修满教学计划要求 162.5 学分方可准予毕业',
+      ];
+
+      final creditPatterns = [
+        RegExp(
+            r'(?:最低毕业学分|毕业要求最低学分|毕业最低学分|最低修读学分|最低学分要求|毕业总学分|最低要求学分|修读总学分|毕业要求|总学分)[^\d\r\n]{0,25}(\d{2,3}(?:\.\d+)?)',
+            caseSensitive: false),
+        RegExp(r'(\d{2,3}(?:\.\d+)?)\s*学分[^\w\r\n]{0,10}(?:毕业|最低)',
+            caseSensitive: false),
+        RegExp(r'要求[^\d\r\n]{0,10}(\d{2,3}(?:\.\d+)?)\s*学分',
+            caseSensitive: false),
+      ];
+
+      for (final snippet in testSnippets) {
+        double? extracted;
+        for (final p in creditPatterns) {
+          final m = p.firstMatch(snippet);
+          if (m != null) {
+            extracted = double.tryParse(m.group(1) ?? '');
+            if (extracted != null && extracted >= 100 && extracted <= 300) {
+              break;
+            }
+          }
+        }
+        expect(extracted, isNotNull, reason: 'Failed to extract from: $snippet');
+        expect(extracted! >= 160.0 && extracted <= 210.0, isTrue);
+      }
+    });
+
+    test('Five-year vs four-year major detection', () {
+      const fiveYearMajors = ['建筑学', '临床医学', '口腔医学', '城乡规划'];
+      const fourYearMajors = ['计算机科学与技术', '软件工程', '信息与电子工程', '机械工程'];
+
+      for (final m in fiveYearMajors) {
+        final isFive = m.contains('建筑') ||
+            m.contains('临床') ||
+            m.contains('口腔') ||
+            m.contains('医学') ||
+            m.contains('规划');
+        expect(isFive, isTrue, reason: '$m should be recognized as 5-year');
+      }
+
+      for (final m in fourYearMajors) {
+        final isFive = m.contains('建筑') ||
+            m.contains('临床') ||
+            m.contains('口腔') ||
+            m.contains('医学') ||
+            m.contains('规划');
+        expect(isFive, isFalse, reason: '$m should be recognized as 4-year');
+      }
     });
   });
 }

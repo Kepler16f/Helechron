@@ -18,6 +18,7 @@ import 'package:celechron/http/ugrs_spider.dart';
 import 'package:celechron/http/grs_spider.dart';
 import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/services/zhiyun_service.dart';
+import 'package:celechron/http/zjuServices/zdbk.dart';
 
 class Scholar {
   Scholar();
@@ -811,18 +812,43 @@ class Scholar {
     isLogan = true;
   }
 
-  /// 尝试从教务网主动拉取用户主修专业/大类名称
+  /// 尝试从教务网（ZDBK）及 ETA 平台主动拉取用户主修专业/大类名称
   Future<String?> fetchStudentMajor() async {
     if (_spider is UgrsSpider) {
       final spider = _spider as UgrsSpider;
       try {
-        final res = await spider.zdbk.getStudentMajor(spider.httpClient);
+        final res = await spider.zdbk
+            .getStudentMajor(spider.httpClient, studentId: username);
         if (res.item2 != null && res.item2!.trim().isNotEmpty) {
           return res.item2!.trim();
         }
       } catch (e) {
         if (kDebugMode) {
           debugPrint('fetchStudentMajor 失败: $e');
+        }
+      }
+    }
+    return null;
+  }
+
+  /// 依据专业名称从教务网培养方案管理系统（pyfagl）拉取官方培养方案与学分要求
+  Future<TrainingPlanInfo?> fetchTrainingPlan(String majorName,
+      {String? grade}) async {
+    if (_spider is UgrsSpider) {
+      final spider = _spider as UgrsSpider;
+      try {
+        final res = await spider.zdbk.getTrainingPlanForMajor(
+          spider.httpClient,
+          majorName,
+          studentId: username,
+          grade: grade,
+        );
+        if (res.item2 != null) {
+          return res.item2;
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('fetchTrainingPlan 失败: $e');
         }
       }
     }

@@ -14,6 +14,57 @@ import 'package:celechron/utils/global.dart';
 import 'package:celechron/services/diagnostic_log_service.dart';
 import 'exceptions.dart';
 import 'response_utils.dart';
+import 'eta.dart';
+
+/// 培养方案与学分要求信息模型
+class TrainingPlanInfo {
+  final String pyfaId;
+  final String planName;
+  final String majorName;
+  final String? grade;
+  final String? collegeName;
+  final double totalCredits;
+  final Map<String, double> categoryCredits;
+  final bool isFiveYear;
+
+  TrainingPlanInfo({
+    required this.pyfaId,
+    required this.planName,
+    required this.majorName,
+    this.grade,
+    this.collegeName,
+    required this.totalCredits,
+    this.categoryCredits = const {},
+    this.isFiveYear = false,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'pyfaId': pyfaId,
+        'planName': planName,
+        'majorName': majorName,
+        'grade': grade,
+        'collegeName': collegeName,
+        'totalCredits': totalCredits,
+        'categoryCredits': categoryCredits,
+        'isFiveYear': isFiveYear,
+      };
+
+  factory TrainingPlanInfo.fromJson(Map<String, dynamic> json) {
+    return TrainingPlanInfo(
+      pyfaId: json['pyfaId'] as String? ?? '',
+      planName: json['planName'] as String? ?? '',
+      majorName: json['majorName'] as String? ?? '',
+      grade: json['grade'] as String?,
+      collegeName: json['collegeName'] as String?,
+      totalCredits: (json['totalCredits'] as num?)?.toDouble() ?? 160.0,
+      categoryCredits: (json['categoryCredits'] as Map?)?.map(
+            (k, v) => MapEntry(k.toString(), (v as num).toDouble()),
+          ) ??
+          {},
+      isFiveYear: json['isFiveYear'] as bool? ?? false,
+    );
+  }
+}
 
 /// 本科教务网客户端；统一管理 CAS 业务会话、并发限流与按接口缓存降级。
 class Zdbk {
@@ -864,15 +915,15 @@ class Zdbk {
     return bytes;
   }
 
-  /// 获取用户主修专业/大类名称（从本地缓存、学籍接口或各教务接口中解析）
+  /// 获取用户主修专业/大类名称（多级多源兜底：本地缓存 -> 课表学籍 -> 成绩单 -> 教务网学籍JSON -> 教务网学籍HTML -> ETA 学工系统）
   Future<Tuple<Exception?, String?>> getStudentMajor(
-      HttpClient httpClient) async {
+      HttpClient httpClient, {String? studentId}) async {
     final cached = _db?.getCachedWebPage('zdbk_user_major');
     if (cached != null && cached.trim().isNotEmpty) {
       return Tuple(null, cached.trim());
     }
 
-    // 1. 检查学生个人信息缓存
+    // 1. 检查学生个人信息缓存（由课表接口写入）
     final studentInfo = _db?.getCachedWebPage('zdbk_student_info');
     if (studentInfo != null && studentInfo.isNotEmpty) {
       try {
@@ -907,9 +958,53 @@ class Zdbk {
       return Tuple(null, major2);
     }
 
-    // 3. 尝试主动请求教务网学籍信息维护接口（新正方标准学籍查询入口）
+    // 3. 尝试主动请求教务网学籍接口
     try {
-      return await _withAutoRelogin(httpClient, (relogged, retried) async {
+      final zdbkMajor = await _withAutoRelogin(httpClient, (relogged, retried) async {
+        // 3.1 优先请求正方标准学生个人信息 JSON 接口
+        try {
+          final suParam = studentId != null && studentId.isNotEmpty ? '&su=$studentId' : '';
+          final jsonUri = Uri.parse(
+              "https://zdbk.zju.edu.cn/jwglxt/xsxxxggl/xsxxwh_cxCkDgxsxx.html?gnmkdm=N100801$suParam");
+          final jsonReq = await httpClient.getUrl(jsonUri).timeout(
+              const Duration(seconds: 8),
+              onTimeout: () => throw requestTimeout());
+          jsonReq.headers
+            ..add("Referer", "https://zdbk.zju.edu.cn/jwglxt/xtgl/index_initMenu.html")
+            ..set('Connection', 'close')
+            ..add('User-Agent',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
+            ..add('X-Requested-With', 'XMLHttpRequest')
+            ..add('Accept', 'application/json, text/plain, */*');
+          jsonReq.cookies.add(_jSessionId!);
+          jsonReq.cookies.add(_route!);
+          jsonReq.followRedirects = false;
+          final jsonResp = await jsonReq.close().timeout(const Duration(seconds: 8),
+              onTimeout: () => throw requestTimeout());
+          final jsonBody = await readResponseBody(jsonResp, context: '教务网学生信息JSON接口');
+          if (jsonResp.statusCode == 200 && jsonBody.isNotEmpty) {
+            try {
+              final decoded = jsonDecode(jsonBody);
+              final map = asStringMap(decoded);
+              if (map != null) {
+                final major = asString(map['zymc']) ??
+                    asString(map['ZYMC']) ??
+                    asString(map['zyfxmc']) ??
+                    asString(map['xymc']) ??
+                    asString(map['jgmc']);
+                if (major != null &&
+                    major.trim().isNotEmpty &&
+                    major != '未知' &&
+                    major != '无') {
+                  _writeCache('zdbk_user_major', major.trim());
+                  return Tuple<Exception?, String?>(null, major.trim());
+                }
+              }
+            } catch (_) {}
+          }
+        } catch (_) {}
+
+        // 3.2 降级请求教务网学籍信息维护 HTML 页面正则匹配
         late HttpClientRequest request;
         late HttpClientResponse response;
         final uri = Uri.parse(
@@ -942,7 +1037,6 @@ class Zdbk {
               retried: retried,
               expectJson: false);
 
-          // 正则提取专业/大类或学院信息
           final patterns = [
             RegExp('id=[\"\']col_zy(?:fx)?_id[\"\'][^>]*>\\s*<p[^>]*>([^<]+)</p>',
                 caseSensitive: false),
@@ -963,20 +1057,363 @@ class Zdbk {
                 text != '无' &&
                 !text.contains('&nbsp;')) {
               _writeCache('zdbk_user_major', text);
-              return Tuple(null, text);
+              return Tuple<Exception?, String?>(null, text);
             }
           }
 
-          return Tuple(null, null);
+          return Tuple<Exception?, String?>(null, null);
         } on Object catch (e) {
           if (e is AuthenticationExpiredException) rethrow;
-          return Tuple(null, null);
+          return Tuple<Exception?, String?>(null, null);
         }
       });
-    } catch (_) {
+
+      if (zdbkMajor.item2 != null && zdbkMajor.item2!.isNotEmpty) {
+        return zdbkMajor;
+      }
+    } catch (_) {}
+
+    // 4. 尝试从浙大 ETA “三全育人”学生信息平台（eta.zju.edu.cn）获取专业
+    try {
+      final etaMajor = await Eta.getStudentMajor(httpClient, _iPlanetDirectoryPro);
+      if (etaMajor != null && etaMajor.trim().isNotEmpty) {
+        _writeCache('zdbk_user_major', etaMajor.trim());
+        return Tuple(null, etaMajor.trim());
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('从 ETA 获取专业兜底失败: $e');
+      }
+    }
+
+    return Tuple(null, null);
+  }
+
+  /// 查询教务网培养方案学生查询列表（gnmkdm=N153020）
+  Future<Tuple<Exception?, List<Map<String, dynamic>>>> getTrainingPlans(
+      HttpClient httpClient,
+      {String? studentId,
+      String? majorName,
+      String? grade}) async {
+    return await _withAutoRelogin(httpClient, (relogged, retried) async {
+      late HttpClientRequest request;
+      late HttpClientResponse response;
+      final suParam = studentId != null && studentId.isNotEmpty ? '&su=$studentId' : '';
+      final uri = Uri.parse(
+          "https://zdbk.zju.edu.cn/jwglxt/pyfagl/pyfaxxcx_cxPyfaxscxIndex.html?doType=query&gnmkdm=N153020$suParam");
+
+      try {
+        request = await httpClient.postUrl(uri).timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => throw requestTimeout());
+        request.headers
+          ..add("Referer",
+              "https://zdbk.zju.edu.cn/jwglxt/pyfagl/pyfaxxcx_cxPyfaxscxIndex.html?gnmkdm=N153020&layout=default$suParam")
+          ..set('Connection', 'close')
+          ..add('User-Agent',
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
+          ..add('Accept', 'application/json, text/javascript, */*; q=0.01')
+          ..add('X-Requested-With', 'XMLHttpRequest')
+          ..set(HttpHeaders.contentTypeHeader,
+              'application/x-www-form-urlencoded;charset=UTF-8');
+        request.cookies.add(_jSessionId!);
+        request.cookies.add(_route!);
+        request.followRedirects = false;
+
+        final queryParams = <String, String>{
+          'queryModel.showCount': '5000',
+          'queryModel.currentPage': '1',
+          'queryModel.sortOrder': 'asc',
+          '_search': 'false',
+        };
+        if (majorName != null && majorName.trim().isNotEmpty) {
+          queryParams['zymc'] = majorName.trim();
+        }
+        if (grade != null && grade.trim().isNotEmpty) {
+          queryParams['njdm_id'] = grade.trim();
+        }
+
+        final encodedBody = queryParams.entries
+            .map((e) =>
+                '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}')
+            .join('&');
+        request.add(utf8.encode(encodedBody));
+
+        response = await request.close().timeout(const Duration(seconds: 10),
+            onTimeout: () => throw requestTimeout());
+
+        var responseText =
+            await readResponseBody(response, context: '教务网培养方案列表接口');
+        _validateResponse(response, responseText,
+            context: '教务网培养方案列表接口',
+            requestUri: uri,
+            relogged: relogged,
+            retried: retried,
+            expectJson: true);
+
+        final decoded = jsonDecode(responseText);
+        final rawItems = asDynamicList(
+            decoded is Map ? decoded['items'] : decoded);
+        final List<Map<String, dynamic>> items = [];
+        if (rawItems != null) {
+          for (final item in rawItems) {
+            final m = asStringMap(item);
+            if (m != null) items.add(m);
+          }
+        }
+        _writeCache('zdbk_training_plans', responseText);
+        return Tuple(null, items);
+      } on Object catch (e) {
+        if (e is AuthenticationExpiredException) rethrow;
+        return Tuple(ExceptionWithMessage("获取培养方案列表失败: $e"), []);
+      }
+    });
+  }
+
+  /// 请求培养方案预览/打印页面并解析最低毕业学分及各模块要求学分
+  Future<Tuple<Exception?, Map<String, dynamic>>> fetchTrainingPlanDetail(
+      HttpClient httpClient, String pyfaId,
+      {String? studentId}) async {
+    return await _withAutoRelogin(httpClient, (relogged, retried) async {
+      final suParam = studentId != null && studentId.isNotEmpty ? '&su=$studentId' : '';
+      final previewUris = [
+        Uri.parse(
+            "https://zdbk.zju.edu.cn/jwglxt/pyfagl/pyfaxxcx_dyPyfaxs.html?pyfa_id=$pyfaId&gnmkdm=N153020$suParam"),
+        Uri.parse(
+            "https://zdbk.zju.edu.cn/jwglxt/pyfagl/pyfaxxcx_cxPyfaxsView.html?pyfa_id=$pyfaId&gnmkdm=N153020$suParam"),
+      ];
+
+      double? totalCredits;
+      final categoryCredits = <String, double>{};
+
+      for (final uri in previewUris) {
+        try {
+          final request = await httpClient.getUrl(uri).timeout(
+              const Duration(seconds: 8),
+              onTimeout: () => throw requestTimeout());
+          request.headers
+            ..add("Referer",
+                "https://zdbk.zju.edu.cn/jwglxt/pyfagl/pyfaxxcx_cxPyfaxscxIndex.html?gnmkdm=N153020&layout=default$suParam")
+            ..set('Connection', 'close')
+            ..add('User-Agent',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
+            ..add('Accept',
+                'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
+          request.cookies.add(_jSessionId!);
+          request.cookies.add(_route!);
+          request.followRedirects = false;
+
+          final response = await request.close().timeout(
+              const Duration(seconds: 8),
+              onTimeout: () => throw requestTimeout());
+          final body =
+              await readResponseBody(response, context: '教务网培养方案详情预览');
+
+          if (response.statusCode == 200 && body.isNotEmpty) {
+            // 解析总毕业学分要求
+            final creditPatterns = [
+              RegExp(
+                  r'(?:最低毕业学分|毕业要求最低学分|毕业最低学分|最低修读学分|最低学分要求|毕业总学分|最低要求学分|修读总学分|毕业要求|总学分)[^\d\r\n]{0,25}(\d{2,3}(?:\.\d+)?)',
+                  caseSensitive: false),
+              RegExp(r'(\d{2,3}(?:\.\d+)?)\s*学分[^\w\r\n]{0,10}(?:毕业|最低)',
+                  caseSensitive: false),
+              RegExp(r'要求[^\d\r\n]{0,10}(\d{2,3}(?:\.\d+)?)\s*学分',
+                  caseSensitive: false),
+            ];
+
+            for (final p in creditPatterns) {
+              final m = p.firstMatch(body);
+              if (m != null) {
+                final parsed = double.tryParse(m.group(1) ?? '');
+                if (parsed != null && parsed >= 100 && parsed <= 300) {
+                  totalCredits = parsed;
+                  break;
+                }
+              }
+            }
+
+            // 解析各模块分类学分
+            final catPatterns = {
+              '通识必修课': RegExp(
+                  r'(?:通识必修|通识教育必修)[^\d\r\n]{0,15}(\d{1,2}(?:\.\d+)?)'),
+              '通识选修课': RegExp(
+                  r'(?:通识选修|通识核心|通识教育选修)[^\d\r\n]{0,15}(\d{1,2}(?:\.\d+)?)'),
+              '大类基础课': RegExp(
+                  r'(?:大类基础|学科基础|大类课程)[^\d\r\n]{0,15}(\d{1,2}(?:\.\d+)?)'),
+              '专业必修课': RegExp(
+                  r'(?:专业必修|专业核心)[^\d\r\n]{0,15}(\d{1,2}(?:\.\d+)?)'),
+              '专业选修课': RegExp(
+                  r'(?:专业选修|专业方向)[^\d\r\n]{0,15}(\d{1,2}(?:\.\d+)?)'),
+              '实践与毕业设计': RegExp(
+                  r'(?:实践教学|集中实践|实践与毕业设计|毕业论文|毕业设计)[^\d\r\n]{0,15}(\d{1,2}(?:\.\d+)?)'),
+            };
+
+            catPatterns.forEach((cat, reg) {
+              final m = reg.firstMatch(body);
+              if (m != null) {
+                final val = double.tryParse(m.group(1) ?? '');
+                if (val != null && val > 0 && val < 100) {
+                  categoryCredits[cat] = val;
+                }
+              }
+            });
+
+            if (totalCredits != null) {
+              break;
+            }
+          }
+        } catch (_) {}
+      }
+
+      return Tuple(null, {
+        'totalCredits': totalCredits,
+        'categoryCredits': categoryCredits,
+      });
+    });
+  }
+
+  /// 依据专业名称查询匹配的培养方案并提取学分配置
+  Future<Tuple<Exception?, TrainingPlanInfo?>> getTrainingPlanForMajor(
+      HttpClient httpClient, String majorName,
+      {String? studentId, String? grade}) async {
+    final cleaned = majorName.trim();
+    if (cleaned.isEmpty) return Tuple(null, null);
+
+    // 检查缓存
+    final cacheKey = 'zdbk_training_plan_$cleaned';
+    final cachedJson = _db?.getCachedWebPage(cacheKey);
+    if (cachedJson != null && cachedJson.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(cachedJson);
+        if (decoded is Map<String, dynamic>) {
+          return Tuple(null, TrainingPlanInfo.fromJson(decoded));
+        }
+      } catch (_) {}
+    }
+
+    // 查询所有培养方案列表
+    final plansRes = await getTrainingPlans(httpClient,
+        studentId: studentId, majorName: cleaned, grade: grade);
+    if (plansRes.item1 != null) {
+      return Tuple(plansRes.item1, null);
+    }
+
+    final items = plansRes.item2;
+    if (items.isEmpty) {
+      // 尝试无专业过滤再查一次
+      final allPlansRes = await getTrainingPlans(httpClient, studentId: studentId);
+      if (allPlansRes.item2.isNotEmpty) {
+        items.addAll(allPlansRes.item2);
+      }
+    }
+
+    if (items.isEmpty) {
       return Tuple(null, null);
     }
+
+    // 在列表中匹配最贴近该专业的培养方案
+    Map<String, dynamic>? matchedItem;
+
+    // 规则 1：专业全名完全匹配
+    for (final it in items) {
+      final zymc = asString(it['zymc']) ?? asString(it['ZYMC']) ?? '';
+      if (zymc == cleaned) {
+        matchedItem = it;
+        break;
+      }
+    }
+
+    // 规则 2：方案名称包含专业全名
+    if (matchedItem == null) {
+      for (final it in items) {
+        final pyfamc = asString(it['pyfamc']) ?? '';
+        if (pyfamc.contains(cleaned)) {
+          matchedItem = it;
+          break;
+        }
+      }
+    }
+
+    // 规则 3：核心专业名称匹配
+    if (matchedItem == null) {
+      final coreName = cleaned
+          .replaceAll('（', '(')
+          .replaceAll('）', ')')
+          .replaceAll('试验班', '')
+          .replaceAll('班', '')
+          .trim();
+      for (final it in items) {
+        final zymc = asString(it['zymc']) ?? asString(it['ZYMC']) ?? '';
+        final pyfamc = asString(it['pyfamc']) ?? '';
+        if (zymc.contains(coreName) || pyfamc.contains(coreName)) {
+          matchedItem = it;
+          break;
+        }
+      }
+    }
+
+    // 规则 4：兜底首项
+    matchedItem ??= items.first;
+
+    final pyfaId = asString(matchedItem['pyfa_id']) ?? '';
+    final planName = asString(matchedItem['pyfamc']) ?? '$cleaned培养方案';
+    final zymc = asString(matchedItem['zymc']) ?? cleaned;
+    final planGrade = asString(matchedItem['njdm_id']) ?? grade;
+    final college = asString(matchedItem['jgmc']);
+
+    final isFiveYear = cleaned.contains('建筑') ||
+        cleaned.contains('临床') ||
+        cleaned.contains('口腔') ||
+        cleaned.contains('医学') ||
+        cleaned.contains('规划');
+
+    // 检查列表自带的毕业要求学分字段（如 bbyq）
+    double? totalCredits;
+    final bbyqStr = asString(matchedItem['bbyq']) ?? asString(matchedItem['zdbyxf']);
+    if (bbyqStr != null) {
+      final parsed = double.tryParse(bbyqStr);
+      if (parsed != null && parsed >= 100 && parsed <= 300) {
+        totalCredits = parsed;
+      }
+    }
+
+    Map<String, double> categoryCredits = {};
+
+    // 若有方案 ID，尝试进一步深入详情预览提取精准学分与各类别要求
+    if (pyfaId.isNotEmpty) {
+      final detailRes =
+          await fetchTrainingPlanDetail(httpClient, pyfaId, studentId: studentId);
+      final detailMap = detailRes.item2;
+      if (detailMap['totalCredits'] != null && detailMap['totalCredits'] is double) {
+        totalCredits = detailMap['totalCredits'] as double;
+      }
+      if (detailMap['categoryCredits'] != null &&
+          detailMap['categoryCredits'] is Map) {
+        categoryCredits =
+            Map<String, double>.from(detailMap['categoryCredits'] as Map);
+      }
+    }
+
+    totalCredits ??= isFiveYear ? 210.0 : 160.0;
+
+    final planInfo = TrainingPlanInfo(
+      pyfaId: pyfaId,
+      planName: planName,
+      majorName: zymc,
+      grade: planGrade,
+      collegeName: college,
+      totalCredits: totalCredits,
+      categoryCredits: categoryCredits,
+      isFiveYear: isFiveYear,
+    );
+
+    try {
+      _writeCache(cacheKey, jsonEncode(planInfo.toJson()));
+    } catch (_) {}
+
+    return Tuple(null, planInfo);
   }
+
 
   Future<String> solveCaptcha(HttpClient httpClient) async {
     throw UnimplementedError("验证码识别功能未开发");

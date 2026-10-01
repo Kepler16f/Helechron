@@ -67,20 +67,27 @@ class CreditProgressPage extends StatelessWidget {
                               horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: CupertinoDynamicColor.resolve(
-                              source == 'zdbk'
-                                  ? CustomCupertinoDynamicColors.spring
-                                  : CupertinoColors.tertiarySystemFill,
+                              source == 'zdbk_pyfa'
+                                  ? CustomCupertinoDynamicColors.sakura
+                                  : (source == 'zdbk'
+                                      ? CustomCupertinoDynamicColors.spring
+                                      : CupertinoColors.tertiarySystemFill),
                               context,
                             ),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            source == 'zdbk' ? '教务网同步' : '手动设置',
+                            source == 'zdbk_pyfa'
+                                ? '官方培养方案'
+                                : (source == 'zdbk' ? '教务网同步' : '手动设置'),
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
                               color: CupertinoDynamicColor.resolve(
-                                  CupertinoColors.label, context),
+                                  source == 'zdbk_pyfa'
+                                      ? CupertinoColors.white
+                                      : CupertinoColors.label,
+                                  context),
                             ),
                           ),
                         ),
@@ -88,16 +95,33 @@ class CreditProgressPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '培养方案要求：${_controller.targetGraduationCredits.value.toStringAsFixed(1)} 学分',
+                      _controller.trainingPlanName.value.isNotEmpty
+                          ? '${_controller.trainingPlanName.value}（${_controller.targetGraduationCredits.value.toStringAsFixed(1)} 学分）'
+                          : '培养方案要求：${_controller.targetGraduationCredits.value.toStringAsFixed(1)} 学分',
                       style: TextStyle(
                         fontSize: 12,
                         color: CupertinoDynamicColor.resolve(
                             CupertinoColors.secondaryLabel, context),
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
+              if (source == 'manual') ...[
+                CupertinoButton(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  minSize: 0,
+                  onPressed: () => _controller.resetManualMajor(),
+                  child: const Icon(
+                    CupertinoIcons.trash,
+                    size: 18,
+                    color: CupertinoColors.destructiveRed,
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
               CupertinoButton(
                 padding: EdgeInsets.zero,
                 onPressed: () => _showSetMajorDialog(context),
@@ -937,20 +961,62 @@ class CreditProgressPage extends StatelessWidget {
                           child: CupertinoButton.filled(
                             padding: const EdgeInsets.symmetric(vertical: 10),
                             child: const Text('保存培养方案'),
-                            onPressed: () {
+                            onPressed: () async {
                               final major = majorTextController.text.trim();
                               if (major.isNotEmpty) {
                                 final credits = double.tryParse(
                                     creditsTextController.text.trim());
                                 _controller.setUserMajor(major,
                                     targetCredits: credits);
+                              } else {
+                                await _controller.resetManualMajor();
                               }
-                              Navigator.of(dialogCtx).pop();
+                              if (dialogCtx.mounted) {
+                                Navigator.of(dialogCtx).pop();
+                              }
                             },
                           ),
                         ),
                       ],
                     ),
+                    if (_controller.hasMajor ||
+                        _controller.majorSource.value == 'manual') ...[
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: CupertinoButton(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          color:
+                              CupertinoColors.destructiveRed.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: const [
+                              Icon(
+                                CupertinoIcons.trash,
+                                size: 16,
+                                color: CupertinoColors.destructiveRed,
+                              ),
+                              SizedBox(width: 6),
+                              Text(
+                                '删除手动设置 / 恢复默认',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: CupertinoColors.destructiveRed,
+                                ),
+                              ),
+                            ],
+                          ),
+                          onPressed: () async {
+                            await _controller.resetManualMajor();
+                            if (dialogCtx.mounted) {
+                              Navigator.of(dialogCtx).pop();
+                            }
+                          },
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
