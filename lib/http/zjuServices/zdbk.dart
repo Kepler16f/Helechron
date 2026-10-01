@@ -361,17 +361,80 @@ class Zdbk {
     return grades;
   }
 
-  /// 从班级名称中提取主修专业或大类（例如 "信息工程2201班" -> "信息工程"，"工科试验班（信息）2401" -> "工科试验班（信息）"）
+  /// 从浙大本科生学号推算入学年级（例如 "3260101109" -> "2026"，"3240101234" -> "2024"）
+  static String? inferGradeFromStudentId(String? studentId) {
+    if (studentId == null || studentId.trim().isEmpty) return null;
+    final trimmed = studentId.trim();
+    final match = RegExp(r'^3(\d{2})').firstMatch(trimmed);
+    if (match != null) {
+      final yy = match.group(1)!;
+      return '20$yy';
+    }
+    return null;
+  }
+
+  /// 标准化专业名称（清洗班级残留、统一中英括号并展开常见简称）
+  static String normalizeMajorName(String name) {
+    var s = name.trim().replaceAll('（', '(').replaceAll('）', ')');
+
+    // 移除可能存在的开头部年级，如 "2026级工科试验班(信息)" -> "工科试验班(信息)"
+    s = s.replaceFirst(RegExp(r'^\d{2,4}级'), '').trim();
+
+    // 移除末尾数字班号，如 "2601班" 或 "2601"
+    s = s.replaceFirst(RegExp(r'\d+班?$'), '').trim();
+
+    if (s.endsWith('班') && !s.contains('试验班')) {
+      s = s.substring(0, s.length - 1).trim();
+    }
+
+    const abbreviations = {
+      '工信': '工科试验班(信息)',
+      '工信大类': '工科试验班(信息)',
+      '信息大类': '工科试验班(信息)',
+      '工科试验班(工信)': '工科试验班(信息)',
+      '工科试验班(信息)': '工科试验班(信息)',
+      '工科': '工科试验班',
+      '社科': '社会科学试验班',
+      '人文': '人文科学试验班',
+      '理试': '理科试验班',
+      '信工': '信息工程',
+      '信电': '信息工程',
+      '计科': '计算机科学与技术',
+      '计算机': '计算机科学与技术',
+      '软工': '软件工程',
+      '软件': '软件工程',
+      '电自': '电气工程及其自动化',
+      '电气': '电气工程及其自动化',
+      '自动化': '自动化',
+      '光电': '光电信息科学与工程',
+      '微电': '微电子科学与工程',
+      '机械': '机械工程',
+    };
+    return abbreviations[s] ?? s;
+  }
+
+  /// 从班级名称中提取主修专业或大类（例如 "信息工程2201班" -> "信息工程"，"工科试验班（信息）2601" -> "工科试验班(信息)"，"工信2601" -> "工科试验班(信息)"）
   static String? extractMajorFromClassName(String? className) {
     if (className == null) return null;
-    var name = className.trim();
+    var name = className.trim().replaceAll('&nbsp;', '');
     if (name.isEmpty || name == '未知' || name == '无') return null;
-    if (name.endsWith('班')) {
+
+    // 清理班级末尾常见校区/学园括号标注，如 "(丹青)", "(云峰)", "(蓝田)", "(竺院)"
+    name = name.replaceAll(RegExp(r'[\(（](?:丹青|云峰|蓝田|竺院)[\)）]'), '').trim();
+
+    // 统一中英文括号
+    name = name.replaceAll('（', '(').replaceAll('）', ')');
+
+    // 移除末尾的数字班号及“班”字，例如 "工科试验班(信息)2601班" -> "工科试验班(信息)", "信息工程2201" -> "信息工程"
+    name = name.replaceFirst(RegExp(r'\d+班?$'), '').trim();
+
+    // 若依然以“班”结尾且不属于“试验班”，去除末尾“班”
+    if (name.endsWith('班') && !name.contains('试验班')) {
       name = name.substring(0, name.length - 1).trim();
     }
-    name = name.replaceFirst(RegExp(r'\d+$'), '').trim();
+
     if (name.isNotEmpty && name.length >= 2) {
-      return name;
+      return normalizeMajorName(name);
     }
     return null;
   }
@@ -453,13 +516,6 @@ class Zdbk {
       'ZYFXMC',
       'evalMajor',
       'zszymc',
-      '所属学院',
-      '学院名称',
-      'xymc',
-      'XYMC',
-      'jgmc',
-      'collegeName',
-      'bmmc',
     ];
 
     for (final key in candidateKeys) {
@@ -470,7 +526,10 @@ class Zdbk {
           if (cleaned.isNotEmpty &&
               cleaned != '未知' &&
               cleaned != '无' &&
-              !cleaned.contains('&nbsp;')) {
+              !cleaned.contains('&nbsp;') &&
+              !cleaned.endsWith('学院') &&
+              !cleaned.endsWith('学园') &&
+              !cleaned.endsWith('学部')) {
             return cleaned;
           }
         }
@@ -750,14 +809,9 @@ class Zdbk {
           final xsxx = asStringMap(payload['xsxx']);
           if (xsxx != null) {
             _writeCache('zdbk_student_info', jsonEncode(xsxx));
-            final major = asString(xsxx['ZYMC']) ??
-                asString(xsxx['zymc']) ??
-                asString(xsxx['ZYFXMC']) ??
-                asString(xsxx['zyfxmc']) ??
-                asString(xsxx['XYMC']) ??
-                asString(xsxx['xymc']);
-            if (major != null && major.trim().isNotEmpty && major != '未知') {
-              _writeCache('zdbk_user_major', major.trim());
+            final major = extractMajorFromKeyValues(xsxx);
+            if (major != null && major.trim().isNotEmpty) {
+              _writeCache('zdbk_user_major', normalizeMajorName(major.trim()));
             }
           }
           return Tuple(null, sessions);
@@ -1035,12 +1089,13 @@ class Zdbk {
     return bytes;
   }
 
-  /// 获取用户主修专业/大类名称（多级多源兜底：本地缓存 -> 课表学籍 -> 成绩单 -> 教务网学籍接口 -> 教务网培养方案页面 -> ETA 学工系统）
+  /// 获取用户主修专业/大类名称（多级多源兜底：本地缓存 -> 课表学籍 -> 成绩单 -> 学业生涯情况 -> 学生信息/学生证补办 -> 实时课表 -> ETA 学工系统）
   Future<Tuple<Exception?, String?>> getStudentMajor(
       HttpClient httpClient, {String? studentId}) async {
+    // 0. 检查本地直接缓存
     final cached = _db?.getCachedWebPage('zdbk_user_major');
     if (cached != null && cached.trim().isNotEmpty) {
-      return Tuple(null, cached.trim());
+      return Tuple(null, normalizeMajorName(cached.trim()));
     }
 
     // 1. 检查学生个人信息缓存（由课表接口写入）
@@ -1052,8 +1107,9 @@ class Zdbk {
         if (map != null) {
           final major = extractMajorFromKeyValues(map);
           if (major != null && major.isNotEmpty) {
-            _writeCache('zdbk_user_major', major);
-            return Tuple(null, major);
+            final normalized = normalizeMajorName(major);
+            _writeCache('zdbk_user_major', normalized);
+            return Tuple(null, normalized);
           }
         }
       } catch (_) {}
@@ -1063,22 +1119,64 @@ class Zdbk {
     final transcriptCache = _cachedList('zdbk_Transcript', '教务网成绩缓存');
     final major1 = _extractMajor(transcriptCache.data);
     if (major1 != null) {
-      _writeCache('zdbk_user_major', major1);
-      return Tuple(null, major1);
+      final normalized = normalizeMajorName(major1);
+      _writeCache('zdbk_user_major', normalized);
+      return Tuple(null, normalized);
     }
     final majorCache = _cachedList('zdbk_MajorGrade', '教务网主修成绩缓存');
     final major2 = _extractMajor(majorCache.data);
     if (major2 != null) {
-      _writeCache('zdbk_user_major', major2);
-      return Tuple(null, major2);
+      final normalized = normalizeMajorName(major2);
+      _writeCache('zdbk_user_major', normalized);
+      return Tuple(null, normalized);
     }
 
-    // 3. 尝试主动请求教务网学籍与培养方案接口
+    // 3. 尝试主动请求教务网各个标准学籍与学业接口
     try {
       final zdbkMajor = await _withAutoRelogin(httpClient, (relogged, retried) async {
         final suParam = studentId != null && studentId.isNotEmpty ? '&su=$studentId' : '';
 
-        // 3.1 请求正方教务网个人信息页面（支持同时处理 JSON 与 HTML 渲染）
+        // 3.1 尝试请求学业生涯情况与培养方案执行情况（Zhengfang N105515 - 最权威学业进度页面）
+        try {
+          final uriAcademia = Uri.parse(
+              "https://zdbk.zju.edu.cn/jwglxt/xsxy/xsxyqk_cxXsxyqkIndex.html?gnmkdm=N105515&layout=default$suParam");
+          final req = await httpClient.getUrl(uriAcademia).timeout(
+              const Duration(seconds: 8),
+              onTimeout: () => throw requestTimeout());
+          req.headers
+            ..add("Referer", "https://zdbk.zju.edu.cn/jwglxt/xtgl/index_initMenu.html")
+            ..set('Connection', 'close')
+            ..add('User-Agent',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
+            ..add('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
+          req.cookies.add(_jSessionId!);
+          req.cookies.add(_route!);
+          req.followRedirects = false;
+          final resp = await req.close().timeout(const Duration(seconds: 8),
+              onTimeout: () => throw requestTimeout());
+          final body = await readResponseBody(resp, context: '教务网学业生涯接口');
+          if (resp.statusCode == 200 && body.isNotEmpty) {
+            final htmlFields = parseHtmlFormFields(body);
+            final major = extractMajorFromKeyValues(htmlFields);
+            if (major != null) {
+              final normalized = normalizeMajorName(major);
+              _writeCache('zdbk_user_major', normalized);
+              return Tuple<Exception?, String?>(null, normalized);
+            }
+            final alertPattern = RegExp(r'(?:专业|主修|大类)[：:\s]+([^\s<",]+)');
+            final m = alertPattern.firstMatch(body);
+            if (m != null) {
+              final val = m.group(1)?.trim();
+              if (val != null && val.length >= 2 && val != '未知') {
+                final normalized = normalizeMajorName(val);
+                _writeCache('zdbk_user_major', normalized);
+                return Tuple<Exception?, String?>(null, normalized);
+              }
+            }
+          }
+        } catch (_) {}
+
+        // 3.2 尝试请求正方教务网个人信息页面（支持同时处理 JSON 与 HTML 渲染）
         try {
           final uri1 = Uri.parse(
               "https://zdbk.zju.edu.cn/jwglxt/xsxxxggl/xsxxwh_cxCkDgxsxx.html?gnmkdm=N100801$suParam");
@@ -1098,30 +1196,61 @@ class Zdbk {
               onTimeout: () => throw requestTimeout());
           final body1 = await readResponseBody(resp1, context: '教务网学生信息接口');
           if (resp1.statusCode == 200 && body1.isNotEmpty) {
-            // 尝试 JSON
             try {
               final decoded = jsonDecode(body1);
               final map = asStringMap(decoded);
               if (map != null) {
                 final major = extractMajorFromKeyValues(map);
                 if (major != null) {
-                  _writeCache('zdbk_user_major', major);
-                  return Tuple<Exception?, String?>(null, major);
+                  final normalized = normalizeMajorName(major);
+                  _writeCache('zdbk_user_major', normalized);
+                  return Tuple<Exception?, String?>(null, normalized);
                 }
               }
             } catch (_) {}
 
-            // 尝试 HTML 表单结构提取
             final htmlFields = parseHtmlFormFields(body1);
             final major = extractMajorFromKeyValues(htmlFields);
             if (major != null) {
-              _writeCache('zdbk_user_major', major);
-              return Tuple<Exception?, String?>(null, major);
+              final normalized = normalizeMajorName(major);
+              _writeCache('zdbk_user_major', normalized);
+              return Tuple<Exception?, String?>(null, normalized);
             }
           }
         } catch (_) {}
 
-        // 3.2 降级请求教务网学籍信息维护页面
+        // 3.3 尝试请求学生证补办申请详情（Zhengfang N106005 - 必然输出 学院/专业/班级）
+        try {
+          final uriCard = Uri.parse(
+              "https://zdbk.zju.edu.cn/jwglxt/xszbbgl/xszbbgl_cxXszbbsqIndex.html?doType=details&gnmkdm=N106005$suParam");
+          final reqCard = await httpClient.postUrl(uriCard).timeout(
+              const Duration(seconds: 8),
+              onTimeout: () => throw requestTimeout());
+          reqCard.headers
+            ..add("Referer", "https://zdbk.zju.edu.cn/jwglxt/xtgl/index_initMenu.html")
+            ..set('Connection', 'close')
+            ..add('User-Agent',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
+            ..set(HttpHeaders.contentTypeHeader, 'application/x-www-form-urlencoded;charset=UTF-8');
+          reqCard.cookies.add(_jSessionId!);
+          reqCard.cookies.add(_route!);
+          reqCard.followRedirects = false;
+          reqCard.add(utf8.encode('offDetails=1&gnmkdm=N106005&czdmKey=00'));
+          final respCard = await reqCard.close().timeout(const Duration(seconds: 8),
+              onTimeout: () => throw requestTimeout());
+          final bodyCard = await readResponseBody(respCard, context: '教务网学生证补办接口');
+          if (respCard.statusCode == 200 && bodyCard.isNotEmpty) {
+            final htmlFields = parseHtmlFormFields(bodyCard);
+            final major = extractMajorFromKeyValues(htmlFields);
+            if (major != null) {
+              final normalized = normalizeMajorName(major);
+              _writeCache('zdbk_user_major', normalized);
+              return Tuple<Exception?, String?>(null, normalized);
+            }
+          }
+        } catch (_) {}
+
+        // 3.4 降级请求教务网学籍信息维护页面
         try {
           final uri2 = Uri.parse(
               "https://zdbk.zju.edu.cn/jwglxt/xsxxxggl/xsgrxxwh_cxXsgrxx.html?gnmkdm=N100801&layout=default$suParam");
@@ -1144,37 +1273,30 @@ class Zdbk {
             final htmlFields = parseHtmlFormFields(body2);
             final major = extractMajorFromKeyValues(htmlFields);
             if (major != null) {
-              _writeCache('zdbk_user_major', major);
-              return Tuple<Exception?, String?>(null, major);
+              final normalized = normalizeMajorName(major);
+              _writeCache('zdbk_user_major', normalized);
+              return Tuple<Exception?, String?>(null, normalized);
             }
           }
         } catch (_) {}
 
-        // 3.3 尝试请求学生培养方案索引页面（可能预先填充或默认包含当前学生专业代码）
+        // 3.5 实时请求当前学期课表并从返回的 payload['xsxx'] 提取真实学籍班级/专业
         try {
-          final uri3 = Uri.parse(
-              "https://zdbk.zju.edu.cn/jwglxt/pyfagl/pyfaxxcx_cxPyfaxscxIndex.html?gnmkdm=N153020&layout=default$suParam");
-          final req3 = await httpClient.getUrl(uri3).timeout(
-              const Duration(seconds: 8),
-              onTimeout: () => throw requestTimeout());
-          req3.headers
-            ..add("Referer", "https://zdbk.zju.edu.cn/jwglxt/xtgl/index_initMenu.html")
-            ..set('Connection', 'close')
-            ..add('User-Agent',
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
-            ..add('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
-          req3.cookies.add(_jSessionId!);
-          req3.cookies.add(_route!);
-          req3.followRedirects = false;
-          final resp3 = await req3.close().timeout(const Duration(seconds: 8),
-              onTimeout: () => throw requestTimeout());
-          final body3 = await readResponseBody(resp3, context: '教务网培养方案学生页面');
-          if (resp3.statusCode == 200 && body3.isNotEmpty) {
-            final htmlFields = parseHtmlFormFields(body3);
-            final major = extractMajorFromKeyValues(htmlFields);
-            if (major != null) {
-              _writeCache('zdbk_user_major', major);
-              return Tuple<Exception?, String?>(null, major);
+          final now = DateTime.now();
+          final curYear = (now.month >= 8) ? now.year : now.year - 1;
+          final curSem = (now.month >= 8 || now.month <= 1) ? '1' : '2';
+          await getTimetable(httpClient, curYear.toString(), curSem);
+          final studentInfoCached = _db?.getCachedWebPage('zdbk_student_info');
+          if (studentInfoCached != null && studentInfoCached.isNotEmpty) {
+            final decoded = jsonDecode(studentInfoCached);
+            final map = asStringMap(decoded);
+            if (map != null) {
+              final major = extractMajorFromKeyValues(map);
+              if (major != null && major.isNotEmpty) {
+                final normalized = normalizeMajorName(major);
+                _writeCache('zdbk_user_major', normalized);
+                return Tuple<Exception?, String?>(null, normalized);
+              }
             }
           }
         } catch (_) {}
@@ -1187,12 +1309,13 @@ class Zdbk {
       }
     } catch (_) {}
 
-    // 4. 尝试从浙大 ETA “三全育人”学生信息平台（eta.zju.edu.cn）获取专业
+    // 4. 尝试从浙大 ETA “三全育人”学生信息平台（eta.zju.edu.cn）获取专业（内网/RVPN环境可用）
     try {
       final etaMajor = await Eta.getStudentMajor(httpClient, _iPlanetDirectoryPro, studentId: studentId);
       if (etaMajor != null && etaMajor.trim().isNotEmpty) {
-        _writeCache('zdbk_user_major', etaMajor.trim());
-        return Tuple(null, etaMajor.trim());
+        final normalized = normalizeMajorName(etaMajor.trim());
+        _writeCache('zdbk_user_major', normalized);
+        return Tuple(null, normalized);
       }
     } catch (e) {
       if (kDebugMode) {
@@ -1237,7 +1360,8 @@ class Zdbk {
         final queryParams = <String, String>{
           'queryModel.showCount': '5000',
           'queryModel.currentPage': '1',
-          'queryModel.sortOrder': 'asc',
+          'queryModel.sortName': 'njdm_id',
+          'queryModel.sortOrder': 'desc',
           '_search': 'false',
         };
         if (majorName != null && majorName.trim().isNotEmpty) {
@@ -1393,8 +1517,10 @@ class Zdbk {
     final cleaned = majorName.trim();
     if (cleaned.isEmpty) return Tuple(null, null);
 
+    final targetGrade = grade ?? inferGradeFromStudentId(studentId);
+
     // 检查缓存
-    final cacheKey = 'zdbk_training_plan_$cleaned';
+    final cacheKey = 'zdbk_training_plan_${cleaned}_${targetGrade ?? 'any'}';
     final cachedJson = _db?.getCachedWebPage(cacheKey);
     if (cachedJson != null && cachedJson.isNotEmpty) {
       try {
@@ -1405,75 +1531,142 @@ class Zdbk {
       } catch (_) {}
     }
 
-    // 查询所有培养方案列表
-    final plansRes = await getTrainingPlans(httpClient,
-        studentId: studentId, majorName: cleaned, grade: grade);
-    if (plansRes.item1 != null) {
-      return Tuple(plansRes.item1, null);
+    // 尝试多层次查询方案列表
+    final Set<String> triedQueries = {};
+    final List<Map<String, dynamic>> items = [];
+
+    Future<void> tryFetchPlans({String? qMajor, String? qGrade}) async {
+      final key = '${qMajor ?? ""}_${qGrade ?? ""}';
+      if (triedQueries.contains(key)) return;
+      triedQueries.add(key);
+      try {
+        final res = await getTrainingPlans(httpClient,
+            studentId: studentId, majorName: qMajor, grade: qGrade);
+        if (res.item2.isNotEmpty) {
+          items.addAll(res.item2);
+        }
+      } catch (_) {}
     }
 
-    final items = plansRes.item2;
+    // 1. 先用精准专业名 + 年级查询
+    await tryFetchPlans(qMajor: cleaned, qGrade: targetGrade);
+
+    // 2. 若无结果，尝试括号互换变体 + 年级查询
+    if (items.isEmpty && cleaned.contains('(')) {
+      await tryFetchPlans(
+          qMajor: cleaned.replaceAll('(', '（').replaceAll(')', '）'),
+          qGrade: targetGrade);
+    } else if (items.isEmpty && cleaned.contains('（')) {
+      await tryFetchPlans(
+          qMajor: cleaned.replaceAll('（', '(').replaceAll('）', ')'),
+          qGrade: targetGrade);
+    }
+
+    // 3. 若仍无结果，尝试只用年级查询（拉取该年级所有方案）
+    if (items.isEmpty && targetGrade != null && targetGrade.isNotEmpty) {
+      await tryFetchPlans(qGrade: targetGrade);
+    }
+
+    // 4. 若仍无结果，尝试不限年级只查该专业
     if (items.isEmpty) {
-      // 尝试无专业过滤再查一次
-      final allPlansRes = await getTrainingPlans(httpClient, studentId: studentId);
-      if (allPlansRes.item2.isNotEmpty) {
-        items.addAll(allPlansRes.item2);
-      }
+      await tryFetchPlans(qMajor: cleaned);
+    }
+
+    // 5. 若仍无结果，全量拉取全部方案列表
+    if (items.isEmpty) {
+      await tryFetchPlans();
     }
 
     if (items.isEmpty) {
       return Tuple(null, null);
     }
 
-    // 在列表中匹配最贴近该专业的培养方案
-    Map<String, dynamic>? matchedItem;
-
-    // 规则 1：专业全名完全匹配
+    // 去重
+    final uniqueItems = <String, Map<String, dynamic>>{};
     for (final it in items) {
-      final zymc = asString(it['zymc']) ?? asString(it['ZYMC']) ?? '';
-      if (zymc == cleaned) {
-        matchedItem = it;
-        break;
+      final id = asString(it['pyfa_id']) ?? asString(it['pyfamc']) ?? '';
+      if (id.isNotEmpty) {
+        uniqueItems[id] = it;
       }
     }
+    final candidateList = uniqueItems.values.toList();
 
-    // 规则 2：方案名称包含专业全名
-    if (matchedItem == null) {
-      for (final it in items) {
-        final pyfamc = asString(it['pyfamc']) ?? '';
-        if (pyfamc.contains(cleaned)) {
-          matchedItem = it;
-          break;
+    // 智能多维打分匹配：专业贴合度 + 年级贴合度
+    Map<String, dynamic>? bestMatch;
+    double bestScore = 0;
+
+    String norm(String s) =>
+        s.trim().replaceAll('（', '(').replaceAll('）', ')').toLowerCase();
+
+    final cleanNorm = norm(cleaned);
+    final coreName = cleanNorm
+        .replaceAll('试验班', '')
+        .replaceAll('大类', '')
+        .replaceAll('班', '')
+        .replaceAll('(', '')
+        .replaceAll(')', '')
+        .trim();
+
+    for (final it in candidateList) {
+      final zymc = norm(asString(it['zymc']) ?? asString(it['ZYMC']) ?? '');
+      final pyfamc = norm(asString(it['pyfamc']) ?? '');
+      final itemGrade = asString(it['njdm_id']) ?? '';
+
+      double score = 0;
+
+      // 1. 专业名称匹配
+      if (zymc == cleanNorm) {
+        score += 100;
+      } else if (zymc.isNotEmpty &&
+          (zymc.contains(cleanNorm) || cleanNorm.contains(zymc))) {
+        score += 80;
+      } else if (pyfamc.contains(cleanNorm)) {
+        score += 70;
+      } else if (coreName.isNotEmpty &&
+          (zymc.contains(coreName) || pyfamc.contains(coreName))) {
+        score += 50;
+      } else {
+        // 与目标专业完全无关，不参与匹配
+        continue;
+      }
+
+      // 2. 年级匹配
+      if (targetGrade != null && targetGrade.isNotEmpty) {
+        if (itemGrade == targetGrade || pyfamc.contains(targetGrade)) {
+          score += 60; // 目标年级完美匹配
+        } else {
+          final tYear = int.tryParse(targetGrade);
+          final iYear = int.tryParse(itemGrade);
+          if (tYear != null && iYear != null) {
+            if (iYear < tYear) {
+              // 往届培养方案：越近越优先
+              final diff = tYear - iYear;
+              final bonus = (30 - diff * 5).clamp(0, 30).toDouble();
+              score += bonus;
+            } else {
+              // 未来年级方案：惩罚
+              score -= 20;
+            }
+          }
         }
       }
-    }
 
-    // 规则 3：核心专业名称匹配
-    if (matchedItem == null) {
-      final coreName = cleaned
-          .replaceAll('（', '(')
-          .replaceAll('）', ')')
-          .replaceAll('试验班', '')
-          .replaceAll('班', '')
-          .trim();
-      for (final it in items) {
-        final zymc = asString(it['zymc']) ?? asString(it['ZYMC']) ?? '';
-        final pyfamc = asString(it['pyfamc']) ?? '';
-        if (zymc.contains(coreName) || pyfamc.contains(coreName)) {
-          matchedItem = it;
-          break;
-        }
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = it;
       }
     }
 
-    // 规则 4：兜底首项
-    matchedItem ??= items.first;
+    // 若没有找到任何匹配项（bestScore <= 0），绝不能盲目回退到 items.first
+    if (bestMatch == null || bestScore <= 0) {
+      return Tuple(null, null);
+    }
 
-    final pyfaId = asString(matchedItem['pyfa_id']) ?? '';
-    final planName = asString(matchedItem['pyfamc']) ?? '$cleaned培养方案';
-    final zymc = asString(matchedItem['zymc']) ?? cleaned;
-    final planGrade = asString(matchedItem['njdm_id']) ?? grade;
-    final college = asString(matchedItem['jgmc']);
+    final pyfaId = asString(bestMatch['pyfa_id']) ?? '';
+    final planName = asString(bestMatch['pyfamc']) ?? '$cleaned培养方案';
+    final matchedZymc = asString(bestMatch['zymc']) ?? cleaned;
+    final planGrade = asString(bestMatch['njdm_id']) ?? targetGrade;
+    final college = asString(bestMatch['jgmc']);
 
     final isFiveYear = cleaned.contains('建筑') ||
         cleaned.contains('临床') ||
@@ -1483,7 +1676,8 @@ class Zdbk {
 
     // 检查列表自带的毕业要求学分字段（如 bbyq）
     double? totalCredits;
-    final bbyqStr = asString(matchedItem['bbyq']) ?? asString(matchedItem['zdbyxf']);
+    final bbyqStr =
+        asString(bestMatch['bbyq']) ?? asString(bestMatch['zdbyxf']);
     if (bbyqStr != null) {
       final parsed = double.tryParse(bbyqStr);
       if (parsed != null && parsed >= 100 && parsed <= 300) {
@@ -1495,10 +1689,11 @@ class Zdbk {
 
     // 若有方案 ID，尝试进一步深入详情预览提取精准学分与各类别要求
     if (pyfaId.isNotEmpty) {
-      final detailRes =
-          await fetchTrainingPlanDetail(httpClient, pyfaId, studentId: studentId);
+      final detailRes = await fetchTrainingPlanDetail(httpClient, pyfaId,
+          studentId: studentId);
       final detailMap = detailRes.item2;
-      if (detailMap['totalCredits'] != null && detailMap['totalCredits'] is double) {
+      if (detailMap['totalCredits'] != null &&
+          detailMap['totalCredits'] is double) {
         totalCredits = detailMap['totalCredits'] as double;
       }
       if (detailMap['categoryCredits'] != null &&
@@ -1513,7 +1708,7 @@ class Zdbk {
     final planInfo = TrainingPlanInfo(
       pyfaId: pyfaId,
       planName: planName,
-      majorName: zymc,
+      majorName: matchedZymc,
       grade: planGrade,
       collegeName: college,
       totalCredits: totalCredits,

@@ -817,7 +817,8 @@ class Scholar {
     if (!isLogan || username == null || password == null) return false;
     if (_spider == null) {
       final loginErrors = await _loginInternal();
-      if (loginErrors.any((error) => error != null)) {
+      // 只要统一身份认证（CAS SSO）未报致命错误（第 0 项为空），即代表主账号鉴权成功
+      if (loginErrors.isNotEmpty && loginErrors.first != null) {
         return false;
       }
     }
@@ -838,17 +839,22 @@ class Scholar {
         }
       } catch (e) {
         if (kDebugMode) {
-          debugPrint('fetchStudentMajor 失败: $e');
+          debugPrint('fetchStudentMajor 初次尝试失败: $e');
         }
-        // 若会话失效，尝试全量重登一次后再试
-        try {
-          await _loginInternal();
-          final retryRes = await spider.zdbk
-              .getStudentMajor(spider.httpClient, studentId: username);
-          if (retryRes.item2 != null && retryRes.item2!.trim().isNotEmpty) {
-            return retryRes.item2!.trim();
-          }
-        } catch (_) {}
+      }
+
+      // 若初次未能获得专业，尝试全量重登一次教务网再试
+      try {
+        await _loginInternal();
+        final retryRes = await spider.zdbk
+            .getStudentMajor(spider.httpClient, studentId: username);
+        if (retryRes.item2 != null && retryRes.item2!.trim().isNotEmpty) {
+          return retryRes.item2!.trim();
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('fetchStudentMajor 重登重试失败: $e');
+        }
       }
     }
     return null;
@@ -861,12 +867,13 @@ class Scholar {
     if (!ok) return null;
     if (_spider is UgrsSpider) {
       final spider = _spider as UgrsSpider;
+      final targetGrade = grade ?? Zdbk.inferGradeFromStudentId(username);
       try {
         final res = await spider.zdbk.getTrainingPlanForMajor(
           spider.httpClient,
           majorName,
           studentId: username,
-          grade: grade,
+          grade: targetGrade,
         );
         if (res.item2 != null) {
           return res.item2;
@@ -881,7 +888,7 @@ class Scholar {
             spider.httpClient,
             majorName,
             studentId: username,
-            grade: grade,
+            grade: targetGrade,
           );
           if (retryRes.item2 != null) {
             return retryRes.item2;

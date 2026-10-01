@@ -159,7 +159,7 @@ class CreditProgressController extends GetxController {
     try {
       final remoteMajor = await scholar.value.fetchStudentMajor();
       if (remoteMajor != null && remoteMajor.trim().isNotEmpty) {
-        final cleaned = remoteMajor.trim();
+        final cleaned = Zdbk.normalizeMajorName(remoteMajor.trim());
         userMajor.value = cleaned;
         majorSource.value = 'zdbk';
         _db.setCachedWebPage(_kZdbkMajorCacheKey, cleaned);
@@ -171,6 +171,22 @@ class CreditProgressController extends GetxController {
         }
         update();
         return true;
+      } else {
+        // 如果网络请求未直接获得，尝试从本地教务网缓存（课表/学生信息/成绩单）中提取
+        final cached = _extractMajorFromZdbkCaches();
+        if (cached != null && cached.isNotEmpty) {
+          final normalized = Zdbk.normalizeMajorName(cached);
+          userMajor.value = normalized;
+          majorSource.value = 'zdbk';
+          _db.setCachedWebPage(_kZdbkMajorCacheKey, normalized);
+          if (fetchPlan) {
+            await fetchAndApplyTrainingPlan(normalized);
+          } else {
+            _applySchemeForMajor(normalized);
+          }
+          update();
+          return true;
+        }
       }
     } catch (e) {
       debugPrint('主动同步教务网专业失败: $e');
@@ -277,7 +293,7 @@ class CreditProgressController extends GetxController {
 
   /// 用户手动设置/更改主修专业培养方案
   void setUserMajor(String major, {double? targetCredits}) {
-    final cleaned = major.trim();
+    final cleaned = Zdbk.normalizeMajorName(major.trim());
     if (cleaned.isEmpty) return;
 
     userMajor.value = cleaned;
@@ -291,6 +307,9 @@ class CreditProgressController extends GetxController {
     }
 
     _applySchemeForMajor(cleaned, overrideTarget: targetCredits);
+    if (scholar.value.isLogan) {
+      fetchAndApplyTrainingPlan(cleaned);
+    }
     update();
   }
 

@@ -231,7 +231,12 @@ class CreditProgressPage extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
               onPressed: _controller.isSyncingMajor.value
                   ? null
-                  : () => _controller.syncMajorFromZdbk(),
+                  : () async {
+                      final ok = await _controller.syncMajorFromZdbk();
+                      if (!ok && context.mounted) {
+                        _showSetMajorDialog(context);
+                      }
+                    },
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

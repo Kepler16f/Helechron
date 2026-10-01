@@ -195,11 +195,33 @@ void main() {
   });
 
   group('P5: Major Extraction and Parsing tests', () {
+    test('inferGradeFromStudentId parses matriculation year accurately', () {
+      expect(Zdbk.inferGradeFromStudentId('3260101109'), '2026');
+      expect(Zdbk.inferGradeFromStudentId('3240101234'), '2024');
+      expect(Zdbk.inferGradeFromStudentId('3200109999'), '2020');
+      expect(Zdbk.inferGradeFromStudentId('3180100000'), '2018');
+      expect(Zdbk.inferGradeFromStudentId('abc'), isNull);
+      expect(Zdbk.inferGradeFromStudentId(null), isNull);
+    });
+
+    test('normalizeMajorName handles abbreviations and class suffixes', () {
+      expect(Zdbk.normalizeMajorName('工信'), '工科试验班(信息)');
+      expect(Zdbk.normalizeMajorName('工科试验班（信息）'), '工科试验班(信息)');
+      expect(Zdbk.normalizeMajorName('工信大类'), '工科试验班(信息)');
+      expect(Zdbk.normalizeMajorName('2026级工科试验班（信息）'), '工科试验班(信息)');
+      expect(Zdbk.normalizeMajorName('工科试验班（信息）2601班'), '工科试验班(信息)');
+      expect(Zdbk.normalizeMajorName('计科'), '计算机科学与技术');
+      expect(Zdbk.normalizeMajorName('软工'), '软件工程');
+      expect(Zdbk.normalizeMajorName('电自'), '电气工程及其自动化');
+    });
+
     test('extractMajorFromClassName cleans year digits and class suffixes', () {
       expect(Zdbk.extractMajorFromClassName('信息工程2201班'), '信息工程');
-      expect(Zdbk.extractMajorFromClassName('工科试验班（信息）2401'), '工科试验班（信息）');
+      expect(Zdbk.extractMajorFromClassName('工科试验班（信息）2401'), '工科试验班(信息)');
+      expect(Zdbk.extractMajorFromClassName('工科试验班（信息）2601(丹青)'), '工科试验班(信息)');
+      expect(Zdbk.extractMajorFromClassName('工信2601班'), '工科试验班(信息)');
       expect(Zdbk.extractMajorFromClassName('软件工程2102'), '软件工程');
-      expect(Zdbk.extractMajorFromClassName('临床医学（5+3体质）2301班'), '临床医学（5+3体质）');
+      expect(Zdbk.extractMajorFromClassName('临床医学（5+3体质）2301班'), '临床医学(5+3体质)');
       expect(Zdbk.extractMajorFromClassName('自动化2001班'), '自动化');
       expect(Zdbk.extractMajorFromClassName('未知'), isNull);
       expect(Zdbk.extractMajorFromClassName('无'), isNull);
@@ -237,7 +259,7 @@ void main() {
       expect(fields['zymc'], '计算机科学与技术');
     });
 
-    test('extractMajorFromKeyValues resolves major by priority and falls back to class name', () {
+    test('extractMajorFromKeyValues resolves major by priority and never confuses college for major', () {
       expect(
         Zdbk.extractMajorFromKeyValues({'zymc': '软件工程'}),
         '软件工程',
@@ -250,6 +272,14 @@ void main() {
         Zdbk.extractMajorFromKeyValues({'majorName': '自动化'}),
         '自动化',
       );
+      // 学院字段绝不能被当作专业，而是降级到从班级提取真实专业
+      expect(
+        Zdbk.extractMajorFromKeyValues({
+          'xymc': '求是学院丹阳青溪学园',
+          'bjmc': '工科试验班（信息）2601',
+        }),
+        '工科试验班(信息)',
+      );
       // 未知则降级到班级
       expect(
         Zdbk.extractMajorFromKeyValues({'zymc': '未知', 'BJMC': '数字媒体技术2201班'}),
@@ -258,7 +288,12 @@ void main() {
       // 只有班级
       expect(
         Zdbk.extractMajorFromKeyValues({'bjmc': '工科试验班（信息）2401'}),
-        '工科试验班（信息）',
+        '工科试验班(信息)',
+      );
+      // 只有工信简写班级
+      expect(
+        Zdbk.extractMajorFromKeyValues({'bjmc': '工信2601班'}),
+        '工科试验班(信息)',
       );
       // 全空或全未知
       expect(
