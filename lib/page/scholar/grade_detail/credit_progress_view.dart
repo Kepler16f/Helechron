@@ -123,6 +123,22 @@ class CreditProgressPage extends StatelessWidget {
                 const SizedBox(width: 4),
               ],
               CupertinoButton(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                minSize: 0,
+                onPressed: _controller.isSyncingMajor.value
+                    ? null
+                    : () => _controller.syncMajorFromZdbk(),
+                child: _controller.isSyncingMajor.value
+                    ? const CupertinoActivityIndicator(radius: 8)
+                    : Icon(
+                        CupertinoIcons.arrow_2_circlepath,
+                        size: 20,
+                        color: CupertinoDynamicColor.resolve(
+                            CustomCupertinoDynamicColors.sakura, context),
+                      ),
+              ),
+              const SizedBox(width: 4),
+              CupertinoButton(
                 padding: EdgeInsets.zero,
                 onPressed: () => _showSetMajorDialog(context),
                 child: const Icon(
@@ -145,7 +161,7 @@ class CreditProgressPage extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  '正在从教务网同步主修专业与培养方案...',
+                  '正在从教务网/ETA同步主修专业与培养方案...',
                   style: TextStyle(
                     fontSize: 13,
                     color: CupertinoDynamicColor.resolve(
@@ -158,9 +174,8 @@ class CreditProgressPage extends StatelessWidget {
         );
       }
 
-      // 未检测到专业时的引导填写卡片
+      // 未检测到专业时的引导填写与同步卡片
       return RoundRectangleCard(
-        onTap: () => _showSetMajorDialog(context),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
@@ -180,34 +195,67 @@ class CreditProgressPage extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '未检测到专业培养方案',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: CupertinoDynamicColor.resolve(
-                          CupertinoColors.label, context),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _showSetMajorDialog(context),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '未检测到专业培养方案',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.label, context),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '点击从教务网同步或选择您的主修专业 >',
+                    const SizedBox(height: 2),
+                    Text(
+                      '点击手动填写或从教务网同步 >',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.secondaryLabel, context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            CupertinoButton(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              minSize: 0,
+              color: CupertinoDynamicColor.resolve(
+                  CustomCupertinoDynamicColors.sakura, context),
+              borderRadius: BorderRadius.circular(8),
+              onPressed: _controller.isSyncingMajor.value
+                  ? null
+                  : () => _controller.syncMajorFromZdbk(),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_controller.isSyncingMajor.value) ...[
+                    const CupertinoActivityIndicator(radius: 6),
+                    const SizedBox(width: 4),
+                  ] else ...[
+                    const Icon(
+                      CupertinoIcons.arrow_2_circlepath,
+                      size: 13,
+                      color: CupertinoColors.white,
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                  const Text(
+                    '同步',
                     style: TextStyle(
                       fontSize: 12,
-                      color: CupertinoDynamicColor.resolve(
-                          CupertinoColors.secondaryLabel, context),
+                      fontWeight: FontWeight.bold,
+                      color: CupertinoColors.white,
                     ),
                   ),
                 ],
               ),
-            ),
-            const Icon(
-              CupertinoIcons.right_chevron,
-              size: 14,
-              color: CupertinoColors.systemGrey,
             ),
           ],
         ),

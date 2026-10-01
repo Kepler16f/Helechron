@@ -7,6 +7,7 @@ import 'package:celechron/model/scholar.dart';
 import 'package:celechron/utils/tuple.dart';
 import 'package:celechron/utils/gpa_helper.dart';
 import 'package:celechron/utils/json_utils.dart';
+import 'package:celechron/http/zjuServices/zdbk.dart';
 
 /// 单个课程类别的学分与成绩聚合模型
 class CourseCategoryGroup {
@@ -152,8 +153,8 @@ class CreditProgressController extends GetxController {
   }
 
   /// 主动向教务网与学工系统拉取并同步学生真实学籍专业与培养方案
-  Future<void> syncMajorFromZdbk({bool fetchPlan = true}) async {
-    if (isSyncingMajor.value) return;
+  Future<bool> syncMajorFromZdbk({bool fetchPlan = true}) async {
+    if (isSyncingMajor.value) return false;
     isSyncingMajor.value = true;
     try {
       final remoteMajor = await scholar.value.fetchStudentMajor();
@@ -169,12 +170,14 @@ class CreditProgressController extends GetxController {
           _applySchemeForMajor(cleaned);
         }
         update();
+        return true;
       }
     } catch (e) {
       debugPrint('主动同步教务网专业失败: $e');
     } finally {
       isSyncingMajor.value = false;
     }
+    return false;
   }
 
   /// 依据真实专业名称从教务网培养方案管理系统（pyfagl）拉取官方培养方案与学分要求
@@ -215,14 +218,9 @@ class CreditProgressController extends GetxController {
         final decoded = jsonDecode(studentInfo);
         final map = asStringMap(decoded);
         if (map != null) {
-          final major = asString(map['ZYMC']) ??
-              asString(map['zymc']) ??
-              asString(map['ZYFXMC']) ??
-              asString(map['zyfxmc']) ??
-              asString(map['XYMC']) ??
-              asString(map['xymc']);
-          if (major != null && major.trim().isNotEmpty && major != '未知') {
-            return major.trim();
+          final major = Zdbk.extractMajorFromKeyValues(map);
+          if (major != null && major.isNotEmpty) {
+            return major;
           }
         }
       } catch (_) {}
@@ -244,15 +242,9 @@ class CreditProgressController extends GetxController {
             for (final item in items) {
               final map = asStringMap(item);
               if (map != null) {
-                final zymc = asString(map['zymc']) ??
-                    asString(map['ZYMC']) ??
-                    asString(map['zyfxmc']) ??
-                    asString(map['ZYFXMC']) ??
-                    asString(map['xymc']) ??
-                    asString(map['XYMC']) ??
-                    asString(map['major']);
-                if (zymc != null && zymc.trim().isNotEmpty && zymc != '未知') {
-                  return zymc.trim();
+                final zymc = Zdbk.extractMajorFromKeyValues(map);
+                if (zymc != null && zymc.isNotEmpty) {
+                  return zymc;
                 }
               }
             }

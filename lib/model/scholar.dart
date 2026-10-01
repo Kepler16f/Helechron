@@ -812,8 +812,22 @@ class Scholar {
     isLogan = true;
   }
 
+  /// 确保后台 Spider 会话已初始化且登录态有效（支持由缓存恢复后的按需连接）
+  Future<bool> ensureSession() async {
+    if (!isLogan || username == null || password == null) return false;
+    if (_spider == null) {
+      final loginErrors = await _loginInternal();
+      if (loginErrors.any((error) => error != null)) {
+        return false;
+      }
+    }
+    return _spider != null;
+  }
+
   /// 尝试从教务网（ZDBK）及 ETA 平台主动拉取用户主修专业/大类名称
   Future<String?> fetchStudentMajor() async {
+    final ok = await ensureSession();
+    if (!ok) return null;
     if (_spider is UgrsSpider) {
       final spider = _spider as UgrsSpider;
       try {
@@ -826,6 +840,15 @@ class Scholar {
         if (kDebugMode) {
           debugPrint('fetchStudentMajor 失败: $e');
         }
+        // 若会话失效，尝试全量重登一次后再试
+        try {
+          await _loginInternal();
+          final retryRes = await spider.zdbk
+              .getStudentMajor(spider.httpClient, studentId: username);
+          if (retryRes.item2 != null && retryRes.item2!.trim().isNotEmpty) {
+            return retryRes.item2!.trim();
+          }
+        } catch (_) {}
       }
     }
     return null;
@@ -834,6 +857,8 @@ class Scholar {
   /// 依据专业名称从教务网培养方案管理系统（pyfagl）拉取官方培养方案与学分要求
   Future<TrainingPlanInfo?> fetchTrainingPlan(String majorName,
       {String? grade}) async {
+    final ok = await ensureSession();
+    if (!ok) return null;
     if (_spider is UgrsSpider) {
       final spider = _spider as UgrsSpider;
       try {
@@ -850,6 +875,18 @@ class Scholar {
         if (kDebugMode) {
           debugPrint('fetchTrainingPlan 失败: $e');
         }
+        try {
+          await _loginInternal();
+          final retryRes = await spider.zdbk.getTrainingPlanForMajor(
+            spider.httpClient,
+            majorName,
+            studentId: username,
+            grade: grade,
+          );
+          if (retryRes.item2 != null) {
+            return retryRes.item2;
+          }
+        } catch (_) {}
       }
     }
     return null;

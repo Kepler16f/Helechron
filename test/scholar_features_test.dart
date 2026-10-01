@@ -193,4 +193,78 @@ void main() {
       }
     });
   });
+
+  group('P5: Major Extraction and Parsing tests', () {
+    test('extractMajorFromClassName cleans year digits and class suffixes', () {
+      expect(Zdbk.extractMajorFromClassName('信息工程2201班'), '信息工程');
+      expect(Zdbk.extractMajorFromClassName('工科试验班（信息）2401'), '工科试验班（信息）');
+      expect(Zdbk.extractMajorFromClassName('软件工程2102'), '软件工程');
+      expect(Zdbk.extractMajorFromClassName('临床医学（5+3体质）2301班'), '临床医学（5+3体质）');
+      expect(Zdbk.extractMajorFromClassName('自动化2001班'), '自动化');
+      expect(Zdbk.extractMajorFromClassName('未知'), isNull);
+      expect(Zdbk.extractMajorFromClassName('无'), isNull);
+      expect(Zdbk.extractMajorFromClassName(''), isNull);
+      expect(Zdbk.extractMajorFromClassName(null), isNull);
+    });
+
+    test('parseHtmlFormFields extracts fields from Bootstrap labels, tables, and inputs', () {
+      const htmlSample = '''
+        <div class="form-group">
+          <label class="col-sm-4 control-label">专业名称：</label>
+          <div class="col-sm-8">
+            <p class="form-control-static">信息工程</p>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="col-sm-4 control-label">学院名称</label>
+          <div class="col-sm-8">
+            <p class="form-control-static">信息与电子工程学院</p>
+          </div>
+        </div>
+        <table>
+          <tr>
+            <th>主修专业</th>
+            <td>电子信息工程</td>
+          </tr>
+        </table>
+        <input type="hidden" name="zymc" value="计算机科学与技术"/>
+      ''';
+
+      final fields = Zdbk.parseHtmlFormFields(htmlSample);
+      expect(fields['专业名称'], '信息工程');
+      expect(fields['学院名称'], '信息与电子工程学院');
+      expect(fields['主修专业'], '电子信息工程');
+      expect(fields['zymc'], '计算机科学与技术');
+    });
+
+    test('extractMajorFromKeyValues resolves major by priority and falls back to class name', () {
+      expect(
+        Zdbk.extractMajorFromKeyValues({'zymc': '软件工程'}),
+        '软件工程',
+      );
+      expect(
+        Zdbk.extractMajorFromKeyValues({'专业名称': '光电信息科学与工程'}),
+        '光电信息科学与工程',
+      );
+      expect(
+        Zdbk.extractMajorFromKeyValues({'majorName': '自动化'}),
+        '自动化',
+      );
+      // 未知则降级到班级
+      expect(
+        Zdbk.extractMajorFromKeyValues({'zymc': '未知', 'BJMC': '数字媒体技术2201班'}),
+        '数字媒体技术',
+      );
+      // 只有班级
+      expect(
+        Zdbk.extractMajorFromKeyValues({'bjmc': '工科试验班（信息）2401'}),
+        '工科试验班（信息）',
+      );
+      // 全空或全未知
+      expect(
+        Zdbk.extractMajorFromKeyValues({'zymc': '未知', 'bjmc': '未知'}),
+        isNull,
+      );
+    });
+  });
 }

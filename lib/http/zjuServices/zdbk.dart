@@ -361,20 +361,140 @@ class Zdbk {
     return grades;
   }
 
+  /// 从班级名称中提取主修专业或大类（例如 "信息工程2201班" -> "信息工程"，"工科试验班（信息）2401" -> "工科试验班（信息）"）
+  static String? extractMajorFromClassName(String? className) {
+    if (className == null) return null;
+    var name = className.trim();
+    if (name.isEmpty || name == '未知' || name == '无') return null;
+    if (name.endsWith('班')) {
+      name = name.substring(0, name.length - 1).trim();
+    }
+    name = name.replaceFirst(RegExp(r'\d+$'), '').trim();
+    if (name.isNotEmpty && name.length >= 2) {
+      return name;
+    }
+    return null;
+  }
+
+  /// 通用 HTML 表单与表格键值对解析器（针对正方教务网 Bootstrap 与 Table 布局）
+  static Map<String, String> parseHtmlFormFields(String html) {
+    final result = <String, String>{};
+
+    // 1. 匹配 <label>Key</label> ... <p class="form-control-static">Value</p>
+    final labelPStaticRegex = RegExp(
+      r'<label[^>]*>\s*([^<:：\s]+?)\s*[:：]?\s*</label>[\s\S]*?<p[^>]*class=["\x27][^"\x27]*form-control-static[^"\x27]*["\x27][^>]*>\s*([^<]+?)\s*</p>',
+      caseSensitive: false,
+    );
+    for (final m in labelPStaticRegex.allMatches(html)) {
+      final k = m.group(1)?.trim() ?? '';
+      final v = m.group(2)?.trim() ?? '';
+      if (k.isNotEmpty && v.isNotEmpty && v != '&nbsp;') {
+        result[k] = v;
+      }
+    }
+
+    // 2. 匹配任意 <label>Key</label> ... <p>Value</p>
+    final generalLabelP = RegExp(
+      r'<label[^>]*>\s*([^<:：\s]+?)\s*[:：]?\s*</label>[\s\S]*?<p[^>]*>\s*([^<]+?)\s*</p>',
+      caseSensitive: false,
+    );
+    for (final m in generalLabelP.allMatches(html)) {
+      final k = m.group(1)?.trim() ?? '';
+      final v = m.group(2)?.trim() ?? '';
+      if (k.isNotEmpty && v.isNotEmpty && v != '&nbsp;' && !result.containsKey(k)) {
+        result[k] = v;
+      }
+    }
+
+    // 3. 匹配表格 <th>Key</th> ... <td>Value</td>
+    final thTdRegex = RegExp(
+      r'<th[^>]*>\s*([^<:：\s]+?)\s*[:：]?\s*</th>[\s\S]*?<td[^>]*>\s*([^<]+?)\s*</td>',
+      caseSensitive: false,
+    );
+    for (final m in thTdRegex.allMatches(html)) {
+      final k = m.group(1)?.trim() ?? '';
+      final v = m.group(2)?.trim() ?? '';
+      if (k.isNotEmpty && v.isNotEmpty && v != '&nbsp;' && !result.containsKey(k)) {
+        result[k] = v;
+      }
+    }
+
+    // 4. 匹配 <input name="k" value="v" /> 或 id="k" value="v"
+    final inputRegex = RegExp(
+      r'<input[^>]+(?:name|id)=["\x27]([^"\x27]+)["\x27][^>]+value=["\x27]([^"\x27]*)["\x27]|<input[^>]+value=["\x27]([^"\x27]*)["\x27][^>]+(?:name|id)=["\x27]([^"\x27]+)["\x27]',
+      caseSensitive: false,
+    );
+    for (final m in inputRegex.allMatches(html)) {
+      final k = (m.group(1) ?? m.group(4))?.trim() ?? '';
+      final v = (m.group(2) ?? m.group(3))?.trim() ?? '';
+      if (k.isNotEmpty && v.isNotEmpty && v != '&nbsp;' && !result.containsKey(k)) {
+        result[k] = v;
+      }
+    }
+
+    return result;
+  }
+
+  /// 从 Map 键值对或 HTML 解析出的键值对中提取主修专业全称
+  static String? extractMajorFromKeyValues(Map<String, dynamic> map) {
+    final candidateKeys = [
+      '专业名称',
+      'zymc',
+      'ZYMC',
+      'majorName',
+      'major',
+      '主修专业',
+      '专业',
+      '大类名称',
+      '大类',
+      '专业（类）',
+      '专业方向',
+      'zyfxmc',
+      'ZYFXMC',
+      'evalMajor',
+      'zszymc',
+      '所属学院',
+      '学院名称',
+      'xymc',
+      'XYMC',
+      'jgmc',
+      'collegeName',
+      'bmmc',
+    ];
+
+    for (final key in candidateKeys) {
+      if (map.containsKey(key)) {
+        final val = map[key];
+        if (val is String) {
+          final cleaned = val.trim();
+          if (cleaned.isNotEmpty &&
+              cleaned != '未知' &&
+              cleaned != '无' &&
+              !cleaned.contains('&nbsp;')) {
+            return cleaned;
+          }
+        }
+      }
+    }
+
+    // 尝试从班级提取
+    final className = map['班级名称'] ?? map['班级'] ?? map['bjmc'] ?? map['BJMC'] ?? map['className'];
+    if (className is String) {
+      final fromClass = extractMajorFromClassName(className);
+      if (fromClass != null) return fromClass;
+    }
+
+    return null;
+  }
+
   /// 从教务网成绩/课程记录中提取用户主修专业名称
   String? _extractMajor(List<dynamic> items) {
     for (final raw in items) {
       final item = asStringMap(raw);
       if (item != null) {
-        final major = asString(item['zymc']) ??
-            asString(item['ZYMC']) ??
-            asString(item['zyfxmc']) ??
-            asString(item['ZYFXMC']) ??
-            asString(item['xymc']) ??
-            asString(item['XYMC']) ??
-            asString(item['major']);
-        if (major != null && major.trim().isNotEmpty && major != '未知') {
-          return major.trim();
+        final major = extractMajorFromKeyValues(item);
+        if (major != null) {
+          return major;
         }
       }
     }
@@ -915,7 +1035,7 @@ class Zdbk {
     return bytes;
   }
 
-  /// 获取用户主修专业/大类名称（多级多源兜底：本地缓存 -> 课表学籍 -> 成绩单 -> 教务网学籍JSON -> 教务网学籍HTML -> ETA 学工系统）
+  /// 获取用户主修专业/大类名称（多级多源兜底：本地缓存 -> 课表学籍 -> 成绩单 -> 教务网学籍接口 -> 教务网培养方案页面 -> ETA 学工系统）
   Future<Tuple<Exception?, String?>> getStudentMajor(
       HttpClient httpClient, {String? studentId}) async {
     final cached = _db?.getCachedWebPage('zdbk_user_major');
@@ -930,15 +1050,10 @@ class Zdbk {
         final decoded = jsonDecode(studentInfo);
         final map = asStringMap(decoded);
         if (map != null) {
-          final major = asString(map['ZYMC']) ??
-              asString(map['zymc']) ??
-              asString(map['ZYFXMC']) ??
-              asString(map['zyfxmc']) ??
-              asString(map['XYMC']) ??
-              asString(map['xymc']);
-          if (major != null && major.trim().isNotEmpty && major != '未知') {
-            _writeCache('zdbk_user_major', major.trim());
-            return Tuple(null, major.trim());
+          final major = extractMajorFromKeyValues(map);
+          if (major != null && major.isNotEmpty) {
+            _writeCache('zdbk_user_major', major);
+            return Tuple(null, major);
           }
         }
       } catch (_) {}
@@ -958,114 +1073,113 @@ class Zdbk {
       return Tuple(null, major2);
     }
 
-    // 3. 尝试主动请求教务网学籍接口
+    // 3. 尝试主动请求教务网学籍与培养方案接口
     try {
       final zdbkMajor = await _withAutoRelogin(httpClient, (relogged, retried) async {
-        // 3.1 优先请求正方标准学生个人信息 JSON 接口
+        final suParam = studentId != null && studentId.isNotEmpty ? '&su=$studentId' : '';
+
+        // 3.1 请求正方教务网个人信息页面（支持同时处理 JSON 与 HTML 渲染）
         try {
-          final suParam = studentId != null && studentId.isNotEmpty ? '&su=$studentId' : '';
-          final jsonUri = Uri.parse(
+          final uri1 = Uri.parse(
               "https://zdbk.zju.edu.cn/jwglxt/xsxxxggl/xsxxwh_cxCkDgxsxx.html?gnmkdm=N100801$suParam");
-          final jsonReq = await httpClient.getUrl(jsonUri).timeout(
+          final req1 = await httpClient.getUrl(uri1).timeout(
               const Duration(seconds: 8),
               onTimeout: () => throw requestTimeout());
-          jsonReq.headers
+          req1.headers
             ..add("Referer", "https://zdbk.zju.edu.cn/jwglxt/xtgl/index_initMenu.html")
             ..set('Connection', 'close')
             ..add('User-Agent',
                 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
-            ..add('X-Requested-With', 'XMLHttpRequest')
-            ..add('Accept', 'application/json, text/plain, */*');
-          jsonReq.cookies.add(_jSessionId!);
-          jsonReq.cookies.add(_route!);
-          jsonReq.followRedirects = false;
-          final jsonResp = await jsonReq.close().timeout(const Duration(seconds: 8),
+            ..add('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8');
+          req1.cookies.add(_jSessionId!);
+          req1.cookies.add(_route!);
+          req1.followRedirects = false;
+          final resp1 = await req1.close().timeout(const Duration(seconds: 8),
               onTimeout: () => throw requestTimeout());
-          final jsonBody = await readResponseBody(jsonResp, context: '教务网学生信息JSON接口');
-          if (jsonResp.statusCode == 200 && jsonBody.isNotEmpty) {
+          final body1 = await readResponseBody(resp1, context: '教务网学生信息接口');
+          if (resp1.statusCode == 200 && body1.isNotEmpty) {
+            // 尝试 JSON
             try {
-              final decoded = jsonDecode(jsonBody);
+              final decoded = jsonDecode(body1);
               final map = asStringMap(decoded);
               if (map != null) {
-                final major = asString(map['zymc']) ??
-                    asString(map['ZYMC']) ??
-                    asString(map['zyfxmc']) ??
-                    asString(map['xymc']) ??
-                    asString(map['jgmc']);
-                if (major != null &&
-                    major.trim().isNotEmpty &&
-                    major != '未知' &&
-                    major != '无') {
-                  _writeCache('zdbk_user_major', major.trim());
-                  return Tuple<Exception?, String?>(null, major.trim());
+                final major = extractMajorFromKeyValues(map);
+                if (major != null) {
+                  _writeCache('zdbk_user_major', major);
+                  return Tuple<Exception?, String?>(null, major);
                 }
               }
             } catch (_) {}
+
+            // 尝试 HTML 表单结构提取
+            final htmlFields = parseHtmlFormFields(body1);
+            final major = extractMajorFromKeyValues(htmlFields);
+            if (major != null) {
+              _writeCache('zdbk_user_major', major);
+              return Tuple<Exception?, String?>(null, major);
+            }
           }
         } catch (_) {}
 
-        // 3.2 降级请求教务网学籍信息维护 HTML 页面正则匹配
-        late HttpClientRequest request;
-        late HttpClientResponse response;
-        final uri = Uri.parse(
-            "https://zdbk.zju.edu.cn/jwglxt/xsxxxggl/xsgrxxwh_cxXsgrxx.html?gnmkdm=N100801&layout=default");
-
+        // 3.2 降级请求教务网学籍信息维护页面
         try {
-          request = await httpClient.getUrl(uri).timeout(
+          final uri2 = Uri.parse(
+              "https://zdbk.zju.edu.cn/jwglxt/xsxxxggl/xsgrxxwh_cxXsgrxx.html?gnmkdm=N100801&layout=default$suParam");
+          final req2 = await httpClient.getUrl(uri2).timeout(
               const Duration(seconds: 8),
               onTimeout: () => throw requestTimeout());
-          request.headers
-            ..add("Referer",
-                "https://zdbk.zju.edu.cn/jwglxt/xtgl/index_initMenu.html")
+          req2.headers
+            ..add("Referer", "https://zdbk.zju.edu.cn/jwglxt/xtgl/index_initMenu.html")
             ..set('Connection', 'close')
             ..add('User-Agent',
                 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
-            ..add('Accept',
-                'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
-          request.cookies.add(_jSessionId!);
-          request.cookies.add(_route!);
-          request.followRedirects = false;
-          response = await request.close().timeout(const Duration(seconds: 8),
+            ..add('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
+          req2.cookies.add(_jSessionId!);
+          req2.cookies.add(_route!);
+          req2.followRedirects = false;
+          final resp2 = await req2.close().timeout(const Duration(seconds: 8),
               onTimeout: () => throw requestTimeout());
-
-          var responseText =
-              await readResponseBody(response, context: '教务网学籍信息接口');
-          _validateResponse(response, responseText,
-              context: '教务网学籍信息接口',
-              requestUri: uri,
-              relogged: relogged,
-              retried: retried,
-              expectJson: false);
-
-          final patterns = [
-            RegExp('id=[\"\']col_zy(?:fx)?_id[\"\'][^>]*>\\s*<p[^>]*>([^<]+)</p>',
-                caseSensitive: false),
-            RegExp('name=[\"\']zy(?:mc|fxmc)?[\"\'][^>]*value=[\"\']([^\"\']+)[\"\']',
-                caseSensitive: false),
-            RegExp('id=[\"\']col_jg_id[\"\'][^>]*>\\s*<p[^>]*>([^<]+)</p>',
-                caseSensitive: false),
-            RegExp('id=[\"\']col_bh_id[\"\'][^>]*>\\s*<p[^>]*>([^<]+)</p>',
-                caseSensitive: false),
-          ];
-
-          for (final p in patterns) {
-            final m = p.firstMatch(responseText);
-            final text = m?.group(1)?.trim();
-            if (text != null &&
-                text.isNotEmpty &&
-                text != '未知' &&
-                text != '无' &&
-                !text.contains('&nbsp;')) {
-              _writeCache('zdbk_user_major', text);
-              return Tuple<Exception?, String?>(null, text);
+          final body2 = await readResponseBody(resp2, context: '教务网学籍维护接口');
+          if (resp2.statusCode == 200 && body2.isNotEmpty) {
+            final htmlFields = parseHtmlFormFields(body2);
+            final major = extractMajorFromKeyValues(htmlFields);
+            if (major != null) {
+              _writeCache('zdbk_user_major', major);
+              return Tuple<Exception?, String?>(null, major);
             }
           }
+        } catch (_) {}
 
-          return Tuple<Exception?, String?>(null, null);
-        } on Object catch (e) {
-          if (e is AuthenticationExpiredException) rethrow;
-          return Tuple<Exception?, String?>(null, null);
-        }
+        // 3.3 尝试请求学生培养方案索引页面（可能预先填充或默认包含当前学生专业代码）
+        try {
+          final uri3 = Uri.parse(
+              "https://zdbk.zju.edu.cn/jwglxt/pyfagl/pyfaxxcx_cxPyfaxscxIndex.html?gnmkdm=N153020&layout=default$suParam");
+          final req3 = await httpClient.getUrl(uri3).timeout(
+              const Duration(seconds: 8),
+              onTimeout: () => throw requestTimeout());
+          req3.headers
+            ..add("Referer", "https://zdbk.zju.edu.cn/jwglxt/xtgl/index_initMenu.html")
+            ..set('Connection', 'close')
+            ..add('User-Agent',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
+            ..add('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
+          req3.cookies.add(_jSessionId!);
+          req3.cookies.add(_route!);
+          req3.followRedirects = false;
+          final resp3 = await req3.close().timeout(const Duration(seconds: 8),
+              onTimeout: () => throw requestTimeout());
+          final body3 = await readResponseBody(resp3, context: '教务网培养方案学生页面');
+          if (resp3.statusCode == 200 && body3.isNotEmpty) {
+            final htmlFields = parseHtmlFormFields(body3);
+            final major = extractMajorFromKeyValues(htmlFields);
+            if (major != null) {
+              _writeCache('zdbk_user_major', major);
+              return Tuple<Exception?, String?>(null, major);
+            }
+          }
+        } catch (_) {}
+
+        return Tuple<Exception?, String?>(null, null);
       });
 
       if (zdbkMajor.item2 != null && zdbkMajor.item2!.isNotEmpty) {
@@ -1075,7 +1189,7 @@ class Zdbk {
 
     // 4. 尝试从浙大 ETA “三全育人”学生信息平台（eta.zju.edu.cn）获取专业
     try {
-      final etaMajor = await Eta.getStudentMajor(httpClient, _iPlanetDirectoryPro);
+      final etaMajor = await Eta.getStudentMajor(httpClient, _iPlanetDirectoryPro, studentId: studentId);
       if (etaMajor != null && etaMajor.trim().isNotEmpty) {
         _writeCache('zdbk_user_major', etaMajor.trim());
         return Tuple(null, etaMajor.trim());
