@@ -6,6 +6,7 @@ import 'package:celechron/services/ohos_native_service.dart';
 
 import 'package:celechron/http/zjuServices/zjuam.dart';
 import 'package:celechron/http/zjuServices/ecard.dart';
+import 'package:celechron/http/zjuServices/network_defense.dart';
 
 class ECardWidgetMessenger {
   static const _platform = MethodChannel('top.celechron.celechron/ecardWidget');
@@ -37,6 +38,7 @@ class ECardWidgetMessenger {
     var httpClient = HttpClient();
     httpClient.userAgent =
         "E-CampusZJU/2.3.20 (iPhone; iOS 17.5.1; Scale/3.00)";
+    applyZjuNetworkDefense(httpClient);
 
     try {
       var iPlanetDirectoryPro =

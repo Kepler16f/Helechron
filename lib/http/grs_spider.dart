@@ -22,6 +22,7 @@ import 'package:celechron/model/semester.dart';
 import 'zjuServices/zjuam.dart';
 import 'zjuServices/zdbk.dart';
 import 'package:celechron/services/zhiyun_service.dart';
+import 'zjuServices/network_defense.dart';
 
 /// 研究生完整刷新编排器，同时兼容研究生院课程与已选本科课程。
 class GrsSpider implements Spider {
@@ -70,10 +71,11 @@ class GrsSpider implements Spider {
 
   HttpClient _createHttpClient() {
     final client = HttpClient();
-    // TCP/TLS 建连快速失败；已建立连接仍由各接口的总超时兜底。
-    client.connectionTimeout = const Duration(seconds: 5);
+    // 放宽建连超时至 12 秒，确保在双栈 IPv6 握手抖动时有足够时间完成 SYN 重传与 IPv4 回退
+    client.connectionTimeout = const Duration(seconds: 12);
     client.userAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36 Edg/110.0.1587.63";
+    applyZjuNetworkDefense(client);
     return client;
   }
 
@@ -445,9 +447,9 @@ class GrsSpider implements Spider {
           if (value.item1.toString().contains("验证码")) {
             cancelTimetableFetch = true;
           }
-          return Future.value(value.item1?.toString());
+          return await Future.value(value.item1?.toString());
         } on Object catch (error, stackTrace) {
-          return Future.value(
+          return await Future.value(
               _describeRefreshFailure(error, stackTrace, source: '课表'));
         }
       }

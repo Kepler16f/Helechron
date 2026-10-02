@@ -13,6 +13,7 @@ import 'package:celechron/utils/gpa_helper.dart';
 import 'weighted_gpa_view.dart';
 import 'gpa_simulator_view.dart';
 import 'credit_progress_view.dart';
+import 'semester_gpa_trend_card.dart';
 import 'package:celechron/design/native_bar_spacer.dart';
 
 class GradeDetailPage extends StatelessWidget {
@@ -407,6 +408,28 @@ class GradeDetailPage extends StatelessWidget {
               );
             },
           ),
+          CupertinoActionSheetAction(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  _gradeDetailController.showTrendChart.value
+                      ? CupertinoIcons.graph_circle_fill
+                      : CupertinoIcons.graph_circle,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(_gradeDetailController.showTrendChart.value
+                    ? '隐藏学期走势折线图'
+                    : '展示学期走势折线图'),
+              ],
+            ),
+            onPressed: () {
+              Navigator.of(sheetCtx).pop();
+              _gradeDetailController.showTrendChart.value =
+                  !_gradeDetailController.showTrendChart.value;
+            },
+          ),
         ],
         cancelButton: CupertinoActionSheetAction(
           isDefaultAction: true,
@@ -493,8 +516,8 @@ class GradeDetailPage extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: CupertinoDynamicColor.resolve(
-                  CupertinoColors.label, context),
+              color:
+                  CupertinoDynamicColor.resolve(CupertinoColors.label, context),
             ),
           ),
         ],
@@ -579,6 +602,30 @@ class GradeDetailPage extends StatelessWidget {
                           Obx(() => !_gradeDetailController.customGpaMode.value
                               ? _buildQuickActionRow(context)
                               : const SizedBox.shrink()),
+                          Obx(() {
+                            if (!_gradeDetailController.customGpaMode.value &&
+                                _gradeDetailController.showTrendChart.value &&
+                                _gradeDetailController
+                                        .semestersWithGrades.length >=
+                                    2) {
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 16),
+                                child: SemesterGpaTrendCard(
+                                  semesters: _gradeDetailController
+                                      .semestersWithGrades,
+                                  selectedIndex: _gradeDetailController
+                                      .semesterIndex.value,
+                                  onSemesterSelected: (idx) {
+                                    _gradeDetailController.semesterIndex.value =
+                                        idx;
+                                    _gradeDetailController.semesterIndex
+                                        .refresh();
+                                  },
+                                ),
+                              );
+                            }
+                            return const SizedBox.shrink();
+                          }),
                           _buildHistory(context),
                         ],
                       ),

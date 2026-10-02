@@ -16,12 +16,12 @@ class ECard {
     request = await httpClient
         .getUrl(Uri.parse(
             "https://elife.zju.edu.cn/berserker-auth/cas/oauth2?resultUrl=https://elife.zju.edu.cn/plat-pc"))
-        .timeout(const Duration(seconds: 8),
+        .timeout(const Duration(seconds: 12),
             onTimeout: () => throw ExceptionWithMessage("请求超时"));
     request.followRedirects = false;
     cookies.add(iPlanetDirectoryPro);
     request.cookies.addAll(cookies);
-    response = await request.close().timeout(const Duration(seconds: 8),
+    response = await request.close().timeout(const Duration(seconds: 12),
         onTimeout: () => throw ExceptionWithMessage("请求超时"));
 
     // synjones-auth 可能出现在任意一跳 Location 中；每跳必须先收集
@@ -53,12 +53,12 @@ class ECard {
       await response.drain();
       current = current.resolve(location);
       request = await httpClient.getUrl(current).timeout(
-          const Duration(seconds: 8),
+          const Duration(seconds: 12),
           onTimeout: () => throw ExceptionWithMessage("请求超时"));
       request.followRedirects = false;
       cookies.addAll(response.cookies);
       request.cookies.addAll(cookies);
-      response = await request.close().timeout(const Duration(seconds: 8),
+      response = await request.close().timeout(const Duration(seconds: 12),
           onTimeout: () => throw ExceptionWithMessage("请求超时"));
     }
     throw ExceptionWithMessage("校园卡登录失败：重定向次数过多");
@@ -75,7 +75,8 @@ class ECard {
         .timeout(const Duration(seconds: 10),
             onTimeout: () => throw ExceptionWithMessage("请求超时"));
     request.headers.add("Synjones-Auth", "Bearer $synjonesAuth");
-    request.headers.add("User-Agent", "E-CampusZJU/2.3.20 (iPhone; iOS 17.5.1; Scale/3.00)");
+    request.headers.add(
+        "User-Agent", "E-CampusZJU/2.3.20 (iPhone; iOS 17.5.1; Scale/3.00)");
     request.headers.add("Accept", "application/json, text/plain, */*");
     request.followRedirects = false;
     response = await request.close().timeout(const Duration(seconds: 10),
@@ -119,14 +120,16 @@ class ECard {
             .timeout(const Duration(seconds: 10),
                 onTimeout: () => throw ExceptionWithMessage("请求超时"));
         request.headers.add("synjones-auth", "bearer $synjonesAuth");
-        request.headers.add("User-Agent", "E-CampusZJU/2.3.20 (iPhone; iOS 17.5.1; Scale/3.00)");
+        request.headers.add("User-Agent",
+            "E-CampusZJU/2.3.20 (iPhone; iOS 17.5.1; Scale/3.00)");
         request.headers.add("Accept", "application/json, text/plain, */*");
         request.followRedirects = false;
-        final response = await request.close().timeout(const Duration(seconds: 10),
+        final response = await request.close().timeout(
+            const Duration(seconds: 10),
             onTimeout: () => throw ExceptionWithMessage("请求超时"));
 
-        var barcodeJson =
-            await readResponseText(response, context: '校园卡付款码接口', expectJson: true);
+        var barcodeJson = await readResponseText(response,
+            context: '校园卡付款码接口', expectJson: true);
         final payload = decodeJsonMap(barcodeJson,
             context: '校园卡付款码接口；HTTP ${response.statusCode}');
         if (jsonIndicatesAuthenticationFailure(payload)) {

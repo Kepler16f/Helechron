@@ -86,7 +86,35 @@ class ZjuAm {
       HttpClient httpClient, String username, String password) async {
     // 先删除 1.2 时期留下的值，防止降级后的旧版本再读取。
     await _deleteLegacyCachedSsoCookie(username);
-    return _getSsoCookie(httpClient, username, password);
+
+    // 针对非校园网 WiFi、双栈 IPv6/IPv4 协商抖动等网络瞬态故障，增加平滑自动重试机制（最多 3 次）
+    Object? lastError;
+    StackTrace? lastStackTrace;
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      try {
+        return await _getSsoCookie(httpClient, username, password);
+      } on Object catch (error, stackTrace) {
+        lastError = error;
+        lastStackTrace = stackTrace;
+        // 如果是明确的学号或密码错误，不进行无谓的重试
+        final msg = error.toString();
+        if (msg.contains('学号或密码错误') || msg.contains('密码不合法')) {
+          Error.throwWithStackTrace(error, stackTrace);
+        }
+        if (attempt < 3) {
+          DiagnosticLogService.instance.record(
+            level: CelechronLogLevel.warning,
+            module: '统一身份认证',
+            operation: 'getSsoCookieRetry',
+            message: '第 $attempt 次尝试失败，正在进行网络抖动重试...',
+            error: error,
+            retried: true,
+          );
+          await Future.delayed(Duration(milliseconds: 600 * attempt));
+        }
+      }
+    }
+    Error.throwWithStackTrace(lastError!, lastStackTrace!);
   }
 
   static String _cookieStorageKey(String username) =>
@@ -115,7 +143,7 @@ class ZjuAm {
     final startedAt = DateTime.now();
     try {
       final request = await httpClient.getUrl(uri).timeout(
-            const Duration(seconds: 8),
+            const Duration(seconds: 12),
             onTimeout: () => throw requestTimeout('CAS service 请求超时'),
           );
       request.followRedirects = false;
@@ -123,7 +151,7 @@ class ZjuAm {
         Cookie(iPlanetDirectoryPro.name, iPlanetDirectoryPro.value),
       );
       final response = await request.close().timeout(
-            const Duration(seconds: 8),
+            const Duration(seconds: 12),
             onTimeout: () => throw requestTimeout('CAS service 响应超时'),
           );
       final location = response.headers.value(HttpHeaders.locationHeader);
@@ -204,10 +232,10 @@ class ZjuAm {
       // execution 与初始 Cookie 属于同一次 CAS 表单会话，必须先取登录页。
       request = await httpClient
           .getUrl(Uri.parse('https://zjuam.zju.edu.cn/cas/login'))
-          .timeout(const Duration(seconds: 8),
+          .timeout(const Duration(seconds: 12),
               onTimeout: () => throw requestTimeout());
       request.followRedirects = false;
-      response = await request.close().timeout(const Duration(seconds: 8),
+      response = await request.close().timeout(const Duration(seconds: 12),
           onTimeout: () => throw requestTimeout());
 
       var cookies = List<Cookie>.from(response.cookies);
@@ -229,11 +257,11 @@ class ZjuAm {
       // 公钥请求沿用登录页 Cookie，随后才可加密密码并提交 execution。
       request = await httpClient
           .getUrl(Uri.parse('https://zjuam.zju.edu.cn/cas/v2/getPubKey'))
-          .timeout(const Duration(seconds: 8),
+          .timeout(const Duration(seconds: 12),
               onTimeout: () => throw requestTimeout());
       request.followRedirects = false;
       request.cookies.addAll(cookies);
-      response = await request.close().timeout(const Duration(seconds: 8),
+      response = await request.close().timeout(const Duration(seconds: 12),
           onTimeout: () => throw requestTimeout());
 
       cookies.addAll(response.cookies);
@@ -269,7 +297,7 @@ class ZjuAm {
 
       request = await httpClient
           .postUrl(Uri.parse('https://zjuam.zju.edu.cn/cas/login'))
-          .timeout(const Duration(seconds: 8),
+          .timeout(const Duration(seconds: 12),
               onTimeout: () => throw requestTimeout());
       request.followRedirects = false;
       request.headers.contentType =
@@ -282,7 +310,7 @@ class ZjuAm {
         '_eventId': 'submit',
         'rememberMe': 'true',
       }).query));
-      response = await request.close().timeout(const Duration(seconds: 8),
+      response = await request.close().timeout(const Duration(seconds: 12),
           onTimeout: () => throw requestTimeout());
       body = await readResponseBody(response, context: '统一身份认证登录提交');
 

@@ -25,6 +25,7 @@ import 'zjuServices/zjuam.dart';
 import 'zjuServices/zdbk.dart';
 import 'zjuServices/sztz.dart';
 import 'package:celechron/services/zhiyun_service.dart';
+import 'zjuServices/network_defense.dart';
 
 /// 本科完整刷新编排器；各站点共享统一认证，但独立登录、缓存和降级。
 class UgrsSpider implements Spider {
@@ -82,12 +83,13 @@ class UgrsSpider implements Spider {
   // 初始化或重置 HttpClient
   HttpClient _createHttpClient() {
     final client = HttpClient();
-    // TCP/TLS 建连快速失败；已建立连接仍由各接口的总超时兜底。
-    client.connectionTimeout = const Duration(seconds: 5);
+    // 放宽建连超时至 12 秒，确保在双栈 IPv6 握手抖动时有足够时间完成 SYN 重传与 IPv4 回退
+    client.connectionTimeout = const Duration(seconds: 12);
     client.userAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36 Edg/110.0.1587.63";
     // 强制不保存 Cookies，完全由 Zdbk 手动管理，避免冲突
     // 同时也避免重定向时 HttpClient 自动携带旧 Cookie
+    applyZjuNetworkDefense(client);
     return client;
   }
 
@@ -535,7 +537,7 @@ class UgrsSpider implements Spider {
           if (isProbeYear && value.item1 != null) {
             probeHadUnexpectedFailure = true;
           }
-          return Future.value(value.item1?.toString());
+          return await Future.value(value.item1?.toString());
         } on Object catch (error, stackTrace) {
           if (isProbeYear && isExpectedTimetableProbeMiss(error)) {
             return null;

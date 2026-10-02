@@ -8,6 +8,7 @@ import 'package:hive/hive.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/http/zjuServices/zjuam.dart';
+import 'package:celechron/http/zjuServices/network_defense.dart';
 import 'package:celechron/model/course.dart';
 import 'package:celechron/model/period.dart';
 
@@ -62,21 +63,10 @@ class ZhiyunService {
 
   /// 创建专用于浙大智云课堂的 HttpClient
   /// 自动直连绕过代理（Clash/VPN），防止内网接口在 SSL 握手时被重置
-  static HttpClient createHttpClient({Duration timeout = const Duration(seconds: 8)}) {
-    final client = HttpClient()
-      ..connectionTimeout = timeout
-      ..badCertificateCallback = (cert, host, port) => true;
-
-    client.findProxy = (uri) {
-      final host = uri.host.toLowerCase();
-      // 对所有浙大校内及智云域名强制直连（DIRECT），避免系统代理拦截或中断校园网 SSL 握手
-      if (host.contains('zju.edu.cn') ||
-          host.contains('cmc.zju.edu.cn') ||
-          host.contains('classroom.zju.edu.cn')) {
-        return 'DIRECT';
-      }
-      return HttpClient.findProxyFromEnvironment(uri);
-    };
+  static HttpClient createHttpClient(
+      {Duration timeout = const Duration(seconds: 12)}) {
+    final client = HttpClient()..connectionTimeout = timeout;
+    applyZjuNetworkDefense(client, connectionTimeout: timeout);
     return client;
   }
 
@@ -141,7 +131,8 @@ class ZhiyunService {
     s = s.replaceAll('【', '[').replaceAll('】', ']');
     // 移除常见教学修饰标签
     s = s.replaceAll(
-        RegExp(r'[\(\[]\s*(网络|线上|线下|双语|全英文|英文|mooc|MOOC|慕课|研讨|实验|翻转|翻转课堂|理论|通识|通识核心|选修|必修)\s*[\)\]]',
+        RegExp(
+            r'[\(\[]\s*(网络|线上|线下|双语|全英文|英文|mooc|MOOC|慕课|研讨|实验|翻转|翻转课堂|理论|通识|通识核心|选修|必修)\s*[\)\]]',
             caseSensitive: false),
         '');
     // 移除班级号如 (01), (01班)
@@ -160,15 +151,18 @@ class ZhiyunService {
         lower.contains('(荣誉)') ||
         lower.contains('（荣誉）') ||
         lower.contains('荣誉课程') ||
-        RegExp(r'[\(（\[【]\s*h\s*[\)）\]】]', caseSensitive: false).hasMatch(name) ||
+        RegExp(r'[\(（\[【]\s*h\s*[\)）\]】]', caseSensitive: false)
+            .hasMatch(name) ||
         RegExp(r'\bh\b', caseSensitive: false).hasMatch(name) ||
-        RegExp(r'[\u4e00-\u9fa5]h$', caseSensitive: false).hasMatch(name.trim());
+        RegExp(r'[\u4e00-\u9fa5]h$', caseSensitive: false)
+            .hasMatch(name.trim());
   }
 
   /// 移除课程名称中的荣誉课程 (H) 标记（用于在两者均为荣誉课程时进一步比对核心名称）
   static String stripHonorsTag(String name) {
     return name
-        .replaceAll(RegExp(r'[\(（\[【]\s*h\s*[\)）\]】]', caseSensitive: false), '')
+        .replaceAll(
+            RegExp(r'[\(（\[【]\s*h\s*[\)）\]】]', caseSensitive: false), '')
         .replaceAll(RegExp(r'[\(（\[【]\s*荣誉\s*[\)）\]】]'), '')
         .replaceAll('荣誉课程', '')
         .replaceAll('荣誉', '')
@@ -470,7 +464,8 @@ class ZhiyunService {
     if (core.isNotEmpty && _userCourseIds.containsKey(core)) {
       return _userCourseIds[core];
     }
-    if (coreNormalized.isNotEmpty && _userCourseIds.containsKey(coreNormalized)) {
+    if (coreNormalized.isNotEmpty &&
+        _userCourseIds.containsKey(coreNormalized)) {
       return _userCourseIds[coreNormalized];
     }
     if (courseCode != null && _userCourseIds.containsKey(courseCode)) {
@@ -705,7 +700,59 @@ class ZhiyunService {
     return null;
   }
 
-  /// 获取指定课程的课节回放目录（优先内存缓存）
+  /// 保存课程的最近观看/播放记录（断点记忆）
+  static Future<void> saveLastWatchedReplay({
+    required String courseName,
+    required String lessonTitle,
+    required String livingroomUrl,
+    String? courseId,
+    String? subId,
+  }) async {
+    try {
+      final box = _getHiveBox();
+      final record = {
+        'courseName': courseName,
+        'lessonTitle': lessonTitle,
+        'livingroomUrl': livingroomUrl,
+        'courseId': courseId,
+        'subId': subId,
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+      final cleaned = cleanCourseName(courseName);
+      final jsonStr = jsonEncode(record);
+      await box?.put('zhiyun_last_played_$cleaned', jsonStr);
+      if (courseId != null) {
+        await box?.put('zhiyun_last_played_cid_$courseId', jsonStr);
+      }
+    } catch (e) {
+      debugPrint('[ZhiyunService] 保存播放进度异常: $e');
+    }
+  }
+
+  /// 获取课程的最近观看记录
+  static Map<String, dynamic>? getLastWatchedReplay({
+    required String courseName,
+    String? courseId,
+  }) {
+    try {
+      final box = _getHiveBox();
+      final cleaned = cleanCourseName(courseName);
+      var raw = box?.get('zhiyun_last_played_$cleaned')?.toString();
+      if (raw == null && courseId != null) {
+        raw = box?.get('zhiyun_last_played_cid_$courseId')?.toString();
+      }
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      }
+    } catch (e) {
+      debugPrint('[ZhiyunService] 读取播放进度异常: $e');
+    }
+    return null;
+  }
+
+  /// 获取指定课程的课节回放目录（优先内存缓存，其次本地 Hive 离线缓存，网络失败时优雅降级）
   static Future<List<Map<String, dynamic>>> fetchCourseCatalogue(
       String courseId) async {
     final cached = _catalogueCache[courseId];
@@ -714,6 +761,28 @@ class ZhiyunService {
         cacheTime != null &&
         DateTime.now().difference(cacheTime) < const Duration(hours: 1)) {
       return cached;
+    }
+
+    // 检查本地 Hive 离线持久化缓存
+    final box = _getHiveBox();
+    List<Map<String, dynamic>>? hiveCached;
+    if (box != null) {
+      final raw = box.get('zhiyun_cat_$courseId')?.toString();
+      if (raw != null && raw.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(raw);
+          if (decoded is List) {
+            hiveCached = decoded
+                .whereType<Map>()
+                .map((e) => Map<String, dynamic>.from(e))
+                .toList();
+            if (hiveCached.isNotEmpty) {
+              _catalogueCache[courseId] = hiveCached;
+              _registerSubIdsFromList(courseId, hiveCached);
+            }
+          }
+        } catch (_) {}
+      }
     }
 
     final client = createHttpClient();
@@ -732,7 +801,7 @@ class ZhiyunService {
         req.headers.set('Authorization', 'Bearer $token');
         req.headers.set('Cookie', '_token=$token; token=$token');
       }
-      final resp = await req.close().timeout(const Duration(seconds: 6));
+      final resp = await req.close().timeout(const Duration(seconds: 10));
       if (resp.statusCode == 200) {
         final body = await resp.transform(utf8.decoder).join();
         final json = jsonDecode(body);
@@ -756,6 +825,11 @@ class ZhiyunService {
             _catalogueCache[courseId] = list;
             _catalogueCacheTime[courseId] = DateTime.now();
             _registerSubIdsFromList(courseId, list);
+            if (box != null) {
+              box.put('zhiyun_cat_$courseId', jsonEncode(list));
+              box.put('zhiyun_cat_time_$courseId',
+                  DateTime.now().toIso8601String());
+            }
             return list;
           }
         }
@@ -771,7 +845,7 @@ class ZhiyunService {
         req2.headers.set('Authorization', 'Bearer $token');
         req2.headers.set('Cookie', '_token=$token; token=$token');
       }
-      final resp2 = await req2.close().timeout(const Duration(seconds: 5));
+      final resp2 = await req2.close().timeout(const Duration(seconds: 8));
       if (resp2.statusCode == 200) {
         final body2 = await resp2.transform(utf8.decoder).join();
         final json2 = jsonDecode(body2);
@@ -787,18 +861,24 @@ class ZhiyunService {
               _catalogueCache[courseId] = list;
               _catalogueCacheTime[courseId] = DateTime.now();
               _registerSubIdsFromList(courseId, list);
+              if (box != null) {
+                box.put('zhiyun_cat_$courseId', jsonEncode(list));
+                box.put('zhiyun_cat_time_$courseId',
+                    DateTime.now().toIso8601String());
+              }
               return list;
             }
           }
         }
       }
     } catch (e) {
-      debugPrint('[ZhiyunService] 获取课程目录失败 (courseId=$courseId): $e');
+      debugPrint('[ZhiyunService] 获取课程目录异常 (courseId=$courseId): $e，尝试降级到离线缓存');
     } finally {
       client.close(force: true);
     }
 
-    return cached ?? const [];
+    // 弱网或请求失败时，优先返回离线缓存，确保课程课次依然可见
+    return cached ?? hiveCached ?? const [];
   }
 
   /// 递归解析 sub_list 结构 (year -> month -> week -> list of subs)
@@ -867,7 +947,8 @@ class ZhiyunService {
   }
 
   /// 别名兼容
-  static String buildSearchUrl(String courseName) => buildSearchContentUrl(courseName);
+  static String buildSearchUrl(String courseName) =>
+      buildSearchContentUrl(courseName);
 
   /// 智云课堂首页门户 URL
   static String buildPortalUrl() {
@@ -896,7 +977,8 @@ class ZhiyunService {
     } catch (_) {}
 
     // 2. 正则查找形如 course_id=12345
-    final paramMatch = RegExp(r'course_id=(\d+)', caseSensitive: false).firstMatch(raw);
+    final paramMatch =
+        RegExp(r'course_id=(\d+)', caseSensitive: false).firstMatch(raw);
     if (paramMatch != null) {
       return paramMatch.group(1);
     }
@@ -1184,15 +1266,20 @@ class ZhiyunService {
     // 2. 时间维度：如果是未来的课节，绝无回放
     final now = DateTime.now();
     final lessonDate = targetDate ??
-        (item['start_at'] != null && int.tryParse(item['start_at'].toString()) != null
-            ? DateTime.fromMillisecondsSinceEpoch(int.parse(item['start_at'].toString()) * 1000)
+        (item['start_at'] != null &&
+                int.tryParse(item['start_at'].toString()) != null
+            ? DateTime.fromMillisecondsSinceEpoch(
+                int.parse(item['start_at'].toString()) * 1000)
             : null);
     if (lessonDate != null && lessonDate.isAfter(now)) {
       return false;
     }
 
     // 3. 如果状态为未开始或正在直播，无回放
-    if (statusLabel == '未开始' || statusLabel.contains('直播') || status == '2' || status == '1') {
+    if (statusLabel == '未开始' ||
+        statusLabel.contains('直播') ||
+        status == '2' ||
+        status == '1') {
       return false;
     }
 
@@ -1274,9 +1361,8 @@ class ZhiyunService {
         // 尝试从目录匹配具体节次
         Map<String, dynamic>? matchedItem;
         for (final item in catalogue) {
-          final title = item['title']?.toString() ??
-              item['sub_title']?.toString() ??
-              '';
+          final title =
+              item['title']?.toString() ?? item['sub_title']?.toString() ?? '';
           final startAt = int.tryParse(item['start_at']?.toString() ?? '');
           DateTime? itemDate;
           if (startAt != null && startAt > 0) {
@@ -1373,9 +1459,8 @@ class ZhiyunService {
         courseId: courseId,
         subId: liveSubId,
         courseName: course.name,
-        lessonTitle: courseHasLive
-            ? '${course.name} 课堂直播'
-            : '${course.name} 智云课程房间',
+        lessonTitle:
+            courseHasLive ? '${course.name} 课堂直播' : '${course.name} 智云课程房间',
         lessonDate: targetDate,
         hasReplay: courseHasAnyReplay,
         isLive: courseHasLive,
@@ -1526,8 +1611,8 @@ class ZhiyunService {
                     if (coursesList != null) {
                       for (final c in coursesList) {
                         if (c is Map) {
-                          final cid = c['id']?.toString() ??
-                              c['course_id']?.toString();
+                          final cid =
+                              c['id']?.toString() ?? c['course_id']?.toString();
                           final title = c['title']?.toString() ??
                               c['course_title']?.toString();
                           final subId = c['sub_id']?.toString();
@@ -1596,8 +1681,8 @@ class ZhiyunService {
             if (pList is List) {
               for (final item in pList) {
                 if (item is Map) {
-                  final cid = item['course_id']?.toString() ??
-                      item['id']?.toString();
+                  final cid =
+                      item['course_id']?.toString() ?? item['id']?.toString();
                   final title = item['course_name']?.toString() ??
                       item['course_title']?.toString() ??
                       item['title']?.toString();
@@ -1764,8 +1849,7 @@ class ZhiyunService {
       // 若已抓取到 Token，向 infosimple 发起校验并拉取真实账号信息
       if (token != null && token.isNotEmpty) {
         try {
-          final infoUri =
-              Uri.parse('$_kZhiyunBaseUrl/userapi/v1/infosimple');
+          final infoUri = Uri.parse('$_kZhiyunBaseUrl/userapi/v1/infosimple');
           final infoReq = await httpClient.getUrl(infoUri);
           infoReq.headers.set('Authorization', 'Bearer $token');
           infoReq.headers.set('Cookie', '_token=$token; token=$token');

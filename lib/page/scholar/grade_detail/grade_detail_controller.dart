@@ -10,6 +10,7 @@ class GradeDetailController extends GetxController {
   final scholar = Get.find<Rx<Scholar>>(tag: 'scholar');
   final semesterIndex = 0.obs;
   final customGpaMode = false.obs;
+  final showTrendChart = true.obs;
   final _db = Get.find<DatabaseHelper>(tag: 'db');
   final RxMap<String, bool> customGpaSelected = RxMap();
   late RxList<Semester> semestersWithGrades;

@@ -11,6 +11,7 @@ import 'package:celechron/services/secure_storage_service.dart';
 import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/design/persistent_headers.dart';
 import '../../http/zjuServices/ecard.dart';
+import '../../http/zjuServices/network_defense.dart';
 
 enum _ViewState { loading, notLoggedIn, error, showing }
 
@@ -44,6 +45,7 @@ class _ECardPayPageState extends State<ECardPayPage> {
   @override
   void initState() {
     super.initState();
+    applyZjuNetworkDefense(_httpClient);
     _load();
   }
 
