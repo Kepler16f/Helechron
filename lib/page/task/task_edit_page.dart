@@ -114,9 +114,11 @@ class _TaskEditPageState extends State<TaskEditPage> {
       if (now.startTime.isAfter(now.endTime)) {
         now.startTime = now.endTime.add(const Duration(minutes: -1));
       }
+      final baseDate =
+          now.type == TaskType.fixed ? now.startTime : now.endTime;
       if (now.repeatEndsTime.isAfter(DateTime(2099, 1, 1)) ||
-          dateOnly(now.repeatEndsTime).isBefore(dateOnly(now.startTime))) {
-        now.repeatEndsTime = dateOnly(now.startTime);
+          dateOnly(now.repeatEndsTime).isBefore(dateOnly(baseDate))) {
+        now.repeatEndsTime = dateOnly(baseDate);
       }
       __got = 1;
     }
@@ -488,13 +490,67 @@ class _TaskEditPageState extends State<TaskEditPage> {
                       ),
                     ],
                   ),
-                if (now.type == TaskType.fixed) ...[
-                  CupertinoListSection.insetGrouped(
-                    header: const Text('日程设置'),
-                    children: [
+                CupertinoListSection.insetGrouped(
+                  header: Text(now.type == TaskType.fixed ? '日程设置' : '重复设置'),
+                  children: [
+                    CupertinoListTile(
+                      title: const Text('重复'),
+                      trailing: Text(deadlineRepeatTypeName[now.repeatType]!),
+                      onTap: () async {
+                        await showCupertinoModalPopup(
+                            context: context,
+                            builder: (BuildContext context) {
+                              return CupertinoPageScaffold(
+                                child: SizedBox(
+                                  height: MediaQuery.of(context)
+                                          .copyWith()
+                                          .size
+                                          .height /
+                                      3,
+                                  child: CupertinoPicker(
+                                    itemExtent: 32,
+                                    scrollController:
+                                        FixedExtentScrollController(
+                                      initialItem: now.repeatType.index,
+                                    ),
+                                    onSelectedItemChanged: (int value) {
+                                      setState(() {
+                                        now.repeatType =
+                                            TaskRepeatType.values[value];
+
+                                        final baseDate =
+                                            now.type == TaskType.fixed
+                                                ? now.startTime
+                                                : now.endTime;
+                                        if (now.repeatType !=
+                                                TaskRepeatType.norepeat &&
+                                            dateOnly(now.repeatEndsTime)
+                                                .isBefore(dateOnly(baseDate))) {
+                                          now.repeatEndsTime =
+                                              dateOnly(baseDate);
+                                        }
+                                      });
+                                    },
+                                    children: List<Widget>.generate(
+                                      deadlineRepeatTypeNameList.length,
+                                      (int index) {
+                                        return Center(
+                                          child: Text(
+                                            deadlineRepeatTypeNameList[index],
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              );
+                            });
+                      },
+                    ),
+                    if (now.repeatType == TaskRepeatType.days)
                       CupertinoListTile(
-                        title: const Text('重复'),
-                        trailing: Text(deadlineRepeatTypeName[now.repeatType]!),
+                        title: const Text('重复周期'),
+                        trailing: Text('${now.repeatPeriod} 天'),
                         onTap: () async {
                           await showCupertinoModalPopup(
                               context: context,
@@ -510,30 +566,19 @@ class _TaskEditPageState extends State<TaskEditPage> {
                                       itemExtent: 32,
                                       scrollController:
                                           FixedExtentScrollController(
-                                        initialItem: now.repeatType.index,
+                                        initialItem: now.repeatPeriod - 1,
                                       ),
                                       onSelectedItemChanged: (int value) {
                                         setState(() {
-                                          now.repeatType =
-                                              TaskRepeatType.values[value];
-
-                                          if (now.repeatType !=
-                                                  TaskRepeatType.norepeat &&
-                                              dateOnly(now.repeatEndsTime)
-                                                  .isBefore(dateOnly(
-                                                      now.startTime))) {
-                                            now.repeatEndsTime =
-                                                dateOnly(now.startTime);
-                                          }
+                                          now.repeatPeriod = value + 1;
                                         });
                                       },
                                       children: List<Widget>.generate(
-                                        deadlineRepeatTypeNameList.length,
+                                        999,
                                         (int index) {
                                           return Center(
-                                            child: Text(
-                                              deadlineRepeatTypeNameList[index],
-                                            ),
+                                            child:
+                                                Text((index + 1).toString()),
                                           );
                                         },
                                       ),
@@ -543,77 +588,37 @@ class _TaskEditPageState extends State<TaskEditPage> {
                               });
                         },
                       ),
-                      if (now.repeatType == TaskRepeatType.days)
-                        CupertinoListTile(
-                          title: const Text('重复周期'),
-                          trailing: Text('${now.repeatPeriod} 天'),
-                          onTap: () async {
-                            await showCupertinoModalPopup(
-                                context: context,
-                                builder: (BuildContext context) {
-                                  return CupertinoPageScaffold(
-                                    child: SizedBox(
-                                      height: MediaQuery.of(context)
-                                              .copyWith()
-                                              .size
-                                              .height /
-                                          3,
-                                      child: CupertinoPicker(
-                                        itemExtent: 32,
-                                        scrollController:
-                                            FixedExtentScrollController(
-                                          initialItem: now.repeatPeriod - 1,
-                                        ),
-                                        onSelectedItemChanged: (int value) {
-                                          setState(() {
-                                            now.repeatPeriod = value + 1;
-                                          });
-                                        },
-                                        children: List<Widget>.generate(
-                                          999,
-                                          (int index) {
-                                            return Center(
-                                              child:
-                                                  Text((index + 1).toString()),
-                                            );
-                                          },
-                                        ),
-                                      ),
+                    if (now.repeatType != TaskRepeatType.norepeat)
+                      CupertinoListTile(
+                        title: const Text('重复截止日期'),
+                        trailing:
+                            Text(TimeHelper.chineseDate(now.repeatEndsTime)),
+                        onTap: () async {
+                          await showCupertinoModalPopup(
+                              context: context,
+                              builder: (BuildContext context) {
+                                return CupertinoPageScaffold(
+                                  child: SizedBox(
+                                    height: MediaQuery.of(context)
+                                            .copyWith()
+                                            .size
+                                            .height /
+                                        3,
+                                    child: CupertinoDatePicker(
+                                      mode: CupertinoDatePickerMode.date,
+                                      initialDateTime: now.repeatEndsTime,
+                                      onDateTimeChanged: (value) {
+                                        setState(() {
+                                          now.repeatEndsTime = value;
+                                        });
+                                      },
                                     ),
-                                  );
-                                });
-                          },
-                        ),
-                      if (now.repeatType != TaskRepeatType.norepeat)
-                        CupertinoListTile(
-                          title: const Text('重复截止日期'),
-                          trailing:
-                              Text(TimeHelper.chineseDate(now.repeatEndsTime)),
-                          onTap: () async {
-                            await showCupertinoModalPopup(
-                                context: context,
-                                builder: (BuildContext context) {
-                                  return CupertinoPageScaffold(
-                                    child: SizedBox(
-                                      height: MediaQuery.of(context)
-                                              .copyWith()
-                                              .size
-                                              .height /
-                                          3,
-                                      child: CupertinoDatePicker(
-                                        mode: CupertinoDatePickerMode.date,
-                                        initialDateTime: now.repeatEndsTime,
-                                        onDateTimeChanged: (value) {
-                                          setState(() {
-                                            now.repeatEndsTime = value;
-                                          });
-                                        },
-                                      ),
-                                    ),
-                                  );
-                                });
-                          },
-                        ),
+                                  ),
+                                );
+                              });
+                        },
+                      ),
+                    if (now.type == TaskType.fixed)
                       CupertinoListTile(
                         title: const Text('不在这个日程中安排任务'),
                         trailing: CupertinoSwitch(
@@ -625,19 +630,8 @@ class _TaskEditPageState extends State<TaskEditPage> {
                           },
                         ),
                       ),
-                    ],
-                  ),
-                  // Container(
-                  //   padding: const EdgeInsets.only(left: 40, right: 40),
-                  //   child: Text(
-                  //     '可以在其中安排任务的日程不会出现在“接下来”栏中。',
-                  //     style: TextStyle(
-                  //         color: CupertinoDynamicColor.resolve(
-                  //             CupertinoColors.secondaryLabel, context),
-                  //         fontSize: 14),
-                  //   ),
-                  // ),
-                ],
+                  ],
+                ),
                 CupertinoListSection.insetGrouped(
                   header: const Text('附加信息'),
                   children: [

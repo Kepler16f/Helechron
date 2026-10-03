@@ -342,41 +342,78 @@ class Task {
   }
 
   bool setToNextPeriod() {
-    if (type != TaskType.fixed || status == TaskStatus.outdated) {
+    if (status == TaskStatus.outdated) {
       return false;
     }
     if (repeatType == TaskRepeatType.norepeat) {
       status = TaskStatus.outdated;
       return false;
-    } else if (repeatType == TaskRepeatType.days) {
+    }
+    if (type == TaskType.fixed) {
       if (repeatPeriod < 1) {
         repeatPeriod = 1;
       }
-      startTime = startTime.add(Duration(days: repeatPeriod));
-      endTime = endTime.add(Duration(days: repeatPeriod));
-    } else if (repeatType == TaskRepeatType.month) {
-      DateTime nex = DateTime(startTime.year, startTime.month + 1, 1);
-      while (daysInMonth(nex.year, nex.month) < startTime.day) {
-        nex = DateTime(nex.year, nex.month + 1, 1);
+      if (repeatType == TaskRepeatType.days) {
+        startTime = startTime.add(Duration(days: repeatPeriod));
+        endTime = endTime.add(Duration(days: repeatPeriod));
+      } else if (repeatType == TaskRepeatType.month) {
+        DateTime nex = DateTime(startTime.year, startTime.month + 1, 1);
+        while (daysInMonth(nex.year, nex.month) < startTime.day) {
+          nex = DateTime(nex.year, nex.month + 1, 1);
+        }
+        nex = DateTime(nex.year, nex.month, startTime.day);
+        int difference = nex.difference(startTime).inDays;
+        startTime = startTime.add(Duration(days: difference));
+        endTime = endTime.add(Duration(days: difference));
+      } else if (repeatType == TaskRepeatType.year) {
+        DateTime nex = DateTime(startTime.year + 1, startTime.month, 1);
+        while (daysInMonth(nex.year, nex.month) < startTime.day) {
+          nex = DateTime(nex.year + 1, nex.month, 1);
+        }
+        nex = DateTime(nex.year, startTime.month, startTime.day);
+        int difference = nex.difference(startTime).inDays;
+        startTime = startTime.add(Duration(days: difference));
+        endTime = endTime.add(Duration(days: difference));
       }
-      nex = DateTime(nex.year, nex.month, startTime.day);
-      int difference = nex.difference(startTime).inDays;
-      startTime = startTime.add(Duration(days: difference));
-      endTime = endTime.add(Duration(days: difference));
-    } else if (repeatType == TaskRepeatType.year) {
-      DateTime nex = DateTime(startTime.year + 1, startTime.month, 1);
-      while (daysInMonth(nex.year, nex.month) < startTime.day) {
-        nex = DateTime(nex.year + 1, nex.month, 1);
+      if (dateOnly(startTime).isAfter(dateOnly(repeatEndsTime))) {
+        status = TaskStatus.outdated;
       }
-      nex = DateTime(nex.year, startTime.month, startTime.day);
-      int difference = nex.difference(startTime).inDays;
-      startTime = startTime.add(Duration(days: difference));
-      endTime = endTime.add(Duration(days: difference));
+      return true;
+    } else if (type == TaskType.deadline) {
+      if (repeatPeriod < 1) {
+        repeatPeriod = 1;
+      }
+      if (repeatType == TaskRepeatType.days) {
+        endTime = endTime.add(Duration(days: repeatPeriod));
+        startTime = startTime.add(Duration(days: repeatPeriod));
+      } else if (repeatType == TaskRepeatType.month) {
+        DateTime nex = DateTime(endTime.year, endTime.month + 1, 1);
+        while (daysInMonth(nex.year, nex.month) < endTime.day) {
+          nex = DateTime(nex.year, nex.month + 1, 1);
+        }
+        nex = DateTime(nex.year, nex.month, endTime.day);
+        int difference = nex.difference(endTime).inDays;
+        endTime = endTime.add(Duration(days: difference));
+        startTime = startTime.add(Duration(days: difference));
+      } else if (repeatType == TaskRepeatType.year) {
+        DateTime nex = DateTime(endTime.year + 1, endTime.month, 1);
+        while (daysInMonth(nex.year, nex.month) < endTime.day) {
+          nex = DateTime(nex.year + 1, nex.month, 1);
+        }
+        nex = DateTime(nex.year, endTime.month, endTime.day);
+        int difference = nex.difference(endTime).inDays;
+        endTime = endTime.add(Duration(days: difference));
+        startTime = startTime.add(Duration(days: difference));
+      }
+      if (dateOnly(endTime).isAfter(dateOnly(repeatEndsTime))) {
+        status = TaskStatus.outdated;
+        return false;
+      }
+      timeSpent = Duration.zero;
+      status = TaskStatus.running;
+      return true;
     }
-    if (dateOnly(startTime).isAfter(dateOnly(repeatEndsTime))) {
-      status = TaskStatus.outdated;
-    }
-    return true;
+    return false;
   }
 
   Period? deadlineOfTime(DateTime refTime, {bool predicting = false}) {

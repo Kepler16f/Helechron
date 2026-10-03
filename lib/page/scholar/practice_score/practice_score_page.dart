@@ -2,6 +2,7 @@ import 'package:celechron/design/multiple_columns.dart';
 import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/model/practice_score_item.dart';
 import 'package:celechron/model/scholar.dart';
+import 'package:celechron/utils/practice_target_helper.dart';
 import 'package:flutter/cupertino.dart';
 
 class PracticeScoreColumns extends StatelessWidget {
@@ -25,7 +26,7 @@ class PracticeScoreColumns extends StatelessWidget {
         CupertinoPageRoute<void>(
           builder: (_) => PracticeScorePage(
             scholar: scholar,
-            categoryId: categoryId,
+            initialCategoryId: categoryId,
           ),
         ),
       );
@@ -37,6 +38,7 @@ class PracticeScoreColumns extends StatelessWidget {
       if (scholar.practiceLyPassed != null)
         '劳育：${scholar.practiceLyPassed! ? '已通过' : '未通过'}',
     ];
+
     return Column(
       children: [
         MultipleColumns(
@@ -52,53 +54,387 @@ class PracticeScoreColumns extends StatelessWidget {
             () => open(3),
           ],
         ),
-        if (passed.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          Text(
-            passed.join(' · '),
-            key: const ValueKey('practice-passed-status'),
-            style: const TextStyle(
-              color: CupertinoColors.secondaryLabel,
-              fontSize: 13,
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (passed.isNotEmpty)
+              Text(
+                passed.join(' · '),
+                key: const ValueKey('practice-passed-status'),
+                style: const TextStyle(
+                  color: CupertinoColors.secondaryLabel,
+                  fontSize: 13,
+                ),
+              ),
+            if (passed.isNotEmpty) const SizedBox(width: 12),
+            GestureDetector(
+              onTap: () => open(0),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '素拓看板',
+                    style: TextStyle(
+                      color: CupertinoColors.activeBlue.resolveFrom(context),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Icon(
+                    CupertinoIcons.chevron_forward,
+                    size: 13,
+                    color: CupertinoColors.activeBlue.resolveFrom(context),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ],
     );
   }
 }
 
-class PracticeScorePage extends StatelessWidget {
+class PracticeScorePage extends StatefulWidget {
   final Scholar scholar;
-  final int categoryId;
+  final int initialCategoryId;
 
   const PracticeScorePage({
     super.key,
     required this.scholar,
-    required this.categoryId,
+    this.initialCategoryId = 1,
   });
 
-  String get _categoryName => switch (categoryId) {
+  @override
+  State<PracticeScorePage> createState() => _PracticeScorePageState();
+}
+
+class _PracticeScorePageState extends State<PracticeScorePage> {
+  late int _selectedCategoryId;
+  bool _sortAscending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCategoryId = widget.initialCategoryId;
+  }
+
+  String _getCategoryTitle(int catId) => switch (catId) {
+        0 => '全部看板',
         1 => '第二课堂',
         2 => '第三课堂',
         3 => '第四课堂',
-        _ => '实践课堂',
+        _ => '素拓课堂',
       };
+
+  double _getCategoryScore(int catId) => switch (catId) {
+        1 => widget.scholar.pt2,
+        2 => widget.scholar.pt3,
+        3 => widget.scholar.pt4,
+        _ => widget.scholar.pt2 + widget.scholar.pt3 + widget.scholar.pt4,
+      };
+
+  void _showSetTargetDialog(int catId) {
+    final currentTarget = PracticeTargetHelper.getTarget(catId);
+    final textController = TextEditingController(
+      text: currentTarget > 0 ? currentTarget.toStringAsFixed(2) : '',
+    );
+
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: Text('设置${_getCategoryTitle(catId)}目标记点'),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: CupertinoTextField(
+            controller: textController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            placeholder: '如: 4.0',
+            autofocus: true,
+          ),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () async {
+              final nav = Navigator.of(ctx);
+              await PracticeTargetHelper.setTarget(catId, 0.0);
+              if (mounted) setState(() {});
+              nav.pop();
+            },
+            child: const Text('清除目标'),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () async {
+              final nav = Navigator.of(ctx);
+              final val = double.tryParse(textController.text.trim()) ?? 0.0;
+              await PracticeTargetHelper.setTarget(catId, val);
+              if (mounted) setState(() {});
+              nav.pop();
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategorySegment() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: CupertinoSlidingSegmentedControl<int>(
+        groupValue: _selectedCategoryId,
+        children: const {
+          0: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Text('总览', style: TextStyle(fontSize: 13)),
+          ),
+          1: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Text('二课', style: TextStyle(fontSize: 13)),
+          ),
+          2: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Text('三课', style: TextStyle(fontSize: 13)),
+          ),
+          3: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Text('四课', style: TextStyle(fontSize: 13)),
+          ),
+        },
+        onValueChanged: (val) {
+          if (val != null) setState(() => _selectedCategoryId = val);
+        },
+      ),
+    );
+  }
+
+  Widget _buildTargetCard(int catId) {
+    final current = _getCategoryScore(catId);
+    final target = PracticeTargetHelper.getTarget(catId);
+    final hasTarget = target > 0;
+    final isPassed = hasTarget && current >= target;
+    final progress = hasTarget ? (current / target).clamp(0.0, 1.0) : 0.0;
+
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${_getCategoryTitle(catId)}目标',
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                onPressed: () => _showSetTargetDialog(catId),
+                child: Row(
+                  children: [
+                    Text(
+                      hasTarget ? '修改目标' : '设置目标',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    const Icon(CupertinoIcons.chevron_forward, size: 13),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Text(
+                '当前 ${current.toStringAsFixed(2)}',
+                style:
+                    const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              if (hasTarget) ...[
+                Text(
+                  ' / ${target.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: CupertinoColors.secondaryLabel,
+                  ),
+                ),
+              ],
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: (!hasTarget
+                          ? CupertinoColors.inactiveGray
+                          : (isPassed
+                              ? CupertinoColors.systemGreen
+                              : CupertinoColors.systemOrange))
+                      .resolveFrom(context)
+                      .withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  !hasTarget
+                      ? '无目标'
+                      : (isPassed
+                          ? '已达标'
+                          : '未达标 (差 ${(target - current).toStringAsFixed(2)})'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: (!hasTarget
+                            ? CupertinoColors.secondaryLabel
+                            : (isPassed
+                                ? CupertinoColors.systemGreen
+                                : CupertinoColors.systemOrange))
+                        .resolveFrom(context),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (hasTarget) ...[
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                height: 6,
+                color: CupertinoColors.systemFill.resolveFrom(context),
+                alignment: Alignment.centerLeft,
+                child: FractionallySizedBox(
+                  widthFactor: progress,
+                  child: Container(
+                    color: isPassed
+                        ? CupertinoColors.systemGreen.resolveFrom(context)
+                        : CupertinoColors.systemOrange.resolveFrom(context),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQualityBreakdown(List<PracticeScoreItem> items) {
+    final breakdown = <String, double>{};
+    for (final item in items) {
+      if (item.countsTowardTotal) {
+        final key = item.qualityType.isNotEmpty ? item.qualityType : '未分类';
+        breakdown[key] = (breakdown[key] ?? 0.0) + item.score;
+      }
+    }
+    if (breakdown.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: _Card(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '素质类型记点统计',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: breakdown.entries.map((entry) {
+                return Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.systemFill.resolveFrom(context),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        entry.key,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        entry.value.toStringAsFixed(2),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color:
+                              CupertinoColors.activeBlue.resolveFrom(context),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final items = scholar.practiceScoreItems
-        .where((item) => item.categoryId == categoryId)
-        .toList()
-      ..sort((a, b) => _sortDate(b).compareTo(_sortDate(a)));
-    final included =
-        items.where((item) => item.countsTowardTotal).toList(growable: false);
-    final excluded =
-        items.where((item) => !item.countsTowardTotal).toList(growable: false);
+    final allItems = widget.scholar.practiceScoreItems;
+    final filteredItems = _selectedCategoryId == 0
+        ? List<PracticeScoreItem>.from(allItems)
+        : allItems.where((i) => i.categoryId == _selectedCategoryId).toList();
+
+    filteredItems.sort((a, b) {
+      final dateA = _sortDate(a);
+      final dateB = _sortDate(b);
+      return _sortAscending ? dateA.compareTo(dateB) : dateB.compareTo(dateA);
+    });
+
+    final included = filteredItems
+        .where((item) => item.countsTowardTotal)
+        .toList(growable: false);
+    final inReview = filteredItems
+        .where((item) =>
+            !item.countsTowardTotal &&
+            (item.statusValue == 2 || item.statusLabel.contains('审核')))
+        .toList(growable: false);
+    final otherExcluded = filteredItems
+        .where((item) =>
+            !item.countsTowardTotal &&
+            (item.statusValue != 2 && !item.statusLabel.contains('审核')))
+        .toList(growable: false);
 
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
-        middle: Text('$_categoryName项目'),
+        middle: Text('${_getCategoryTitle(_selectedCategoryId)}看板'),
+        trailing: CupertinoButton(
+          padding: EdgeInsets.zero,
+          onPressed: () {
+            setState(() => _sortAscending = !_sortAscending);
+          },
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _sortAscending
+                    ? CupertinoIcons.sort_up
+                    : CupertinoIcons.sort_down,
+                size: 16,
+              ),
+              const SizedBox(width: 2),
+              Text(
+                _sortAscending ? '正序' : '倒序',
+                style: const TextStyle(fontSize: 13),
+              ),
+            ],
+          ),
+        ),
       ),
       backgroundColor: CupertinoDynamicColor.resolve(
         CupertinoColors.systemGroupedBackground,
@@ -109,35 +445,42 @@ class PracticeScorePage extends StatelessWidget {
         child: ListView(
           padding: EdgeInsets.fromLTRB(
               16,
-              16,
+              12,
               16,
               MediaQuery.paddingOf(context).bottom +
                   nativeBottomBarInset() +
                   16),
           children: [
+            _buildCategorySegment(),
+            if (_selectedCategoryId == 0) ...[
+              _buildTargetCard(1),
+              const SizedBox(height: 10),
+              _buildTargetCard(2),
+              const SizedBox(height: 10),
+              _buildTargetCard(3),
+            ] else ...[
+              _buildTargetCard(_selectedCategoryId),
+            ],
+            const SizedBox(height: 12),
             _SummaryCard(
-              categoryName: _categoryName,
-              total: switch (categoryId) {
-                1 => scholar.pt2,
-                2 => scholar.pt3,
-                3 => scholar.pt4,
-                _ => 0,
-              },
+              categoryName: _getCategoryTitle(_selectedCategoryId),
+              total: _getCategoryScore(_selectedCategoryId),
               includedCount: included.length,
-              excludedCount: excluded.length,
-              source: scholar.practiceSummarySource,
-              detailSource: scholar.practiceDataSource,
-              updatedAt: scholar.practiceUpdatedAt,
-              stale: scholar.practiceSummaryStale,
-              detailsStale: scholar.practiceDetailsStale,
+              excludedCount: inReview.length + otherExcluded.length,
+              source: widget.scholar.practiceSummarySource,
+              detailSource: widget.scholar.practiceDataSource,
+              updatedAt: widget.scholar.practiceUpdatedAt,
+              stale: widget.scholar.practiceSummaryStale,
+              detailsStale: widget.scholar.practiceDetailsStale,
             ),
+            _buildQualityBreakdown(filteredItems),
             const SizedBox(height: 16),
-            if (!scholar.practiceDetailsAvailable)
-              _NoDetailsCard(source: scholar.practiceDataSource)
+            if (!widget.scholar.practiceDetailsAvailable)
+              _NoDetailsCard(source: widget.scholar.practiceDataSource)
             else ...[
-              _SectionTitle(title: '已计入总分', count: included.length),
+              _SectionTitle(title: '已计入记点项目', count: included.length),
               if (included.isEmpty)
-                const _EmptyGroup(text: '暂无已计入总分的项目')
+                const _EmptyGroup(text: '暂无已计入记点的项目')
               else
                 ...included.map(
                   (item) => _PracticeItemCard(
@@ -146,11 +489,21 @@ class PracticeScorePage extends StatelessWidget {
                   ),
                 ),
               const SizedBox(height: 12),
-              _SectionTitle(title: '审核中或未计入', count: excluded.length),
-              if (excluded.isEmpty)
-                const _EmptyGroup(text: '暂无审核中或未计入的项目')
-              else
-                ...excluded.map(
+              if (inReview.isNotEmpty) ...[
+                _SectionTitle(title: '审核中项目', count: inReview.length),
+                ...inReview.map(
+                  (item) => _PracticeItemCard(
+                    item: item,
+                    onTap: () => _openDetail(context, item),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              _SectionTitle(title: '未计入或其他项目', count: otherExcluded.length),
+              if (otherExcluded.isEmpty && inReview.isEmpty)
+                const _EmptyGroup(text: '暂无未计入或异常项目')
+              else if (otherExcluded.isNotEmpty)
+                ...otherExcluded.map(
                   (item) => _PracticeItemCard(
                     item: item,
                     onTap: () => _openDetail(context, item),
@@ -270,58 +623,58 @@ class _SummaryCard extends StatelessWidget {
         children: [
           Text(
             categoryName,
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           const Text(
             '正式汇总记点',
-            style: TextStyle(color: CupertinoColors.secondaryLabel),
+            style:
+                TextStyle(color: CupertinoColors.secondaryLabel, fontSize: 13),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             total.toStringAsFixed(2),
-            style: const TextStyle(fontSize: 34, fontWeight: FontWeight.bold),
+            style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 12),
-          Text('已计入 $includedCount 项 · 未计入 $excludedCount 项'),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
+          Text(
+            '已计入 $includedCount 项 · 审核中/未计入 $excludedCount 项',
+            style: const TextStyle(fontSize: 13),
+          ),
+          const SizedBox(height: 4),
           Text(
             '记点来源：${source.label}',
-            style: const TextStyle(color: CupertinoColors.secondaryLabel),
+            style: const TextStyle(
+                color: CupertinoColors.secondaryLabel, fontSize: 12),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             '项目明细来源：${detailSource.label}',
-            style: const TextStyle(color: CupertinoColors.secondaryLabel),
+            style: const TextStyle(
+                color: CupertinoColors.secondaryLabel, fontSize: 12),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             '更新时间：${_dateTime(updatedAt)}',
-            style: const TextStyle(color: CupertinoColors.secondaryLabel),
+            style: const TextStyle(
+                color: CupertinoColors.secondaryLabel, fontSize: 12),
           ),
           if (stale) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             const Text(
               '当前记点使用缓存或项目合计，请在网络恢复后刷新。',
-              style: TextStyle(color: CupertinoColors.systemOrange),
+              style:
+                  TextStyle(color: CupertinoColors.systemOrange, fontSize: 12),
             ),
           ],
           if (detailsStale) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             const Text(
               '项目明细为缓存或上一次结果。',
-              style: TextStyle(color: CupertinoColors.systemOrange),
+              style:
+                  TextStyle(color: CupertinoColors.systemOrange, fontSize: 12),
             ),
           ],
-          const SizedBox(height: 10),
-          const Text(
-            '正式汇总与项目记录可能不完全一致，项目明细仍按 getSqjl 原样展示。',
-            style: TextStyle(
-              color: CupertinoColors.secondaryLabel,
-              fontSize: 13,
-              height: 1.4,
-            ),
-          ),
         ],
       ),
     );
@@ -359,6 +712,9 @@ class _PracticeItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final counted = item.countsTowardTotal;
+    final isInReview =
+        !counted && (item.statusValue == 2 || item.statusLabel.contains('审核'));
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: CupertinoButton(
@@ -380,19 +736,24 @@ class _PracticeItemCard extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Text(
                       counted
                           ? item.statusLabel
-                          : '${item.statusLabel} · 未计入总分',
+                          : (isInReview
+                              ? '${item.statusLabel}（审核中）'
+                              : '${item.statusLabel} · 未计入总分'),
                       style: TextStyle(
                         color: counted
                             ? CupertinoColors.systemGreen
-                            : CupertinoColors.systemOrange,
+                            : (isInReview
+                                ? CupertinoColors.systemOrange
+                                : CupertinoColors.secondaryLabel),
                         fontSize: 13,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Text(
                       '${item.projectType} · ${item.qualityType}',
                       style: const TextStyle(

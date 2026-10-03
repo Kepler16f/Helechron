@@ -8,6 +8,7 @@ import 'package:celechron/model/scholar.dart';
 import 'package:celechron/model/semester.dart';
 import 'package:celechron/model/todo.dart';
 import 'package:celechron/services/scholar_widget_sync.dart';
+import 'package:celechron/services/todo_task_sync.dart';
 
 class ScholarController extends GetxController {
   final _scholar = Get.find<Rx<Scholar>>(tag: 'scholar');
@@ -145,12 +146,14 @@ class ScholarController extends GetxController {
               onPartialUpdate: () {
                 _scholar.refresh();
                 _updateDurations();
+                TodoTaskSync.syncFromScholar();
               },
               onFetchStatus: _onFetchStatus)
           .then((value) {
         _scholar.refresh();
         _updateDurations();
         _syncWidgetData();
+        TodoTaskSync.syncFromScholar();
         return value;
       });
     } finally {
@@ -206,6 +209,7 @@ class ScholarController extends GetxController {
     semesterIndex.value = thisSemesterIndex >= 0 ? thisSemesterIndex : 0;
 
     _syncWidgetData();
+    TodoTaskSync.syncFromScholar();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _updateDurations();
     });

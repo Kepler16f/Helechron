@@ -15,6 +15,7 @@ import 'package:celechron/design/round_rectangle_card.dart';
 import 'package:celechron/design/custom_colors.dart';
 import 'package:celechron/page/scholar/course_detail/course_detail_view.dart';
 import 'package:celechron/page/calendar/schedule_view.dart';
+import 'package:celechron/utils/swap_day_helper.dart';
 import 'calendar_controller.dart';
 
 class CalendarPage extends StatelessWidget {
@@ -23,6 +24,66 @@ class CalendarPage extends StatelessWidget {
   final _taskController = Get.put(TaskController());
   final _flowController = Get.put(FlowController());
   final deadlineList = Get.find<RxList<Task>>(tag: 'taskList');
+
+  void _showJumpToDatePicker(BuildContext context) {
+    DateTime tempDate = _calendarController.selectedDay.value;
+    showCupertinoModalPopup(
+      context: context,
+      builder: (BuildContext ctx) {
+        return Container(
+          height: 280,
+          color: CupertinoTheme.of(context).scaffoldBackgroundColor,
+          child: SafeArea(
+            top: false,
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    CupertinoButton(
+                      child: const Text('取消'),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                    Text(
+                      '跳转到日期',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: CupertinoTheme.of(context)
+                            .textTheme
+                            .textStyle
+                            .color,
+                      ),
+                    ),
+                    CupertinoButton(
+                      child: const Text('确定'),
+                      onPressed: () {
+                        _calendarController.focusedDay.value = tempDate;
+                        _calendarController.selectedDay.value = tempDate;
+                        _calendarController.focusedDay.refresh();
+                        Navigator.of(ctx).pop();
+                      },
+                    ),
+                  ],
+                ),
+                Expanded(
+                  child: CupertinoDatePicker(
+                    mode: CupertinoDatePickerMode.date,
+                    initialDateTime: _calendarController.selectedDay.value,
+                    minimumDate: DateTime(2022, 9, 1),
+                    maximumDate: DateTime(2030, 12, 31),
+                    onDateTimeChanged: (DateTime newDate) {
+                      tempDate = newDate;
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -64,16 +125,26 @@ class CalendarPage extends StatelessWidget {
                         },
                       ),
                       CupertinoButton(
-                        padding: EdgeInsets.zero,
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: const Icon(
+                          CupertinoIcons.calendar_today,
+                          semanticLabel: '跳转日期',
+                          size: 20,
+                        ),
+                        onPressed: () => _showJumpToDatePicker(context),
+                      ),
+                      CupertinoButton(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: Text('今天',
                             style: TextStyle(
-                                fontSize: 18,
+                                fontSize: 16,
                                 color: CupertinoDynamicColor.resolve(
                                     CupertinoColors.systemBlue, context))),
                         onPressed: () {
                           _calendarController.focusedDay.value = DateTime.now();
                           _calendarController.selectedDay.value =
                               DateTime.now();
+                          _calendarController.focusedDay.refresh();
                         },
                       ),
                     ],
@@ -178,8 +249,62 @@ class CalendarPage extends StatelessWidget {
                             defaultTextStyle:
                                 CupertinoTheme.of(context).textTheme.textStyle,
                           ),
-                          calendarBuilders: const CalendarBuilders(
+                          calendarBuilders: CalendarBuilders<Period>(
                             singleMarkerBuilder: singleMarkerBuilder,
+                            markerBuilder: (context, day, events) {
+                              final swapInfo = swapDayInfoFor(
+                                  day,
+                                  _calendarController
+                                      .scholar.value.specialDates);
+                              final hasSwap = swapInfo != null &&
+                                  swapInfo.kind != SwapDayKind.unknown;
+                              if (events.isEmpty && !hasSwap) {
+                                return const SizedBox.shrink();
+                              }
+
+                              List<Widget> markers = [];
+                              if (hasSwap) {
+                                final isHoliday =
+                                    swapInfo.kind == SwapDayKind.holiday;
+                                markers.add(
+                                  Container(
+                                    margin: const EdgeInsets.symmetric(
+                                        horizontal: 1),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 2.5, vertical: 0.5),
+                                    decoration: BoxDecoration(
+                                      color: (isHoliday
+                                              ? CupertinoColors.systemRed
+                                              : CupertinoColors.systemIndigo)
+                                          .resolveFrom(context)
+                                          .withValues(alpha: 0.16),
+                                      borderRadius: BorderRadius.circular(3),
+                                    ),
+                                    child: Text(
+                                      isHoliday ? '休' : '班',
+                                      style: TextStyle(
+                                        fontSize: 8.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: (isHoliday
+                                                ? CupertinoColors.systemRed
+                                                : CupertinoColors.systemIndigo)
+                                            .resolveFrom(context),
+                                        height: 1.1,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }
+                              for (var event in events.take(4)) {
+                                markers.add(
+                                    singleMarkerBuilder(context, day, event));
+                              }
+                              return Row(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: markers,
+                              );
+                            },
                           ),
                         ),
                       ),
@@ -218,6 +343,15 @@ class CalendarPage extends StatelessWidget {
                                   )
                                 : null),
                       ),
+                      Obx(() {
+                        final swapInfo = swapDayInfoFor(
+                          _calendarController.selectedDay.value
+                              .copyWith(isUtc: false),
+                          _calendarController.scholar.value.specialDates,
+                        );
+                        if (swapInfo == null) return const SizedBox.shrink();
+                        return _buildSwapDayBanner(context, swapInfo);
+                      }),
                       Expanded(
                         child: Obx(() {
                           final events = _calendarController.getEventsForDay(
@@ -356,8 +490,8 @@ class CalendarPage extends StatelessWidget {
     return RoundRectangleCard(
       onTap:
           (period.type == PeriodType.classes || period.type == PeriodType.test)
-              ? () async => Navigator.of(context, rootNavigator: true).push(
-                  CupertinoPageRoute(
+              ? () async => Navigator.of(context, rootNavigator: true)
+                  .push(CupertinoPageRoute(
                       builder: (context) => CourseDetailPage(
                             courseId: period.fromUid,
                             period: period,
@@ -492,6 +626,62 @@ class CalendarPage extends StatelessWidget {
                     .withValues(alpha: 0.5))
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSwapDayBanner(BuildContext context, SwapDayInfo info) {
+    final isHoliday = info.kind == SwapDayKind.holiday;
+    final color = isHoliday
+        ? CupertinoColors.systemRed.resolveFrom(context)
+        : (info.kind == SwapDayKind.makeUp
+            ? CupertinoColors.systemIndigo.resolveFrom(context)
+            : CustomCupertinoDynamicColors.okGreen.darkColor);
+    final icon = isHoliday
+        ? CupertinoIcons.moon_stars_fill
+        : (info.kind == SwapDayKind.makeUp
+            ? CupertinoIcons.arrow_2_squarepath
+            : CupertinoIcons.info_circle_fill);
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  info.title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+                if (info.detail != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    info.detail!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: color.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

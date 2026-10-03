@@ -15,6 +15,7 @@ import 'package:celechron/services/diagnostic_log_service.dart';
 import 'exceptions.dart';
 import 'response_utils.dart';
 import 'eta.dart';
+import 'request_throttle.dart';
 
 /// 培养方案与学分要求信息模型
 class TrainingPlanInfo {
@@ -75,8 +76,6 @@ class Zdbk {
   DatabaseHelper? _db;
   Future<bool>? _loginFuture;
   int _sessionGeneration = 0;
-  int _activeSiteRequests = 0;
-  final List<Completer<void>> _siteWaiters = [];
 
   set db(DatabaseHelper? db) {
     _db = db;
@@ -189,6 +188,13 @@ class Zdbk {
       bool expectJson = true,
       bool relogged = false,
       bool retried = false}) {
+    if (isRateLimitedResponse(
+      statusCode: response.statusCode,
+      responseBody: responseText,
+      location: response.headers.value(HttpHeaders.locationHeader),
+    )) {
+      RequestThrottle.instance.recordRateLimit('zdbk.zju.edu.cn');
+    }
     try {
       validateResponse(
         response: response,
@@ -257,21 +263,13 @@ class Zdbk {
   }
 
   Future<T> _withSitePermit<T>(Future<T> Function() action) async {
-    // 限制同时访问教务站的请求数，避免刷新时多个模块共同放大瞬时压力。
-    if (_activeSiteRequests >= 3) {
-      final waiter = Completer<void>();
-      _siteWaiters.add(waiter);
-      await waiter.future;
-    }
-    _activeSiteRequests++;
-    try {
-      return await action();
-    } finally {
-      _activeSiteRequests--;
-      if (_siteWaiters.isNotEmpty) {
-        _siteWaiters.removeAt(0).complete();
-      }
-    }
+    // 使用统一的请求限频与并发控制削峰，防止并发突发请求触发教务网 WAF/IP 限频
+    return RequestThrottle.instance.run(
+      'zdbk.zju.edu.cn',
+      action,
+      maxConcurrency: 3,
+      minInterval: const Duration(milliseconds: 250),
+    );
   }
 
   _CachedList _cachedList(String cacheKey, String context) {

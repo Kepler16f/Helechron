@@ -9,10 +9,13 @@ import 'package:celechron/utils/gpa_helper.dart';
 import 'package:celechron/utils/json_utils.dart';
 import 'package:celechron/http/zjuServices/zdbk.dart';
 
+import 'package:celechron/utils/credit_override_helper.dart';
+
 /// 单个课程类别的学分与成绩聚合模型
 class CourseCategoryGroup {
   final String name;
   final double earnedCredits;
+  final double nonGpaCredits;
   final double? targetCredits;
   final int courseCount;
   final List<Grade> courses;
@@ -23,6 +26,7 @@ class CourseCategoryGroup {
   CourseCategoryGroup({
     required this.name,
     required this.earnedCredits,
+    this.nonGpaCredits = 0.0,
     this.targetCredits,
     required this.courseCount,
     required this.courses,
@@ -65,6 +69,15 @@ class CreditProgressController extends GetxController {
 
   /// 各分类目标学分要求（根据专业培养方案映射）
   final categoryTargetCredits = <String, double>{}.obs;
+
+  /// 本地自定义学分计算规则变更版本计数（驱动 Obx 响应式重算）
+  final overrideUpdateCount = 0.obs;
+
+  /// 非绩点课程独立看板展开状态
+  final nonGpaSectionExpanded = false.obs;
+
+  /// 已排除课程独立看板展开状态
+  final excludedSectionExpanded = false.obs;
 
   static const String _kTargetCreditsKey = 'graduation_target_credits';
   static const String _kUserMajorKey = 'user_major';
@@ -341,6 +354,7 @@ class CreditProgressController extends GetxController {
     if (isFiveYear) {
       categoryTargetCredits.value = {
         '通识必修课': 38.0,
+        '通识核心课': 6.0,
         '通识选修课': 10.0,
         '大类基础课': 40.0,
         '专业必修课': 65.0,
@@ -350,6 +364,7 @@ class CreditProgressController extends GetxController {
     } else {
       categoryTargetCredits.value = {
         '通识必修课': 34.0,
+        '通识核心课': 6.0,
         '通识选修课': 10.0,
         '大类基础课': 35.0,
         '专业必修课': 40.0,
@@ -374,6 +389,38 @@ class CreditProgressController extends GetxController {
     }
   }
 
+  /// 获取课程自定义计算规则
+  CourseCreditOverride getCourseOverride(String courseId) {
+    // 监听 overrideUpdateCount 以确保 Obx 响应式重算
+    final _ = overrideUpdateCount.value;
+    return CreditOverrideHelper.getOverride(courseId);
+  }
+
+  /// 设置课程自定义计算规则
+  Future<void> setCourseOverride(
+      String courseId, CourseCreditOverride override) async {
+    await CreditOverrideHelper.setOverride(courseId, override);
+    overrideUpdateCount.value++;
+    update();
+  }
+
+  /// 该课程在学分看板中是否计入学分
+  bool isCourseCreditIncluded(Grade g) {
+    final ov = getCourseOverride(g.id);
+    if (ov == CourseCreditOverride.excludeCredit) return false;
+    return g.earnedCredit > 0;
+  }
+
+  /// 该课程在学分看板中是否计入绩点
+  bool isCourseGpaIncluded(Grade g) {
+    final ov = getCourseOverride(g.id);
+    if (ov == CourseCreditOverride.excludeCredit ||
+        ov == CourseCreditOverride.excludeGpa) {
+      return false;
+    }
+    return g.gpaIncluded;
+  }
+
   /// 获取去重后的所有有效成绩课程列表
   List<Grade> getAllUniqueGrades() {
     final Map<String, Grade> uniqueMap = {};
@@ -389,22 +436,52 @@ class CreditProgressController extends GetxController {
     return uniqueMap.values.toList();
   }
 
-  /// 总已获学分
+  /// 总已获学分（考虑 override）
   double get totalEarnedCredits {
     return getAllUniqueGrades().fold<double>(
-        0.0, (sum, g) => sum + g.earnedCredit);
+        0.0, (sum, g) => sum + (isCourseCreditIncluded(g) ? g.credit : 0.0));
   }
 
-  /// 计入 GPA 的总学分
+  /// 计入 GPA 的总学分（考虑 override）
   double get totalGpaCredits {
     return getAllUniqueGrades()
-        .where((g) => g.gpaIncluded)
+        .where((g) => isCourseGpaIncluded(g))
         .fold<double>(0.0, (sum, g) => sum + g.credit);
   }
 
-  /// 总体 GPA
+  /// 非绩点课程列表（已获得学分但不计入 GPA 的课程，包括 P/F 合格制、体测及手动排除绩点项）
+  List<Grade> get nonGpaCourses {
+    final list = getAllUniqueGrades()
+        .where((g) => isCourseCreditIncluded(g) && !isCourseGpaIncluded(g))
+        .toList();
+    list.sort((a, b) => b.credit.compareTo(a.credit));
+    return list;
+  }
+
+  /// 不计入绩点的已获学分总和
+  double get totalNonGpaCredits {
+    return nonGpaCourses.fold<double>(0.0, (sum, g) => sum + g.credit);
+  }
+
+  /// 手动排除学分的课程列表
+  List<Grade> get excludedCreditCourses {
+    final list = getAllUniqueGrades()
+        .where((g) =>
+            getCourseOverride(g.id) == CourseCreditOverride.excludeCredit)
+        .toList();
+    list.sort((a, b) => b.credit.compareTo(a.credit));
+    return list;
+  }
+
+  /// 手动排除的学分总和
+  double get totalExcludedCredits {
+    return excludedCreditCourses.fold<double>(0.0, (sum, g) => sum + g.credit);
+  }
+
+  /// 总体 GPA（仅计算计入绩点的课程）
   Tuple<List<double>, double> get overallGpa {
-    final list = getAllUniqueGrades().where((g) => g.gpaIncluded).toList();
+    final list =
+        getAllUniqueGrades().where((g) => isCourseGpaIncluded(g)).toList();
     if (list.isEmpty) {
       return Tuple([0.0, 0.0, 0.0, 0.0], 0.0);
     }
@@ -430,7 +507,10 @@ class CreditProgressController extends GetxController {
     if (cat.contains('通识必修') || cat.contains('思想政治') || cat.contains('军政')) {
       return '通识必修课';
     }
-    if (cat.contains('通识选修') || cat.contains('通识核心')) {
+    if (cat.contains('通识核心')) {
+      return '通识核心课';
+    }
+    if (cat.contains('通识选修')) {
       return '通识选修课';
     }
     if (cat.contains('大类基础') || cat.contains('学科基础')) {
@@ -463,6 +543,7 @@ class CreditProgressController extends GetxController {
   /// 标准分类的推荐展示顺序
   static const List<String> categoryOrder = [
     '通识必修课',
+    '通识核心课',
     '通识选修课',
     '大类基础课',
     '专业必修课',
@@ -492,8 +573,16 @@ class CreditProgressController extends GetxController {
         // 按成绩降序排列，方便同学查阅优秀科目
         list.sort((a, b) => b.fivePoint.compareTo(a.fivePoint));
 
-        final earned = list.fold<double>(0.0, (p, e) => p + e.earnedCredit);
-        final gpaGrades = list.where((e) => e.gpaIncluded).toList();
+        final earned = list.fold<double>(
+            0.0, (p, e) => p + (isCourseCreditIncluded(e) ? e.credit : 0.0));
+        final nonGpa = list.fold<double>(
+            0.0,
+            (p, e) =>
+                p +
+                (isCourseCreditIncluded(e) && !isCourseGpaIncluded(e)
+                    ? e.credit
+                    : 0.0));
+        final gpaGrades = list.where((e) => isCourseGpaIncluded(e)).toList();
         final avgGpa = gpaGrades.isEmpty
             ? 0.0
             : (GpaHelper.calculateGpa(gpaGrades).item1[0]);
@@ -504,6 +593,7 @@ class CreditProgressController extends GetxController {
         result.add(CourseCategoryGroup(
           name: catName,
           earnedCredits: earned,
+          nonGpaCredits: nonGpa,
           targetCredits: categoryTargetCredits[catName],
           courseCount: list.length,
           courses: list,
@@ -518,8 +608,16 @@ class CreditProgressController extends GetxController {
     groupMap.forEach((key, list) {
       if (!categoryOrder.contains(key)) {
         list.sort((a, b) => b.fivePoint.compareTo(a.fivePoint));
-        final earned = list.fold<double>(0.0, (p, e) => p + e.earnedCredit);
-        final gpaGrades = list.where((e) => e.gpaIncluded).toList();
+        final earned = list.fold<double>(
+            0.0, (p, e) => p + (isCourseCreditIncluded(e) ? e.credit : 0.0));
+        final nonGpa = list.fold<double>(
+            0.0,
+            (p, e) =>
+                p +
+                (isCourseCreditIncluded(e) && !isCourseGpaIncluded(e)
+                    ? e.credit
+                    : 0.0));
+        final gpaGrades = list.where((e) => isCourseGpaIncluded(e)).toList();
         final avgGpa = gpaGrades.isEmpty
             ? 0.0
             : (GpaHelper.calculateGpa(gpaGrades).item1[0]);
@@ -530,6 +628,7 @@ class CreditProgressController extends GetxController {
         result.add(CourseCategoryGroup(
           name: key,
           earnedCredits: earned,
+          nonGpaCredits: nonGpa,
           targetCredits: categoryTargetCredits[key],
           courseCount: list.length,
           courses: list,

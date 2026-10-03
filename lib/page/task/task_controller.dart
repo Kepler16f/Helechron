@@ -1,13 +1,18 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
+import 'package:hive/hive.dart';
 import 'package:celechron/database/database_helper.dart';
+import 'package:celechron/model/option.dart';
 import 'package:celechron/model/task.dart';
+import 'package:celechron/services/ohos_native_service.dart';
 
 class TaskController extends GetxController {
   final taskList = Get.find<RxList<Task>>(tag: 'taskList');
   final taskListLastUpdate = Get.find<Rx<DateTime>>(tag: 'taskListLastUpdate');
   final _db = Get.find<DatabaseHelper>(tag: 'db');
   Timer? _timer;
+  DateTime? _lastDdlReminderCheck;
 
   List<Task> get todoDeadlineList => taskList
       .where((element) => (element.type == TaskType.deadline &&
@@ -27,8 +32,10 @@ class TaskController extends GetxController {
   @override
   void onInit() {
     updateDeadlineList();
+    _checkDdlReminders();
     _timer = Timer.periodic(const Duration(seconds: 1), (Timer t) {
       updateDeadlineList();
+      _checkDdlReminders();
     });
     super.onInit();
   }
@@ -73,9 +80,37 @@ class TaskController extends GetxController {
       if (deadline.type == TaskType.deadline) {
         if (deadline.timeSpent >= deadline.timeNeeded) {
           deadline.status = TaskStatus.completed;
+          if (deadline.repeatType != TaskRepeatType.norepeat) {
+            Task temp = deadline.copyWith(
+              repeatType: TaskRepeatType.norepeat,
+              fromUid: deadline.uid,
+            );
+            if (deadline.setToNextPeriod()) {
+              temp.genUid();
+              newDeadlineList.add(temp);
+            }
+          }
         } else if (deadline.status != TaskStatus.completed &&
             deadline.endTime.isBefore(DateTime.now())) {
-          deadline.status = TaskStatus.failed;
+          if (deadline.repeatType != TaskRepeatType.norepeat) {
+            while (deadline.endTime.isBefore(DateTime.now()) &&
+                deadline.status != TaskStatus.outdated) {
+              Task temp = deadline.copyWith(
+                status: TaskStatus.failed,
+                repeatType: TaskRepeatType.norepeat,
+                fromUid: deadline.uid,
+              );
+              if (deadline.setToNextPeriod()) {
+                temp.genUid();
+                newDeadlineList.add(temp);
+              } else {
+                deadline.status = TaskStatus.failed;
+                break;
+              }
+            }
+          } else {
+            deadline.status = TaskStatus.failed;
+          }
         }
       } else if (deadline.type == TaskType.fixed) {
         deadline.refreshStatus();
@@ -169,5 +204,64 @@ class TaskController extends GetxController {
       }
     }
     return count;
+  }
+
+  void _checkDdlReminders() {
+    final now = DateTime.now();
+    if (_lastDdlReminderCheck != null &&
+        now.difference(_lastDdlReminderCheck!).inSeconds < 60) {
+      return;
+    }
+    _lastDdlReminderCheck = now;
+
+    try {
+      bool pushEnabled = true;
+      if (Get.isRegistered<Option>(tag: 'option')) {
+        pushEnabled = Get.find<Option>(tag: 'option').pushOnDdlReminder.value;
+      }
+      if (!pushEnabled) return;
+
+      final nativeService = OhosNativeService.instance;
+      Set<String> notifiedSet = {};
+      if (Hive.isBoxOpen('dbOptions')) {
+        final box = Hive.box('dbOptions');
+        final raw =
+            box.get('notified_task_ddl_uids', defaultValue: <String>[]);
+        if (raw is List) {
+          notifiedSet = raw.map((e) => e.toString()).toSet();
+        }
+      }
+
+      for (final task in todoDeadlineList) {
+        if (task.status == TaskStatus.completed ||
+            task.status == TaskStatus.deleted) {
+          continue;
+        }
+        final timeLeft = task.endTime.difference(now);
+        if (timeLeft.isNegative) continue;
+
+        // 截止前 24 小时以内发送提醒
+        if (timeLeft.inHours <= 24 && !notifiedSet.contains(task.uid)) {
+          final hoursLeft = timeLeft.inHours;
+          final minutesLeft = timeLeft.inMinutes % 60;
+          final timeDesc = hoursLeft > 0
+              ? '$hoursLeft 小时 $minutesLeft 分钟后'
+              : '$minutesLeft 分钟后';
+          nativeService.showNotification(
+            id: (task.uid.hashCode & 0x7FFFFFFF),
+            title: '任务截止提醒',
+            text: '「${task.summary}」将于 $timeDesc 截止，请合理安排进度！',
+          );
+          notifiedSet.add(task.uid);
+        }
+      }
+
+      if (Hive.isBoxOpen('dbOptions')) {
+        final box = Hive.box('dbOptions');
+        box.put('notified_task_ddl_uids', notifiedSet.toList());
+      }
+    } catch (e) {
+      debugPrint('TaskController._checkDdlReminders error: $e');
+    }
   }
 }

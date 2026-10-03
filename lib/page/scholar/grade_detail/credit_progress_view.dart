@@ -8,6 +8,7 @@ import 'package:celechron/design/persistent_headers.dart';
 import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/model/grade.dart';
 import 'package:celechron/page/scholar/grade_detail/credit_progress_controller.dart';
+import 'package:celechron/utils/credit_override_helper.dart';
 
 /// 培养方案与学分进度看板（P2）
 class CreditProgressPage extends StatelessWidget {
@@ -347,9 +348,9 @@ class CreditProgressPage extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '已获: ${earned.toStringAsFixed(1)} 学分',
+                    '已获: ${earned.toStringAsFixed(1)} 学分 (GPA: ${_controller.totalGpaCredits.toStringAsFixed(1)} / 非GPA: ${_controller.totalNonGpaCredits.toStringAsFixed(1)})',
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 12,
                       fontWeight: FontWeight.w500,
                       color: CupertinoDynamicColor.resolve(
                           CupertinoColors.secondaryLabel, context),
@@ -358,7 +359,7 @@ class CreditProgressPage extends StatelessWidget {
                   Text(
                     '目标要求: ${target.toStringAsFixed(1)} 学分',
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 12,
                       fontWeight: FontWeight.w500,
                       color: CupertinoDynamicColor.resolve(
                           CupertinoColors.secondaryLabel, context),
@@ -422,12 +423,14 @@ class CreditProgressPage extends StatelessWidget {
         color = CupertinoColors.activeGreen;
       } else if (remaining <= 20.0) {
         title = '毕业冲刺阶段';
-        message = '当前仅差 ${remaining.toStringAsFixed(1)} 学分（约 5~8 门课），建议重点核对专业必修课与通识选修要求。';
+        message =
+            '当前仅差 ${remaining.toStringAsFixed(1)} 学分（约 5~8 门课），建议重点核对专业必修课与通识选修要求。';
         icon = CupertinoIcons.flag_fill;
         color = CupertinoColors.activeBlue;
       } else {
         title = '平稳修读中';
-        message = '距毕业目标学分还需 ${remaining.toStringAsFixed(1)} 学分，可点击下方各分类查看具体课程达成明细。';
+        message =
+            '距毕业目标学分还需 ${remaining.toStringAsFixed(1)} 学分，可点击下方各分类查看具体课程达成明细。';
         icon = CupertinoIcons.info_circle_fill;
         color = CustomCupertinoDynamicColors.sakura;
       }
@@ -471,6 +474,286 @@ class CreditProgressPage extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      );
+    });
+  }
+
+  // ==================== 非绩点课程独立看板卡片 ====================
+
+  Widget _buildNonGpaCoursesCard(BuildContext context) {
+    return Obx(() {
+      final nonGpaList = _controller.nonGpaCourses;
+      final nonGpaCredits = _controller.totalNonGpaCredits;
+      if (nonGpaList.isEmpty) return const SizedBox.shrink();
+
+      final isExpanded = _controller.nonGpaSectionExpanded.value;
+
+      return RoundRectangleCard(
+        child: Column(
+          children: [
+            CupertinoButton(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              onPressed: () {
+                _controller.nonGpaSectionExpanded.value = !isExpanded;
+              },
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: CupertinoDynamicColor.resolve(
+                          CustomCupertinoDynamicColors.cyan, context),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.circle_grid_hex_fill,
+                      size: 16,
+                      color: CupertinoColors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              '非绩点课程学分统计',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: CupertinoDynamicColor.resolve(
+                                    CupertinoColors.label, context),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: CupertinoDynamicColor.resolve(
+                                    CupertinoColors.tertiarySystemFill,
+                                    context),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '${nonGpaList.length} 门 · ${nonGpaCredits.toStringAsFixed(1)} 学分',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: CupertinoDynamicColor.resolve(
+                                      CupertinoColors.secondaryLabel, context),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '二级制(合格/不合格)、体测及手动排除绩点课程，计入学分但不影响 GPA',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.secondaryLabel, context),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    isExpanded
+                        ? CupertinoIcons.chevron_up
+                        : CupertinoIcons.chevron_down,
+                    size: 16,
+                    color: CupertinoDynamicColor.resolve(
+                        CupertinoColors.secondaryLabel, context),
+                  ),
+                ],
+              ),
+            ),
+            if (isExpanded) ...[
+              Divider(
+                height: 1,
+                indent: 14,
+                endIndent: 14,
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.separator, context),
+              ),
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                child: Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: CupertinoDynamicColor.resolve(
+                        CupertinoColors.tertiarySystemFill, context),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '💡 说明：下列科目已成功获得毕业学分，但不纳入五分制 GPA 累计计算。点击任意课程可调整计算规则。',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: CupertinoDynamicColor.resolve(
+                          CupertinoColors.secondaryLabel, context),
+                      height: 1.3,
+                    ),
+                  ),
+                ),
+              ),
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                itemCount: nonGpaList.length,
+                separatorBuilder: (context, index) => Divider(
+                  height: 1,
+                  color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.separator, context),
+                ),
+                itemBuilder: (context, index) {
+                  final grade = nonGpaList[index];
+                  return _buildCourseItemRow(context, grade,
+                      showCategory: true);
+                },
+              ),
+              const SizedBox(height: 4),
+            ],
+          ],
+        ),
+      );
+    });
+  }
+
+  // ==================== 手动排除课程独立卡片 ====================
+
+  Widget _buildExcludedCoursesCard(BuildContext context) {
+    return Obx(() {
+      final excludedList = _controller.excludedCreditCourses;
+      final excludedCredits = _controller.totalExcludedCredits;
+      if (excludedList.isEmpty) return const SizedBox.shrink();
+
+      final isExpanded = _controller.excludedSectionExpanded.value;
+
+      return RoundRectangleCard(
+        child: Column(
+          children: [
+            CupertinoButton(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              onPressed: () {
+                _controller.excludedSectionExpanded.value = !isExpanded;
+              },
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.destructiveRed
+                          .withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.clear_circled_solid,
+                      size: 16,
+                      color: CupertinoColors.destructiveRed,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              '已手动排除课程',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: CupertinoDynamicColor.resolve(
+                                    CupertinoColors.label, context),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: CupertinoColors.destructiveRed
+                                    .withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '${excludedList.length} 门 · ${excludedCredits.toStringAsFixed(1)} 学分',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: CupertinoColors.destructiveRed,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '以下课程被标记为不计入学分与绩点，点击可恢复计入',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.secondaryLabel, context),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    isExpanded
+                        ? CupertinoIcons.chevron_up
+                        : CupertinoIcons.chevron_down,
+                    size: 16,
+                    color: CupertinoDynamicColor.resolve(
+                        CupertinoColors.secondaryLabel, context),
+                  ),
+                ],
+              ),
+            ),
+            if (isExpanded) ...[
+              Divider(
+                height: 1,
+                indent: 14,
+                endIndent: 14,
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.separator, context),
+              ),
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                itemCount: excludedList.length,
+                separatorBuilder: (context, index) => Divider(
+                  height: 1,
+                  color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.separator, context),
+                ),
+                itemBuilder: (context, index) {
+                  final grade = excludedList[index];
+                  return _buildCourseItemRow(context, grade,
+                      showCategory: true);
+                },
+              ),
+              const SizedBox(height: 4),
+            ],
+          ],
         ),
       );
     });
@@ -528,7 +811,7 @@ class CreditProgressPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '已修 ${group.earnedCredits.toStringAsFixed(1)} 学分 · 均绩 ${group.averageGpa > 0 ? group.averageGpa.toStringAsFixed(2) : '-'} · 优秀率 ${(group.excellentRate * 100).toStringAsFixed(0)}%',
+                        '已修 ${group.earnedCredits.toStringAsFixed(1)} 学分${group.nonGpaCredits > 0 ? ' (含非绩点 ${group.nonGpaCredits.toStringAsFixed(1)})' : ''} · 均绩 ${group.averageGpa > 0 ? group.averageGpa.toStringAsFixed(2) : '-'} · 优秀率 ${(group.excellentRate * 100).toStringAsFixed(0)}%',
                         style: TextStyle(
                           fontSize: 12,
                           color: CupertinoDynamicColor.resolve(
@@ -635,61 +918,217 @@ class CreditProgressPage extends StatelessWidget {
 
   // ==================== 单门课程行 ====================
 
-  Widget _buildCourseItemRow(BuildContext context, Grade grade) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildCourseItemRow(BuildContext context, Grade grade,
+      {bool showCategory = false}) {
+    return Obx(() {
+      final override = _controller.getCourseOverride(grade.id);
+      final isExcludedCredit = override == CourseCreditOverride.excludeCredit;
+      final isExcludedGpa = override == CourseCreditOverride.excludeGpa;
+      final isOriginalNonGpa = !grade.gpaIncluded;
+
+      String? statusBadge;
+      Color? badgeColor;
+      Color? badgeTextColor;
+
+      if (isExcludedCredit) {
+        statusBadge = '不计学分';
+        badgeColor = CupertinoColors.destructiveRed.withValues(alpha: 0.12);
+        badgeTextColor = CupertinoColors.destructiveRed;
+      } else if (isExcludedGpa) {
+        statusBadge = '手动排除绩点';
+        badgeColor = CustomCupertinoDynamicColors.sand.withValues(alpha: 0.15);
+        badgeTextColor = CupertinoDynamicColor.resolve(
+            CustomCupertinoDynamicColors.sand, context);
+      } else if (isOriginalNonGpa) {
+        if (grade.original == '合格' || grade.original == '不合格') {
+          statusBadge = '二级制';
+        } else if (grade.id.contains('xtwkc') ||
+            grade.name.contains('体育') ||
+            grade.name.contains('体测')) {
+          statusBadge = '体测';
+        } else {
+          statusBadge = '不计绩点';
+        }
+        badgeColor = CupertinoDynamicColor.resolve(
+            CupertinoColors.tertiarySystemFill, context);
+        badgeTextColor = CupertinoDynamicColor.resolve(
+            CupertinoColors.secondaryLabel, context);
+      }
+
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _showCourseOverrideSheet(context, grade),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            grade.name,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              decoration: isExcludedCredit
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                              color: isExcludedCredit
+                                  ? CupertinoDynamicColor.resolve(
+                                      CupertinoColors.secondaryLabel, context)
+                                  : CupertinoDynamicColor.resolve(
+                                      CupertinoColors.label, context),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (statusBadge != null) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: badgeColor,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              statusBadge,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: badgeTextColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${grade.credit.toStringAsFixed(1)} 学分${showCategory && grade.category.isNotEmpty ? ' · ${grade.category}' : ''}${grade.gpaIncluded && !isExcludedGpa && !isExcludedCredit ? '' : ' · 不计绩点'}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.secondaryLabel, context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: grade.fivePoint >= 4.5
+                      ? CupertinoDynamicColor.resolve(
+                          CustomCupertinoDynamicColors.sakura, context)
+                      : CupertinoDynamicColor.resolve(
+                          CupertinoColors.tertiarySystemFill, context),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '${grade.fivePoint.toStringAsFixed(1)} (${grade.original})',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: grade.fivePoint >= 4.5
+                        ? null
+                        : CupertinoDynamicColor.resolve(
+                            CupertinoColors.label, context),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                CupertinoIcons.ellipsis_circle,
+                size: 16,
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.tertiaryLabel, context),
+              ),
+            ],
+          ),
+        ),
+      );
+    });
+  }
+
+  // ==================== 弹窗：调整单门课程计算规则 ====================
+
+  void _showCourseOverrideSheet(BuildContext context, Grade grade) {
+    final currentOverride = _controller.getCourseOverride(grade.id);
+
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (actionCtx) => CupertinoActionSheet(
+        title: Text(grade.name),
+        message: Text(
+          '【${grade.credit.toStringAsFixed(1)} 学分 · 成绩: ${grade.original}】\n'
+          '官方属性：${grade.gpaIncluded ? "计入学分与绩点" : "计入学分，不计入绩点"}\n'
+          '设置在学分看板内部的计算方式（仅影响本地学分看板）：',
+        ),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () async {
+              Navigator.of(actionCtx).pop();
+              await _controller.setCourseOverride(
+                  grade.id, CourseCreditOverride.none);
+            },
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  grade.name,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: CupertinoDynamicColor.resolve(
-                        CupertinoColors.label, context),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${grade.credit.toStringAsFixed(1)} 学分${grade.gpaIncluded ? '' : ' · 不计绩点'}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: CupertinoDynamicColor.resolve(
-                        CupertinoColors.secondaryLabel, context),
-                  ),
-                ),
+                if (currentOverride == CourseCreditOverride.none) ...[
+                  const Icon(CupertinoIcons.checkmark, size: 18),
+                  const SizedBox(width: 6),
+                ],
+                const Text('默认计入（依教务系统规则）'),
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: grade.fivePoint >= 4.5
-                  ? CupertinoDynamicColor.resolve(
-                      CustomCupertinoDynamicColors.sakura, context)
-                  : CupertinoDynamicColor.resolve(
-                      CupertinoColors.tertiarySystemFill, context),
-              borderRadius: BorderRadius.circular(6),
+          CupertinoActionSheetAction(
+            onPressed: () async {
+              Navigator.of(actionCtx).pop();
+              await _controller.setCourseOverride(
+                  grade.id, CourseCreditOverride.excludeGpa);
+            },
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (currentOverride == CourseCreditOverride.excludeGpa) ...[
+                  const Icon(CupertinoIcons.checkmark, size: 18),
+                  const SizedBox(width: 6),
+                ],
+                const Text('仅计入学分（不计入 GPA 绩点）'),
+              ],
             ),
-            child: Text(
-              '${grade.fivePoint.toStringAsFixed(1)} (${grade.original})',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: grade.fivePoint >= 4.5
-                    ? null
-                    : CupertinoDynamicColor.resolve(
-                        CupertinoColors.label, context),
-              ),
+          ),
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () async {
+              Navigator.of(actionCtx).pop();
+              await _controller.setCourseOverride(
+                  grade.id, CourseCreditOverride.excludeCredit);
+            },
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (currentOverride == CourseCreditOverride.excludeCredit) ...[
+                  const Icon(CupertinoIcons.checkmark, size: 18),
+                  const SizedBox(width: 6),
+                ],
+                const Text('完全不计入（不计学分与绩点）'),
+              ],
             ),
           ),
         ],
+        cancelButton: CupertinoActionSheetAction(
+          child: const Text('取消'),
+          onPressed: () => Navigator.of(actionCtx).pop(),
+        ),
       ),
     );
   }
@@ -758,7 +1197,8 @@ class CreditProgressPage extends StatelessWidget {
                               : () async {
                                   await _controller.syncMajorFromZdbk();
                                   setModalState(() {
-                                    if (_controller.userMajor.value.isNotEmpty) {
+                                    if (_controller
+                                        .userMajor.value.isNotEmpty) {
                                       majorTextController.text =
                                           _controller.userMajor.value;
                                       creditsTextController.text = _controller
@@ -828,10 +1268,9 @@ class CreditProgressPage extends StatelessWidget {
                               final isFiveYear = m.contains('建筑') ||
                                   m.contains('医学') ||
                                   m.contains('临床');
-                              creditsTextController.text = (isFiveYear
-                                      ? 210.0
-                                      : 160.0)
-                                  .toStringAsFixed(1);
+                              creditsTextController.text =
+                                  (isFiveYear ? 210.0 : 160.0)
+                                      .toStringAsFixed(1);
                             });
                           },
                           child: Container(
@@ -916,12 +1355,12 @@ class CreditProgressPage extends StatelessWidget {
                         width: double.infinity,
                         child: CupertinoButton(
                           padding: const EdgeInsets.symmetric(vertical: 10),
-                          color:
-                              CupertinoColors.destructiveRed.withOpacity(0.12),
+                          color: CupertinoColors.destructiveRed
+                              .withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(8),
-                          child: Row(
+                          child: const Row(
                             mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
+                            children: [
                               Icon(
                                 CupertinoIcons.trash,
                                 size: 16,
@@ -1005,6 +1444,20 @@ class CreditProgressPage extends StatelessWidget {
               child: _buildAdviceCard(context),
             ),
           ),
+          // 非绩点课程独立看板
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+              child: _buildNonGpaCoursesCard(context),
+            ),
+          ),
+          // 手动排除课程看板（若有）
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+              child: _buildExcludedCoursesCard(context),
+            ),
+          ),
           const SliverToBoxAdapter(
             child: SizedBox(height: 4),
           ),
@@ -1042,7 +1495,8 @@ class CreditProgressPage extends StatelessWidget {
             if (groups.isEmpty) {
               return SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: RoundRectangleCard(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
@@ -1065,7 +1519,8 @@ class CreditProgressPage extends StatelessWidget {
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
                   return Padding(
-                    padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+                    padding:
+                        const EdgeInsets.only(left: 16, right: 16, bottom: 8),
                     child: _buildCategoryGroupCard(context, groups[index]),
                   );
                 },
