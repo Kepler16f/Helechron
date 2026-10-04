@@ -1,7 +1,7 @@
-name: celechron
+﻿name: celechron
 description: Time scheduler for zjuers.
 publish_to: "none"
-version: 0.1.6-dev.2+81
+version: 0.1.6-dev.3+82
 environment:
   sdk: ">=3.0.0"
 

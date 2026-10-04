@@ -79,7 +79,8 @@ class TodoTaskSync {
       final existingTask = existingTodoTasks[key];
 
       final expectedSummary = '作业：${todo.name}';
-      final expectedDescription = '课程：${todo.course}\n来源：学在浙大';
+      final expectedDescription =
+          '课程：${todo.course}\n来源：学在浙大\n提交：${todo.submitUrl}';
 
       if (existingTask != null) {
         // 已存在任务：若截止时间或名称变更，平滑更新，保留用户标记的完成度与状态
@@ -91,6 +92,11 @@ class TodoTaskSync {
         if (existingTask.summary != expectedSummary) {
           existingTask.summary = expectedSummary;
           modified = true;
+        }
+        if (existingTask.description != expectedDescription &&
+            existingTask.description.contains('来源：学在浙大')) {
+          existingTask.description = expectedDescription;
+          hasChanged = true;
         }
         if (modified) {
           existingTask.refreshStatus();
@@ -143,4 +149,3 @@ class TodoTaskSync {
     }
   }
 }
-

@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:celechron/model/task.dart';
 import 'package:celechron/model/period.dart';
 import 'task_edit_page.dart';
+import 'package:celechron/page/scholar/todo/todo_card.dart';
 import 'dart:async';
 import 'package:get/get.dart';
 
@@ -74,6 +75,16 @@ class TaskPage extends StatelessWidget {
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('返回'),
             ),
+            if (extractCoursesUrl(deadline.description) != null)
+              CupertinoDialogAction(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                  showTodoSubmitSheet(
+                      context, extractCoursesUrl(deadline.description)!,
+                      title: deadline.summary);
+                },
+                child: const Text('去提交作业'),
+              ),
             if (deadline.type == TaskType.deadline &&
                 deadline.timeSpent < deadline.timeNeeded)
               CupertinoDialogAction(

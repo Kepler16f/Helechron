@@ -5,18 +5,26 @@ class Todo {
   String name;
   String course;
   DateTime? endTime;
+  String courseId;
 
   Todo.fromJson(Map<String, dynamic> json)
-      : id = asString(json["id"]) ?? '',
+      : id = asString(json["id"]) ?? json["id"]?.toString() ?? '',
         name = asString(json["title"]) ?? '未命名作业',
         course = asString(json["course_name"]) ?? '未知课程',
-        endTime = DateTime.tryParse(asString(json["end_time"]) ?? '');
+        endTime = DateTime.tryParse(asString(json["end_time"]) ?? ''),
+        courseId = json["course_id"]?.toString() ?? '';
+
+  /// 学在浙大作业直达提交页；缺少课程 ID 时回退到待办主页。
+  String get submitUrl => courseId.isNotEmpty && id.isNotEmpty
+      ? 'https://courses.zju.edu.cn/course/$courseId/learning-activity#/$id'
+      : 'https://courses.zju.edu.cn/user/index#/todo';
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'title': name,
         'course_name': course,
         'end_time': endTime?.toIso8601String(),
+        'course_id': courseId,
       };
 
   static List<Todo> getAllFromCourses(Map<String, dynamic> json) {
