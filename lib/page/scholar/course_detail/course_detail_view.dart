@@ -446,6 +446,45 @@ class CourseDetailPage extends StatelessWidget {
     );
   }
 
+  bool _shouldShowZhiyun(Course c) {
+    if (!showZhiyun) return false;
+    final now = DateTime.now();
+
+    // 1. 若当前页面传入了具体的课程节次 (period)，则判断该节次是否已经到了上课时间
+    if (period != null) {
+      if (now.isBefore(period!.startTime)) {
+        return false;
+      }
+      return true;
+    }
+
+    // 2. 若未传入具体节次（如从课程表网格/课程列表进入）：
+    // 检查该课程是否有任何已经到达上课时间（或已经上过）的节次；
+    // 如果该课程的所有节次都在未来（还没到上课时间），则隐藏智云课堂卡片。
+    try {
+      if (Get.isRegistered<Rx<Scholar>>(tag: 'scholar')) {
+        final scholar = Get.find<Rx<Scholar>>(tag: 'scholar').value;
+        final coursePeriods = scholar.periods.where((p) =>
+            p.type == PeriodType.classes &&
+            (p.fromUid == c.id ||
+                p.summary == c.name ||
+                c.sessions.any((s) => s.id != null && s.id == p.fromUid)));
+
+        if (coursePeriods.isNotEmpty) {
+          final hasStartedAny =
+              coursePeriods.any((p) => !now.isBefore(p.startTime));
+          if (!hasStartedAny) {
+            return false;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('CourseDetailPage._shouldShowZhiyun error: $e');
+    }
+
+    return true;
+  }
+
   Widget createZhiyunCard(BuildContext context, Course c) {
     return ZhiyunCard(course: c, period: period);
   }
@@ -494,7 +533,7 @@ class CourseDetailPage extends StatelessWidget {
               ),
             ),
           ),
-          if (showZhiyun)
+          if (_shouldShowZhiyun(c))
             SliverToBoxAdapter(
               child: createZhiyunCard(context, c),
             ),
@@ -978,6 +1017,11 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
       future: _future,
       builder: (context, snapshot) {
         if (!ZhiyunService.isRecordableCourse(c.name, courseCode: c.id)) {
+          return const SizedBox.shrink();
+        }
+
+        if (widget.period != null &&
+            DateTime.now().isBefore(widget.period!.startTime)) {
           return const SizedBox.shrink();
         }
 

@@ -41,11 +41,17 @@ class CalendarPage extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     CupertinoButton(
-                      child: const Text('取消'),
-                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('回到今天'),
+                      onPressed: () {
+                        final now = DateTime.now();
+                        _calendarController.focusedDay.value = now;
+                        _calendarController.selectedDay.value = now;
+                        _calendarController.focusedDay.refresh();
+                        Navigator.of(ctx).pop();
+                      },
                     ),
                     Text(
-                      '跳转到日期',
+                      '跳转日期',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -133,28 +139,14 @@ class CalendarPage extends StatelessWidget {
                         ),
                         onPressed: () => _showJumpToDatePicker(context),
                       ),
-                      CupertinoButton(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: Text('今天',
-                            style: TextStyle(
-                                fontSize: 16,
-                                color: CupertinoDynamicColor.resolve(
-                                    CupertinoColors.systemBlue, context))),
-                        onPressed: () {
-                          _calendarController.focusedDay.value = DateTime.now();
-                          _calendarController.selectedDay.value =
-                              DateTime.now();
-                          _calendarController.focusedDay.refresh();
-                        },
-                      ),
                     ],
                     CupertinoButton(
                       padding: EdgeInsets.zero,
                       child: Icon(
                         _calendarController.viewMode.value ==
                                 CalendarViewMode.calendar
-                            ? CupertinoIcons.calendar
-                            : CupertinoIcons.list_bullet,
+                            ? CupertinoIcons.table
+                            : CupertinoIcons.calendar,
                         semanticLabel: '切换视图',
                       ),
                       onPressed: () {
@@ -226,7 +218,6 @@ class CalendarPage extends StatelessWidget {
                             return _calendarController.getEventsForDay(day);
                           },
                           calendarStyle: CalendarStyle(
-                            markersAnchor: -0.1,
                             markersMaxCount: 10,
                             selectedDecoration: BoxDecoration(
                               color: CupertinoDynamicColor.resolve(
@@ -262,47 +253,64 @@ class CalendarPage extends StatelessWidget {
                                 return const SizedBox.shrink();
                               }
 
-                              List<Widget> markers = [];
-                              if (hasSwap) {
-                                final isHoliday =
-                                    swapInfo.kind == SwapDayKind.holiday;
-                                markers.add(
-                                  Container(
-                                    margin: const EdgeInsets.symmetric(
-                                        horizontal: 1),
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 2.5, vertical: 0.5),
-                                    decoration: BoxDecoration(
-                                      color: (isHoliday
-                                              ? CupertinoColors.systemRed
-                                              : CupertinoColors.systemIndigo)
-                                          .resolveFrom(context)
-                                          .withValues(alpha: 0.16),
-                                      borderRadius: BorderRadius.circular(3),
-                                    ),
-                                    child: Text(
-                                      isHoliday ? '休' : '班',
-                                      style: TextStyle(
-                                        fontSize: 8.5,
-                                        fontWeight: FontWeight.bold,
-                                        color: (isHoliday
-                                                ? CupertinoColors.systemRed
-                                                : CupertinoColors.systemIndigo)
-                                            .resolveFrom(context),
-                                        height: 1.1,
+                              final isHoliday =
+                                  swapInfo?.kind == SwapDayKind.holiday;
+
+                              return Positioned.fill(
+                                child: Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    if (hasSwap)
+                                      Positioned(
+                                        top: 2,
+                                        right: 3,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 2.5, vertical: 0.5),
+                                          decoration: BoxDecoration(
+                                            color: (isHoliday
+                                                    ? CupertinoColors.systemRed
+                                                    : CupertinoColors
+                                                        .systemIndigo)
+                                                .resolveFrom(context)
+                                                .withValues(alpha: 0.16),
+                                            borderRadius:
+                                                BorderRadius.circular(3),
+                                          ),
+                                          child: Text(
+                                            isHoliday ? '休' : '班',
+                                            style: TextStyle(
+                                              fontSize: 8.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: (isHoliday
+                                                      ? CupertinoColors
+                                                          .systemRed
+                                                      : CupertinoColors
+                                                          .systemIndigo)
+                                                  .resolveFrom(context),
+                                              height: 1.1,
+                                            ),
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                );
-                              }
-                              for (var event in events.take(4)) {
-                                markers.add(
-                                    singleMarkerBuilder(context, day, event));
-                              }
-                              return Row(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: markers,
+                                    if (events.isNotEmpty)
+                                      Positioned(
+                                        bottom: 2,
+                                        left: 0,
+                                        right: 0,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            for (var event in events.take(4))
+                                              singleMarkerBuilder(
+                                                  context, day, event),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               );
                             },
                           ),

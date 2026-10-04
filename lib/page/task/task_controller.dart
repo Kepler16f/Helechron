@@ -235,7 +235,8 @@ class TaskController extends GetxController {
       Set<String> notifiedSet = {};
       if (Hive.isBoxOpen('dbOptions')) {
         final box = Hive.box('dbOptions');
-        final raw = box.get('notified_task_ddl_uids', defaultValue: <String>[]);
+        final raw =
+            box.get('notified_task_ddl_uids', defaultValue: <String>[]);
         if (raw is List) {
           notifiedSet = raw.map((e) => e.toString()).toSet();
         }

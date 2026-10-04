@@ -14,8 +14,7 @@ class Todo {
         name = asString(json["title"]) ?? '未命名作业',
         course = asString(json["course_name"]) ?? '未知课程',
         endTime = DateTime.tryParse(asString(json["end_time"]) ?? ''),
-        courseId =
-            asString(json["course_id"]) ?? json["course_id"]?.toString() ?? '';
+        courseId = asString(json["course_id"]) ?? json["course_id"]?.toString() ?? '';
 
   /// 优先使用当前 courseId；若历史缓存缺少该字段，从原始缓存中补全
   String get resolvedCourseId {
@@ -27,8 +26,7 @@ class Todo {
         final cached = box.get('courses_todo');
         if (cached is String && cached.isNotEmpty) {
           final decoded = jsonDecode(cached);
-          final list =
-              asDynamicList(decoded is Map ? decoded['todo_list'] : null);
+          final list = asDynamicList(decoded is Map ? decoded['todo_list'] : null);
           if (list != null) {
             for (final item in list) {
               final m = asStringMap(item);

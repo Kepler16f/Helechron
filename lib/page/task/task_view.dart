@@ -463,9 +463,10 @@ class TaskPage extends StatelessWidget {
                               .color!
                               .withValues(alpha: 0.5),
                         ),
+                        const SizedBox(width: 4.0),
                         Expanded(
                           child: Text(
-                            ' ${_getHomeworkCourseName(deadline)}',
+                            _getHomeworkCourseName(deadline),
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.normal,
@@ -478,6 +479,42 @@ class TaskPage extends StatelessWidget {
                             ),
                           ),
                         ),
+                        if (extractCoursesUrl(deadline.description) !=
+                            null) ...[
+                          const SizedBox(width: 8.0),
+                          CupertinoButton(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 3),
+                            color: CupertinoColors.activeBlue
+                                .withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                            onPressed: () {
+                              final url =
+                                  extractCoursesUrl(deadline.description);
+                              if (url != null) {
+                                showTodoSubmitSheet(context, url,
+                                    title: deadline.summary);
+                              }
+                            },
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(CupertinoIcons.arrow_up_right_square,
+                                    size: 13,
+                                    color: CupertinoColors.activeBlue),
+                                SizedBox(width: 4),
+                                Text(
+                                  '去提交',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: CupertinoColors.activeBlue,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 4.0),
@@ -566,45 +603,6 @@ class TaskPage extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                               )))
                     ]),
-                  ],
-                  if (deadline.type == TaskType.homework &&
-                      extractCoursesUrl(deadline.description) != null) ...[
-                    const SizedBox(height: 8.0),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        CupertinoButton(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
-                          color: CupertinoColors.activeBlue
-                              .withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(12),
-                          onPressed: () {
-                            final url = extractCoursesUrl(deadline.description);
-                            if (url != null) {
-                              showTodoSubmitSheet(context, url,
-                                  title: deadline.summary);
-                            }
-                          },
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(CupertinoIcons.arrow_up_right_square,
-                                  size: 13, color: CupertinoColors.activeBlue),
-                              SizedBox(width: 4),
-                              Text(
-                                '去提交',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: CupertinoColors.activeBlue,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
                   ],
                   if (deadline.type == TaskType.deadline)
                     Row(children: [
