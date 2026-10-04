@@ -83,8 +83,15 @@ class TodoTaskSync {
           '课程：${todo.course}\n来源：学在浙大\n提交：${todo.submitUrl}';
 
       if (existingTask != null) {
-        // 已存在任务：若截止时间或名称变更，平滑更新，保留用户标记的完成度与状态
+        // 已存在任务：若为旧版本生成的 DDL 任务，自动平滑升级为作业专属样式
         bool modified = false;
+        if (existingTask.type != TaskType.homework) {
+          existingTask.type = TaskType.homework;
+          existingTask.timeNeeded = Duration.zero;
+          existingTask.timeSpent = Duration.zero;
+          existingTask.isBreakable = false;
+          modified = true;
+        }
         if (existingTask.endTime != todo.endTime) {
           existingTask.endTime = todo.endTime!;
           modified = true;
@@ -103,7 +110,7 @@ class TodoTaskSync {
           hasChanged = true;
         }
       } else {
-        // 新作业：创建对应 DDL 任务
+        // 新作业：创建作业任务（独立于 DDL 样式）
         final newTask = Task(
           uid: const Uuid().v4(),
           status: todo.endTime!.isBefore(now)
@@ -111,12 +118,12 @@ class TodoTaskSync {
               : TaskStatus.running,
           description: expectedDescription,
           timeSpent: Duration.zero,
-          timeNeeded: const Duration(hours: 2),
+          timeNeeded: Duration.zero,
           endTime: todo.endTime!,
           location: '',
           summary: expectedSummary,
-          isBreakable: true,
-          type: TaskType.deadline,
+          isBreakable: false,
+          type: TaskType.homework,
           startTime: now,
           repeatType: TaskRepeatType.norepeat,
           repeatPeriod: 1,
@@ -149,4 +156,3 @@ class TodoTaskSync {
     }
   }
 }
-

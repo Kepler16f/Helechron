@@ -24,13 +24,35 @@ class TaskPage extends StatelessWidget {
     return '${(deadline.getProgress() * 100).toInt()}% 已完成：预期 ${durationToString(deadline.timeNeeded)}，还要 ${durationToString(deadline.timeNeeded <= deadline.timeSpent ? Duration.zero : (deadline.timeNeeded - deadline.timeSpent))}';
   }
 
+  String _getHomeworkCourseName(Task task) {
+    for (final line in task.description.split('\n')) {
+      if (line.startsWith('课程：')) {
+        return line.substring(3).trim();
+      }
+    }
+    return '学在浙大';
+  }
+
   Future<void> showCardDialog(BuildContext context, Task deadline) async {
     return showDialog<void>(
       context: context,
       builder: (BuildContext dialogContext) {
+        String titleType;
+        if (deadline.type == TaskType.homework) {
+          titleType = deadline.status == TaskStatus.completed
+              ? '已完成'
+              : (deadline.endTime.isBefore(DateTime.now()) ? '已过期' : '待提交');
+        } else if (deadline.type == TaskType.deadline) {
+          titleType = deadlineStatusName[deadline.status]!;
+        } else if (deadline.type == TaskType.fixed) {
+          titleType = deadlineTypeName[TaskType.fixed]!;
+        } else {
+          titleType = '';
+        }
+
         return CupertinoAlertDialog(
           title: Text(
-            '${deadline.summary}：${deadline.type == TaskType.deadline ? deadlineStatusName[deadline.status]! : deadline.type == TaskType.fixed ? deadlineTypeName[TaskType.fixed] : ''}',
+            '${deadline.summary}：$titleType',
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
           content: SizedBox(
@@ -48,10 +70,13 @@ class TaskPage extends StatelessWidget {
                       '结束于 ${toStringHumanReadable(deadline.endTime)}',
                     ),
                   ],
-                  if (deadline.type == TaskType.deadline) ...[
+                  if (deadline.type == TaskType.deadline ||
+                      deadline.type == TaskType.homework) ...[
                     Text(
                       '截止于 ${toStringHumanReadable(deadline.endTime)}${deadline.endTime.isBefore(DateTime.now()) ? ' - 已过期' : ''}',
                     ),
+                  ],
+                  if (deadline.type == TaskType.deadline) ...[
                     Text(
                       deadlineProgress(deadline),
                     ),
@@ -84,6 +109,21 @@ class TaskPage extends StatelessWidget {
                       title: deadline.summary);
                 },
                 child: const Text('去提交作业'),
+              ),
+            if (deadline.type == TaskType.homework)
+              CupertinoDialogAction(
+                onPressed: () {
+                  if (deadline.status != TaskStatus.completed) {
+                    deadline.status = TaskStatus.completed;
+                  } else {
+                    deadline.forceRefreshStatus();
+                  }
+                  _taskController.updateDeadlineListTime();
+                  _taskController.taskList.refresh();
+                  Navigator.of(dialogContext).pop();
+                },
+                child: Text(
+                    '标记为${deadline.status == TaskStatus.completed ? '未' : ''}完成'),
               ),
             if (deadline.type == TaskType.deadline &&
                 deadline.timeSpent < deadline.timeNeeded)
@@ -142,12 +182,14 @@ class TaskPage extends StatelessWidget {
                 },
                 child: const Text('编辑'),
               ),
-            if (deadline.type == TaskType.fixedlegacy)
+            if (deadline.type == TaskType.fixedlegacy ||
+                deadline.type == TaskType.homework)
               CupertinoDialogAction(
                 onPressed: () async {
                   Navigator.of(dialogContext).pop();
                   deadline.status = TaskStatus.deleted;
                   _taskController.updateDeadlineList();
+                  _taskController.updateDeadlineListTime();
                   _taskController.taskList.refresh();
                 },
                 child: const Text('删除'),
@@ -196,7 +238,8 @@ class TaskPage extends StatelessWidget {
             : SubtitleRow(subtitle: title),
         Dismissible(
           key: Key(deadline.uid),
-          direction: deadline.type == TaskType.deadline
+          direction: (deadline.type == TaskType.deadline ||
+                  deadline.type == TaskType.homework)
               ? DismissDirection.horizontal
               : DismissDirection.endToStart,
           movementDuration: const Duration(milliseconds: 300),
@@ -206,7 +249,8 @@ class TaskPage extends StatelessWidget {
             DismissDirection.endToStart: 0.25,
           },
           crossAxisEndOffset: 0.0,
-          background: deadline.type == TaskType.deadline
+          background: (deadline.type == TaskType.deadline ||
+                  deadline.type == TaskType.homework)
               ? Container(
                   alignment: Alignment.centerLeft,
                   padding: const EdgeInsets.only(left: 16),
@@ -276,6 +320,15 @@ class TaskPage extends StatelessWidget {
                     now.year, now.month, now.day, now.hour, now.minute);
                 _flowController.generateNewFlowList(startsAt);
                 _taskController.taskList.refresh();
+              } else if (deadline.type == TaskType.homework) {
+                if (deadline.status == TaskStatus.completed) {
+                  deadline.forceRefreshStatus();
+                } else {
+                  deadline.status = TaskStatus.completed;
+                }
+                _taskController.updateDeadlineList();
+                _taskController.updateDeadlineListTime();
+                _taskController.taskList.refresh();
               }
               return false; // 阻止真正的 dismiss
             } else if (direction == DismissDirection.endToStart) {
@@ -302,6 +355,10 @@ class TaskPage extends StatelessWidget {
           },
           child: RoundRectangleCard(
             onTap: () async {
+              if (deadline.type == TaskType.homework) {
+                await showCardDialog(context, deadline);
+                return;
+              }
               // 直接导航到编辑页面
               Task? res = await Navigator.of(context, rootNavigator: true).push(
                 CupertinoPageRoute(
@@ -349,29 +406,82 @@ class TaskPage extends StatelessWidget {
                                     overflow: TextOverflow.ellipsis,
                                   ))),
                       const Spacer(),
-                      // 固定日程的状态随时间翻转；taskList 不再每秒通知，改由 timeNow 驱动
-                      Obx(() {
-                        final now = _flowController.timeNow.value;
-                        return Text(
-                            deadline.type == TaskType.deadline
-                                ? deadlineStatusName[deadline.status]!
-                                : (now.isBefore(deadline.startTime)
-                                    ? '未开始'
-                                    : (!now.isBefore(deadline.endTime)
-                                        ? '已结束'
-                                        : '进行中')),
-                            style: CupertinoTheme.of(context)
-                                .textTheme
-                                .textStyle
-                                .copyWith(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  overflow: TextOverflow.ellipsis,
-                                ));
-                      }),
+                      if (deadline.type == TaskType.homework)
+                        Text(
+                          deadline.status == TaskStatus.completed
+                              ? '已完成'
+                              : (deadline.endTime.isBefore(DateTime.now())
+                                  ? '已过期'
+                                  : '待提交'),
+                          style: CupertinoTheme.of(context)
+                              .textTheme
+                              .textStyle
+                              .copyWith(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: deadline.status == TaskStatus.completed
+                                    ? CupertinoColors.systemOrange
+                                    : (deadline.endTime.isBefore(DateTime.now())
+                                        ? CupertinoColors.systemRed
+                                        : CupertinoColors.activeBlue),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                        )
+                      else
+                        // 固定日程的状态随时间翻转；taskList 不再每秒通知，改由 timeNow 驱动
+                        Obx(() {
+                          final now = _flowController.timeNow.value;
+                          return Text(
+                              deadline.type == TaskType.deadline
+                                  ? deadlineStatusName[deadline.status]!
+                                  : (now.isBefore(deadline.startTime)
+                                      ? '未开始'
+                                      : (!now.isBefore(deadline.endTime)
+                                          ? '已结束'
+                                          : '进行中')),
+                              style: CupertinoTheme.of(context)
+                                  .textTheme
+                                  .textStyle
+                                  .copyWith(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    overflow: TextOverflow.ellipsis,
+                                  ));
+                        }),
                     ],
                   ),
                   const SizedBox(height: 8.0),
+                  if (deadline.type == TaskType.homework) ...[
+                    Row(
+                      children: [
+                        Icon(
+                          CupertinoIcons.book,
+                          size: 14,
+                          color: CupertinoTheme.of(context)
+                              .textTheme
+                              .textStyle
+                              .color!
+                              .withValues(alpha: 0.5),
+                        ),
+                        Expanded(
+                          child: Text(
+                            ' ${_getHomeworkCourseName(deadline)}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.normal,
+                              color: CupertinoTheme.of(context)
+                                  .textTheme
+                                  .textStyle
+                                  .color!
+                                  .withValues(alpha: 0.75),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4.0),
+                  ],
                   Row(
                     children: [
                       Icon(
@@ -457,6 +567,45 @@ class TaskPage extends StatelessWidget {
                               )))
                     ]),
                   ],
+                  if (deadline.type == TaskType.homework &&
+                      extractCoursesUrl(deadline.description) != null) ...[
+                    const SizedBox(height: 8.0),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        CupertinoButton(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          color: CupertinoColors.activeBlue
+                              .withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                          onPressed: () {
+                            final url = extractCoursesUrl(deadline.description);
+                            if (url != null) {
+                              showTodoSubmitSheet(context, url,
+                                  title: deadline.summary);
+                            }
+                          },
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(CupertinoIcons.arrow_up_right_square,
+                                  size: 13, color: CupertinoColors.activeBlue),
+                              SizedBox(width: 4),
+                              Text(
+                                '去提交',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: CupertinoColors.activeBlue,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   if (deadline.type == TaskType.deadline)
                     Row(children: [
                       Icon(
@@ -482,7 +631,8 @@ class TaskPage extends StatelessWidget {
                               ))),
                     ]),
                   if (deadline.type == TaskType.fixed ||
-                      deadline.status == TaskStatus.running) ...[
+                      (deadline.type == TaskType.deadline &&
+                          deadline.status == TaskStatus.running)) ...[
                     const SizedBox(height: 8.0),
                     // 固定日程的进度随时间前进，订阅 timeNow 以便每秒刷新
                     Obx(() {
@@ -632,25 +782,53 @@ class TaskPage extends StatelessWidget {
                 ],
               ),
             ),
-            if (_taskController.todoDeadlineList.isEmpty &&
-                _taskController.doneDeadlineList.isEmpty &&
-                _taskController.fixedDeadlineList.isEmpty)
-              SliverToBoxAdapter(
-                child: SizedBox(
-                  height: 500,
-                  child: Column(
-                    children: [
-                      const Spacer(),
-                      Text(
-                        '没有任务',
-                        style: CupertinoTheme.of(context).textTheme.textStyle,
-                        textAlign: TextAlign.center,
-                      ),
-                      const Spacer(),
-                    ],
+            Obx(() {
+              if (_taskController.todoHomeworkList.isEmpty &&
+                  _taskController.todoDeadlineList.isEmpty &&
+                  _taskController.doneDeadlineList.isEmpty &&
+                  _taskController.fixedDeadlineList.isEmpty) {
+                return SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: 500,
+                    child: Column(
+                      children: [
+                        const Spacer(),
+                        Text(
+                          '没有任务',
+                          style: CupertinoTheme.of(context).textTheme.textStyle,
+                          textAlign: TextAlign.center,
+                        ),
+                        const Spacer(),
+                      ],
+                    ),
                   ),
+                );
+              }
+              return const SliverToBoxAdapter(child: SizedBox.shrink());
+            }),
+            Obx(
+              () => SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    return Container(
+                      padding: EdgeInsets.only(
+                        top: index == 0 ? 0 : 5,
+                        bottom: 5,
+                        left: 16,
+                        right: 16,
+                      ),
+                      child: createCard(
+                          context,
+                          _taskController.todoHomeworkList[index],
+                          UidColors.colorFromUid(
+                              _taskController.todoHomeworkList[index].uid),
+                          index == 0 ? '课程作业' : null),
+                    );
+                  },
+                  childCount: _taskController.todoHomeworkList.length,
                 ),
               ),
+            ),
             Obx(
               () => SliverList(
                 delegate: SliverChildBuilderDelegate(

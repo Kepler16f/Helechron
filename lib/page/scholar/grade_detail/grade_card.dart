@@ -59,7 +59,10 @@ class _GradeCardState extends State<GradeCard>
     try {
       Navigator.of(context, rootNavigator: true).push(
         CupertinoPageRoute(
-          builder: (_) => CourseDetailPage(courseId: widget.grade.id),
+          builder: (_) => CourseDetailPage(
+            courseId: widget.grade.id,
+            showZhiyun: false,
+          ),
         ),
       );
     } catch (error, stackTrace) {

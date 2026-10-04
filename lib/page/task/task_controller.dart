@@ -14,6 +14,13 @@ class TaskController extends GetxController {
   Timer? _timer;
   DateTime? _lastDdlReminderCheck;
 
+  List<Task> get todoHomeworkList => taskList
+      .where((element) => (element.type == TaskType.homework &&
+          (element.status == TaskStatus.running ||
+              element.status == TaskStatus.suspended ||
+              element.status == TaskStatus.failed)))
+      .toList();
+
   List<Task> get todoDeadlineList => taskList
       .where((element) => (element.type == TaskType.deadline &&
           (element.status == TaskStatus.running ||
@@ -22,7 +29,8 @@ class TaskController extends GetxController {
       .toList();
 
   List<Task> get doneDeadlineList => taskList
-      .where((element) => (element.type == TaskType.deadline &&
+      .where((element) => ((element.type == TaskType.deadline ||
+              element.type == TaskType.homework) &&
           element.status == TaskStatus.completed))
       .toList();
 
@@ -172,14 +180,16 @@ class TaskController extends GetxController {
 
   void removeCompletedDeadline(context) {
     taskList.removeWhere((element) =>
-        element.type == TaskType.deadline &&
+        (element.type == TaskType.deadline ||
+            element.type == TaskType.homework) &&
         element.status == TaskStatus.completed);
     saveDeadlineListToDb();
   }
 
   void removeFailedDeadline(context) {
     taskList.removeWhere((element) =>
-        element.type == TaskType.deadline &&
+        (element.type == TaskType.deadline ||
+            element.type == TaskType.homework) &&
         element.status == TaskStatus.failed);
     saveDeadlineListToDb();
   }
@@ -225,14 +235,13 @@ class TaskController extends GetxController {
       Set<String> notifiedSet = {};
       if (Hive.isBoxOpen('dbOptions')) {
         final box = Hive.box('dbOptions');
-        final raw =
-            box.get('notified_task_ddl_uids', defaultValue: <String>[]);
+        final raw = box.get('notified_task_ddl_uids', defaultValue: <String>[]);
         if (raw is List) {
           notifiedSet = raw.map((e) => e.toString()).toSet();
         }
       }
 
-      for (final task in todoDeadlineList) {
+      for (final task in [...todoDeadlineList, ...todoHomeworkList]) {
         if (task.status == TaskStatus.completed ||
             task.status == TaskStatus.deleted) {
           continue;
@@ -247,10 +256,11 @@ class TaskController extends GetxController {
           final timeDesc = hoursLeft > 0
               ? '$hoursLeft 小时 $minutesLeft 分钟后'
               : '$minutesLeft 分钟后';
+          final isHomework = task.type == TaskType.homework;
           nativeService.showNotification(
             id: (task.uid.hashCode & 0x7FFFFFFF),
-            title: '任务截止提醒',
-            text: '「${task.summary}」将于 $timeDesc 截止，请合理安排进度！',
+            title: isHomework ? '课程作业截止提醒' : '任务截止提醒',
+            text: '「${task.summary}」将于 $timeDesc 截止，请尽快完成！',
           );
           notifiedSet.add(task.uid);
         }

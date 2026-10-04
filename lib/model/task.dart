@@ -9,7 +9,8 @@ import 'package:quiver/time.dart';
 enum TaskType {
   deadline, // 只有结束时间固定的《真DDL》
   fixed, // 开始和结束时间都固定的《日程》
-  fixedlegacy // 已过的《日程》
+  fixedlegacy, // 已过的《日程》
+  homework, // 学在浙大自动同步的《作业》
 }
 
 enum TaskStatus { running, suspended, completed, failed, deleted, outdated }
@@ -20,6 +21,7 @@ const Map<TaskType, String> deadlineTypeName = {
   TaskType.deadline: 'DDL',
   TaskType.fixed: '日程',
   TaskType.fixedlegacy: '过去日程',
+  TaskType.homework: '课程作业',
 };
 
 const Map<TaskStatus, String> deadlineStatusName = {
@@ -306,8 +308,8 @@ class Task {
   }
 
   void refreshStatus() {
-    if (type == TaskType.deadline) {
-      if (timeSpent >= timeNeeded) {
+    if (type == TaskType.deadline || type == TaskType.homework) {
+      if (type == TaskType.deadline && timeSpent >= timeNeeded) {
         status = TaskStatus.completed;
       } else if (status != TaskStatus.completed &&
           endTime.isBefore(DateTime.now())) {
@@ -323,8 +325,8 @@ class Task {
   }
 
   void forceRefreshStatus() {
-    if (type == TaskType.deadline) {
-      if (timeSpent >= timeNeeded) {
+    if (type == TaskType.deadline || type == TaskType.homework) {
+      if (type == TaskType.deadline && timeSpent >= timeNeeded) {
         status = TaskStatus.completed;
       } else if (status != TaskStatus.completed &&
           endTime.isBefore(DateTime.now())) {

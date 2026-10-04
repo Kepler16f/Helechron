@@ -281,12 +281,13 @@ class CalendarToSystemManager {
       final taskList = Get.find<RxList<Task>>(tag: 'taskList');
       for (final task in taskList) {
         if (task.status == TaskStatus.deleted) continue;
-        if (task.type == TaskType.deadline) {
+        if (task.type == TaskType.deadline || task.type == TaskType.homework) {
           final end = task.endTime;
           if (end.isBefore(DateTime.now())) continue;
+          final tag = task.type == TaskType.homework ? '[作业]' : '[DDL]';
           events.add({
             'uid': 'task_${task.uid}',
-            'summary': '[DDL] ${task.summary}',
+            'summary': '$tag ${task.summary}',
             'description': task.description,
             'location': task.location,
             'startTime': end
