@@ -11,6 +11,7 @@ import 'package:celechron/model/task.dart';
 import 'package:celechron/model/period.dart';
 import 'task_edit_page.dart';
 import 'package:celechron/page/scholar/todo/todo_card.dart';
+import 'package:celechron/services/todo_task_sync.dart';
 import 'dart:async';
 import 'package:get/get.dart';
 
@@ -31,6 +32,74 @@ class TaskPage extends StatelessWidget {
       }
     }
     return '学在浙大';
+  }
+
+  Widget _buildHomeworkStatusBadge(BuildContext context, Task deadline) {
+    String? aid;
+    if (deadline.fromUid != null &&
+        deadline.fromUid!.startsWith('courses-todo:')) {
+      aid = deadline.fromUid!.substring('courses-todo:'.length);
+    }
+    final recorded = aid != null ? TodoTaskSync.getHomeworkStatus(aid) : null;
+    final score = (recorded?['score'] as num?)?.toDouble();
+    final isSubmitted = deadline.status == TaskStatus.completed ||
+        recorded?['completeness'] == 'full' ||
+        score != null;
+    final isGraded = score != null;
+    final isOverdue = !isSubmitted && deadline.endTime.isBefore(DateTime.now());
+
+    Color bg;
+    Color fg;
+    IconData icon;
+    String text;
+
+    if (isGraded) {
+      bg = CupertinoColors.systemOrange.withValues(alpha: 0.15);
+      fg = CupertinoColors.systemOrange;
+      icon = CupertinoIcons.star_fill;
+      final scoreText = score == score.roundToDouble()
+          ? score.toInt().toString()
+          : score.toStringAsFixed(1);
+      text = '已批改 · $scoreText分';
+    } else if (isSubmitted) {
+      bg = CupertinoColors.systemGreen.withValues(alpha: 0.15);
+      fg = CupertinoColors.systemGreen;
+      icon = CupertinoIcons.checkmark_circle_fill;
+      text = '已提交';
+    } else if (isOverdue) {
+      bg = CupertinoColors.systemRed.withValues(alpha: 0.12);
+      fg = CupertinoColors.systemRed;
+      icon = CupertinoIcons.exclamationmark_circle_fill;
+      text = '逾期';
+    } else {
+      bg = CupertinoColors.activeBlue.withValues(alpha: 0.12);
+      fg = CupertinoColors.activeBlue;
+      icon = CupertinoIcons.clock;
+      text = '待提交';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: fg),
+          const SizedBox(width: 3),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: fg,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> showCardDialog(BuildContext context, Task deadline) async {
@@ -104,11 +173,19 @@ class TaskPage extends StatelessWidget {
               CupertinoDialogAction(
                 onPressed: () {
                   Navigator.of(dialogContext).pop();
+                  String? aid;
+                  if (deadline.fromUid != null &&
+                      deadline.fromUid!.startsWith('courses-todo:')) {
+                    aid = deadline.fromUid!.substring('courses-todo:'.length);
+                  }
                   showTodoSubmitSheet(
-                      context, extractCoursesUrl(deadline.description)!,
-                      title: deadline.summary);
+                    context,
+                    extractCoursesUrl(deadline.description)!,
+                    title: deadline.summary,
+                    activityId: aid,
+                  );
                 },
-                child: const Text('去提交作业'),
+                child: const Text('作业选项与状态探测'),
               ),
             if (deadline.type == TaskType.homework)
               CupertinoDialogAction(
@@ -479,41 +556,72 @@ class TaskPage extends StatelessWidget {
                             ),
                           ),
                         ),
+                        const SizedBox(width: 6.0),
+                        _buildHomeworkStatusBadge(context, deadline),
                         if (extractCoursesUrl(deadline.description) !=
                             null) ...[
-                          const SizedBox(width: 8.0),
-                          CupertinoButton(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 3),
-                            color: CupertinoColors.activeBlue
-                                .withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(12),
-                            onPressed: () {
-                              final url =
-                                  extractCoursesUrl(deadline.description);
-                              if (url != null) {
-                                showTodoSubmitSheet(context, url,
-                                    title: deadline.summary);
-                              }
-                            },
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(CupertinoIcons.arrow_up_right_square,
+                          const SizedBox(width: 6.0),
+                          Builder(builder: (context) {
+                            String? aid;
+                            if (deadline.fromUid != null &&
+                                deadline.fromUid!.startsWith('courses-todo:')) {
+                              aid = deadline.fromUid!
+                                  .substring('courses-todo:'.length);
+                            }
+                            final recorded = aid != null
+                                ? TodoTaskSync.getHomeworkStatus(aid)
+                                : null;
+                            final isDone =
+                                deadline.status == TaskStatus.completed ||
+                                    recorded?['completeness'] == 'full' ||
+                                    recorded?['score'] != null;
+
+                            return CupertinoButton(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 9, vertical: 3),
+                              color: isDone
+                                  ? CupertinoColors.activeGreen
+                                      .withValues(alpha: 0.12)
+                                  : CupertinoColors.activeBlue
+                                      .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                              onPressed: () {
+                                final url =
+                                    extractCoursesUrl(deadline.description);
+                                if (url != null) {
+                                  showTodoSubmitSheet(
+                                    context,
+                                    url,
+                                    title: deadline.summary,
+                                    activityId: aid,
+                                  );
+                                }
+                              },
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    CupertinoIcons.arrow_up_right_square,
                                     size: 13,
-                                    color: CupertinoColors.activeBlue),
-                                SizedBox(width: 4),
-                                Text(
-                                  '去提交',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: CupertinoColors.activeBlue,
+                                    color: isDone
+                                        ? CupertinoColors.activeGreen
+                                        : CupertinoColors.activeBlue,
                                   ),
-                                ),
-                              ],
-                            ),
-                          ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    isDone ? '查看提交' : '去提交',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDone
+                                          ? CupertinoColors.activeGreen
+                                          : CupertinoColors.activeBlue,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
                         ],
                       ],
                     ),

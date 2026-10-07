@@ -2,19 +2,86 @@ import 'dart:convert';
 import 'package:hive/hive.dart';
 import 'package:celechron/utils/json_utils.dart';
 
+enum HomeworkSubmissionStatus {
+  unsubmitted, // 未提交
+  submitted, // 已提交（待批改）
+  graded, // 已批改（已出分）
+  overdue, // 逾期未交
+}
+
 class Todo {
   String id;
   String name;
   String course;
   DateTime? endTime;
   String courseId;
+  HomeworkSubmissionStatus submissionStatus;
+  double? score;
+  String? completeness;
+  DateTime? submittedAt;
 
   Todo.fromJson(Map<String, dynamic> json)
       : id = asString(json["id"]) ?? json["id"]?.toString() ?? '',
         name = asString(json["title"]) ?? '未命名作业',
         course = asString(json["course_name"]) ?? '未知课程',
         endTime = DateTime.tryParse(asString(json["end_time"]) ?? ''),
-        courseId = asString(json["course_id"]) ?? json["course_id"]?.toString() ?? '';
+        courseId =
+            asString(json["course_id"]) ?? json["course_id"]?.toString() ?? '',
+        submissionStatus = _parseSubmissionStatus(json),
+        score = (json["score"] as num?)?.toDouble(),
+        completeness = asString(json["completeness"]),
+        submittedAt = DateTime.tryParse(asString(json["submitted_at"]) ?? '');
+
+  static HomeworkSubmissionStatus _parseSubmissionStatus(
+      Map<String, dynamic> json) {
+    final statusStr = asString(json["submission_status"]);
+    if (statusStr != null) {
+      for (final s in HomeworkSubmissionStatus.values) {
+        if (s.name == statusStr) return s;
+      }
+    }
+    if (json["score"] != null) return HomeworkSubmissionStatus.graded;
+    if (asString(json["completeness"]) == 'full') {
+      return HomeworkSubmissionStatus.submitted;
+    }
+    return HomeworkSubmissionStatus.unsubmitted;
+  }
+
+  bool get isSubmitted =>
+      submissionStatus == HomeworkSubmissionStatus.submitted ||
+      submissionStatus == HomeworkSubmissionStatus.graded ||
+      completeness == 'full' ||
+      score != null;
+
+  bool get isGraded =>
+      submissionStatus == HomeworkSubmissionStatus.graded || score != null;
+
+  HomeworkSubmissionStatus get effectiveStatus {
+    if (isGraded) return HomeworkSubmissionStatus.graded;
+    if (isSubmitted) return HomeworkSubmissionStatus.submitted;
+    if (endTime != null && endTime!.isBefore(DateTime.now())) {
+      return HomeworkSubmissionStatus.overdue;
+    }
+    return HomeworkSubmissionStatus.unsubmitted;
+  }
+
+  String get statusText {
+    switch (effectiveStatus) {
+      case HomeworkSubmissionStatus.graded:
+        final scoreText = score != null
+            ? (score! == score!.roundToDouble()
+                ? score!.toInt().toString()
+                : score!.toStringAsFixed(1))
+            : '';
+        return scoreText.isNotEmpty ? '已批改 · $scoreText分' : '已批改';
+      case HomeworkSubmissionStatus.submitted:
+        return '已提交';
+      case HomeworkSubmissionStatus.overdue:
+        return '逾期未交';
+      case HomeworkSubmissionStatus.unsubmitted:
+        return '待提交';
+    }
+  }
 
   /// 优先使用当前 courseId；若历史缓存缺少该字段，从原始缓存中补全
   String get resolvedCourseId {
@@ -26,7 +93,8 @@ class Todo {
         final cached = box.get('courses_todo');
         if (cached is String && cached.isNotEmpty) {
           final decoded = jsonDecode(cached);
-          final list = asDynamicList(decoded is Map ? decoded['todo_list'] : null);
+          final list =
+              asDynamicList(decoded is Map ? decoded['todo_list'] : null);
           if (list != null) {
             for (final item in list) {
               final m = asStringMap(item);
@@ -61,6 +129,10 @@ class Todo {
         'course_name': course,
         'end_time': endTime?.toIso8601String(),
         'course_id': courseId,
+        'submission_status': submissionStatus.name,
+        'score': score,
+        'completeness': completeness,
+        'submitted_at': submittedAt?.toIso8601String(),
       };
 
   static List<Todo> getAllFromCourses(Map<String, dynamic> json) {

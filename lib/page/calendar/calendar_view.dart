@@ -283,8 +283,7 @@ class CalendarPage extends StatelessWidget {
                                               fontSize: 8.5,
                                               fontWeight: FontWeight.bold,
                                               color: (isHoliday
-                                                      ? CupertinoColors
-                                                          .systemRed
+                                                      ? CupertinoColors.systemRed
                                                       : CupertinoColors
                                                           .systemIndigo)
                                                   .resolveFrom(context),

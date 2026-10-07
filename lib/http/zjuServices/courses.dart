@@ -8,9 +8,11 @@ import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/http/data_source_status.dart';
 import 'package:celechron/http/zjuServices/exceptions.dart';
 import 'package:celechron/services/diagnostic_log_service.dart';
+import 'package:celechron/services/todo_task_sync.dart';
 import 'package:celechron/utils/tuple.dart';
 import 'package:celechron/model/todo.dart';
 import 'package:flutter/foundation.dart';
+import 'package:hive/hive.dart';
 import 'response_utils.dart';
 
 @visibleForTesting
@@ -38,6 +40,143 @@ Uri? coursesMetaRefreshTarget(String body, Uri source) {
 /// 学在浙大客户端；手动跟随 SSO 跳转并维护业务 SESSION，失败时回退作业缓存。
 class Courses {
   static final Uri _todoUri = Uri.parse("https://courses.zju.edu.cn/api/todos");
+
+  static Cookie? _cachedStaticSession;
+  static Cookie? get cachedSession =>
+      _cachedStaticSession ?? _readPersistedSessionCookie();
+
+  static void _persistSessionCookie(Cookie cookie) {
+    _cachedStaticSession = cookie;
+    try {
+      if (Hive.isBoxOpen('dbOptions')) {
+        final box = Hive.box('dbOptions');
+        box.put('courses_session_name', cookie.name);
+        box.put('courses_session_value', cookie.value);
+        box.put(
+            'courses_session_domain', cookie.domain ?? 'courses.zju.edu.cn');
+        box.put('courses_session_path', cookie.path ?? '/');
+      }
+    } catch (_) {}
+  }
+
+  static Cookie? _readPersistedSessionCookie() {
+    try {
+      if (Hive.isBoxOpen('dbOptions')) {
+        final box = Hive.box('dbOptions');
+        final name = box.get('courses_session_name')?.toString();
+        final val = box.get('courses_session_value')?.toString();
+        if (name != null && val != null && val.isNotEmpty) {
+          final cookie = Cookie(name, val)
+            ..domain = box.get('courses_session_domain')?.toString() ??
+                'courses.zju.edu.cn'
+            ..path = box.get('courses_session_path')?.toString() ?? '/';
+          _cachedStaticSession = cookie;
+          return cookie;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// 查询指定课程的用户活动阅读与完成情况（用于探测作业提交与打分状态）
+  static Future<Map<String, dynamic>?> fetchActivityReadsForCourse(
+    HttpClient httpClient,
+    String courseId, {
+    Cookie? sessionCookie,
+  }) async {
+    if (courseId.isEmpty) return null;
+    final session = sessionCookie ?? cachedSession;
+    if (session == null) return null;
+
+    final uri = Uri.parse(
+        'https://courses.zju.edu.cn/api/course/$courseId/activity-reads-for-user');
+    try {
+      final request = await httpClient.getUrl(uri).timeout(
+            const Duration(seconds: 6),
+            onTimeout: () => throw requestTimeout(),
+          );
+      request.followRedirects = false;
+      request.cookies.add(session);
+
+      final response = await request.close().timeout(
+            const Duration(seconds: 6),
+            onTimeout: () => throw requestTimeout(),
+          );
+      if (response.statusCode != HttpStatus.ok) {
+        return null;
+      }
+      final body = await readResponseBody(
+        response,
+        context: '学在浙大作业提交状态接口',
+      );
+      final json = decodeJsonMap(body, context: '学在浙大作业提交状态');
+      return json;
+    } catch (e) {
+      debugPrint('fetchActivityReadsForCourse error: $e');
+      return null;
+    }
+  }
+
+  Future<void> _probeActivitiesCompleteness(
+    HttpClient httpClient,
+    Set<String> courseIds,
+    List<Todo> todos,
+  ) async {
+    try {
+      final futures = courseIds.map((cid) async {
+        final res = await fetchActivityReadsForCourse(
+          httpClient,
+          cid,
+          sessionCookie: _session,
+        );
+        return MapEntry(cid, res);
+      });
+      final results = await Future.wait(futures);
+
+      for (final entry in results) {
+        final data = entry.value;
+        if (data == null) continue;
+        final rawReads = asDynamicList(data['activity_reads']);
+        if (rawReads == null) continue;
+
+        for (final item in rawReads) {
+          final m = asStringMap(item);
+          if (m == null) continue;
+          final aid = m['activity_id']?.toString() ?? '';
+          if (aid.isEmpty) continue;
+          final completeness = asString(m['completeness']) ?? '';
+          final subData = asStringMap(m['data']);
+          final score = (subData?['score'] as num?)?.toDouble();
+          final submittedAtStr = asString(subData?['submitted_at']);
+          final submittedAt = DateTime.tryParse(submittedAtStr ?? '');
+
+          for (final todo in todos) {
+            if (todo.id == aid) {
+              todo.completeness = completeness;
+              todo.score = score;
+              todo.submittedAt = submittedAt;
+              if (score != null) {
+                todo.submissionStatus = HomeworkSubmissionStatus.graded;
+              } else if (completeness == 'full') {
+                todo.submissionStatus = HomeworkSubmissionStatus.submitted;
+              } else {
+                todo.submissionStatus = HomeworkSubmissionStatus.unsubmitted;
+              }
+            }
+          }
+
+          TodoTaskSync.recordHomeworkStatus(
+            aid,
+            completeness: completeness,
+            score: score,
+            submittedAt: submittedAt,
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('_probeActivitiesCompleteness error: $e');
+    }
+  }
 
   DatabaseHelper? _db;
   Cookie? _session;
@@ -100,6 +239,15 @@ class Courses {
             Future<void>.value(),
       ]);
       final todos = Todo.getAllFromCourses(data);
+      if (todos.isNotEmpty && _session != null) {
+        final courseIds = todos
+            .map((t) => t.resolvedCourseId)
+            .where((cid) => cid.isNotEmpty)
+            .toSet();
+        if (courseIds.isNotEmpty) {
+          await _probeActivitiesCompleteness(httpClient, courseIds, todos);
+        }
+      }
       DiagnosticLogService.instance.record(
         module: '学在浙大作业',
         operation: 'fetchTodo',
@@ -175,10 +323,23 @@ class Courses {
       return const _CachedTodos([], false);
     }
     try {
+      final todos = Todo.getAllFromCourses(
+        decodeJsonMap(cached, context: '学在浙大作业缓存'),
+      );
+      for (final todo in todos) {
+        final recorded = TodoTaskSync.getHomeworkStatus(todo.id);
+        if (recorded != null) {
+          todo.completeness = asString(recorded['completeness']);
+          todo.score = (recorded['score'] as num?)?.toDouble();
+          if (todo.score != null) {
+            todo.submissionStatus = HomeworkSubmissionStatus.graded;
+          } else if (todo.completeness == 'full') {
+            todo.submissionStatus = HomeworkSubmissionStatus.submitted;
+          }
+        }
+      }
       return _CachedTodos(
-        Todo.getAllFromCourses(
-          decodeJsonMap(cached, context: '学在浙大作业缓存'),
-        ),
+        todos,
         true,
         cachedAt: _db?.getCachedWebPage("courses_todo_timestamp"),
       );
@@ -378,6 +539,9 @@ class Courses {
         // 避免把其他域名的同名 Cookie 当作业务会话。
         if (current.host == 'courses.zju.edu.cn' && cookie.name == 'session') {
           _session = isExpiredCookie(cookie) ? null : cookie;
+          if (_session != null) {
+            _persistSessionCookie(_session!);
+          }
         }
       }
 

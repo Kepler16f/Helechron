@@ -1,17 +1,50 @@
 import 'package:celechron/model/todo.dart';
+import 'package:celechron/services/todo_task_sync.dart';
 import 'package:celechron/utils/utils.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
-/// 学在浙大作业提交链接操作面板（打开 / 复制），供作业卡片与任务详情复用。
-void showTodoSubmitSheet(BuildContext context, String url, {String? title}) {
+/// 学在浙大作业提交链接操作面板（打开 / 复制 / 探测提交状态），供作业卡片与任务详情复用。
+void showTodoSubmitSheet(BuildContext context, String url,
+    {String? title, String? courseId, String? activityId}) {
+  String? cid = courseId;
+  String? aid = activityId;
+  if (cid == null || aid == null) {
+    final match =
+        RegExp(r'/course/(\d+)/learning-activity#/(\d+)').firstMatch(url);
+    if (match != null) {
+      cid ??= match.group(1);
+      aid ??= match.group(2);
+    }
+  }
+
   showCupertinoModalPopup<void>(
     context: context,
     builder: (ctx) => CupertinoActionSheet(
       title: Text(title ?? '学在浙大作业'),
       message: Text(url, maxLines: 2, overflow: TextOverflow.ellipsis),
       actions: [
+        if (cid != null && aid != null)
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              TodoTaskSync.probeSingleHomework(
+                context,
+                courseId: cid!,
+                activityId: aid!,
+                title: title,
+              );
+            },
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(CupertinoIcons.search, size: 18),
+                SizedBox(width: 6),
+                Text('探测作业提交状态'),
+              ],
+            ),
+          ),
         CupertinoActionSheetAction(
           onPressed: () {
             Navigator.of(ctx).pop();
@@ -48,9 +81,68 @@ class TodoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => showTodoSubmitSheet(context, todo.submitUrl,
-          title: '${todo.course} · ${todo.name}'),
+      onTap: () => showTodoSubmitSheet(
+        context,
+        todo.submitUrl,
+        title: '${todo.course} · ${todo.name}',
+        courseId: todo.resolvedCourseId,
+        activityId: todo.id,
+      ),
       child: _buildCard(context),
+    );
+  }
+
+  Widget _buildStatusBadge(BuildContext context, Todo todo) {
+    final status = todo.effectiveStatus;
+    Color bg;
+    Color fg;
+    IconData icon;
+    String text = todo.statusText;
+
+    switch (status) {
+      case HomeworkSubmissionStatus.graded:
+        bg = CupertinoColors.systemOrange.withValues(alpha: 0.15);
+        fg = CupertinoColors.systemOrange;
+        icon = CupertinoIcons.star_fill;
+        break;
+      case HomeworkSubmissionStatus.submitted:
+        bg = CupertinoColors.systemGreen.withValues(alpha: 0.15);
+        fg = CupertinoColors.systemGreen;
+        icon = CupertinoIcons.checkmark_circle_fill;
+        break;
+      case HomeworkSubmissionStatus.overdue:
+        bg = CupertinoColors.systemRed.withValues(alpha: 0.12);
+        fg = CupertinoColors.systemRed;
+        icon = CupertinoIcons.exclamationmark_circle_fill;
+        break;
+      case HomeworkSubmissionStatus.unsubmitted:
+        bg = CupertinoColors.activeBlue.withValues(alpha: 0.12);
+        fg = CupertinoColors.activeBlue;
+        icon = CupertinoIcons.clock;
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: fg),
+          const SizedBox(width: 3),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: fg,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -78,20 +170,30 @@ class TodoCard extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         // add a colored edge
         children: [
-          Text(
-            todo.course,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            strutStyle: const StrutStyle(leading: 0.5, forceStrutHeight: true),
-            style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                  color: CupertinoTheme.of(context)
-                      .textTheme
-                      .textStyle
-                      .color!
-                      .withValues(alpha: 0.5),
-                  fontSize: 14,
-                  fontWeight: FontWeight.normal,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  todo.course,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  strutStyle:
+                      const StrutStyle(leading: 0.5, forceStrutHeight: true),
+                  style:
+                      CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                            color: CupertinoTheme.of(context)
+                                .textTheme
+                                .textStyle
+                                .color!
+                                .withValues(alpha: 0.5),
+                            fontSize: 14,
+                            fontWeight: FontWeight.normal,
+                          ),
                 ),
+              ),
+              const SizedBox(width: 6),
+              _buildStatusBadge(context, todo),
+            ],
           ),
           const SizedBox(height: 6),
           Text(
