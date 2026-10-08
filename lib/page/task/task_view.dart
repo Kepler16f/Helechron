@@ -472,38 +472,21 @@ class TaskPage extends StatelessWidget {
                       ),
                       const SizedBox(width: 8.0),
                       Expanded(
-                          flex: 4,
-                          child: Text(deadline.summary,
-                              style: CupertinoTheme.of(context)
-                                  .textTheme
-                                  .textStyle
-                                  .copyWith(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    overflow: TextOverflow.ellipsis,
-                                  ))),
-                      const Spacer(),
-                      if (deadline.type == TaskType.homework)
-                        Text(
-                          deadline.status == TaskStatus.completed
-                              ? '已完成'
-                              : (deadline.endTime.isBefore(DateTime.now())
-                                  ? '已过期'
-                                  : '待提交'),
+                        child: Text(
+                          deadline.summary,
                           style: CupertinoTheme.of(context)
                               .textTheme
                               .textStyle
                               .copyWith(
-                                fontSize: 14,
+                                fontSize: 18,
                                 fontWeight: FontWeight.bold,
-                                color: deadline.status == TaskStatus.completed
-                                    ? CupertinoColors.systemOrange
-                                    : (deadline.endTime.isBefore(DateTime.now())
-                                        ? CupertinoColors.systemRed
-                                        : CupertinoColors.activeBlue),
                                 overflow: TextOverflow.ellipsis,
                               ),
-                        )
+                        ),
+                      ),
+                      const SizedBox(width: 8.0),
+                      if (deadline.type == TaskType.homework)
+                        _buildHomeworkStatusBadge(context, deadline)
                       else
                         // 固定日程的状态随时间翻转；taskList 不再每秒通知，改由 timeNow 驱动
                         Obx(() {
@@ -556,8 +539,6 @@ class TaskPage extends StatelessWidget {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 6.0),
-                        _buildHomeworkStatusBadge(context, deadline),
                         if (extractCoursesUrl(deadline.description) !=
                             null) ...[
                           const SizedBox(width: 6.0),
@@ -577,14 +558,15 @@ class TaskPage extends StatelessWidget {
                                     recorded?['score'] != null;
 
                             return CupertinoButton(
+                              minSize: 0,
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 9, vertical: 3),
+                                  horizontal: 8, vertical: 2.5),
                               color: isDone
                                   ? CupertinoColors.activeGreen
                                       .withValues(alpha: 0.12)
                                   : CupertinoColors.activeBlue
                                       .withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(6),
                               onPressed: () {
                                 final url =
                                     extractCoursesUrl(deadline.description);
@@ -602,16 +584,16 @@ class TaskPage extends StatelessWidget {
                                 children: [
                                   Icon(
                                     CupertinoIcons.arrow_up_right_square,
-                                    size: 13,
+                                    size: 12,
                                     color: isDone
                                         ? CupertinoColors.activeGreen
                                         : CupertinoColors.activeBlue,
                                   ),
-                                  const SizedBox(width: 4),
+                                  const SizedBox(width: 3),
                                   Text(
                                     isDone ? '查看提交' : '去提交',
                                     style: TextStyle(
-                                      fontSize: 12,
+                                      fontSize: 11,
                                       fontWeight: FontWeight.w600,
                                       color: isDone
                                           ? CupertinoColors.activeGreen
