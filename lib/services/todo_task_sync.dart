@@ -245,6 +245,7 @@ class TodoTaskSync {
       // 若 TaskController 已注册，触发更新和存库
       if (Get.isRegistered<TaskController>()) {
         final taskController = Get.find<TaskController>();
+        taskController.lastChangeIsHomeworkOnly.value = true;
         taskController.updateDeadlineList();
         taskController.updateDeadlineListTime();
       } else if (Get.isRegistered<DatabaseHelper>(tag: 'db')) {

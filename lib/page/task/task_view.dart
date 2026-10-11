@@ -78,16 +78,28 @@ class TaskPage extends StatelessWidget {
       text = '待提交';
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(10),
-      ),
+    return CupertinoButton(
+      minSize: 0,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+      color: bg,
+      borderRadius: BorderRadius.circular(8),
+      onPressed: () {
+        final url = extractCoursesUrl(deadline.description);
+        if (url != null) {
+          showTodoSubmitSheet(
+            context,
+            url,
+            title: deadline.summary,
+            activityId: aid,
+          );
+        } else {
+          showCardDialog(context, deadline);
+        }
+      },
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 10, color: fg),
+          Icon(icon, size: 11, color: fg),
           const SizedBox(width: 3),
           Text(
             text,
@@ -100,6 +112,40 @@ class TaskPage extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Widget _buildHomeworkRefreshButton(BuildContext context) {
+    return Obx(() {
+      final refreshing = _taskController.isRefreshingHomework.value;
+      return CupertinoButton(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+        minSize: 0,
+        color: CupertinoColors.activeBlue.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        onPressed: refreshing ? null : () => _taskController.refreshHomework(),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            refreshing
+                ? const CupertinoActivityIndicator(radius: 5.5)
+                : const Icon(
+                    CupertinoIcons.arrow_clockwise,
+                    size: 11,
+                    color: CupertinoColors.activeBlue,
+                  ),
+            const SizedBox(width: 3),
+            Text(
+              refreshing ? '同步中' : '刷新',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: CupertinoColors.activeBlue,
+              ),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   Future<void> showCardDialog(BuildContext context, Task deadline) async {
@@ -292,6 +338,7 @@ class TaskPage extends StatelessWidget {
       },
     );
     if (res != null && res.status != TaskStatus.deleted) {
+      _taskController.lastChangeIsHomeworkOnly.value = false;
       _taskController.taskList.add(res);
       _taskController.updateDeadlineList();
       _taskController.updateDeadlineListTime();
@@ -312,7 +359,12 @@ class TaskPage extends StatelessWidget {
       children: [
         title == null
             ? const SizedBox(height: 0)
-            : SubtitleRow(subtitle: title),
+            : SubtitleRow(
+                subtitle: title,
+                right: title == '课程作业'
+                    ? _buildHomeworkRefreshButton(context)
+                    : null,
+              ),
         Dismissible(
           key: Key(deadline.uid),
           direction: (deadline.type == TaskType.deadline ||
@@ -388,6 +440,7 @@ class TaskPage extends StatelessWidget {
                   deadline.timeSpent = deadline.timeNeeded;
                   deadline.status = TaskStatus.completed;
                 }
+                _taskController.lastChangeIsHomeworkOnly.value = false;
                 _taskController.updateDeadlineList();
                 _taskController.updateDeadlineListTime();
                 // 重新规划
@@ -403,6 +456,7 @@ class TaskPage extends StatelessWidget {
                 } else {
                   deadline.status = TaskStatus.completed;
                 }
+                _taskController.lastChangeIsHomeworkOnly.value = true;
                 _taskController.updateDeadlineList();
                 _taskController.updateDeadlineListTime();
                 _taskController.taskList.refresh();
@@ -419,6 +473,11 @@ class TaskPage extends StatelessWidget {
             if (direction == DismissDirection.endToStart) {
               // 向左滑（从右到左）：删除
               deadline.status = TaskStatus.deleted;
+              if (deadline.type == TaskType.homework) {
+                _taskController.lastChangeIsHomeworkOnly.value = true;
+              } else {
+                _taskController.lastChangeIsHomeworkOnly.value = false;
+              }
               _taskController.updateDeadlineList();
               _taskController.updateDeadlineListTime();
               // 重新规划
@@ -566,7 +625,7 @@ class TaskPage extends StatelessWidget {
                                       .withValues(alpha: 0.12)
                                   : CupertinoColors.activeBlue
                                       .withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: BorderRadius.circular(8),
                               onPressed: () {
                                 final url =
                                     extractCoursesUrl(deadline.description);
@@ -827,6 +886,13 @@ class TaskPage extends StatelessWidget {
                                 _taskController.updateDeadlineList();
                                 _taskController.taskList.refresh();
                                 Navigator.of(context).pop();
+                              },
+                            ),
+                            CupertinoActionSheetAction(
+                              child: const Text('刷新学在浙大作业'),
+                              onPressed: () async {
+                                Navigator.of(context).pop();
+                                await _taskController.refreshHomework();
                               },
                             ),
                             CupertinoActionSheetAction(

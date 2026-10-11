@@ -37,8 +37,8 @@ class FlowPage extends StatelessWidget {
             : SubtitleRow(subtitle: title),
         RoundRectangleCard(
           onTap: period.type == PeriodType.classes
-              ? () async => Navigator.of(context, rootNavigator: true).push(
-                  CupertinoPageRoute(
+              ? () async => Navigator.of(context, rootNavigator: true)
+                  .push(CupertinoPageRoute(
                       builder: (context) => CourseDetailPage(
                             courseId: period.fromUid,
                             period: period,
@@ -295,8 +295,8 @@ class FlowPage extends StatelessWidget {
             : SubtitleRow(subtitle: title),
         RoundRectangleCard(
             onTap: period.type == PeriodType.classes
-                ? () async => Navigator.of(context, rootNavigator: true).push(
-                    CupertinoPageRoute(
+                ? () async => Navigator.of(context, rootNavigator: true)
+                    .push(CupertinoPageRoute(
                         builder: (context) => CourseDetailPage(
                               courseId: period.fromUid,
                               period: period,
@@ -613,18 +613,21 @@ class FlowPage extends StatelessWidget {
             SliverToBoxAdapter(
               child: Obx(() {
                 if (_flowController.isFlowListOutdated()) {
+                  final isHomework =
+                      _flowController.isOutdatedDueToHomeworkOnly();
                   return MaterialBanner(
                     backgroundColor: CupertinoDynamicColor.resolve(
                         CupertinoColors.secondarySystemBackground, context),
                     dividerColor: Colors.transparent,
-                    content: const Text('规划方案已过期'),
+                    content: Text(isHomework ? '作业状态已变化' : '规划方案已过期'),
                     contentTextStyle: TextStyle(
                       fontSize: 16,
                       color:
                           CupertinoTheme.of(context).textTheme.textStyle.color!,
                     ),
-                    leading:
-                        const Icon(CupertinoIcons.exclamationmark_triangle),
+                    leading: Icon(isHomework
+                        ? CupertinoIcons.book_fill
+                        : CupertinoIcons.exclamationmark_triangle),
                     actions: [
                       CupertinoButton(
                         child: const Text('忽略'),
@@ -634,10 +637,14 @@ class FlowPage extends StatelessWidget {
                       ),
                       CupertinoButton(
                         onPressed: () async {
-                          await newFlowList(context);
-                          _flowController.flowList.refresh();
+                          if (isHomework) {
+                            _flowController.updateDeadlineListTime();
+                          } else {
+                            await newFlowList(context);
+                            _flowController.flowList.refresh();
+                          }
                         },
-                        child: const Text('重新规划'),
+                        child: Text(isHomework ? '知道了' : '重新规划'),
                       ),
                     ],
                   );

@@ -4,8 +4,10 @@ import 'package:get/get.dart';
 import 'package:hive/hive.dart';
 import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/model/option.dart';
+import 'package:celechron/model/scholar.dart';
 import 'package:celechron/model/task.dart';
 import 'package:celechron/services/ohos_native_service.dart';
+import 'package:celechron/services/todo_task_sync.dart';
 
 class TaskController extends GetxController {
   final taskList = Get.find<RxList<Task>>(tag: 'taskList');
@@ -13,6 +15,9 @@ class TaskController extends GetxController {
   final _db = Get.find<DatabaseHelper>(tag: 'db');
   Timer? _timer;
   DateTime? _lastDdlReminderCheck;
+
+  final lastChangeIsHomeworkOnly = false.obs;
+  final isRefreshingHomework = false.obs;
 
   List<Task> get todoHomeworkList => taskList
       .where((element) => (element.type == TaskType.homework &&
@@ -235,8 +240,7 @@ class TaskController extends GetxController {
       Set<String> notifiedSet = {};
       if (Hive.isBoxOpen('dbOptions')) {
         final box = Hive.box('dbOptions');
-        final raw =
-            box.get('notified_task_ddl_uids', defaultValue: <String>[]);
+        final raw = box.get('notified_task_ddl_uids', defaultValue: <String>[]);
         if (raw is List) {
           notifiedSet = raw.map((e) => e.toString()).toSet();
         }
@@ -273,6 +277,27 @@ class TaskController extends GetxController {
       }
     } catch (e) {
       debugPrint('TaskController._checkDdlReminders error: $e');
+    }
+  }
+
+  /// 刷新学在浙大作业列表并同步至任务
+  Future<void> refreshHomework() async {
+    if (isRefreshingHomework.value) return;
+    isRefreshingHomework.value = true;
+    try {
+      if (Get.isRegistered<Rx<Scholar>>(tag: 'scholar')) {
+        final scholar = Get.find<Rx<Scholar>>(tag: 'scholar');
+        await scholar.value.refresh();
+        scholar.refresh();
+        TodoTaskSync.syncFromScholar();
+      }
+      lastChangeIsHomeworkOnly.value = true;
+      updateDeadlineList();
+      taskList.refresh();
+    } catch (e) {
+      debugPrint('TaskController.refreshHomework error: $e');
+    } finally {
+      isRefreshingHomework.value = false;
     }
   }
 }

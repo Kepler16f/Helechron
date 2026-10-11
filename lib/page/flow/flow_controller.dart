@@ -5,6 +5,7 @@ import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/model/task.dart';
 import 'package:celechron/model/period.dart';
 import 'package:celechron/model/scholar.dart';
+import 'package:celechron/page/task/task_controller.dart';
 import 'package:celechron/utils/utils.dart';
 
 class FlowController extends GetxController {
@@ -40,6 +41,8 @@ class FlowController extends GetxController {
       _walkPending = true;
     });
 
+    _lastPlannedDeadlinesSig = _computeDeadlinesSig();
+
     super.onInit();
   }
 
@@ -69,13 +72,46 @@ class FlowController extends GetxController {
     flowListLastUpdate.value = _db.getFlowListUpdateTime();
   }
 
+  int _lastPlannedDeadlinesSig = 0;
+
+  int _computeDeadlinesSig() {
+    return Object.hashAll(taskList
+        .where((t) => t.type == TaskType.deadline)
+        .map((t) => Object.hash(
+              t.uid,
+              t.status,
+              t.timeSpent,
+              t.timeNeeded,
+              t.endTime,
+              t.summary,
+            )));
+  }
+
   bool isFlowListOutdated() {
     return flowListLastUpdate.value.isBefore(taskListLastUpdate.value);
+  }
+
+  bool isOutdatedDueToHomeworkOnly() {
+    if (!isFlowListOutdated()) return false;
+    if (Get.isRegistered<TaskController>()) {
+      if (Get.find<TaskController>().lastChangeIsHomeworkOnly.value) {
+        return true;
+      }
+    }
+    final sig = _computeDeadlinesSig();
+    if (_lastPlannedDeadlinesSig != 0 && sig == _lastPlannedDeadlinesSig) {
+      return true;
+    }
+    return false;
   }
 
   void updateDeadlineListTime() {
     flowListLastUpdate.value = taskListLastUpdate.value.copyWith();
     _db.setFlowListUpdateTime(flowListLastUpdate.value);
+    _lastPlannedDeadlinesSig = _computeDeadlinesSig();
+    if (Get.isRegistered<TaskController>()) {
+      Get.find<TaskController>().lastChangeIsHomeworkOnly.value = false;
+    }
   }
 
   void removeFlowInFlowList() {
