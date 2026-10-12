@@ -1072,7 +1072,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                     ),
                   ),
                   onPressed: () => _openAndRecord(info.livingroomUrl, '实时直播',
-                      courseId: info.courseId),
+                      courseId: info.courseId, subId: info.subId),
                 ),
               ),
               const SizedBox(width: 8),

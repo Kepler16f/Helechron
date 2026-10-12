@@ -11,6 +11,7 @@ import 'package:celechron/http/zjuServices/zjuam.dart';
 import 'package:celechron/http/zjuServices/network_defense.dart';
 import 'package:celechron/model/course.dart';
 import 'package:celechron/model/period.dart';
+import 'package:celechron/model/scholar.dart';
 
 /// 浙大智云课堂（Zhiyun Classroom）单节录播回放或课程房间详情
 class ZhiyunReplayInfo {
@@ -915,6 +916,8 @@ class ZhiyunService {
           final dKey =
               '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
           _knownSubIds['${courseId}_$dKey'] = subId;
+          _knownSubIds['${courseId}_${dKey}_${dt.hour}'] = subId;
+          _knownSubIds['${courseId}_${dKey}_${dt.hour}_${dt.minute}'] = subId;
         } else if (item['date'] != null) {
           final dateStr = item['date'].toString().split(' ').first;
           if (dateStr.isNotEmpty) {
@@ -1161,8 +1164,15 @@ class ZhiyunService {
 
   /// 注册/更新课节的 Zhiyun sub_id 映射
   static void registerSubIdMapping(
-      String courseId, String dateStr, String subId) {
+      String courseId, String dateStr, String subId,
+      {int? hour, int? minute}) {
     _knownSubIds['${courseId}_$dateStr'] = subId;
+    if (hour != null) {
+      _knownSubIds['${courseId}_${dateStr}_$hour'] = subId;
+      if (minute != null) {
+        _knownSubIds['${courseId}_${dateStr}_${hour}_$minute'] = subId;
+      }
+    }
   }
 
   /// 智能检测课程或特定课节当前是否正在智云课堂直播
@@ -1171,6 +1181,33 @@ class ZhiyunService {
     DateTime? targetDate,
     Period? period,
   }) {
+    final now = DateTime.now();
+
+    // 0. 时间合理性硬核防线：如果指定了 period，且当前时间完全不在该节课的时间窗口内，绝不是该节课直播
+    if (period != null) {
+      if (now.isBefore(
+              period.startTime.subtract(const Duration(minutes: 20))) ||
+          now.isAfter(period.endTime.add(const Duration(minutes: 20)))) {
+        return false;
+      }
+    }
+
+    // 若 item 包含明确的开始/结束时间戳，如果距离当前时间已经结束或尚未开始，亦排除
+    final startAt = int.tryParse(item?['start_at']?.toString() ?? '');
+    final endAt = int.tryParse(item?['end_at']?.toString() ?? '');
+    if (endAt != null && endAt > 0) {
+      final eDt = DateTime.fromMillisecondsSinceEpoch(endAt * 1000);
+      if (now.isAfter(eDt.add(const Duration(minutes: 30)))) {
+        return false;
+      }
+    }
+    if (startAt != null && startAt > 0) {
+      final sDt = DateTime.fromMillisecondsSinceEpoch(startAt * 1000);
+      if (now.isBefore(sDt.subtract(const Duration(minutes: 20)))) {
+        return false;
+      }
+    }
+
     // 1. 检查 item 中的状态标记
     if (item != null) {
       final statusLabel = item['status_label']?.toString() ?? '';
@@ -1198,7 +1235,6 @@ class ZhiyunService {
     }
 
     // 2. 时间维度辅助判断：如果当前正处于该节课的上课时间窗口内
-    final now = DateTime.now();
     if (period != null) {
       final start = period.startTime;
       final end = period.endTime;
@@ -1216,8 +1252,6 @@ class ZhiyunService {
       if (targetDate.year == now.year &&
           targetDate.month == now.month &&
           targetDate.day == now.day) {
-        final startAt = int.tryParse(item?['start_at']?.toString() ?? '');
-        final endAt = int.tryParse(item?['end_at']?.toString() ?? '');
         if (startAt != null && endAt != null && startAt > 0 && endAt > 0) {
           final sDt = DateTime.fromMillisecondsSinceEpoch(startAt * 1000);
           final eDt = DateTime.fromMillisecondsSinceEpoch(endAt * 1000);
@@ -1294,6 +1328,199 @@ class ZhiyunService {
     return false;
   }
 
+  /// 从课程目录项中提取时间
+  static DateTime? _extractCatalogueItemDateTime(
+      Map<String, dynamic> item, DateTime fallbackDate) {
+    final startAt = int.tryParse(item['start_at']?.toString() ?? '');
+    if (startAt != null && startAt > 0) {
+      return DateTime.fromMillisecondsSinceEpoch(startAt * 1000);
+    }
+    final dateVal = item['date']?.toString();
+    if (dateVal != null && dateVal.isNotEmpty) {
+      final parsed = DateTime.tryParse(dateVal);
+      if (parsed != null && (parsed.hour != 0 || parsed.minute != 0)) {
+        return parsed;
+      }
+    }
+    final title =
+        item['title']?.toString() ?? item['sub_title']?.toString() ?? '';
+    final timeMatch = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(title);
+    if (timeMatch != null) {
+      final h = int.parse(timeMatch.group(1)!);
+      final m = int.parse(timeMatch.group(2)!);
+      return DateTime(
+          fallbackDate.year, fallbackDate.month, fallbackDate.day, h, m);
+    }
+    return null;
+  }
+
+  /// 从智云课程目录中精准匹配目标日期及节次的单堂课记录
+  ///
+  /// 当一门课在同一天有多堂（如上午一堂、下午一堂）时：
+  /// 1. 优先在正在上课的时间窗口内校准正在直播中的节次；
+  /// 2. 优先通过上课时间（Period.startTime 与 item.start_at）的最小时间差精确匹配；
+  /// 3. 辅助结合节次安排（如第1-2节 vs 第6-7节）；
+  /// 4. 若时间信息缺失，结合课程当天排课次序与智云课表先后顺序对齐。
+  static Map<String, dynamic>? findBestMatchingCatalogueItem({
+    required List<Map<String, dynamic>> catalogue,
+    required DateTime targetDate,
+    Course? course,
+    Period? period,
+  }) {
+    if (catalogue.isEmpty) return null;
+
+    final dateKey =
+        '${targetDate.year}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}';
+    final shortDateKey = '${targetDate.month}月${targetDate.day}日';
+
+    // 1. 筛选出属于目标日期的所有候选课节
+    final sameDateItems = <Map<String, dynamic>>[];
+    for (final item in catalogue) {
+      final startAt = int.tryParse(item['start_at']?.toString() ?? '');
+      DateTime? itemDate;
+      if (startAt != null && startAt > 0) {
+        itemDate = DateTime.fromMillisecondsSinceEpoch(startAt * 1000);
+      } else if (item['date'] != null) {
+        itemDate = DateTime.tryParse(item['date'].toString());
+      }
+
+      final title =
+          item['title']?.toString() ?? item['sub_title']?.toString() ?? '';
+
+      final isSameDay = itemDate != null &&
+          itemDate.year == targetDate.year &&
+          itemDate.month == targetDate.month &&
+          itemDate.day == targetDate.day;
+
+      final containsDate =
+          title.contains(dateKey) || title.contains(shortDateKey);
+
+      if (isSameDay || containsDate) {
+        sameDateItems.add(item);
+      }
+    }
+
+    if (sameDateItems.isEmpty) return null;
+    if (sameDateItems.length == 1) return sameDateItems.first;
+
+    // 当同一天存在多节课时，按多维度智能判定最优匹配：
+    final now = DateTime.now();
+
+    // 策略 A（实时直播优先）：若当前正处于该节课的上课时间窗口内，优先匹配正在直播状态的节次
+    if (period != null) {
+      final isCurrentPeriodActive =
+          now.isAfter(period.startTime.subtract(const Duration(minutes: 15))) &&
+              now.isBefore(period.endTime.add(const Duration(minutes: 15)));
+      if (isCurrentPeriodActive) {
+        for (final item in sameDateItems) {
+          if (checkIsLive(item: item, period: period)) {
+            return item;
+          }
+        }
+      }
+    }
+
+    // 策略 B（绝对时间距离最接近匹配）：对比 Period.startTime 与 item.start_at / 标题中时间
+    if (period != null) {
+      Map<String, dynamic>? closestItem;
+      int minDiffMs = 1 << 62;
+
+      for (final item in sameDateItems) {
+        final itemStart = _extractCatalogueItemDateTime(item, targetDate);
+        if (itemStart != null) {
+          final dayItemTime = DateTime(
+            targetDate.year,
+            targetDate.month,
+            targetDate.day,
+            itemStart.hour,
+            itemStart.minute,
+          );
+          final diff =
+              (dayItemTime.difference(period.startTime)).abs().inMilliseconds;
+          if (diff < minDiffMs) {
+            minDiffMs = diff;
+            closestItem = item;
+          }
+        }
+      }
+
+      // 如果最接近的一项时间差在合理范围内（2小时内，通常同一天不同课节间隔至少2~3小时以上）
+      if (closestItem != null && minDiffMs <= 2 * 3600 * 1000) {
+        return closestItem;
+      }
+    }
+
+    // 策略 C（节次序号匹配）：从 Period 的描述中提取节次数字与智云标题对比
+    if (period != null) {
+      final periodSectionMatch =
+          RegExp(r'第?\s*(\d+)').firstMatch(period.description);
+      if (periodSectionMatch != null) {
+        final secNum = periodSectionMatch.group(1);
+        if (secNum != null) {
+          for (final item in sameDateItems) {
+            final title = item['title']?.toString() ??
+                item['sub_title']?.toString() ??
+                '';
+            if (title.contains('第$secNum') ||
+                title.contains('第 $secNum') ||
+                title.contains('$secNum节')) {
+              return item;
+            }
+          }
+        }
+      }
+    }
+
+    // 策略 D（当天节次排序对齐）：
+    // 若当天同一门课有多个 Period，按 startTime 排序，并与按时间排序后的智云 catalogue 对应
+    if (period != null) {
+      try {
+        if (Get.isRegistered<Rx<Scholar>>(tag: 'scholar')) {
+          final scholar = Get.find<Rx<Scholar>>(tag: 'scholar').value;
+          final todayPeriods = scholar.periods
+              .where((p) =>
+                  p.type == PeriodType.classes &&
+                  (p.fromUid == period.fromUid ||
+                      p.summary == period.summary ||
+                      (course != null &&
+                          (p.fromUid == course.id ||
+                              p.summary == course.name))) &&
+                  p.startTime.year == targetDate.year &&
+                  p.startTime.month == targetDate.month &&
+                  p.startTime.day == targetDate.day)
+              .toList()
+            ..sort((a, b) => a.startTime.compareTo(b.startTime));
+
+          final rank = todayPeriods.indexWhere(
+              (p) => p.startTime.isAtSameMomentAs(period.startTime));
+
+          if (rank >= 0) {
+            final sortedItems = List<Map<String, dynamic>>.from(sameDateItems);
+            sortedItems.sort((a, b) {
+              final aStart = int.tryParse(a['start_at']?.toString() ?? '') ?? 0;
+              final bStart = int.tryParse(b['start_at']?.toString() ?? '') ?? 0;
+              if (aStart != bStart) return aStart.compareTo(bStart);
+              final aId = int.tryParse(
+                      a['sub_id']?.toString() ?? a['id']?.toString() ?? '') ??
+                  0;
+              final bId = int.tryParse(
+                      b['sub_id']?.toString() ?? b['id']?.toString() ?? '') ??
+                  0;
+              return aId.compareTo(bId);
+            });
+
+            if (rank < sortedItems.length) {
+              return sortedItems[rank];
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 兜底返回第一个候选
+    return sameDateItems.first;
+  }
+
   /// 解析指定课程/节次的回放或直播信息。若为体育/素质课等非录播课程，返回 null（自动隐藏入口）
   static Future<ZhiyunReplayInfo?> getLessonReplay({
     required Course course,
@@ -1358,33 +1585,28 @@ class ZhiyunService {
             '${targetDate.year}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}';
         final shortDateKey = '${targetDate.month}月${targetDate.day}日';
 
-        // 尝试从目录匹配具体节次
-        Map<String, dynamic>? matchedItem;
-        for (final item in catalogue) {
-          final title =
-              item['title']?.toString() ?? item['sub_title']?.toString() ?? '';
-          final startAt = int.tryParse(item['start_at']?.toString() ?? '');
-          DateTime? itemDate;
-          if (startAt != null && startAt > 0) {
-            itemDate = DateTime.fromMillisecondsSinceEpoch(startAt * 1000);
-          } else if (item['date'] != null) {
-            itemDate = DateTime.tryParse(item['date'].toString());
-          }
-
-          if (title.contains(dateKey) ||
-              title.contains(shortDateKey) ||
-              (itemDate != null &&
-                  itemDate.year == targetDate.year &&
-                  itemDate.month == targetDate.month &&
-                  itemDate.day == targetDate.day)) {
-            matchedItem = item;
-            break;
-          }
-        }
+        // 尝试从目录精准匹配具体节次（支持同一天多堂课智能区分）
+        final matchedItem = findBestMatchingCatalogueItem(
+          catalogue: catalogue,
+          targetDate: targetDate,
+          course: course,
+          period: period,
+        );
 
         String? subId = matchedItem?['sub_id']?.toString() ??
-            matchedItem?['id']?.toString() ??
-            _knownSubIds['${courseId}_$dateKey'];
+            matchedItem?['id']?.toString();
+
+        if (subId == null || subId.isEmpty) {
+          if (period != null) {
+            final h = period.startTime.hour;
+            final m = period.startTime.minute;
+            subId = _knownSubIds['${courseId}_${dateKey}_${h}_$m'] ??
+                _knownSubIds['${courseId}_${dateKey}_$h'] ??
+                _knownSubIds['${courseId}_$dateKey'];
+          } else {
+            subId = _knownSubIds['${courseId}_$dateKey'];
+          }
+        }
 
         final isLive = checkIsLive(
           item: matchedItem,
@@ -1397,6 +1619,15 @@ class ZhiyunService {
         );
 
         if (subId != null && subId.isNotEmpty) {
+          if (period != null) {
+            registerSubIdMapping(
+              courseId,
+              dateKey,
+              subId,
+              hour: period.startTime.hour,
+              minute: period.startTime.minute,
+            );
+          }
           return ZhiyunReplayInfo(
             courseId: courseId,
             subId: subId,
@@ -1642,6 +1873,10 @@ class ZhiyunService {
                               final dKey =
                                   '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
                               _knownSubIds['${cid}_$dKey'] = subId;
+                              _knownSubIds['${cid}_${dKey}_${dt.hour}'] = subId;
+                              _knownSubIds[
+                                      '${cid}_${dKey}_${dt.hour}_${dt.minute}'] =
+                                  subId;
                             }
                           }
                         }
