@@ -9,6 +9,7 @@ import 'package:celechron/http/zjuServices/courses.dart';
 import 'package:celechron/http/zjuServices/network_defense.dart';
 import 'package:celechron/model/task.dart';
 import 'package:celechron/model/todo.dart';
+import 'package:celechron/page/flow/flow_controller.dart';
 import 'package:celechron/page/task/task_controller.dart';
 import 'package:celechron/services/ohos_native_service.dart';
 import 'package:celechron/services/todo_task_sync.dart';
@@ -325,30 +326,46 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
     final aid = _resolvedActivityId;
     if (aid == null) return;
 
+    bool hasChanged = false;
     if (Get.isRegistered<RxList<Task>>(tag: 'taskList')) {
       final taskList = Get.find<RxList<Task>>(tag: 'taskList');
       for (final t in taskList) {
         if (t.fromUid == 'courses-todo:$aid') {
-          if (submitted || score != null) {
-            t.status = TaskStatus.completed;
-          } else {
-            final now = DateTime.now();
-            t.status = t.endTime.isBefore(now)
-                ? TaskStatus.failed
-                : TaskStatus.running;
+          final oldStatus = t.status;
+          final targetStatus = (submitted || score != null)
+              ? TaskStatus.completed
+              : (t.endTime.isBefore(DateTime.now())
+                  ? TaskStatus.failed
+                  : TaskStatus.running);
+          if (oldStatus != targetStatus) {
+            t.status = targetStatus;
+            t.refreshStatus();
+            hasChanged = true;
           }
-          t.refreshStatus();
           break;
         }
       }
-      taskList.refresh();
+      if (hasChanged) {
+        taskList.refresh();
+      }
+    }
+
+    if (!hasChanged) {
+      // 状态并未发生变化（如仅是点开卡片查看），不触发任务更新，避免影响首页规划状态
+      return;
     }
 
     if (Get.isRegistered<TaskController>()) {
       final tc = Get.find<TaskController>();
-      tc.lastChangeIsHomeworkOnly.value = true;
       tc.updateDeadlineList();
-      tc.updateDeadlineListTime();
+      tc.saveDeadlineListToDb();
+    }
+
+    // 在作业提交界面内部产生的状态同步（用户主动提交/撤回），保持与 FlowController 的规划时间一致，
+    // 避免首页规划产生多余的“作业状态已变化”弹窗
+    if (Get.isRegistered<FlowController>()) {
+      final fc = Get.find<FlowController>();
+      fc.updateDeadlineListTime();
     }
   }
 
@@ -364,35 +381,20 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
             name.isNotEmpty &&
             bytes != null &&
             bytes.isNotEmpty) {
-          setState(() {
-            _selectedFileName = name;
-            _selectedFileSize = size ?? bytes.length;
-            _selectedFileBytes = bytes;
-          });
+          if (mounted) {
+            setState(() {
+              _selectedFileName = name;
+              _selectedFileSize = size ?? bytes.length;
+              _selectedFileBytes = bytes;
+            });
+          }
           return;
         }
       }
     } catch (e) {
       debugPrint('pickAttachment error: $e');
     }
-
-    if (!mounted) return;
-    showCupertinoDialog<void>(
-      context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('提示'),
-        content: const Padding(
-          padding: EdgeInsets.only(top: 8.0),
-          child: Text('未能从系统文件管理器选取文件，您也可以在下方留言框直接输入文字作业内容，或点击右上角在浏览器中提交。'),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('我知道了'),
-          ),
-        ],
-      ),
-    );
+    // 用户取消选取或未选择任何文件，保持静默，不弹提示
   }
 
   /// 提交作业流程

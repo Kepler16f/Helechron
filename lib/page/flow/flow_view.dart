@@ -50,11 +50,19 @@ class _FlowPageState extends State<FlowPage> {
     if (_isPromptingOutdated) return;
     if (!_flowController.isFlowListOutdated()) return;
 
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return;
+
     _isPromptingOutdated = true;
     final isHomework = _flowController.isOutdatedDueToHomeworkOnly();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
+        _isPromptingOutdated = false;
+        return;
+      }
+      final curRoute = ModalRoute.of(context);
+      if (curRoute != null && !curRoute.isCurrent) {
         _isPromptingOutdated = false;
         return;
       }
