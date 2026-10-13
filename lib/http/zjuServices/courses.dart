@@ -117,6 +117,283 @@ class Courses {
     }
   }
 
+  /// 查询指定课程活动详情（作业标题、富文本/HTML 说明要求、截止时间、附件等）
+  static Future<Map<String, dynamic>?> fetchActivityDetails(
+    HttpClient httpClient,
+    String activityId, {
+    Cookie? sessionCookie,
+  }) async {
+    if (activityId.isEmpty) return null;
+    final session = sessionCookie ?? cachedSession;
+    if (session == null) return null;
+
+    final uri =
+        Uri.parse('https://courses.zju.edu.cn/api/activities/$activityId');
+    try {
+      final request = await httpClient.getUrl(uri).timeout(
+            const Duration(seconds: 8),
+            onTimeout: () => throw requestTimeout(),
+          );
+      request.followRedirects = false;
+      request.cookies.add(session);
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+
+      final response = await request.close().timeout(
+            const Duration(seconds: 8),
+            onTimeout: () => throw requestTimeout(),
+          );
+      if (response.statusCode != HttpStatus.ok) {
+        return null;
+      }
+      final body = await readResponseBody(
+        response,
+        context: '学在浙大作业详情接口',
+      );
+      return decodeJsonMap(body, context: '学在浙大作业详情');
+    } catch (e) {
+      debugPrint('fetchActivityDetails error: $e');
+      return null;
+    }
+  }
+
+  /// 查询指定作业的提交记录（包含学生已上传文件、提交说明、得分及教师反馈）
+  static Future<Map<String, dynamic>?> fetchActivitySubmissions(
+    HttpClient httpClient,
+    String activityId, {
+    Cookie? sessionCookie,
+  }) async {
+    if (activityId.isEmpty) return null;
+    final session = sessionCookie ?? cachedSession;
+    if (session == null) return null;
+
+    final uri = Uri.parse(
+        'https://courses.zju.edu.cn/api/activities/$activityId/submissions');
+    try {
+      final request = await httpClient.getUrl(uri).timeout(
+            const Duration(seconds: 8),
+            onTimeout: () => throw requestTimeout(),
+          );
+      request.followRedirects = false;
+      request.cookies.add(session);
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+
+      final response = await request.close().timeout(
+            const Duration(seconds: 8),
+            onTimeout: () => throw requestTimeout(),
+          );
+      if (response.statusCode != HttpStatus.ok) {
+        return null;
+      }
+      final body = await readResponseBody(
+        response,
+        context: '学在浙大作业提交记录接口',
+      );
+      return decodeJsonMap(body, context: '学在浙大作业提交记录');
+    } catch (e) {
+      debugPrint('fetchActivitySubmissions error: $e');
+      return null;
+    }
+  }
+
+  /// 两阶段上传文件至学在浙大服务器（申请票据并流式上传文件二进制），返回 uploadId
+  static Future<int?> uploadSubmissionFile(
+    HttpClient httpClient, {
+    required String fileName,
+    required List<int> fileBytes,
+    Cookie? sessionCookie,
+  }) async {
+    final session = sessionCookie ?? cachedSession;
+    if (session == null) return null;
+
+    try {
+      final ticketUri = Uri.parse('https://courses.zju.edu.cn/api/uploads');
+      final ticketReq = await httpClient.postUrl(ticketUri).timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => throw requestTimeout(),
+          );
+      ticketReq.cookies.add(session);
+      ticketReq.headers
+          .set(HttpHeaders.contentTypeHeader, 'application/json;charset=utf-8');
+      ticketReq.write(jsonEncode({
+        'name': fileName,
+        'size': fileBytes.length,
+        'parent_type': 'submission_upload',
+        'parent_id': 0,
+      }));
+      final ticketResp = await ticketReq.close();
+      if (ticketResp.statusCode != HttpStatus.ok &&
+          ticketResp.statusCode != HttpStatus.created) {
+        debugPrint(
+            'uploadSubmissionFile: ticket failed with ${ticketResp.statusCode}');
+        return null;
+      }
+      final ticketBody =
+          await readResponseBody(ticketResp, context: '学在浙大上传凭据接口');
+      final ticketJson = decodeJsonMap(ticketBody, context: '学在浙大上传凭据');
+      final uploadId = (ticketJson['id'] as num?)?.toInt();
+      final uploadUrlStr = ticketJson['upload_url']?.toString();
+      if (uploadId == null) return null;
+
+      if (uploadUrlStr != null && uploadUrlStr.isNotEmpty) {
+        Uri uploadUri;
+        if (uploadUrlStr.startsWith('http://') ||
+            uploadUrlStr.startsWith('https://')) {
+          uploadUri = Uri.parse(uploadUrlStr);
+        } else {
+          uploadUri = Uri.parse('https://courses.zju.edu.cn$uploadUrlStr');
+        }
+
+        final boundary =
+            '----TronClassFormBoundary${DateTime.now().millisecondsSinceEpoch}';
+        final dataReq = await httpClient.postUrl(uploadUri).timeout(
+              const Duration(seconds: 30),
+              onTimeout: () => throw requestTimeout(),
+            );
+        dataReq.cookies.add(session);
+        dataReq.headers.set(HttpHeaders.contentTypeHeader,
+            'multipart/form-data; boundary=$boundary');
+
+        final header =
+            '--$boundary\r\nContent-Disposition: form-data; name="file"; filename="$fileName"\r\nContent-Type: application/octet-stream\r\n\r\n';
+        final footer = '\r\n--$boundary--\r\n';
+
+        dataReq.add(utf8.encode(header));
+        dataReq.add(fileBytes);
+        dataReq.add(utf8.encode(footer));
+
+        final dataResp = await dataReq.close().timeout(
+              const Duration(seconds: 30),
+              onTimeout: () => throw requestTimeout(),
+            );
+        if (dataResp.statusCode != HttpStatus.ok &&
+            dataResp.statusCode != HttpStatus.created &&
+            dataResp.statusCode != HttpStatus.noContent) {
+          debugPrint(
+              'uploadSubmissionFile: file stream failed with ${dataResp.statusCode}, trying PUT fallback');
+          final putReq = await httpClient.putUrl(uploadUri).timeout(
+                const Duration(seconds: 30),
+                onTimeout: () => throw requestTimeout(),
+              );
+          putReq.cookies.add(session);
+          putReq.headers
+              .set(HttpHeaders.contentTypeHeader, 'application/octet-stream');
+          putReq.add(fileBytes);
+          final putResp = await putReq.close();
+          if (putResp.statusCode != HttpStatus.ok &&
+              putResp.statusCode != HttpStatus.noContent) {
+            return null;
+          }
+        }
+      }
+
+      return uploadId;
+    } catch (e) {
+      debugPrint('uploadSubmissionFile error: $e');
+      return null;
+    }
+  }
+
+  /// 提交作业（指定活动 ID、已上传附件 ID 列表、留言与文本内容）
+  static Future<bool> submitHomework(
+    HttpClient httpClient, {
+    required String activityId,
+    required List<int> uploadIds,
+    String? comment,
+    String? content,
+    Cookie? sessionCookie,
+  }) async {
+    final session = sessionCookie ?? cachedSession;
+    if (session == null) return false;
+
+    final uri = Uri.parse(
+        'https://courses.zju.edu.cn/api/course/activities/$activityId/submissions');
+    try {
+      final request = await httpClient.postUrl(uri).timeout(
+            const Duration(seconds: 12),
+            onTimeout: () => throw requestTimeout(),
+          );
+      request.cookies.add(session);
+      request.headers
+          .set(HttpHeaders.contentTypeHeader, 'application/json;charset=utf-8');
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+
+      request.write(jsonEncode({
+        'uploads': uploadIds,
+        'comment': comment ?? '',
+        'is_draft': false,
+        'content': content ?? '',
+      }));
+
+      final response = await request.close().timeout(
+            const Duration(seconds: 12),
+            onTimeout: () => throw requestTimeout(),
+          );
+
+      if (response.statusCode == HttpStatus.ok ||
+          response.statusCode == HttpStatus.created ||
+          response.statusCode == HttpStatus.noContent) {
+        return true;
+      }
+      debugPrint(
+          'submitHomework failed with statusCode: ${response.statusCode}');
+      return false;
+    } catch (e) {
+      debugPrint('submitHomework error: $e');
+      return false;
+    }
+  }
+
+  /// 撤回作业提交
+  static Future<bool> retractHomework(
+    HttpClient httpClient, {
+    required String submissionId,
+    String? activityId,
+    Cookie? sessionCookie,
+  }) async {
+    final session = sessionCookie ?? cachedSession;
+    if (session == null) return false;
+
+    try {
+      final uri = Uri.parse(
+          'https://courses.zju.edu.cn/api/submissions/$submissionId/retract');
+      final request = await httpClient.putUrl(uri).timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => throw requestTimeout(),
+          );
+      request.cookies.add(session);
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+
+      final response = await request.close().timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => throw requestTimeout(),
+          );
+
+      if (response.statusCode == HttpStatus.ok ||
+          response.statusCode == HttpStatus.noContent) {
+        return true;
+      }
+
+      if (activityId != null && activityId.isNotEmpty) {
+        final altUri = Uri.parse(
+            'https://courses.zju.edu.cn/api/course/activities/$activityId/submissions/retract');
+        final altReq = await httpClient.putUrl(altUri).timeout(
+              const Duration(seconds: 10),
+              onTimeout: () => throw requestTimeout(),
+            );
+        altReq.cookies.add(session);
+        final altResp = await altReq.close();
+        if (altResp.statusCode == HttpStatus.ok ||
+            altResp.statusCode == HttpStatus.noContent) {
+          return true;
+        }
+      }
+      return false;
+    } catch (e) {
+      debugPrint('retractHomework error: $e');
+      return false;
+    }
+  }
+
   Future<void> _probeActivitiesCompleteness(
     HttpClient httpClient,
     Set<String> courseIds,
@@ -149,15 +426,19 @@ class Courses {
           final score = (subData?['score'] as num?)?.toDouble();
           final submittedAtStr = asString(subData?['submitted_at']);
           final submittedAt = DateTime.tryParse(submittedAtStr ?? '');
+          final isDraft = asBool(subData?['is_draft']) ?? false;
+
+          final isSubmitted =
+              (score != null) || (completeness == 'full' && !isDraft);
 
           for (final todo in todos) {
             if (todo.id == aid) {
               todo.completeness = completeness;
               todo.score = score;
-              todo.submittedAt = submittedAt;
+              todo.submittedAt = isSubmitted ? submittedAt : null;
               if (score != null) {
                 todo.submissionStatus = HomeworkSubmissionStatus.graded;
-              } else if (completeness == 'full') {
+              } else if (completeness == 'full' && !isDraft) {
                 todo.submissionStatus = HomeworkSubmissionStatus.submitted;
               } else {
                 todo.submissionStatus = HomeworkSubmissionStatus.unsubmitted;
@@ -169,7 +450,8 @@ class Courses {
             aid,
             completeness: completeness,
             score: score,
-            submittedAt: submittedAt,
+            submittedAt: isSubmitted ? submittedAt : null,
+            clearIfIncomplete: !isSubmitted,
           );
         }
       }

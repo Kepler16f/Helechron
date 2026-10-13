@@ -350,6 +350,31 @@ class OhosNativeService {
     }
   }
 
+  /// 打开系统文档选择器选择任意文件（作业提交附件用）。
+  /// 返回包含 {'name': String, 'size': int, 'bytes': Uint8List} 的 Map；
+  /// 用户取消、通道不可用或选择失败时返回 null。
+  Future<Map<String, dynamic>?> pickAnyFile() async {
+    try {
+      final result =
+          await _channel.invokeMethod<Map<Object, Object?>>('pickAnyFile');
+      if (result == null) return null;
+      final name = result['name']?.toString() ?? '';
+      final size = (result['size'] as num?)?.toInt() ?? 0;
+      final bytes = result['bytes'] as Uint8List?;
+      if (name.isNotEmpty && bytes != null) {
+        return {'name': name, 'size': size, 'bytes': bytes};
+      }
+      return null;
+    } on PlatformException catch (e) {
+      lastFilePickError = e.message ?? e.code;
+      debugPrint('pickAnyFile failed: $e');
+      return null;
+    } on MissingPluginException {
+      debugPrint('pickAnyFile: platform channel not available');
+      return null;
+    }
+  }
+
   // ==================== Widget Routes & Native Tab ====================
 
   static void Function(String target)? _widgetRouteHandler;

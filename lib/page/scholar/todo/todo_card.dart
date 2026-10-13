@@ -1,4 +1,5 @@
 import 'package:celechron/model/todo.dart';
+import 'package:celechron/page/task/homework_submission_page.dart';
 import 'package:celechron/services/todo_task_sync.dart';
 import 'package:celechron/utils/utils.dart';
 import 'package:flutter/cupertino.dart';
@@ -25,6 +26,30 @@ void showTodoSubmitSheet(BuildContext context, String url,
       title: Text(title ?? '学在浙大作业'),
       message: Text(url, maxLines: 2, overflow: TextOverflow.ellipsis),
       actions: [
+        if (aid != null)
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              Navigator.of(context, rootNavigator: true).push(
+                CupertinoPageRoute(
+                  builder: (context) => HomeworkSubmissionPage(
+                    activityId: aid,
+                    courseId: cid,
+                    title: title,
+                    submitUrl: url,
+                  ),
+                ),
+              );
+            },
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(CupertinoIcons.pencil_ellipsis_rectangle, size: 18),
+                SizedBox(width: 6),
+                Text('应用内查看与提交'),
+              ],
+            ),
+          ),
         if (cid != null && aid != null)
           CupertinoActionSheetAction(
             onPressed: () {
@@ -50,7 +75,7 @@ void showTodoSubmitSheet(BuildContext context, String url,
             Navigator.of(ctx).pop();
             launchUrlString(url, mode: LaunchMode.externalApplication);
           },
-          child: const Text('打开提交页面'),
+          child: const Text('打开网页提交页面'),
         ),
         CupertinoActionSheetAction(
           onPressed: () {
@@ -81,7 +106,12 @@ class TodoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => showTodoSubmitSheet(
+      onTap: () => Navigator.of(context, rootNavigator: true).push(
+        CupertinoPageRoute(
+          builder: (context) => HomeworkSubmissionPage(todo: todo),
+        ),
+      ),
+      onLongPress: () => showTodoSubmitSheet(
         context,
         todo.submitUrl,
         title: '${todo.course} · ${todo.name}',

@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:celechron/model/task.dart';
 import 'package:celechron/model/period.dart';
 import 'task_edit_page.dart';
+import 'homework_submission_page.dart';
 import 'package:celechron/page/scholar/todo/todo_card.dart';
 import 'package:celechron/services/todo_task_sync.dart';
 import 'dart:async';
@@ -42,9 +43,13 @@ class TaskPage extends StatelessWidget {
     }
     final recorded = aid != null ? TodoTaskSync.getHomeworkStatus(aid) : null;
     final score = (recorded?['score'] as num?)?.toDouble();
-    final isSubmitted = deadline.status == TaskStatus.completed ||
-        recorded?['completeness'] == 'full' ||
-        score != null;
+    final completeness = recorded?['completeness']?.toString();
+    final isExplicitlyIncomplete =
+        completeness != null && completeness != 'full' && score == null;
+    final isSubmitted = !isExplicitlyIncomplete &&
+        (deadline.status == TaskStatus.completed ||
+            completeness == 'full' ||
+            score != null);
     final isGraded = score != null;
     final isOverdue = !isSubmitted && deadline.endTime.isBefore(DateTime.now());
 
@@ -84,17 +89,11 @@ class TaskPage extends StatelessWidget {
       color: bg,
       borderRadius: BorderRadius.circular(8),
       onPressed: () {
-        final url = extractCoursesUrl(deadline.description);
-        if (url != null) {
-          showTodoSubmitSheet(
-            context,
-            url,
-            title: deadline.summary,
-            activityId: aid,
-          );
-        } else {
-          showCardDialog(context, deadline);
-        }
+        Navigator.of(context, rootNavigator: true).push(
+          CupertinoPageRoute(
+            builder: (context) => HomeworkSubmissionPage(task: deadline),
+          ),
+        );
       },
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -492,7 +491,12 @@ class TaskPage extends StatelessWidget {
           child: RoundRectangleCard(
             onTap: () async {
               if (deadline.type == TaskType.homework) {
-                await showCardDialog(context, deadline);
+                await Navigator.of(context, rootNavigator: true).push(
+                  CupertinoPageRoute(
+                    builder: (context) =>
+                        HomeworkSubmissionPage(task: deadline),
+                  ),
+                );
                 return;
               }
               // 直接导航到编辑页面
@@ -512,6 +516,11 @@ class TaskPage extends StatelessWidget {
                     now.year, now.month, now.day, now.hour, now.minute);
                 _flowController.generateNewFlowList(startsAt);
                 _taskController.taskList.refresh();
+              }
+            },
+            onLongPress: () async {
+              if (deadline.type == TaskType.homework) {
+                await showCardDialog(context, deadline);
               }
             },
             child: Padding(
@@ -611,10 +620,18 @@ class TaskPage extends StatelessWidget {
                             final recorded = aid != null
                                 ? TodoTaskSync.getHomeworkStatus(aid)
                                 : null;
-                            final isDone =
-                                deadline.status == TaskStatus.completed ||
-                                    recorded?['completeness'] == 'full' ||
-                                    recorded?['score'] != null;
+                            final completeness =
+                                recorded?['completeness']?.toString();
+                            final score =
+                                (recorded?['score'] as num?)?.toDouble();
+                            final isExplicitlyIncomplete =
+                                completeness != null &&
+                                    completeness != 'full' &&
+                                    score == null;
+                            final isDone = !isExplicitlyIncomplete &&
+                                (deadline.status == TaskStatus.completed ||
+                                    completeness == 'full' ||
+                                    score != null);
 
                             return CupertinoButton(
                               minSize: 0,
@@ -627,16 +644,12 @@ class TaskPage extends StatelessWidget {
                                       .withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(8),
                               onPressed: () {
-                                final url =
-                                    extractCoursesUrl(deadline.description);
-                                if (url != null) {
-                                  showTodoSubmitSheet(
-                                    context,
-                                    url,
-                                    title: deadline.summary,
-                                    activityId: aid,
-                                  );
-                                }
+                                Navigator.of(context, rootNavigator: true).push(
+                                  CupertinoPageRoute(
+                                    builder: (context) =>
+                                        HomeworkSubmissionPage(task: deadline),
+                                  ),
+                                );
                               },
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,

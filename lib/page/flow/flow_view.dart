@@ -15,11 +15,105 @@ import 'package:celechron/design/round_rectangle_card.dart';
 import 'package:celechron/page/scholar/course_detail/course_detail_view.dart';
 import 'flow_controller.dart';
 
-class FlowPage extends StatelessWidget {
-  FlowPage({super.key});
+class FlowPage extends StatefulWidget {
+  const FlowPage({super.key});
 
+  @override
+  State<FlowPage> createState() => _FlowPageState();
+}
+
+class _FlowPageState extends State<FlowPage> {
   final _flowController = Get.put(FlowController());
   final db = Get.find<DatabaseHelper>(tag: 'db');
+  bool _isPromptingOutdated = false;
+  Worker? _taskListWorker;
+
+  @override
+  void initState() {
+    super.initState();
+    _taskListWorker = ever(_flowController.taskListLastUpdate, (_) {
+      _checkAndPromptOutdated();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAndPromptOutdated();
+    });
+  }
+
+  @override
+  void dispose() {
+    _taskListWorker?.dispose();
+    super.dispose();
+  }
+
+  void _checkAndPromptOutdated() {
+    if (!mounted) return;
+    if (_isPromptingOutdated) return;
+    if (!_flowController.isFlowListOutdated()) return;
+
+    _isPromptingOutdated = true;
+    final isHomework = _flowController.isOutdatedDueToHomeworkOnly();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        _isPromptingOutdated = false;
+        return;
+      }
+      showCupertinoDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogCtx) => CupertinoAlertDialog(
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                isHomework
+                    ? CupertinoIcons.book_fill
+                    : CupertinoIcons.exclamationmark_triangle_fill,
+                size: 20,
+                color: isHomework
+                    ? CupertinoColors.activeBlue
+                    : CupertinoColors.systemOrange,
+              ),
+              const SizedBox(width: 6),
+              Text(isHomework ? '作业状态已变化' : '规划方案已过期'),
+            ],
+          ),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Text(
+              isHomework
+                  ? '检测到作业状态已更新，当前规划方案可能需要同步或确认。'
+                  : '任务列表已发生变更，原有的时间规划方案已过期，是否立即重新规划？',
+            ),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              child: const Text('忽略'),
+              onPressed: () {
+                Navigator.of(dialogCtx).pop();
+                _flowController.updateDeadlineListTime();
+              },
+            ),
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              child: Text(isHomework ? '知道了' : '重新规划'),
+              onPressed: () async {
+                Navigator.of(dialogCtx).pop();
+                if (isHomework) {
+                  _flowController.updateDeadlineListTime();
+                } else {
+                  await newFlowList(context);
+                  _flowController.flowList.refresh();
+                }
+              },
+            ),
+          ],
+        ),
+      ).then((_) {
+        _isPromptingOutdated = false;
+      });
+    });
+  }
 
   Widget createFirst(context, Period period, String? title) {
     Color themeColor =
@@ -582,6 +676,9 @@ class FlowPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAndPromptOutdated();
+    });
     return CupertinoPageScaffold(
       child: SafeArea(
         bottom: false,
@@ -610,47 +707,8 @@ class FlowPage extends StatelessWidget {
                 ],
               ),
             ),
-            SliverToBoxAdapter(
-              child: Obx(() {
-                if (_flowController.isFlowListOutdated()) {
-                  final isHomework =
-                      _flowController.isOutdatedDueToHomeworkOnly();
-                  return MaterialBanner(
-                    backgroundColor: CupertinoDynamicColor.resolve(
-                        CupertinoColors.secondarySystemBackground, context),
-                    dividerColor: Colors.transparent,
-                    content: Text(isHomework ? '作业状态已变化' : '规划方案已过期'),
-                    contentTextStyle: TextStyle(
-                      fontSize: 16,
-                      color:
-                          CupertinoTheme.of(context).textTheme.textStyle.color!,
-                    ),
-                    leading: Icon(isHomework
-                        ? CupertinoIcons.book_fill
-                        : CupertinoIcons.exclamationmark_triangle),
-                    actions: [
-                      CupertinoButton(
-                        child: const Text('忽略'),
-                        onPressed: () {
-                          _flowController.updateDeadlineListTime();
-                        },
-                      ),
-                      CupertinoButton(
-                        onPressed: () async {
-                          if (isHomework) {
-                            _flowController.updateDeadlineListTime();
-                          } else {
-                            await newFlowList(context);
-                            _flowController.flowList.refresh();
-                          }
-                        },
-                        child: Text(isHomework ? '知道了' : '重新规划'),
-                      ),
-                    ],
-                  );
-                }
-                return const SizedBox();
-              }),
+            const SliverToBoxAdapter(
+              child: SizedBox(height: 0),
             ),
             Obx(
               () {

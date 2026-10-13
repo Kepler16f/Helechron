@@ -71,6 +71,7 @@ class TodoTaskSync {
     String? completeness,
     double? score,
     DateTime? submittedAt,
+    bool clearIfIncomplete = false,
   }) {
     if (activityId.isEmpty) return;
     try {
@@ -79,14 +80,30 @@ class TodoTaskSync {
         final map = _getStatusMap();
         final existing =
             (map[activityId] as Map?)?.cast<String, dynamic>() ?? {};
-        if (completeness != null && completeness.isNotEmpty) {
-          existing['completeness'] = completeness;
-        }
-        if (score != null) {
-          existing['score'] = score;
-        }
-        if (submittedAt != null) {
-          existing['submitted_at'] = submittedAt.toIso8601String();
+
+        final isComplete = completeness == 'full' || score != null;
+        if (!isComplete && clearIfIncomplete) {
+          existing['completeness'] = completeness ?? 'incomplete';
+          existing.remove('score');
+          existing.remove('submitted_at');
+        } else {
+          if (completeness != null && completeness.isNotEmpty) {
+            existing['completeness'] = completeness;
+            if (completeness != 'full' && score == null) {
+              existing.remove('score');
+              existing.remove('submitted_at');
+            }
+          }
+          if (score != null) {
+            existing['score'] = score;
+          } else if (completeness != 'full') {
+            existing.remove('score');
+          }
+          if (submittedAt != null) {
+            existing['submitted_at'] = submittedAt.toIso8601String();
+          } else if (completeness != 'full') {
+            existing.remove('submitted_at');
+          }
         }
         existing['updated_at'] = DateTime.now().toIso8601String();
         map[activityId] = existing;
@@ -94,6 +111,21 @@ class TodoTaskSync {
       }
     } catch (e) {
       debugPrint('TodoTaskSync.recordHomeworkStatus error: $e');
+    }
+  }
+
+  /// 清除指定作业的持久化提交状态（如撤回提交时使用）
+  static void clearHomeworkStatus(String activityId) {
+    if (activityId.isEmpty) return;
+    try {
+      if (Hive.isBoxOpen('dbOptions')) {
+        final box = Hive.box('dbOptions');
+        final map = _getStatusMap();
+        map.remove(activityId);
+        box.put(kHomeworkStatusMapKey, jsonEncode(map));
+      }
+    } catch (e) {
+      debugPrint('TodoTaskSync.clearHomeworkStatus error: $e');
     }
   }
 
@@ -178,9 +210,19 @@ class TodoTaskSync {
           existingTask.description = expectedDescription;
           hasChanged = true;
         }
-        if (isSubmitted && existingTask.status != TaskStatus.completed) {
-          existingTask.status = TaskStatus.completed;
-          modified = true;
+        if (isSubmitted) {
+          if (existingTask.status != TaskStatus.completed) {
+            existingTask.status = TaskStatus.completed;
+            modified = true;
+          }
+        } else {
+          // 撤回或未提交：若此前被标记为 completed，需恢复为 running 或 failed (若已过期)
+          if (existingTask.status == TaskStatus.completed) {
+            existingTask.status = existingTask.endTime.isBefore(now)
+                ? TaskStatus.failed
+                : TaskStatus.running;
+            modified = true;
+          }
         }
         if (modified) {
           existingTask.refreshStatus();
@@ -323,12 +365,17 @@ class TodoTaskSync {
       final score = (subData?['score'] as num?)?.toDouble();
       final submittedAtStr = asString(subData?['submitted_at']);
       final submittedAt = DateTime.tryParse(submittedAtStr ?? '');
+      final isDraft = asBool(subData?['is_draft']) ?? false;
+
+      final isSubmitted =
+          (score != null) || (completeness == 'full' && !isDraft);
 
       recordHomeworkStatus(
         activityId,
         completeness: completeness,
         score: score,
-        submittedAt: submittedAt,
+        submittedAt: isSubmitted ? submittedAt : null,
+        clearIfIncomplete: !isSubmitted,
       );
 
       // 实时更新任务列表中对应的作业状态
@@ -336,9 +383,14 @@ class TodoTaskSync {
         final taskList = Get.find<RxList<Task>>(tag: 'taskList');
         for (final task in taskList) {
           if (task.fromUid == '$_todoPrefix$activityId') {
-            if (completeness == 'full' || score != null) {
+            if (isSubmitted) {
               task.status = TaskStatus.completed;
+            } else {
+              task.status = task.endTime.isBefore(DateTime.now())
+                  ? TaskStatus.failed
+                  : TaskStatus.running;
             }
+            task.refreshStatus();
             break;
           }
         }

@@ -304,6 +304,56 @@ export default class EntryAbility extends FlutterAbility {
     }
   }
 
+  /// 打开系统文档选择器选择任意文件（作业提交附件用）。
+  /// 返回文件名、大小与文件二进制字节数组，支持各类作业附件。
+  private async pickAnyFile(result: MethodResult): Promise<void> {
+    try {
+      const documentSelectOptions = new picker.DocumentSelectOptions();
+      documentSelectOptions.maxSelectNumber = 1;
+      const documentPicker = new picker.DocumentViewPicker();
+      const uris: Array<string> = await documentPicker.select(documentSelectOptions);
+      if (uris.length === 0) {
+        result.success(null);
+        return;
+      }
+      const uri = uris[0];
+      const file = await fileIo.open(uri, fileIo.OpenMode.READ_ONLY);
+      try {
+        const stat = await fileIo.stat(file.fd);
+        const maxBytes = 100 * 1024 * 1024;
+        if (stat.size <= 0 || stat.size > maxBytes) {
+          hilog.warn(DOMAIN, TAG, `pickAnyFile: invalid file size ${stat.size}`);
+          result.error('PICK_FILE_ERROR', '文件为空或超过 100MB，无法选择', null);
+          return;
+        }
+        const buffer = new ArrayBuffer(stat.size);
+        await fileIo.read(file.fd, buffer);
+        let name = uri;
+        const slashIndex = uri.lastIndexOf('/');
+        if (slashIndex >= 0) {
+          name = uri.substring(slashIndex + 1);
+        }
+        try {
+          name = decodeURIComponent(name);
+        } catch (e) {
+          // ignore
+        }
+        hilog.info(DOMAIN, TAG, `pickAnyFile: picked ${name}, ${stat.size} bytes`);
+        const pickedMap: Record<string, Object> = {
+          'name': name,
+          'size': stat.size,
+          'bytes': new Uint8Array(buffer),
+        };
+        result.success(pickedMap);
+      } finally {
+        await fileIo.close(file);
+      }
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, `pickAnyFile failed: ${JSON.stringify(err)}`);
+      result.error('PICK_FILE_ERROR', JSON.stringify(err), null);
+    }
+  }
+
   private handleMethodCall(call: MethodCall, result: MethodResult): void {
     hilog.info(DOMAIN, TAG, `Received method call: ${call.method}`);
     switch (call.method) {
@@ -369,6 +419,9 @@ export default class EntryAbility extends FlutterAbility {
         break;
       case 'pickTextFile':
         this.pickTextFile(result);
+        break;
+      case 'pickAnyFile':
+        this.pickAnyFile(result);
         break;
       case 'exitApp':
         hilog.info(DOMAIN, TAG, 'exitApp requested from Dart');

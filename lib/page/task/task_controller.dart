@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:hive/hive.dart';
 import 'package:celechron/database/database_helper.dart';
+import 'package:celechron/http/zjuServices/courses.dart';
+import 'package:celechron/http/zjuServices/network_defense.dart';
 import 'package:celechron/model/option.dart';
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/model/task.dart';
@@ -285,6 +288,28 @@ class TaskController extends GetxController {
     if (isRefreshingHomework.value) return;
     isRefreshingHomework.value = true;
     try {
+      // 优先通过 Courses 直接高频探测作业列表与最新提交/撤回状态
+      try {
+        if (Courses.cachedSession != null) {
+          final client = HttpClient()
+            ..connectionTimeout = const Duration(seconds: 8);
+          applyZjuNetworkDefense(client,
+              connectionTimeout: const Duration(seconds: 8));
+          final courses = Courses()..db = _db;
+          final result = await courses.getTodo(client);
+          client.close(force: true);
+          if (result.item2.isNotEmpty) {
+            TodoTaskSync.sync(result.item2);
+            if (Get.isRegistered<Rx<Scholar>>(tag: 'scholar')) {
+              Get.find<Rx<Scholar>>(tag: 'scholar').value.todos = result.item2;
+              Get.find<Rx<Scholar>>(tag: 'scholar').refresh();
+            }
+          }
+        }
+      } catch (fastError) {
+        debugPrint('Direct courses refresh error: $fastError');
+      }
+
       if (Get.isRegistered<Rx<Scholar>>(tag: 'scholar')) {
         final scholar = Get.find<Rx<Scholar>>(tag: 'scholar');
         await scholar.value.refresh();

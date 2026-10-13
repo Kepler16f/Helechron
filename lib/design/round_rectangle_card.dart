@@ -5,6 +5,7 @@ import 'package:flutter/cupertino.dart';
 class RoundRectangleCard extends StatefulWidget {
   final Widget child;
   final Function()? onTap;
+  final Function()? onLongPress;
   final bool animate;
   final List<BoxShadow> boxShadow;
   final EdgeInsets padding;
@@ -13,6 +14,7 @@ class RoundRectangleCard extends StatefulWidget {
     super.key,
     required this.child,
     this.onTap,
+    this.onLongPress,
     this.animate = true,
     this.padding = const EdgeInsets.all(12),
     this.boxShadow = const [
@@ -94,6 +96,12 @@ class _RoundRectangleCardState extends State<RoundRectangleCard>
         child: widget.child);
     return widget.animate
         ? GestureDetector(
+            onLongPress: widget.onLongPress != null
+                ? () {
+                    _animationController.reverse();
+                    widget.onLongPress?.call();
+                  }
+                : null,
             onTapDown: (_) async {
               isDown = true;
               isCancel = false;
@@ -115,7 +123,11 @@ class _RoundRectangleCardState extends State<RoundRectangleCard>
             onTapCancel: () async => _animationController.reverse(),
             child: ScaleTransition(scale: _scaleAnimation, child: core),
           )
-        : GestureDetector(onTap: widget.onTap, child: core);
+        : GestureDetector(
+            onTap: widget.onTap,
+            onLongPress: widget.onLongPress,
+            child: core,
+          );
   }
 }
 
@@ -124,6 +136,7 @@ class RoundRectangleCardWithForehead extends StatelessWidget {
   final Widget forehead;
   final Color foreheadColor;
   final Function()? onTap;
+  final Function()? onLongPress;
   final bool animate;
 
   const RoundRectangleCardWithForehead({
@@ -132,6 +145,7 @@ class RoundRectangleCardWithForehead extends StatelessWidget {
     required this.forehead,
     this.foreheadColor = CupertinoColors.systemFill,
     this.onTap,
+    this.onLongPress,
     this.animate = true,
   });
 
@@ -156,6 +170,7 @@ class RoundRectangleCardWithForehead extends StatelessWidget {
               forehead,
               RoundRectangleCard(
                 onTap: onTap,
+                onLongPress: onLongPress,
                 animate: animate,
                 boxShadow: const [],
                 child: child,
