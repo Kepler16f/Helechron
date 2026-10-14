@@ -1,7 +1,12 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show SelectableText;
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:hive/hive.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 import 'package:celechron/design/round_rectangle_card.dart';
@@ -13,6 +18,7 @@ import 'package:celechron/page/flow/flow_controller.dart';
 import 'package:celechron/page/task/task_controller.dart';
 import 'package:celechron/services/ohos_native_service.dart';
 import 'package:celechron/services/todo_task_sync.dart';
+import 'package:celechron/utils/json_utils.dart';
 
 /// 内置学在浙大作业详情、附件浏览、文件提交与撤回管理页面。
 class HomeworkSubmissionPage extends StatefulWidget {
@@ -59,12 +65,11 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
   List<Map<String, dynamic>> _studentUploads = [];
   String? _teacherComment;
 
-  // 待提交的本地文件与留言
-  String? _selectedFileName;
-  int? _selectedFileSize;
-  Uint8List? _selectedFileBytes;
+  // 待提交的本地附件列表与留言
+  final List<Map<String, dynamic>> _selectedAttachments = [];
   final TextEditingController _commentController = TextEditingController();
   bool _isSubmitting = false;
+  String? _submittingStatusText;
 
   @override
   void initState() {
@@ -111,12 +116,40 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
         widget.todo!.resolvedCourseId.isNotEmpty) {
       _resolvedCourseId = widget.todo!.resolvedCourseId;
     } else {
-      final match = RegExp(r'/course/(\d+)/learning-activity#/(\d+)')
+      final match = RegExp(r'/course[s]?/(\d+)/[^\d]*(\d+)')
           .firstMatch(_resolvedSubmitUrl);
       if (match != null) {
         _resolvedCourseId = match.group(1);
         _resolvedActivityId ??= match.group(2);
       }
+    }
+
+    // 若依然未能解析出 courseId，尝试从持久化缓存的 courses_todo 匹配
+    if ((_resolvedCourseId == null || _resolvedCourseId!.isEmpty) &&
+        _resolvedActivityId != null) {
+      try {
+        if (Hive.isBoxOpen('dbOriginalWebPage')) {
+          final box = Hive.box('dbOriginalWebPage');
+          final cached = box.get('courses_todo');
+          if (cached is String && cached.isNotEmpty) {
+            final decoded = jsonDecode(cached);
+            final list =
+                asDynamicList(decoded is Map ? decoded['todo_list'] : null);
+            if (list != null) {
+              for (final item in list) {
+                final m = asStringMap(item);
+                if (m != null && m['id']?.toString() == _resolvedActivityId) {
+                  final cid = m['course_id']?.toString();
+                  if (cid != null && cid.isNotEmpty) {
+                    _resolvedCourseId = cid;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (_) {}
     }
 
     // 标题、课程名、截止时间
@@ -175,8 +208,12 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
         connectionTimeout: const Duration(seconds: 10));
 
     try {
-      // 1. 获取作业活动详情
-      final details = await Courses.fetchActivityDetails(client, aid);
+      // 1. 获取作业活动详情（兼容 TronClass 多租户与多路由）
+      final details = await Courses.fetchActivityDetails(
+        client,
+        aid,
+        courseId: _resolvedCourseId,
+      );
       if (details != null) {
         _activityDetails = details;
         if (details['title'] != null &&
@@ -187,13 +224,7 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
         if (rawEndTime != null && rawEndTime.isNotEmpty) {
           _resolvedEndTime = DateTime.tryParse(rawEndTime) ?? _resolvedEndTime;
         }
-        final rawUploads = details['uploads'];
-        if (rawUploads is List) {
-          _teacherUploads = rawUploads
-              .whereType<Map>()
-              .map((e) => Map<String, dynamic>.from(e))
-              .toList();
-        }
+        _teacherUploads = Courses.extractUploads(details);
         if (details['allow_retract'] is bool) {
           _allowRetract = details['allow_retract'] as bool;
         }
@@ -369,38 +400,44 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
     }
   }
 
-  /// 选择本地文件作为附件
-  Future<void> _pickAttachment() async {
+  /// 选择本地文件作为附件（支持单选或一次多选，支持追加）
+  Future<void> _pickAttachments() async {
     try {
-      final picked = await OhosNativeService.instance.pickAnyFile();
-      if (picked != null) {
-        final name = picked['name'] as String?;
-        final size = picked['size'] as int?;
-        final bytes = picked['bytes'] as Uint8List?;
-        if (name != null &&
-            name.isNotEmpty &&
-            bytes != null &&
-            bytes.isNotEmpty) {
-          if (mounted) {
-            setState(() {
-              _selectedFileName = name;
-              _selectedFileSize = size ?? bytes.length;
-              _selectedFileBytes = bytes;
-            });
-          }
-          return;
+      final pickedList =
+          await OhosNativeService.instance.pickAnyFiles(maxCount: 10);
+      if (pickedList.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            for (final item in pickedList) {
+              final name = item['name'] as String;
+              final size = item['size'] as int;
+              final alreadyAdded = _selectedAttachments
+                  .any((a) => a['name'] == name && a['size'] == size);
+              if (!alreadyAdded) {
+                _selectedAttachments.add(item);
+              }
+            }
+          });
         }
+        return;
       }
     } catch (e) {
-      debugPrint('pickAttachment error: $e');
+      debugPrint('pickAttachments error: $e');
     }
-    // 用户取消选取或未选择任何文件，保持静默，不弹提示
+  }
+
+  void _removeAttachment(int index) {
+    if (index >= 0 && index < _selectedAttachments.length) {
+      setState(() {
+        _selectedAttachments.removeAt(index);
+      });
+    }
   }
 
   /// 提交作业流程
   Future<void> _submitHomework() async {
     final comment = _commentController.text.trim();
-    if (_selectedFileBytes == null && comment.isEmpty) {
+    if (_selectedAttachments.isEmpty && comment.isEmpty) {
       showCupertinoDialog<void>(
         context: context,
         builder: (ctx) => CupertinoAlertDialog(
@@ -420,6 +457,15 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
       return;
     }
 
+    String confirmFileList = '';
+    if (_selectedAttachments.isNotEmpty) {
+      final listStr = _selectedAttachments
+          .map((f) => '• ${f['name']} (${_formatFileSize(f['size'] as int)})')
+          .join('\n');
+      confirmFileList =
+          '待上传附件 (${_selectedAttachments.length} 个)：\n$listStr\n\n';
+    }
+
     final confirmed = await showCupertinoDialog<bool>(
       context: context,
       builder: (ctx) => CupertinoAlertDialog(
@@ -427,8 +473,8 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
         content: Padding(
           padding: const EdgeInsets.only(top: 8.0),
           child: Text(
-            '确定要向学在浙大提交此项作业吗？\n'
-            '${_selectedFileName != null ? "附件：$_selectedFileName\n" : ""}'
+            '确定要向学在浙大提交此项作业吗？\n\n'
+            '$confirmFileList'
             '提交后将自动同步任务完成状态。',
           ),
         ),
@@ -448,34 +494,57 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
 
     if (confirmed != true) return;
 
-    setState(() => _isSubmitting = true);
+    setState(() {
+      _isSubmitting = true;
+      _submittingStatusText = '准备提交...';
+    });
 
     final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 30);
+      ..connectionTimeout = const Duration(seconds: 40);
     applyZjuNetworkDefense(client,
-        connectionTimeout: const Duration(seconds: 30));
+        connectionTimeout: const Duration(seconds: 40));
 
     try {
       final uploadIds = <int>[];
 
-      // 若有选择本地文件，执行上传
-      if (_selectedFileName != null && _selectedFileBytes != null) {
+      // 逐一上传所有选择的本地附件
+      for (int i = 0; i < _selectedAttachments.length; i++) {
+        final file = _selectedAttachments[i];
+        final name = file['name'] as String;
+        final bytes = file['bytes'] as Uint8List;
+
+        if (mounted) {
+          setState(() {
+            _submittingStatusText =
+                '正在上传 (${i + 1}/${_selectedAttachments.length}): $name';
+          });
+        }
+
         final uploadId = await Courses.uploadSubmissionFile(
           client,
-          fileName: _selectedFileName!,
-          fileBytes: _selectedFileBytes!,
+          fileName: name,
+          fileBytes: bytes,
+          activityId: _resolvedActivityId,
+          courseId: _resolvedCourseId,
         );
         if (uploadId != null) {
           uploadIds.add(uploadId);
         } else {
-          throw Exception('文件上传至学在浙大失败，请检查网络或在网页端提交');
+          throw Exception('附件 "$name" 上传至学在浙大失败，请检查网络或在网页端提交');
         }
+      }
+
+      if (mounted) {
+        setState(() {
+          _submittingStatusText = '正在向学在浙大提交作业...';
+        });
       }
 
       // 执行提交请求
       final success = await Courses.submitHomework(
         client,
         activityId: _resolvedActivityId!,
+        courseId: _resolvedCourseId,
         uploadIds: uploadIds,
         comment: comment,
       );
@@ -485,9 +554,8 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
       if (success) {
         setState(() {
           _isSubmitting = false;
-          _selectedFileName = null;
-          _selectedFileSize = null;
-          _selectedFileBytes = null;
+          _submittingStatusText = null;
+          _selectedAttachments.clear();
           _commentController.clear();
         });
 
@@ -519,7 +587,10 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
     } catch (e) {
       client.close(force: true);
       if (mounted) {
-        setState(() => _isSubmitting = false);
+        setState(() {
+          _isSubmitting = false;
+          _submittingStatusText = null;
+        });
         showCupertinoDialog<void>(
           context: context,
           builder: (ctx) => CupertinoAlertDialog(
@@ -653,18 +724,113 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
-  String _cleanHtml(String html) {
-    return html
-        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
-        .replaceAll(RegExp(r'</p>', caseSensitive: false), '\n\n')
-        .replaceAll(RegExp(r'</div>', caseSensitive: false), '\n')
-        .replaceAll(RegExp(r'<[^>]*>'), '')
+  static String _decodeHtmlEntities(String text) {
+    var result = text
         .replaceAll('&nbsp;', ' ')
         .replaceAll('&amp;', '&')
         .replaceAll('&lt;', '<')
         .replaceAll('&gt;', '>')
         .replaceAll('&quot;', '"')
-        .trim();
+        .replaceAll('&#39;', "'")
+        .replaceAll('&apos;', "'");
+
+    result = result.replaceAllMapped(RegExp(r'&#(\d+);'), (match) {
+      final code = int.tryParse(match.group(1)!);
+      if (code != null) {
+        try {
+          return String.fromCharCode(code);
+        } catch (_) {}
+      }
+      return match.group(0)!;
+    });
+
+    result = result.replaceAllMapped(RegExp(r'&#x([0-9a-fA-F]+);'), (match) {
+      final code = int.tryParse(match.group(1)!, radix: 16);
+      if (code != null) {
+        try {
+          return String.fromCharCode(code);
+        } catch (_) {}
+      }
+      return match.group(0)!;
+    });
+
+    return result;
+  }
+
+  static String _cleanHtmlText(String html) {
+    var text = html
+        .replaceAll(
+            RegExp(r'<style\b[^>]*>[\s\S]*?<\/style>', caseSensitive: false),
+            '')
+        .replaceAll(
+            RegExp(r'<script\b[^>]*>[\s\S]*?<\/script>', caseSensitive: false),
+            '')
+        .replaceAll(RegExp(r'<!--[\s\S]*?-->'), '')
+        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'</p>', caseSensitive: false), '\n\n')
+        .replaceAll(RegExp(r'</div>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'</tr>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'</td>', caseSensitive: false), '  ')
+        .replaceAll(RegExp(r'</li>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'<li>', caseSensitive: false), '• ')
+        .replaceAll(RegExp(r'</h[1-6]>', caseSensitive: false), '\n\n')
+        .replaceAll(RegExp(r'<[^>]*>'), '');
+
+    text = _decodeHtmlEntities(text);
+    text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    return text.trim();
+  }
+
+  static List<_DescriptionSegment> _parseDescriptionSegments(String rawHtml) {
+    if (rawHtml.trim().isEmpty) return [];
+
+    final segments = <_DescriptionSegment>[];
+    final imgRegex = RegExp(r'<img\b([^>]*)>', caseSensitive: false);
+    final srcRegex =
+        RegExp(r'''src\s*=\s*["']([^"']+)["']''', caseSensitive: false);
+    final unquotedSrcRegex =
+        RegExp(r'''src\s*=\s*([^\s>]+)''', caseSensitive: false);
+    final altRegex =
+        RegExp(r'''alt\s*=\s*["']([^"']*)["']''', caseSensitive: false);
+
+    int lastIndex = 0;
+    for (final match in imgRegex.allMatches(rawHtml)) {
+      if (match.start > lastIndex) {
+        final precedingText =
+            _cleanHtmlText(rawHtml.substring(lastIndex, match.start));
+        if (precedingText.isNotEmpty) {
+          segments.add(_TextDescriptionSegment(precedingText));
+        }
+      }
+
+      final attrs = match.group(1) ?? '';
+      final srcMatch =
+          srcRegex.firstMatch(attrs) ?? unquotedSrcRegex.firstMatch(attrs);
+      if (srcMatch != null) {
+        var src = srcMatch.group(1)!.trim();
+        if ((src.startsWith('"') && src.endsWith('"')) ||
+            (src.startsWith("'") && src.endsWith("'"))) {
+          src = src.substring(1, src.length - 1).trim();
+        }
+        final altMatch = altRegex.firstMatch(attrs);
+        final alt = altMatch?.group(1)?.trim();
+
+        if (src.isNotEmpty) {
+          segments.add(_ImageDescriptionSegment(src: src, alt: alt));
+        }
+      }
+
+      lastIndex = match.end;
+    }
+
+    if (lastIndex < rawHtml.length) {
+      final tailText = _cleanHtmlText(rawHtml.substring(lastIndex));
+      if (tailText.isNotEmpty) {
+        segments.add(_TextDescriptionSegment(tailText));
+      }
+    }
+
+    return segments;
   }
 
   @override
@@ -877,35 +1043,85 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
   }
 
   Widget _buildRequirementsCard() {
-    final rawDesc = _activityDetails?['description']?.toString() ?? '';
-    final cleaned = _cleanHtml(rawDesc);
+    final rawDesc = Courses.extractDescription(_activityDetails);
+    final segments = _parseDescriptionSegments(rawDesc);
 
     return RoundRectangleCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(CupertinoIcons.doc_text, size: 16),
-              SizedBox(width: 6),
-              Text(
+              const Icon(CupertinoIcons.doc_text, size: 16),
+              const SizedBox(width: 6),
+              const Text(
                 '作业要求与说明',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
               ),
+              if (segments.any((s) => s is _ImageDescriptionSegment)) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.activeBlue.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    '含图',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: CupertinoColors.activeBlue,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            cleaned.isNotEmpty ? cleaned : '教师未填写作业补充说明。',
-            style: TextStyle(
-              fontSize: 14,
-              height: 1.45,
-              color: cleaned.isNotEmpty
-                  ? CupertinoTheme.of(context).textTheme.textStyle.color
-                  : CupertinoDynamicColor.resolve(
-                      CupertinoColors.placeholderText, context),
+          const SizedBox(height: 10),
+          if (segments.isNotEmpty) ...[
+            ...segments.asMap().entries.map((entry) {
+              final idx = entry.key;
+              final seg = entry.value;
+              final isLast = idx == segments.length - 1;
+              if (seg is _TextDescriptionSegment) {
+                return Padding(
+                  padding: EdgeInsets.only(bottom: isLast ? 0 : 8.0),
+                  child: SelectableText(
+                    seg.text,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.45,
+                      color:
+                          CupertinoTheme.of(context).textTheme.textStyle.color,
+                    ),
+                  ),
+                );
+              } else if (seg is _ImageDescriptionSegment) {
+                return Padding(
+                  padding: EdgeInsets.only(bottom: isLast ? 0 : 8.0),
+                  child: _CoursesNetworkImage(
+                    url: seg.src,
+                    alt: seg.alt,
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            }),
+          ] else ...[
+            Text(
+              _teacherUploads.isNotEmpty
+                  ? '教师未填写文本说明，请查阅下方附件。'
+                  : '教师未填写作业补充说明。',
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.45,
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.placeholderText, context),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -937,6 +1153,15 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
                 ? downloadUrl
                 : 'https://courses.zju.edu.cn$downloadUrl';
 
+            final isImage =
+                RegExp(r'\.(png|jpe?g|gif|webp|bmp)$', caseSensitive: false)
+                        .hasMatch(name) ||
+                    (file['content_type']
+                            ?.toString()
+                            .toLowerCase()
+                            .startsWith('image/') ??
+                        false);
+
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 4.0),
               child: Container(
@@ -948,8 +1173,13 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(CupertinoIcons.doc_fill,
-                        size: 20, color: CupertinoColors.activeBlue),
+                    Icon(
+                      isImage ? CupertinoIcons.photo : CupertinoIcons.doc_fill,
+                      size: 20,
+                      color: isImage
+                          ? CupertinoColors.systemTeal
+                          : CupertinoColors.activeBlue,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Column(
@@ -970,6 +1200,27 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
                         ],
                       ),
                     ),
+                    if (isImage) ...[
+                      CupertinoButton(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 9, vertical: 4),
+                        minSize: 0,
+                        color: CupertinoColors.systemTeal,
+                        borderRadius: BorderRadius.circular(6),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(
+                              builder: (ctx) => _CoursesImageViewerPage(
+                                imageUrl: fullUrl,
+                                title: name,
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text('预览', style: TextStyle(fontSize: 12)),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
                     CupertinoButton(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 4),
@@ -1132,54 +1383,87 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
             ],
           ] else ...[
             // 未提交：文件选择器与提交留言
-            if (_selectedFileName != null) ...[
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.tertiarySystemFill, context),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(CupertinoIcons.doc_fill,
-                        size: 20, color: CupertinoColors.activeBlue),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(_selectedFileName!,
-                              style: const TextStyle(
-                                  fontSize: 13, fontWeight: FontWeight.w600)),
-                          Text(
-                            _formatFileSize(_selectedFileSize ?? 0),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: CupertinoDynamicColor.resolve(
-                                  CupertinoColors.secondaryLabel, context),
-                            ),
-                          ),
-                        ],
-                      ),
+            if (_selectedAttachments.isNotEmpty) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '待提交附件 (${_selectedAttachments.length})',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
                     ),
-                    CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      minSize: 0,
-                      onPressed: () {
-                        setState(() {
-                          _selectedFileName = null;
-                          _selectedFileSize = null;
-                          _selectedFileBytes = null;
-                        });
-                      },
-                      child: const Icon(CupertinoIcons.clear_circled,
-                          size: 18, color: CupertinoColors.systemGrey),
-                    ),
-                  ],
-                ),
+                  ),
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    minSize: 0,
+                    onPressed: () {
+                      setState(() {
+                        _selectedAttachments.clear();
+                      });
+                    },
+                    child: const Text('清空',
+                        style: TextStyle(
+                            fontSize: 12, color: CupertinoColors.systemRed)),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
+              ..._selectedAttachments.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final file = entry.value;
+                final name = file['name']?.toString() ?? '待提交文件';
+                final size = (file['size'] as num?)?.toInt() ?? 0;
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3.0),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: CupertinoDynamicColor.resolve(
+                          CupertinoColors.tertiarySystemFill, context),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(CupertinoIcons.doc_fill,
+                            size: 20, color: CupertinoColors.activeBlue),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(name,
+                                  style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600)),
+                              if (size > 0)
+                                Text(
+                                  _formatFileSize(size),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: CupertinoDynamicColor.resolve(
+                                        CupertinoColors.secondaryLabel,
+                                        context),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        CupertinoButton(
+                          padding: const EdgeInsets.all(4),
+                          minSize: 0,
+                          onPressed: () => _removeAttachment(idx),
+                          child: const Icon(CupertinoIcons.clear_circled,
+                              size: 18, color: CupertinoColors.systemGrey),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 6),
             ],
 
             CupertinoButton(
@@ -1187,7 +1471,7 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
               color: CupertinoDynamicColor.resolve(
                   CupertinoColors.secondarySystemFill, context),
               borderRadius: BorderRadius.circular(8),
-              onPressed: _pickAttachment,
+              onPressed: _isSubmitting ? null : _pickAttachments,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -1195,7 +1479,7 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
                       size: 16, color: CupertinoColors.activeBlue),
                   const SizedBox(width: 6),
                   Text(
-                    _selectedFileName == null ? '选择文件附件' : '重新选择文件',
+                    _selectedAttachments.isEmpty ? '选择文件附件（支持多选）' : '+ 继续添加附件',
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -1227,26 +1511,526 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  if (_isSubmitting)
+                  if (_isSubmitting) ...[
                     const CupertinoActivityIndicator(
-                        radius: 8, color: CupertinoColors.white)
-                  else
+                        radius: 8, color: CupertinoColors.white),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        _submittingStatusText ?? '正在提交作业...',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: CupertinoColors.white,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ] else ...[
                     const Icon(CupertinoIcons.cloud_upload_fill,
                         size: 17, color: CupertinoColors.white),
-                  const SizedBox(width: 6),
-                  const Text(
-                    '提交作业',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: CupertinoColors.white,
+                    const SizedBox(width: 6),
+                    Text(
+                      _selectedAttachments.isNotEmpty
+                          ? '提交作业 (${_selectedAttachments.length} 个附件)'
+                          : '提交作业',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: CupertinoColors.white,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+abstract class _DescriptionSegment {}
+
+class _TextDescriptionSegment extends _DescriptionSegment {
+  final String text;
+  _TextDescriptionSegment(this.text);
+}
+
+class _ImageDescriptionSegment extends _DescriptionSegment {
+  final String src;
+  final String? alt;
+  _ImageDescriptionSegment({required this.src, this.alt});
+}
+
+/// 支持 TronClass 会话鉴权、防重定向拦截与内存缓存的图片组件
+class _CoursesNetworkImage extends StatefulWidget {
+  final String url;
+  final String? alt;
+
+  const _CoursesNetworkImage({
+    required this.url,
+    this.alt,
+  });
+
+  static final Map<String, Uint8List> _imageCache = <String, Uint8List>{};
+
+  @override
+  State<_CoursesNetworkImage> createState() => _CoursesNetworkImageState();
+}
+
+class _CoursesNetworkImageState extends State<_CoursesNetworkImage> {
+  Uint8List? _bytes;
+  bool _isLoading = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadImage();
+  }
+
+  @override
+  void didUpdateWidget(covariant _CoursesNetworkImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) {
+      _loadImage();
+    }
+  }
+
+  Future<void> _loadImage() async {
+    final rawUrl = widget.url.trim();
+    if (rawUrl.isEmpty) {
+      setState(() => _error = '图片地址为空');
+      return;
+    }
+
+    // Base64 data URL 处理
+    if (rawUrl.startsWith('data:image')) {
+      final comma = rawUrl.indexOf(',');
+      if (comma != -1) {
+        try {
+          final data = base64Decode(rawUrl.substring(comma + 1));
+          setState(() {
+            _bytes = data;
+            _isLoading = false;
+            _error = null;
+          });
+          return;
+        } catch (_) {
+          setState(() => _error = 'Base64 图片解析失败');
+          return;
+        }
+      }
+    }
+
+    // 内存缓存检查
+    if (_CoursesNetworkImage._imageCache.containsKey(rawUrl)) {
+      setState(() {
+        _bytes = _CoursesNetworkImage._imageCache[rawUrl];
+        _isLoading = false;
+        _error = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    final fullUrl = rawUrl.startsWith('http')
+        ? rawUrl
+        : 'https://courses.zju.edu.cn${rawUrl.startsWith('/') ? '' : '/'}$rawUrl';
+
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 10);
+    applyZjuNetworkDefense(client,
+        connectionTimeout: const Duration(seconds: 10));
+
+    try {
+      var currentUri = Uri.parse(fullUrl);
+      var session = Courses.cachedSession;
+      if (session == null &&
+          (currentUri.host.isEmpty || currentUri.host.endsWith('zju.edu.cn'))) {
+        session = await Courses.ensureSession(client);
+      }
+
+      int redirects = 0;
+      HttpClientResponse? response;
+      while (redirects < 5) {
+        final req = await client
+            .getUrl(currentUri)
+            .timeout(const Duration(seconds: 12));
+        req.followRedirects = false;
+        if (session != null &&
+            (currentUri.host == 'courses.zju.edu.cn' ||
+                currentUri.host.endsWith('.zju.edu.cn'))) {
+          req.cookies.add(session);
+        }
+        response = await req.close().timeout(const Duration(seconds: 12));
+        if (response.isRedirect) {
+          final loc = response.headers.value(HttpHeaders.locationHeader);
+          if (loc != null && loc.isNotEmpty) {
+            currentUri = currentUri.resolve(loc);
+            redirects++;
+            continue;
+          }
+        }
+        break;
+      }
+
+      if (response != null && response.statusCode == HttpStatus.ok) {
+        final data = await consolidateHttpClientResponseBytes(response);
+        if (mounted) {
+          _CoursesNetworkImage._imageCache[rawUrl] = data;
+          setState(() {
+            _bytes = data;
+            _isLoading = false;
+            _error = null;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _error = '图片加载失败 (HTTP ${response?.statusCode ?? 0})';
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = '网络错误: $e';
+        });
+      }
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  void _openViewer() {
+    if (_bytes == null && (_error != null || _isLoading)) return;
+    Navigator.of(context).push(
+      CupertinoPageRoute(
+        builder: (ctx) => _CoursesImageViewerPage(
+          imageBytes: _bytes,
+          imageUrl: widget.url,
+          title: widget.alt?.isNotEmpty == true ? widget.alt! : '作业说明插图',
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Container(
+        height: 120,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: CupertinoDynamicColor.resolve(
+              CupertinoColors.tertiarySystemFill, context),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CupertinoActivityIndicator(radius: 12),
+            SizedBox(height: 8),
+            Text(
+              '正在加载说明插图...',
+              style: TextStyle(
+                fontSize: 12,
+                color: CupertinoColors.secondaryLabel,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_error != null || _bytes == null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: CupertinoDynamicColor.resolve(
+              CupertinoColors.tertiarySystemFill, context),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            const Icon(CupertinoIcons.photo,
+                size: 20, color: CupertinoColors.systemOrange),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                widget.alt?.isNotEmpty == true
+                    ? '${widget.alt} (图片加载失败)'
+                    : (_error ?? '图片无法加载'),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: CupertinoColors.secondaryLabel,
+                ),
+              ),
+            ),
+            CupertinoButton(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              minSize: 0,
+              onPressed: _loadImage,
+              child: const Text('重试', style: TextStyle(fontSize: 12)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: _openViewer,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Stack(
+          alignment: Alignment.bottomRight,
+          children: [
+            Container(
+              constraints: const BoxConstraints(maxHeight: 320),
+              width: double.infinity,
+              color: CupertinoDynamicColor.resolve(
+                  CupertinoColors.tertiarySystemFill, context),
+              child: Image.memory(
+                _bytes!,
+                fit: BoxFit.contain,
+              ),
+            ),
+            Container(
+              margin: const EdgeInsets.all(6),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: CupertinoColors.black.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(CupertinoIcons.zoom_in,
+                      color: CupertinoColors.white, size: 12),
+                  SizedBox(width: 3),
+                  Text('点击放大',
+                      style: TextStyle(
+                          color: CupertinoColors.white, fontSize: 10)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 图片全屏查看器，支持多指手势缩放与拖拽查看
+class _CoursesImageViewerPage extends StatefulWidget {
+  final Uint8List? imageBytes;
+  final String? imageUrl;
+  final String title;
+
+  const _CoursesImageViewerPage({
+    this.imageBytes,
+    this.imageUrl,
+    required this.title,
+  });
+
+  @override
+  State<_CoursesImageViewerPage> createState() =>
+      _CoursesImageViewerPageState();
+}
+
+class _CoursesImageViewerPageState extends State<_CoursesImageViewerPage> {
+  Uint8List? _bytes;
+  bool _isLoading = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _bytes = widget.imageBytes;
+    if (_bytes == null &&
+        widget.imageUrl != null &&
+        widget.imageUrl!.isNotEmpty) {
+      _fetchImage();
+    }
+  }
+
+  Future<void> _fetchImage() async {
+    final rawUrl = widget.imageUrl!.trim();
+    if (_CoursesNetworkImage._imageCache.containsKey(rawUrl)) {
+      setState(() => _bytes = _CoursesNetworkImage._imageCache[rawUrl]);
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    final fullUrl = rawUrl.startsWith('http')
+        ? rawUrl
+        : 'https://courses.zju.edu.cn${rawUrl.startsWith('/') ? '' : '/'}$rawUrl';
+
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 12);
+    applyZjuNetworkDefense(client,
+        connectionTimeout: const Duration(seconds: 12));
+
+    try {
+      var currentUri = Uri.parse(fullUrl);
+      var session = Courses.cachedSession;
+      if (session == null &&
+          (currentUri.host.isEmpty || currentUri.host.endsWith('zju.edu.cn'))) {
+        session = await Courses.ensureSession(client);
+      }
+
+      int redirects = 0;
+      HttpClientResponse? response;
+      while (redirects < 5) {
+        final req = await client
+            .getUrl(currentUri)
+            .timeout(const Duration(seconds: 12));
+        req.followRedirects = false;
+        if (session != null &&
+            (currentUri.host == 'courses.zju.edu.cn' ||
+                currentUri.host.endsWith('.zju.edu.cn'))) {
+          req.cookies.add(session);
+        }
+        response = await req.close().timeout(const Duration(seconds: 12));
+        if (response.isRedirect) {
+          final loc = response.headers.value(HttpHeaders.locationHeader);
+          if (loc != null && loc.isNotEmpty) {
+            currentUri = currentUri.resolve(loc);
+            redirects++;
+            continue;
+          }
+        }
+        break;
+      }
+
+      if (response != null && response.statusCode == HttpStatus.ok) {
+        final data = await consolidateHttpClientResponseBytes(response);
+        if (mounted) {
+          _CoursesNetworkImage._imageCache[rawUrl] = data;
+          setState(() {
+            _bytes = data;
+            _isLoading = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _error = '图片加载失败 (HTTP ${response?.statusCode ?? 0})';
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = '$e';
+        });
+      }
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fullUrl = widget.imageUrl != null && widget.imageUrl!.isNotEmpty
+        ? (widget.imageUrl!.startsWith('http')
+            ? widget.imageUrl!
+            : 'https://courses.zju.edu.cn${widget.imageUrl!.startsWith('/') ? '' : '/'}${widget.imageUrl!}')
+        : null;
+
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.black,
+      navigationBar: CupertinoNavigationBar(
+        backgroundColor: CupertinoColors.black.withValues(alpha: 0.7),
+        middle: Text(
+          widget.title,
+          style: const TextStyle(color: CupertinoColors.white, fontSize: 16),
+          overflow: TextOverflow.ellipsis,
+        ),
+        leading: CupertinoButton(
+          padding: EdgeInsets.zero,
+          minSize: 0,
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Icon(CupertinoIcons.xmark,
+              color: CupertinoColors.white, size: 20),
+        ),
+        trailing: fullUrl != null
+            ? CupertinoButton(
+                padding: EdgeInsets.zero,
+                minSize: 0,
+                onPressed: () => launchUrlString(fullUrl,
+                    mode: LaunchMode.externalApplication),
+                child: const Icon(CupertinoIcons.compass,
+                    color: CupertinoColors.white, size: 20),
+              )
+            : null,
+      ),
+      child: SafeArea(
+        child: Center(
+          child: _isLoading
+              ? const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CupertinoActivityIndicator(
+                        radius: 14, color: CupertinoColors.white),
+                    SizedBox(height: 12),
+                    Text(
+                      '正在加载完整图片...',
+                      style:
+                          TextStyle(color: CupertinoColors.white, fontSize: 13),
+                    ),
+                  ],
+                )
+              : _error != null
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(CupertinoIcons.exclamationmark_triangle_fill,
+                            color: CupertinoColors.systemOrange, size: 36),
+                        const SizedBox(height: 10),
+                        Text(
+                          _error!,
+                          style: const TextStyle(
+                              color: CupertinoColors.white, fontSize: 13),
+                        ),
+                        const SizedBox(height: 12),
+                        CupertinoButton(
+                          color: CupertinoColors.activeBlue,
+                          onPressed: _fetchImage,
+                          child: const Text('重试'),
+                        ),
+                      ],
+                    )
+                  : _bytes != null && _bytes!.isNotEmpty
+                      ? InteractiveViewer(
+                          minScale: 0.5,
+                          maxScale: 6.0,
+                          child: Center(
+                            child: Image.memory(
+                              _bytes!,
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        )
+                      : const Text(
+                          '暂无图片数据',
+                          style: TextStyle(color: CupertinoColors.white),
+                        ),
+        ),
       ),
     );
   }

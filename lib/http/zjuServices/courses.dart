@@ -12,6 +12,8 @@ import 'package:celechron/services/todo_task_sync.dart';
 import 'package:celechron/utils/tuple.dart';
 import 'package:celechron/model/todo.dart';
 import 'package:flutter/foundation.dart';
+import 'package:celechron/http/zjuServices/zjuam.dart';
+import 'package:celechron/services/secure_storage_service.dart';
 import 'package:hive/hive.dart';
 import 'response_utils.dart';
 
@@ -117,43 +119,191 @@ class Courses {
     }
   }
 
+  /// 确保获取到有效的学在浙大业务 session Cookie，若失效自动利用存储的 SSO 凭据重新登录
+  static Future<Cookie?> ensureSession(HttpClient httpClient) async {
+    final existing = cachedSession;
+    if (existing != null) return existing;
+    try {
+      const secureStorage = FlutterSecureStorage();
+      final username = await secureStorage.read(key: 'username');
+      final password = await secureStorage.read(key: 'password');
+      if (username != null &&
+          password != null &&
+          username.isNotEmpty &&
+          password.isNotEmpty) {
+        final ssoCookie =
+            await ZjuAm.getSsoCookie(httpClient, username, password);
+        if (ssoCookie != null) {
+          final courses = Courses();
+          await courses.login(httpClient, ssoCookie);
+          return cachedSession;
+        }
+      }
+    } catch (e) {
+      debugPrint('Courses.ensureSession error: $e');
+    }
+    return cachedSession;
+  }
+
+  /// 从各种不同结构/字段的活动详情 JSON 中提取作业说明与要求文本或 HTML
+  static String extractDescription(Map<String, dynamic>? details) {
+    if (details == null) return '';
+    final candidates = [
+      details['description'],
+      details['content'],
+      details['instructions'],
+      details['instruction'],
+      details['body'],
+      details['requirement'],
+      details['requirements'],
+      details['note'],
+      details['intro'],
+      details['text'],
+      if (details['homework'] is Map) ...[
+        (details['homework'] as Map)['description'],
+        (details['homework'] as Map)['content'],
+        (details['homework'] as Map)['instructions'],
+        (details['homework'] as Map)['requirement'],
+      ],
+      if (details['activity'] is Map) ...[
+        (details['activity'] as Map)['description'],
+        (details['activity'] as Map)['content'],
+        (details['activity'] as Map)['instructions'],
+      ],
+      if (details['data'] is Map) ...[
+        (details['data'] as Map)['description'],
+        (details['data'] as Map)['content'],
+        (details['data'] as Map)['instruction'],
+        (details['data'] as Map)['instructions'],
+      ],
+    ];
+    for (final c in candidates) {
+      if (c != null && c.toString().trim().isNotEmpty) {
+        return c.toString().trim();
+      }
+    }
+    return '';
+  }
+
+  /// 从各种活动结构中提取教师附件列表
+  static List<Map<String, dynamic>> extractUploads(
+      Map<String, dynamic>? details) {
+    if (details == null) return [];
+    final candidates = [
+      details['uploads'],
+      details['attachments'],
+      details['files'],
+      details['reference_materials'],
+      if (details['homework'] is Map) (details['homework'] as Map)['uploads'],
+      if (details['activity'] is Map) (details['activity'] as Map)['uploads'],
+      if (details['data'] is Map) (details['data'] as Map)['uploads'],
+    ];
+    for (final c in candidates) {
+      if (c is List && c.isNotEmpty) {
+        return c
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+    }
+    return [];
+  }
+
   /// 查询指定课程活动详情（作业标题、富文本/HTML 说明要求、截止时间、附件等）
+  /// 兼容 TronClass 多租户路由：优先请求课程特定作业路由，回退通用活动路由，合并说明与附件
   static Future<Map<String, dynamic>?> fetchActivityDetails(
     HttpClient httpClient,
     String activityId, {
+    String? courseId,
     Cookie? sessionCookie,
   }) async {
     if (activityId.isEmpty) return null;
-    final session = sessionCookie ?? cachedSession;
-    if (session == null) return null;
-
-    final uri =
-        Uri.parse('https://courses.zju.edu.cn/api/activities/$activityId');
-    try {
-      final request = await httpClient.getUrl(uri).timeout(
-            const Duration(seconds: 8),
-            onTimeout: () => throw requestTimeout(),
-          );
-      request.followRedirects = false;
-      request.cookies.add(session);
-      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
-
-      final response = await request.close().timeout(
-            const Duration(seconds: 8),
-            onTimeout: () => throw requestTimeout(),
-          );
-      if (response.statusCode != HttpStatus.ok) {
-        return null;
-      }
-      final body = await readResponseBody(
-        response,
-        context: '学在浙大作业详情接口',
-      );
-      return decodeJsonMap(body, context: '学在浙大作业详情');
-    } catch (e) {
-      debugPrint('fetchActivityDetails error: $e');
-      return null;
+    var session = sessionCookie ?? cachedSession;
+    if (session == null) {
+      session = await ensureSession(httpClient);
+      if (session == null) return null;
     }
+
+    final candidateUris = <Uri>[];
+    if (courseId != null && courseId.isNotEmpty) {
+      candidateUris.add(Uri.parse(
+          'https://courses.zju.edu.cn/api/courses/$courseId/homework-activities/$activityId'));
+      candidateUris.add(Uri.parse(
+          'https://courses.zju.edu.cn/api/course/$courseId/homework-activities/$activityId'));
+      candidateUris.add(Uri.parse(
+          'https://courses.zju.edu.cn/api/courses/$courseId/activities/$activityId'));
+      candidateUris.add(Uri.parse(
+          'https://courses.zju.edu.cn/api/course/activities/$activityId'));
+    }
+    candidateUris.add(
+        Uri.parse('https://courses.zju.edu.cn/api/activities/$activityId'));
+
+    Map<String, dynamic>? bestResult;
+
+    for (final uri in candidateUris) {
+      try {
+        final request = await httpClient.getUrl(uri).timeout(
+              const Duration(seconds: 8),
+              onTimeout: () => throw requestTimeout(),
+            );
+        request.followRedirects = false;
+        if (session != null) {
+          request.cookies.add(session);
+        }
+        request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+
+        final response = await request.close().timeout(
+              const Duration(seconds: 8),
+              onTimeout: () => throw requestTimeout(),
+            );
+
+        if (response.statusCode == HttpStatus.ok) {
+          final body = await readResponseBody(
+            response,
+            context: '学在浙大作业详情接口(${uri.path})',
+          );
+          final json = decodeJsonMap(body, context: '学在浙大作业详情');
+          if (json.isNotEmpty) {
+            if (bestResult == null) {
+              bestResult = Map<String, dynamic>.from(json);
+            } else {
+              // 深度补充字段，避免旧路由缺少说明或附件
+              final target = bestResult;
+              json.forEach((k, v) {
+                if (v != null) {
+                  final existing = target[k];
+                  if (existing == null ||
+                      (existing is String && existing.isEmpty) ||
+                      (existing is List &&
+                          existing.isEmpty &&
+                          v is List &&
+                          v.isNotEmpty)) {
+                    target[k] = v;
+                  }
+                }
+              });
+            }
+
+            // 若已解析出有效作业说明文本/HTML，则说明已命中最佳详情，结束后续探测
+            final desc = extractDescription(bestResult);
+            if (desc.isNotEmpty) {
+              break;
+            }
+          }
+        } else if (response.statusCode == HttpStatus.unauthorized ||
+            response.statusCode == HttpStatus.found) {
+          // 会话过期重登尝试
+          final refreshed = await ensureSession(httpClient);
+          if (refreshed != null && refreshed.value != session?.value) {
+            session = refreshed;
+          }
+        }
+      } catch (e) {
+        debugPrint('fetchActivityDetails ($uri) error: $e');
+      }
+    }
+
+    return bestResult;
   }
 
   /// 查询指定作业的提交记录（包含学生已上传文件、提交说明、得分及教师反馈）
@@ -195,102 +345,344 @@ class Courses {
     }
   }
 
-  /// 两阶段上传文件至学在浙大服务器（申请票据并流式上传文件二进制），返回 uploadId
+  static String _lookupMimeType(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    if (lower.endsWith('.zip')) return 'application/zip';
+    if (lower.endsWith('.rar')) return 'application/x-rar-compressed';
+    if (lower.endsWith('.7z')) return 'application/x-7z-compressed';
+    if (lower.endsWith('.tar') || lower.endsWith('.gz')) {
+      return 'application/gzip';
+    }
+    if (lower.endsWith('.doc')) return 'application/msword';
+    if (lower.endsWith('.docx')) {
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    }
+    if (lower.endsWith('.xls')) return 'application/vnd.ms-excel';
+    if (lower.endsWith('.xlsx')) {
+      return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    }
+    if (lower.endsWith('.ppt')) return 'application/vnd.ms-powerpoint';
+    if (lower.endsWith('.pptx')) {
+      return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    }
+    if (lower.endsWith('.txt') ||
+        lower.endsWith('.c') ||
+        lower.endsWith('.cpp') ||
+        lower.endsWith('.h') ||
+        lower.endsWith('.py') ||
+        lower.endsWith('.java') ||
+        lower.endsWith('.dart') ||
+        lower.endsWith('.js') ||
+        lower.endsWith('.ts') ||
+        lower.endsWith('.html') ||
+        lower.endsWith('.json') ||
+        lower.endsWith('.md')) {
+      return 'text/plain;charset=utf-8';
+    }
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.gif')) return 'image/gif';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.mp4')) return 'video/mp4';
+    if (lower.endsWith('.mp3')) return 'audio/mpeg';
+    return 'application/octet-stream';
+  }
+
+  static List<int> _buildMultipartPayload({
+    required String boundary,
+    required String fileName,
+    required List<int> fileBytes,
+    String parentType = 'submission_upload',
+    int parentId = 0,
+  }) {
+    final bytes = <int>[];
+    bytes.addAll(utf8.encode(
+        '--$boundary\r\nContent-Disposition: form-data; name="parent_type"\r\n\r\n$parentType\r\n'));
+    bytes.addAll(utf8.encode(
+        '--$boundary\r\nContent-Disposition: form-data; name="parent_id"\r\n\r\n$parentId\r\n'));
+    final mimeType = _lookupMimeType(fileName);
+    bytes.addAll(utf8.encode(
+        '--$boundary\r\nContent-Disposition: form-data; name="file"; filename="$fileName"\r\nContent-Type: $mimeType\r\n\r\n'));
+    bytes.addAll(fileBytes);
+    bytes.addAll(utf8.encode('\r\n--$boundary--\r\n'));
+    return bytes;
+  }
+
+  static Future<void> _notifyUploadFinish(
+    HttpClient httpClient,
+    Cookie session,
+    int uploadId,
+  ) async {
+    final endpoints = [
+      Uri.parse('https://courses.zju.edu.cn/api/uploads/$uploadId/finish'),
+      Uri.parse('https://courses.zju.edu.cn/api/uploads/$uploadId/success'),
+    ];
+    for (final uri in endpoints) {
+      try {
+        final req =
+            await httpClient.postUrl(uri).timeout(const Duration(seconds: 6));
+        req.cookies.add(session);
+        req.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+        req.contentLength = 2;
+        req.write('{}');
+        final resp = await req.close();
+        if (resp.statusCode == HttpStatus.ok ||
+            resp.statusCode == HttpStatus.noContent) {
+          break;
+        }
+      } catch (_) {}
+    }
+  }
+
+  static Future<bool> _streamBytesToUploadUrl({
+    required HttpClient httpClient,
+    required Cookie session,
+    required String uploadUrlStr,
+    required String fileName,
+    required List<int> fileBytes,
+    required int uploadId,
+  }) async {
+    try {
+      final uploadUri = uploadUrlStr.startsWith('http')
+          ? Uri.parse(uploadUrlStr)
+          : Uri.parse('https://courses.zju.edu.cn$uploadUrlStr');
+
+      final isExternalOss = uploadUri.host.contains('aliyuncs.com') ||
+          uploadUri.host.contains('amazonaws.com') ||
+          uploadUri.queryParameters.containsKey('OSSAccessKeyId') ||
+          uploadUri.queryParameters.containsKey('Signature');
+
+      if (isExternalOss) {
+        final putReq = await httpClient.putUrl(uploadUri).timeout(
+              const Duration(seconds: 40),
+              onTimeout: () => throw requestTimeout(),
+            );
+        final mime = _lookupMimeType(fileName);
+        putReq.headers.set(HttpHeaders.contentTypeHeader, mime);
+        putReq.contentLength = fileBytes.length;
+        putReq.add(fileBytes);
+        final putResp = await putReq.close();
+        if (putResp.statusCode == HttpStatus.ok ||
+            putResp.statusCode == HttpStatus.created ||
+            putResp.statusCode == HttpStatus.noContent) {
+          await _notifyUploadFinish(httpClient, session, uploadId);
+          return true;
+        }
+      } else {
+        final putReq = await httpClient.putUrl(uploadUri).timeout(
+              const Duration(seconds: 40),
+              onTimeout: () => throw requestTimeout(),
+            );
+        putReq.cookies.add(session);
+        putReq.headers
+            .set(HttpHeaders.contentTypeHeader, _lookupMimeType(fileName));
+        putReq.contentLength = fileBytes.length;
+        putReq.add(fileBytes);
+        final putResp = await putReq.close();
+        if (putResp.statusCode == HttpStatus.ok ||
+            putResp.statusCode == HttpStatus.created ||
+            putResp.statusCode == HttpStatus.noContent) {
+          await _notifyUploadFinish(httpClient, session, uploadId);
+          return true;
+        }
+
+        final boundary =
+            '----TronStreamBoundary${DateTime.now().millisecondsSinceEpoch}';
+        final header = utf8.encode(
+            '--$boundary\r\nContent-Disposition: form-data; name="file"; filename="$fileName"\r\nContent-Type: ${_lookupMimeType(fileName)}\r\n\r\n');
+        final footer = utf8.encode('\r\n--$boundary--\r\n');
+        final totalLength = header.length + fileBytes.length + footer.length;
+
+        final postReq = await httpClient.postUrl(uploadUri).timeout(
+              const Duration(seconds: 40),
+              onTimeout: () => throw requestTimeout(),
+            );
+        postReq.cookies.add(session);
+        postReq.headers.set(HttpHeaders.contentTypeHeader,
+            'multipart/form-data; boundary=$boundary');
+        postReq.contentLength = totalLength;
+        postReq.add(header);
+        postReq.add(fileBytes);
+        postReq.add(footer);
+        final postResp = await postReq.close();
+        if (postResp.statusCode == HttpStatus.ok ||
+            postResp.statusCode == HttpStatus.created ||
+            postResp.statusCode == HttpStatus.noContent) {
+          await _notifyUploadFinish(httpClient, session, uploadId);
+          return true;
+        }
+      }
+    } catch (e) {
+      debugPrint('_streamBytesToUploadUrl error: $e');
+    }
+    return false;
+  }
+
+  /// 上传作业附件文件至学在浙大服务器（支持直接表单与两阶段凭据流式直传），返回 uploadId
   static Future<int?> uploadSubmissionFile(
     HttpClient httpClient, {
     required String fileName,
     required List<int> fileBytes,
+    String? activityId,
+    String? courseId,
     Cookie? sessionCookie,
   }) async {
-    final session = sessionCookie ?? cachedSession;
-    if (session == null) return null;
+    var currentSession = sessionCookie ?? cachedSession;
+    if (currentSession == null) {
+      currentSession = await ensureSession(httpClient);
+      if (currentSession == null) return null;
+    }
+    Cookie activeSession = currentSession;
 
+    // 策略 1：直接通过 multipart/form-data POST 上传至 /api/uploads
+    try {
+      final boundary =
+          '----TronClassBoundary${DateTime.now().millisecondsSinceEpoch}';
+      final payload = _buildMultipartPayload(
+        boundary: boundary,
+        fileName: fileName,
+        fileBytes: fileBytes,
+      );
+
+      final uploadUri = Uri.parse('https://courses.zju.edu.cn/api/uploads');
+      final req = await httpClient.postUrl(uploadUri).timeout(
+            const Duration(seconds: 35),
+            onTimeout: () => throw requestTimeout(),
+          );
+      req.followRedirects = false;
+      req.cookies.add(activeSession);
+      req.headers.set(HttpHeaders.contentTypeHeader,
+          'multipart/form-data; boundary=$boundary');
+      req.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      req.contentLength = payload.length;
+      req.add(payload);
+
+      final resp = await req.close().timeout(
+            const Duration(seconds: 35),
+            onTimeout: () => throw requestTimeout(),
+          );
+
+      if (resp.statusCode == HttpStatus.ok ||
+          resp.statusCode == HttpStatus.created) {
+        final body = await readResponseBody(resp, context: '学在浙大直接上传接口');
+        final json = decodeJsonMap(body, context: '学在浙大上传响应');
+        final uploadId = (json['id'] as num?)?.toInt();
+        final uploadUrlStr = json['upload_url']?.toString();
+
+        if (uploadId != null) {
+          if (uploadUrlStr == null || uploadUrlStr.isEmpty) {
+            return uploadId;
+          }
+          final streamed = await _streamBytesToUploadUrl(
+            httpClient: httpClient,
+            session: activeSession,
+            uploadUrlStr: uploadUrlStr,
+            fileName: fileName,
+            fileBytes: fileBytes,
+            uploadId: uploadId,
+          );
+          if (streamed) return uploadId;
+        }
+      } else if (resp.statusCode == HttpStatus.unauthorized ||
+          resp.statusCode == HttpStatus.found) {
+        final refreshed = await ensureSession(httpClient);
+        if (refreshed != null) activeSession = refreshed;
+      }
+    } catch (e) {
+      debugPrint(
+          'uploadSubmissionFile Strategy 1 (direct multipart) error: $e');
+    }
+
+    // 策略 2：两阶段凭据上传（POST /api/uploads 申请凭据 JSON -> 写入目标地址）
     try {
       final ticketUri = Uri.parse('https://courses.zju.edu.cn/api/uploads');
       final ticketReq = await httpClient.postUrl(ticketUri).timeout(
-            const Duration(seconds: 10),
+            const Duration(seconds: 15),
             onTimeout: () => throw requestTimeout(),
           );
-      ticketReq.cookies.add(session);
+      ticketReq.cookies.add(activeSession);
       ticketReq.headers
           .set(HttpHeaders.contentTypeHeader, 'application/json;charset=utf-8');
-      ticketReq.write(jsonEncode({
+      ticketReq.headers.set(HttpHeaders.acceptHeader, 'application/json');
+
+      final ticketPayload = jsonEncode({
         'name': fileName,
         'size': fileBytes.length,
         'parent_type': 'submission_upload',
         'parent_id': 0,
-      }));
+      });
+      ticketReq.contentLength = utf8.encode(ticketPayload).length;
+      ticketReq.write(ticketPayload);
+
       final ticketResp = await ticketReq.close();
-      if (ticketResp.statusCode != HttpStatus.ok &&
-          ticketResp.statusCode != HttpStatus.created) {
-        debugPrint(
-            'uploadSubmissionFile: ticket failed with ${ticketResp.statusCode}');
-        return null;
-      }
-      final ticketBody =
-          await readResponseBody(ticketResp, context: '学在浙大上传凭据接口');
-      final ticketJson = decodeJsonMap(ticketBody, context: '学在浙大上传凭据');
-      final uploadId = (ticketJson['id'] as num?)?.toInt();
-      final uploadUrlStr = ticketJson['upload_url']?.toString();
-      if (uploadId == null) return null;
+      if (ticketResp.statusCode == HttpStatus.ok ||
+          ticketResp.statusCode == HttpStatus.created) {
+        final ticketBody =
+            await readResponseBody(ticketResp, context: '学在浙大上传凭据接口');
+        final ticketJson = decodeJsonMap(ticketBody, context: '学在浙大上传凭据');
+        final uploadId = (ticketJson['id'] as num?)?.toInt();
+        final uploadUrlStr = ticketJson['upload_url']?.toString();
 
-      if (uploadUrlStr != null && uploadUrlStr.isNotEmpty) {
-        Uri uploadUri;
-        if (uploadUrlStr.startsWith('http://') ||
-            uploadUrlStr.startsWith('https://')) {
-          uploadUri = Uri.parse(uploadUrlStr);
-        } else {
-          uploadUri = Uri.parse('https://courses.zju.edu.cn$uploadUrlStr');
-        }
-
-        final boundary =
-            '----TronClassFormBoundary${DateTime.now().millisecondsSinceEpoch}';
-        final dataReq = await httpClient.postUrl(uploadUri).timeout(
-              const Duration(seconds: 30),
-              onTimeout: () => throw requestTimeout(),
-            );
-        dataReq.cookies.add(session);
-        dataReq.headers.set(HttpHeaders.contentTypeHeader,
-            'multipart/form-data; boundary=$boundary');
-
-        final header =
-            '--$boundary\r\nContent-Disposition: form-data; name="file"; filename="$fileName"\r\nContent-Type: application/octet-stream\r\n\r\n';
-        final footer = '\r\n--$boundary--\r\n';
-
-        dataReq.add(utf8.encode(header));
-        dataReq.add(fileBytes);
-        dataReq.add(utf8.encode(footer));
-
-        final dataResp = await dataReq.close().timeout(
-              const Duration(seconds: 30),
-              onTimeout: () => throw requestTimeout(),
-            );
-        if (dataResp.statusCode != HttpStatus.ok &&
-            dataResp.statusCode != HttpStatus.created &&
-            dataResp.statusCode != HttpStatus.noContent) {
-          debugPrint(
-              'uploadSubmissionFile: file stream failed with ${dataResp.statusCode}, trying PUT fallback');
-          final putReq = await httpClient.putUrl(uploadUri).timeout(
-                const Duration(seconds: 30),
-                onTimeout: () => throw requestTimeout(),
-              );
-          putReq.cookies.add(session);
-          putReq.headers
-              .set(HttpHeaders.contentTypeHeader, 'application/octet-stream');
-          putReq.add(fileBytes);
-          final putResp = await putReq.close();
-          if (putResp.statusCode != HttpStatus.ok &&
-              putResp.statusCode != HttpStatus.noContent) {
-            return null;
+        if (uploadId != null) {
+          if (uploadUrlStr == null || uploadUrlStr.isEmpty) {
+            return uploadId;
           }
+          final streamed = await _streamBytesToUploadUrl(
+            httpClient: httpClient,
+            session: activeSession,
+            uploadUrlStr: uploadUrlStr,
+            fileName: fileName,
+            fileBytes: fileBytes,
+            uploadId: uploadId,
+          );
+          if (streamed) return uploadId;
         }
       }
-
-      return uploadId;
     } catch (e) {
-      debugPrint('uploadSubmissionFile error: $e');
-      return null;
+      debugPrint('uploadSubmissionFile Strategy 2 (ticketed) error: $e');
     }
+
+    // 策略 3：课程级接口回退（POST /api/courses/$courseId/uploads）
+    if (courseId != null && courseId.isNotEmpty) {
+      try {
+        final boundary =
+            '----TronClassBoundary${DateTime.now().millisecondsSinceEpoch}';
+        final payload = _buildMultipartPayload(
+          boundary: boundary,
+          fileName: fileName,
+          fileBytes: fileBytes,
+          parentType: 'submission',
+        );
+
+        final courseUploadUri = Uri.parse(
+            'https://courses.zju.edu.cn/api/courses/$courseId/uploads');
+        final req = await httpClient.postUrl(courseUploadUri).timeout(
+              const Duration(seconds: 35),
+              onTimeout: () => throw requestTimeout(),
+            );
+        req.cookies.add(activeSession);
+        req.headers.set(HttpHeaders.contentTypeHeader,
+            'multipart/form-data; boundary=$boundary');
+        req.headers.set(HttpHeaders.acceptHeader, 'application/json');
+        req.contentLength = payload.length;
+        req.add(payload);
+
+        final resp = await req.close();
+        if (resp.statusCode == HttpStatus.ok ||
+            resp.statusCode == HttpStatus.created) {
+          final body = await readResponseBody(resp, context: '课程级上传响应');
+          final json = decodeJsonMap(body, context: '课程级上传响应');
+          final uploadId = (json['id'] as num?)?.toInt();
+          if (uploadId != null) return uploadId;
+        }
+      } catch (e) {
+        debugPrint(
+            'uploadSubmissionFile Strategy 3 (course uploads) error: $e');
+      }
+    }
+
+    return null;
   }
 
   /// 提交作业（指定活动 ID、已上传附件 ID 列表、留言与文本内容）
@@ -298,49 +690,70 @@ class Courses {
     HttpClient httpClient, {
     required String activityId,
     required List<int> uploadIds,
+    String? courseId,
     String? comment,
     String? content,
     Cookie? sessionCookie,
   }) async {
-    final session = sessionCookie ?? cachedSession;
-    if (session == null) return false;
-
-    final uri = Uri.parse(
-        'https://courses.zju.edu.cn/api/course/activities/$activityId/submissions');
-    try {
-      final request = await httpClient.postUrl(uri).timeout(
-            const Duration(seconds: 12),
-            onTimeout: () => throw requestTimeout(),
-          );
-      request.cookies.add(session);
-      request.headers
-          .set(HttpHeaders.contentTypeHeader, 'application/json;charset=utf-8');
-      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
-
-      request.write(jsonEncode({
-        'uploads': uploadIds,
-        'comment': comment ?? '',
-        'is_draft': false,
-        'content': content ?? '',
-      }));
-
-      final response = await request.close().timeout(
-            const Duration(seconds: 12),
-            onTimeout: () => throw requestTimeout(),
-          );
-
-      if (response.statusCode == HttpStatus.ok ||
-          response.statusCode == HttpStatus.created ||
-          response.statusCode == HttpStatus.noContent) {
-        return true;
-      }
-      debugPrint(
-          'submitHomework failed with statusCode: ${response.statusCode}');
-      return false;
-    } catch (e) {
-      debugPrint('submitHomework error: $e');
-      return false;
+    var session = sessionCookie ?? cachedSession;
+    if (session == null) {
+      session = await ensureSession(httpClient);
+      if (session == null) return false;
     }
+
+    final candidateUris = <Uri>[
+      Uri.parse(
+          'https://courses.zju.edu.cn/api/course/activities/$activityId/submissions'),
+      Uri.parse(
+          'https://courses.zju.edu.cn/api/activities/$activityId/submissions'),
+    ];
+    if (courseId != null && courseId.isNotEmpty) {
+      candidateUris.insert(
+          0,
+          Uri.parse(
+              'https://courses.zju.edu.cn/api/courses/$courseId/homework-activities/$activityId/submissions'));
+      candidateUris.insert(
+          1,
+          Uri.parse(
+              'https://courses.zju.edu.cn/api/course/$courseId/homework-activities/$activityId/submissions'));
+    }
+
+    for (final uri in candidateUris) {
+      try {
+        final request = await httpClient.postUrl(uri).timeout(
+              const Duration(seconds: 15),
+              onTimeout: () => throw requestTimeout(),
+            );
+        request.cookies.add(session);
+        request.headers.set(
+            HttpHeaders.contentTypeHeader, 'application/json;charset=utf-8');
+        request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+
+        final payload = jsonEncode({
+          'uploads': uploadIds,
+          'comment': comment ?? '',
+          'is_draft': false,
+          'content': content ?? '',
+        });
+        request.contentLength = utf8.encode(payload).length;
+        request.write(payload);
+
+        final response = await request.close().timeout(
+              const Duration(seconds: 15),
+              onTimeout: () => throw requestTimeout(),
+            );
+
+        if (response.statusCode == HttpStatus.ok ||
+            response.statusCode == HttpStatus.created ||
+            response.statusCode == HttpStatus.noContent) {
+          return true;
+        }
+      } catch (e) {
+        debugPrint('submitHomework ($uri) error: $e');
+      }
+    }
+
+    return false;
   }
 
   /// 撤回作业提交

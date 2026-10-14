@@ -375,6 +375,49 @@ class OhosNativeService {
     }
   }
 
+  /// 打开系统文档选择器选择任意文件（作业提交附件用，支持单选与一次多选）。
+  /// 返回包含 [{'name': String, 'size': int, 'bytes': Uint8List}, ...] 的列表；
+  /// 用户取消、通道不可用或选择失败时返回空列表 []。
+  Future<List<Map<String, dynamic>>> pickAnyFiles({int maxCount = 10}) async {
+    try {
+      lastFilePickError = null;
+      final result = await _channel.invokeMethod<List<dynamic>>(
+        'pickAnyFiles',
+        {'maxCount': maxCount},
+      );
+      if (result == null || result.isEmpty) {
+        return [];
+      }
+      final list = <Map<String, dynamic>>[];
+      for (final item in result) {
+        if (item is Map) {
+          final name = item['name']?.toString() ?? '';
+          final size = (item['size'] as num?)?.toInt() ?? 0;
+          final bytes = item['bytes'] as Uint8List?;
+          if (name.isNotEmpty && bytes != null && bytes.isNotEmpty) {
+            list.add({'name': name, 'size': size, 'bytes': bytes});
+          }
+        }
+      }
+      return list;
+    } on PlatformException catch (e) {
+      lastFilePickError = e.message ?? e.code;
+      debugPrint('pickAnyFiles failed: $e');
+      final single = await pickAnyFile();
+      if (single != null) {
+        return [single];
+      }
+      return [];
+    } on MissingPluginException {
+      debugPrint('pickAnyFiles: platform channel not available');
+      return [];
+    } catch (e) {
+      lastFilePickError = '$e';
+      debugPrint('pickAnyFiles error: $e');
+      return [];
+    }
+  }
+
   // ==================== Widget Routes & Native Tab ====================
 
   static void Function(String target)? _widgetRouteHandler;

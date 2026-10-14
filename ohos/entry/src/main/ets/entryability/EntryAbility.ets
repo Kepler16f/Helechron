@@ -354,6 +354,63 @@ export default class EntryAbility extends FlutterAbility {
     }
   }
 
+  /// 打开系统文档选择器选择任意文件（作业提交附件用，支持一次多选）。
+  /// 返回包含文件名、大小与文件二进制字节数组的列表。
+  private async pickAnyFiles(call: MethodCall, result: MethodResult): Promise<void> {
+    try {
+      const maxArg = call.argument('maxCount') as number;
+      const maxSelectNumber = (typeof maxArg === 'number' && maxArg > 0) ? maxArg : 10;
+      const documentSelectOptions = new picker.DocumentSelectOptions();
+      documentSelectOptions.maxSelectNumber = maxSelectNumber;
+      const documentPicker = new picker.DocumentViewPicker();
+      const uris: Array<string> = await documentPicker.select(documentSelectOptions);
+      if (uris === null || uris === undefined || uris.length === 0) {
+        result.success([]);
+        return;
+      }
+      const filesList: Array<Record<string, Object>> = [];
+      const maxBytes = 100 * 1024 * 1024;
+      for (const uri of uris) {
+        try {
+          const file = await fileIo.open(uri, fileIo.OpenMode.READ_ONLY);
+          try {
+            const stat = await fileIo.stat(file.fd);
+            if (stat.size <= 0 || stat.size > maxBytes) {
+              hilog.warn(DOMAIN, TAG, `pickAnyFiles: invalid file size ${stat.size} for ${uri}`);
+              continue;
+            }
+            const buffer = new ArrayBuffer(stat.size);
+            await fileIo.read(file.fd, buffer);
+            let name = uri;
+            const slashIndex = uri.lastIndexOf('/');
+            if (slashIndex >= 0) {
+              name = uri.substring(slashIndex + 1);
+            }
+            try {
+              name = decodeURIComponent(name);
+            } catch (e) {
+              // ignore
+            }
+            hilog.info(DOMAIN, TAG, `pickAnyFiles: picked ${name}, ${stat.size} bytes`);
+            filesList.push({
+              'name': name,
+              'size': stat.size,
+              'bytes': new Uint8Array(buffer),
+            });
+          } finally {
+            await fileIo.close(file);
+          }
+        } catch (fileErr) {
+          hilog.error(DOMAIN, TAG, `pickAnyFiles: error reading file ${uri}: ${JSON.stringify(fileErr)}`);
+        }
+      }
+      result.success(filesList);
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, `pickAnyFiles failed: ${JSON.stringify(err)}`);
+      result.error('PICK_FILE_ERROR', JSON.stringify(err), null);
+    }
+  }
+
   private handleMethodCall(call: MethodCall, result: MethodResult): void {
     hilog.info(DOMAIN, TAG, `Received method call: ${call.method}`);
     switch (call.method) {
@@ -422,6 +479,9 @@ export default class EntryAbility extends FlutterAbility {
         break;
       case 'pickAnyFile':
         this.pickAnyFile(result);
+        break;
+      case 'pickAnyFiles':
+        this.pickAnyFiles(call, result);
         break;
       case 'exitApp':
         hilog.info(DOMAIN, TAG, 'exitApp requested from Dart');
