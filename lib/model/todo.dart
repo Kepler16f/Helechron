@@ -20,6 +20,8 @@ class Todo {
   String? completeness;
   DateTime? submittedAt;
 
+  String? type; // TronClass 活动类型：'homework' / 'quiz' / 'exam' / 'assessment' 等
+
   Todo.fromJson(Map<String, dynamic> json)
       : id = asString(json["id"]) ?? json["id"]?.toString() ?? '',
         name = asString(json["title"]) ?? '未命名作业',
@@ -30,7 +32,8 @@ class Todo {
         submissionStatus = _parseSubmissionStatus(json),
         score = (json["score"] as num?)?.toDouble(),
         completeness = asString(json["completeness"]),
-        submittedAt = DateTime.tryParse(asString(json["submitted_at"]) ?? '');
+        submittedAt = DateTime.tryParse(asString(json["submitted_at"]) ?? ''),
+        type = asString(json["type"]) ?? asString(json["activity_type"]);
 
   static HomeworkSubmissionStatus _parseSubmissionStatus(
       Map<String, dynamic> json) {
@@ -46,6 +49,28 @@ class Todo {
     }
     return HomeworkSubmissionStatus.unsubmitted;
   }
+
+  /// 是否为在线小测 / 随堂测验 / 在线考试
+  bool get isQuiz {
+    final t = (type ?? '').toLowerCase();
+    if (t == 'quiz' || t == 'exam' || t == 'assessment' || t == 'test') {
+      return true;
+    }
+    final n = name.toLowerCase();
+    return n.contains('小测') ||
+        n.contains('测验') ||
+        n.contains('quiz') ||
+        n.contains('随堂测') ||
+        n.contains('随堂考') ||
+        n.contains('在线测试') ||
+        n.contains('线上测试');
+  }
+
+  /// 类别标签文案
+  String get categoryBadgeText => isQuiz ? '小测' : '作业';
+
+  /// 操作按钮文案
+  String get actionButtonText => isQuiz ? '去作答' : '去提交';
 
   bool get isSubmitted =>
       submissionStatus == HomeworkSubmissionStatus.submitted ||
@@ -75,11 +100,11 @@ class Todo {
             : '';
         return scoreText.isNotEmpty ? '已批改 · $scoreText分' : '已批改';
       case HomeworkSubmissionStatus.submitted:
-        return '已提交';
+        return isQuiz ? '已作答' : '已提交';
       case HomeworkSubmissionStatus.overdue:
-        return '逾期未交';
+        return isQuiz ? '逾期未测' : '逾期未交';
       case HomeworkSubmissionStatus.unsubmitted:
-        return '待提交';
+        return isQuiz ? '待作答' : '待提交';
     }
   }
 
@@ -133,6 +158,7 @@ class Todo {
         'score': score,
         'completeness': completeness,
         'submitted_at': submittedAt?.toIso8601String(),
+        'type': type,
       };
 
   static List<Todo> getAllFromCourses(Map<String, dynamic> json) {

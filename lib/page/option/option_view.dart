@@ -15,6 +15,7 @@ import 'diagnostic_log_page.dart';
 import 'package:get/get.dart';
 import 'custom_license_page.dart';
 import 'login_page.dart';
+import 'network_proxy_page.dart';
 import 'option_controller.dart';
 
 const Color _kHeaderFooterColor = CupertinoDynamicColor(
@@ -192,7 +193,7 @@ class OptionPage extends StatelessWidget {
                                               value;
                                         }
                                       : null,
-                                 )),
+                                )),
                           } else ...{
                             CupertinoListTile(
                               title: const Text('点击登录',
@@ -421,7 +422,8 @@ class OptionPage extends StatelessWidget {
                                 _optionController.showExportDialog(context),
                           ),
                           CupertinoListTile(
-                            key: ValueKey('import_ics_${_optionController.icsImportKey.value}'),
+                            key: ValueKey(
+                                'import_ics_${_optionController.icsImportKey.value}'),
                             title: const Text('导入日程文件'),
                             subtitle: const Text('从 .ics 日历文件导入日程与 DDL'),
                             trailing: const BackChervonRow(),
@@ -430,34 +432,36 @@ class OptionPage extends StatelessWidget {
                         ]))),
                 // 备份与恢复
                 Obx(() => SliverToBoxAdapter(
-                    child: CupertinoListSection.insetGrouped(
-                        additionalDividerMargin: 2,
-                        margin: _defaultMargin,
-                        header: Container(
-                            padding: const EdgeInsets.only(left: 16),
-                            child: Text('备份与恢复',
-                                style: headerFooterTextStyle)),
-                        footer: Container(
-                            padding: const EdgeInsets.only(left: 16),
-                            child: Text(
-                                '备份包含学业数据、任务列表、课程号映射与提醒时段等配置，不含账号密码。',
-                                style: headerFooterTextStyle)),
-                        children: <Widget>[
-                      CupertinoListTile(
-                        key: ValueKey('export_backup_${_optionController.backupActionKey.value}'),
-                        title: const Text('导出备份'),
-                        subtitle: const Text('生成 JSON 备份文件并分享保存'),
-                        trailing: const BackChervonRow(),
-                        onTap: () => _optionController.exportBackup(),
-                      ),
-                      CupertinoListTile(
-                        key: ValueKey('import_backup_${_optionController.backupActionKey.value}'),
-                        title: const Text('导入备份'),
-                        subtitle: const Text('从备份文件恢复，将覆盖当前数据'),
-                        trailing: const BackChervonRow(),
-                        onTap: () => _optionController.importBackup(),
-                      ),
-                    ]))),
+                        child: CupertinoListSection.insetGrouped(
+                            additionalDividerMargin: 2,
+                            margin: _defaultMargin,
+                            header: Container(
+                                padding: const EdgeInsets.only(left: 16),
+                                child: Text('备份与恢复',
+                                    style: headerFooterTextStyle)),
+                            footer: Container(
+                                padding: const EdgeInsets.only(left: 16),
+                                child: Text(
+                                    '备份包含学业数据、任务列表、课程号映射与提醒时段等配置，不含账号密码。',
+                                    style: headerFooterTextStyle)),
+                            children: <Widget>[
+                          CupertinoListTile(
+                            key: ValueKey(
+                                'export_backup_${_optionController.backupActionKey.value}'),
+                            title: const Text('导出备份'),
+                            subtitle: const Text('生成 JSON 备份文件并分享保存'),
+                            trailing: const BackChervonRow(),
+                            onTap: () => _optionController.exportBackup(),
+                          ),
+                          CupertinoListTile(
+                            key: ValueKey(
+                                'import_backup_${_optionController.backupActionKey.value}'),
+                            title: const Text('导入备份'),
+                            subtitle: const Text('从备份文件恢复，将覆盖当前数据'),
+                            trailing: const BackChervonRow(),
+                            onTap: () => _optionController.importBackup(),
+                          ),
+                        ]))),
                 // 工具
                 SliverToBoxAdapter(
                     child: CupertinoListSection.insetGrouped(
@@ -473,6 +477,28 @@ class OptionPage extends StatelessWidget {
                         onTap: () async {
                           Navigator.of(context, rootNavigator: true)
                               .pushNamed('/ecardpaypage');
+                        },
+                      ),
+                    ])),
+                // 网络与环境
+                SliverToBoxAdapter(
+                    child: CupertinoListSection.insetGrouped(
+                        additionalDividerMargin: 2,
+                        margin: _defaultMargin,
+                        header: Container(
+                            padding: const EdgeInsets.only(left: 16),
+                            child: Text('网络与环境', style: headerFooterTextStyle)),
+                        children: <Widget>[
+                      CupertinoListTile(
+                        title: const Text('网络代理与校内直连'),
+                        subtitle: const Text('解决挂节点无法访问浙大、分流规则与连通性体检'),
+                        trailing: const BackChervonRow(),
+                        onTap: () async {
+                          Navigator.of(context, rootNavigator: true).push(
+                            CupertinoPageRoute(
+                              builder: (context) => const NetworkProxyPage(),
+                            ),
+                          );
                         },
                       ),
                     ])),

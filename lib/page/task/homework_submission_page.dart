@@ -12,6 +12,7 @@ import 'package:url_launcher/url_launcher_string.dart';
 import 'package:celechron/design/round_rectangle_card.dart';
 import 'package:celechron/http/zjuServices/courses.dart';
 import 'package:celechron/http/zjuServices/network_defense.dart';
+import 'package:celechron/model/scholar.dart';
 import 'package:celechron/model/task.dart';
 import 'package:celechron/model/todo.dart';
 import 'package:celechron/page/flow/flow_controller.dart';
@@ -60,6 +61,27 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
   double? _score;
   DateTime? _submittedAt;
   bool _allowRetract = true;
+
+  /// 是否为在线小测 / 随堂测验
+  bool get _isQuiz {
+    if (widget.todo?.isQuiz == true) return true;
+    if (widget.task?.isQuiz == true) return true;
+    final type = _activityDetails?['type']?.toString().toLowerCase();
+    if (type == 'quiz' ||
+        type == 'exam' ||
+        type == 'assessment' ||
+        type == 'test') {
+      return true;
+    }
+    final t = _resolvedTitle.toLowerCase();
+    return t.contains('小测') ||
+        t.contains('测验') ||
+        t.contains('quiz') ||
+        t.contains('随堂测') ||
+        t.contains('随堂考') ||
+        t.contains('在线测试') ||
+        t.contains('线上测试');
+  }
 
   List<Map<String, dynamic>> _teacherUploads = [];
   List<Map<String, dynamic>> _studentUploads = [];
@@ -158,7 +180,8 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
     } else if (widget.todo != null) {
       _resolvedTitle = widget.todo!.name;
     } else if (widget.task != null) {
-      _resolvedTitle = widget.task!.summary.replaceFirst(RegExp(r'^作业：'), '');
+      _resolvedTitle =
+          widget.task!.summary.replaceFirst(RegExp(r'^(作业|小测)：'), '');
     }
 
     if (widget.todo != null && widget.todo!.course.isNotEmpty) {
@@ -357,6 +380,39 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
     final aid = _resolvedActivityId;
     if (aid == null) return;
 
+    // 1. 立即持久化作业/测验状态到本地 Hive 存储
+    TodoTaskSync.recordHomeworkStatus(
+      aid,
+      completeness: submitted ? 'full' : 'incomplete',
+      score: score,
+      submittedAt: submitted ? (_submittedAt ?? DateTime.now()) : null,
+      clearIfIncomplete: !submitted,
+      isQuiz: _isQuiz,
+    );
+
+    // 2. 立即同步更新全局 Scholar todos 内存缓存，确保卡片与标签无需下拉刷新即可即时变色与变文案
+    if (Get.isRegistered<Rx<Scholar>>(tag: 'scholar')) {
+      final scholarRx = Get.find<Rx<Scholar>>(tag: 'scholar');
+      for (final todo in scholarRx.value.todos) {
+        if (todo.id == aid) {
+          todo.completeness = submitted ? 'full' : 'incomplete';
+          if (score != null) {
+            todo.score = score;
+            todo.submissionStatus = HomeworkSubmissionStatus.graded;
+          } else if (submitted) {
+            todo.submissionStatus = HomeworkSubmissionStatus.submitted;
+            todo.submittedAt ??= DateTime.now();
+          } else {
+            todo.submissionStatus = HomeworkSubmissionStatus.unsubmitted;
+            todo.submittedAt = null;
+          }
+          break;
+        }
+      }
+      scholarRx.refresh();
+    }
+
+    // 3. 实时同步任务列表 (taskList)
     bool hasChanged = false;
     if (Get.isRegistered<RxList<Task>>(tag: 'taskList')) {
       final taskList = Get.find<RxList<Task>>(tag: 'taskList');
@@ -839,8 +895,8 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
       navigationBar: CupertinoNavigationBar(
         middle: Text(
           _resolvedCourseName.isNotEmpty
-              ? '$_resolvedCourseName · 作业'
-              : '作业详情与提交',
+              ? '$_resolvedCourseName · ${_isQuiz ? '在线测验' : '作业'}'
+              : (_isQuiz ? '在线测试详情' : '作业详情与提交'),
           overflow: TextOverflow.ellipsis,
         ),
         trailing: Row(
@@ -888,17 +944,432 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
                       _buildErrorCard(),
                       const SizedBox(height: 12),
                     ],
+                    if (_isQuiz) ...[
+                      _buildQuizRuleCard(),
+                      const SizedBox(height: 12),
+                    ],
                     _buildRequirementsCard(),
                     const SizedBox(height: 12),
                     if (_teacherUploads.isNotEmpty) ...[
                       _buildTeacherUploadsCard(),
                       const SizedBox(height: 12),
                     ],
-                    _buildSubmissionCard(),
+                    if (_isQuiz)
+                      _buildQuizConsoleSection()
+                    else
+                      _buildSubmissionCard(),
                     const SizedBox(height: 24),
                   ],
                 ),
               ),
+      ),
+    );
+  }
+
+  Widget _buildQuizRuleCard() {
+    final details = _activityDetails;
+    if (details == null) return const SizedBox.shrink();
+
+    // 提取测验参数
+    String? durationStr;
+    final rawDuration =
+        details['duration'] ?? details['time_limit'] ?? details['timelimit'];
+    if (rawDuration is num && rawDuration > 0) {
+      durationStr = '$rawDuration 分钟';
+    } else if (rawDuration is String && rawDuration.isNotEmpty) {
+      durationStr = rawDuration.contains('分') ? rawDuration : '$rawDuration 分钟';
+    }
+
+    String? attemptsStr;
+    final rawAttempts = details['submission_count_limit'] ??
+        details['allowed_attempts'] ??
+        details['submit_count_limit'] ??
+        details['attempt_limit'];
+    if (rawAttempts is num) {
+      attemptsStr = rawAttempts > 0 ? '$rawAttempts 次' : '不限次数';
+    } else if (rawAttempts is String && rawAttempts.isNotEmpty) {
+      attemptsStr = rawAttempts;
+    }
+
+    String? totalScoreStr;
+    final rawScore =
+        details['total_score'] ?? details['score'] ?? details['max_score'];
+    if (rawScore is num && rawScore > 0) {
+      totalScoreStr = rawScore == rawScore.roundToDouble()
+          ? '${rawScore.toInt()} 分'
+          : '${rawScore.toStringAsFixed(1)} 分';
+    }
+
+    String? questionsCountStr;
+    final rawQCount = details['question_count'] ?? details['questions_count'];
+    if (rawQCount is num && rawQCount > 0) {
+      questionsCountStr = '$rawQCount 题';
+    }
+
+    return RoundRectangleCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(CupertinoIcons.square_list,
+                  size: 16, color: CupertinoColors.systemPurple),
+              const SizedBox(width: 6),
+              const Text(
+                '测验规则与说明',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: CupertinoColors.systemPurple.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  '在线小测',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: CupertinoColors.systemPurple,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              _buildQuizParamChip(
+                icon: CupertinoIcons.stopwatch,
+                label: '答题限时',
+                value: durationStr ?? '不限时长',
+              ),
+              _buildQuizParamChip(
+                icon: CupertinoIcons.repeat,
+                label: '允许次数',
+                value: attemptsStr ?? '1 次',
+              ),
+              if (totalScoreStr != null)
+                _buildQuizParamChip(
+                  icon: CupertinoIcons.flag,
+                  label: '测验满分',
+                  value: totalScoreStr,
+                ),
+              if (questionsCountStr != null)
+                _buildQuizParamChip(
+                  icon: CupertinoIcons.number,
+                  label: '题目数量',
+                  value: questionsCountStr,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuizParamChip({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: CupertinoColors.systemPurple.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: CupertinoColors.systemPurple),
+          const SizedBox(width: 5),
+          Text(
+            '$label: ',
+            style: const TextStyle(
+              fontSize: 12,
+              color: CupertinoColors.secondaryLabel,
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: CupertinoColors.systemPurple,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuizConsoleSection() {
+    return RoundRectangleCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(
+                _isSubmitted
+                    ? CupertinoIcons.check_mark_circled_solid
+                    : CupertinoIcons.pencil_outline,
+                size: 16,
+                color: _isSubmitted
+                    ? CupertinoColors.systemGreen
+                    : CupertinoColors.systemPurple,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _isSubmitted ? '测验完成记录' : '在线测验作答',
+                style:
+                    const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_isSubmitted) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: CupertinoColors.systemGreen.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: CupertinoColors.systemGreen.withValues(alpha: 0.25),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(CupertinoIcons.checkmark_alt,
+                          size: 16, color: CupertinoColors.systemGreen),
+                      const SizedBox(width: 6),
+                      Text(
+                        _submittedAt != null
+                            ? '已于 ${_submittedAt!.year}-${_submittedAt!.month.toString().padLeft(2, '0')}-${_submittedAt!.day.toString().padLeft(2, '0')} ${_submittedAt!.hour.toString().padLeft(2, '0')}:${_submittedAt!.minute.toString().padLeft(2, '0')} 完成作答'
+                            : '已在学在浙大完成测验作答',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: CupertinoColors.systemGreen,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_score != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: CupertinoColors.systemOrange
+                            .withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(CupertinoIcons.star_fill,
+                              size: 14, color: CupertinoColors.systemOrange),
+                          const SizedBox(width: 5),
+                          Text(
+                            '测验得分：${_score == _score!.roundToDouble() ? _score!.toInt() : _score!.toStringAsFixed(1)} 分',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: CupertinoColors.systemOrange,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (_teacherComment != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      '教师评语：$_teacherComment',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: CupertinoColors.systemPurple.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: CupertinoColors.systemPurple.withValues(alpha: 0.2),
+                  width: 1,
+                ),
+              ),
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(CupertinoIcons.info_circle,
+                      size: 16, color: CupertinoColors.systemPurple),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '在线小测/随堂测试需在学在浙大在线答题系统完成。请点击下方“进入在线作答”在浏览器中完成试题。答题完毕后，点击“探测作答与得分状态”即可一键同步。',
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.4,
+                        color: CupertinoColors.systemPurple,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+
+          // 核心作答按钮
+          CupertinoButton.filled(
+            padding: const EdgeInsets.symmetric(vertical: 11),
+            borderRadius: BorderRadius.circular(8),
+            onPressed: () => launchUrlString(
+              _resolvedSubmitUrl,
+              mode: LaunchMode.externalApplication,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(CupertinoIcons.rocket_fill,
+                    size: 17, color: CupertinoColors.white),
+                const SizedBox(width: 8),
+                Text(
+                  _isSubmitted ? '在网页端查看答卷与解析' : '🚀 进入学在浙大在线作答',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: CupertinoColors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // 探测与辅助按钮行
+          Row(
+            children: [
+              Expanded(
+                child: CupertinoButton(
+                  padding: const EdgeInsets.symmetric(vertical: 9),
+                  color: CupertinoColors.activeBlue.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  onPressed: _isLoading ? null : _loadData,
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(CupertinoIcons.search,
+                          size: 14, color: CupertinoColors.activeBlue),
+                      SizedBox(width: 5),
+                      Text(
+                        '探测作答与得分',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: CupertinoColors.activeBlue,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: CupertinoButton(
+                  padding: const EdgeInsets.symmetric(vertical: 9),
+                  color: _isSubmitted
+                      ? CupertinoColors.destructiveRed.withValues(alpha: 0.12)
+                      : CupertinoColors.systemGreen.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  onPressed: () {
+                    final targetSubmitted = !_isSubmitted;
+                    setState(() {
+                      _isSubmitted = targetSubmitted;
+                      if (targetSubmitted) {
+                        _submittedAt ??= DateTime.now();
+                      }
+                    });
+                    _syncTaskStatusLocally(targetSubmitted, _score);
+                  },
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        _isSubmitted
+                            ? CupertinoIcons.clear_circled
+                            : CupertinoIcons.checkmark_alt_circle,
+                        size: 14,
+                        color: _isSubmitted
+                            ? CupertinoColors.destructiveRed
+                            : CupertinoColors.systemGreen,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        _isSubmitted ? '标记为未作答' : '手动标记已作答',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: _isSubmitted
+                              ? CupertinoColors.destructiveRed
+                              : CupertinoColors.systemGreen,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          CupertinoButton(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: _resolvedSubmitUrl));
+              showCupertinoDialog<void>(
+                context: context,
+                builder: (ctx) => CupertinoAlertDialog(
+                  title: const Text('已复制作答链接'),
+                  content: const Padding(
+                    padding: EdgeInsets.only(top: 8.0),
+                    child: Text('测验作答链接已复制到剪贴板，您可以发送到电脑端或平板端浏览器中作答。'),
+                  ),
+                  actions: [
+                    CupertinoDialogAction(
+                      isDefaultAction: true,
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('好的'),
+                    ),
+                  ],
+                ),
+              );
+            },
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(CupertinoIcons.doc_on_clipboard, size: 14),
+                SizedBox(width: 4),
+                Text('复制作答直达链接', style: TextStyle(fontSize: 13)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -927,17 +1398,24 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
       badgeBg = CupertinoColors.systemGreen.withValues(alpha: 0.15);
       badgeFg = CupertinoColors.systemGreen;
       badgeIcon = CupertinoIcons.checkmark_circle_fill;
-      badgeText = '已提交（待批改）';
+      badgeText = _isQuiz ? '已作答（待批改）' : '已提交（待批改）';
     } else if (isOverdue) {
       badgeBg = CupertinoColors.systemRed.withValues(alpha: 0.12);
       badgeFg = CupertinoColors.systemRed;
       badgeIcon = CupertinoIcons.exclamationmark_circle_fill;
-      badgeText = '已逾期';
+      badgeText = _isQuiz ? '已逾期未测' : '已逾期';
     } else {
-      badgeBg = CupertinoColors.activeBlue.withValues(alpha: 0.12);
-      badgeFg = CupertinoColors.activeBlue;
-      badgeIcon = CupertinoIcons.clock;
-      badgeText = '待提交';
+      if (_isQuiz) {
+        badgeBg = CupertinoColors.systemPurple.withValues(alpha: 0.15);
+        badgeFg = CupertinoColors.systemPurple;
+        badgeIcon = CupertinoIcons.pencil_ellipsis_rectangle;
+        badgeText = '待作答';
+      } else {
+        badgeBg = CupertinoColors.activeBlue.withValues(alpha: 0.12);
+        badgeFg = CupertinoColors.activeBlue;
+        badgeIcon = CupertinoIcons.clock;
+        badgeText = '待提交';
+      }
     }
 
     String ddlStr = '未指定截止时间';
@@ -960,6 +1438,32 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_isQuiz) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: CupertinoColors.systemPurple.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(CupertinoIcons.pencil_outline,
+                      size: 11, color: CupertinoColors.systemPurple),
+                  SizedBox(width: 3),
+                  Text(
+                    '随堂测验 / 在线小测',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: CupertinoColors.systemPurple,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           Row(
             children: [
               Expanded(

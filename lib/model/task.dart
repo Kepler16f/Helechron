@@ -538,4 +538,19 @@ class Task {
     }
     return false;
   }
+
+  /// 是否为学在浙大在线小测 / 随堂测验
+  bool get isQuiz {
+    final lowerSummary = summary.toLowerCase();
+    final lowerDesc = description.toLowerCase();
+    return lowerSummary.contains('小测') ||
+        lowerSummary.contains('测验') ||
+        lowerSummary.contains('quiz') ||
+        lowerSummary.contains('随堂测') ||
+        lowerSummary.contains('随堂考') ||
+        lowerSummary.contains('在线测试') ||
+        lowerDesc.contains('在线测试') ||
+        lowerDesc.contains('随堂小测') ||
+        lowerDesc.contains('学在浙大在线测试');
+  }
 }

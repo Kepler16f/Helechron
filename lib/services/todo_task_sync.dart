@@ -72,6 +72,7 @@ class TodoTaskSync {
     double? score,
     DateTime? submittedAt,
     bool clearIfIncomplete = false,
+    bool? isQuiz,
   }) {
     if (activityId.isEmpty) return;
     try {
@@ -80,6 +81,10 @@ class TodoTaskSync {
         final map = _getStatusMap();
         final existing =
             (map[activityId] as Map?)?.cast<String, dynamic>() ?? {};
+
+        if (isQuiz != null) {
+          existing['is_quiz'] = isQuiz;
+        }
 
         final isComplete = completeness == 'full' || score != null;
         if (!isComplete && clearIfIncomplete) {
@@ -179,13 +184,26 @@ class TodoTaskSync {
       final existingTask = existingTodoTasks[key];
 
       final recorded = getHomeworkStatus(todo.id);
+      final isQuiz = todo.isQuiz || (recorded?['is_quiz'] == true);
       final isSubmitted = todo.isSubmitted ||
           recorded?['completeness'] == 'full' ||
           recorded?['score'] != null;
 
-      final expectedSummary = '作业：${todo.name}';
-      final expectedDescription =
-          '课程：${todo.course}\n来源：学在浙大\n提交：${todo.submitUrl}';
+      // 同步持久化 isQuiz 标志
+      if (todo.isQuiz) {
+        recordHomeworkStatus(
+          todo.id,
+          completeness: todo.completeness,
+          score: todo.score,
+          submittedAt: todo.submittedAt,
+          isQuiz: true,
+        );
+      }
+
+      final expectedSummary = isQuiz ? '小测：${todo.name}' : '作业：${todo.name}';
+      final expectedDescription = isQuiz
+          ? '课程：${todo.course}\n来源：学在浙大在线测试\n测验：${todo.submitUrl}'
+          : '课程：${todo.course}\n来源：学在浙大\n提交：${todo.submitUrl}';
 
       if (existingTask != null) {
         // 已存在任务：若为旧版本生成的 DDL 任务，自动平滑升级为作业专属样式
@@ -206,7 +224,8 @@ class TodoTaskSync {
           modified = true;
         }
         if (existingTask.description != expectedDescription &&
-            existingTask.description.contains('来源：学在浙大')) {
+            (existingTask.description.contains('来源：学在浙大') ||
+                existingTask.description.contains('来源：学在浙大在线测试'))) {
           existingTask.description = expectedDescription;
           hasChanged = true;
         }
@@ -370,12 +389,17 @@ class TodoTaskSync {
       final isSubmitted =
           (score != null) || (completeness == 'full' && !isDraft);
 
+      final isQuiz = (title?.contains('小测') == true) ||
+          (title?.contains('测验') == true) ||
+          (title?.toLowerCase().contains('quiz') == true);
+
       recordHomeworkStatus(
         activityId,
         completeness: completeness,
         score: score,
         submittedAt: isSubmitted ? submittedAt : null,
         clearIfIncomplete: !isSubmitted,
+        isQuiz: isQuiz ? true : null,
       );
 
       // 实时更新任务列表中对应的作业状态
@@ -397,20 +421,49 @@ class TodoTaskSync {
         taskList.refresh();
       }
 
+      // 实时同步全局 Scholar todos 内存缓存，确保标签与卡片无需重新下拉即可立即更新
+      if (Get.isRegistered<Rx<Scholar>>(tag: 'scholar')) {
+        final scholarRx = Get.find<Rx<Scholar>>(tag: 'scholar');
+        for (final todo in scholarRx.value.todos) {
+          if (todo.id == activityId) {
+            todo.completeness = completeness;
+            todo.score = score;
+            todo.submittedAt = isSubmitted ? submittedAt : null;
+            if (score != null) {
+              todo.submissionStatus = HomeworkSubmissionStatus.graded;
+            } else if (isSubmitted) {
+              todo.submissionStatus = HomeworkSubmissionStatus.submitted;
+            } else {
+              todo.submissionStatus = HomeworkSubmissionStatus.unsubmitted;
+            }
+            break;
+          }
+        }
+        scholarRx.refresh();
+      }
+
+      if (Get.isRegistered<TaskController>()) {
+        final tc = Get.find<TaskController>();
+        tc.updateDeadlineList();
+        tc.saveDeadlineListToDb();
+      }
+
       String resultTitle;
       String resultDesc;
+      final typeLabel = isQuiz ? '测验' : '作业';
       if (score != null) {
         final scoreText = score == score.roundToDouble()
             ? score.toInt().toString()
             : score.toStringAsFixed(1);
-        resultTitle = '✅ 作业已批改';
+        resultTitle = '✅ $typeLabel已批改';
         resultDesc = '教师已打分：$scoreText 分\n完成度：100%\n已自动将该任务标记为已完成。';
       } else if (completeness == 'full') {
-        resultTitle = '✓ 作业已提交';
-        resultDesc = '学在浙大记录显示作业已提交（待教师批改）\n已自动将该任务标记为已完成。';
+        resultTitle = isQuiz ? '✓ 测验已作答' : '✓ 作业已提交';
+        resultDesc =
+            '学在浙大记录显示$typeLabel已${isQuiz ? '完成作答' : '提交'}（待教师批阅）\n已自动将该任务标记为已完成。';
       } else {
-        resultTitle = '⏱ 作业尚未提交';
-        resultDesc = '学在浙大记录显示当前尚未提交该作业，请在截止时间前完成提交。';
+        resultTitle = '⏱ $typeLabel尚未${isQuiz ? '作答' : '提交'}';
+        resultDesc = '学在浙大记录显示当前尚未${isQuiz ? '完成该测验' : '提交该作业'}，请在截止时间前完成。';
       }
 
       showCupertinoDialog<void>(

@@ -105,6 +105,7 @@ class ECardWidgetMessenger {
       final httpClient = HttpClient();
       httpClient.userAgent =
           "E-CampusZJU/2.3.20 (iPhone; iOS 17.5.1; Scale/3.00)";
+      applyZjuNetworkDefense(httpClient);
       try {
         final account =
             eCardAccount ?? await ECard.getAccount(httpClient, synjonesAuth);

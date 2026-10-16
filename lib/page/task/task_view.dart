@@ -9,6 +9,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:celechron/model/task.dart';
 import 'package:celechron/model/period.dart';
+import 'package:celechron/model/scholar.dart';
+import 'package:celechron/model/todo.dart';
 import 'task_edit_page.dart';
 import 'homework_submission_page.dart';
 import 'package:celechron/page/scholar/todo/todo_card.dart';
@@ -44,12 +46,10 @@ class TaskPage extends StatelessWidget {
     final recorded = aid != null ? TodoTaskSync.getHomeworkStatus(aid) : null;
     final score = (recorded?['score'] as num?)?.toDouble();
     final completeness = recorded?['completeness']?.toString();
-    final isExplicitlyIncomplete =
-        completeness != null && completeness != 'full' && score == null;
-    final isSubmitted = !isExplicitlyIncomplete &&
-        (deadline.status == TaskStatus.completed ||
-            completeness == 'full' ||
-            score != null);
+    final isQuiz = deadline.isQuiz || (recorded?['is_quiz'] == true);
+    final isSubmitted = completeness == 'full' ||
+        score != null ||
+        deadline.status == TaskStatus.completed;
     final isGraded = score != null;
     final isOverdue = !isSubmitted && deadline.endTime.isBefore(DateTime.now());
 
@@ -70,17 +70,24 @@ class TaskPage extends StatelessWidget {
       bg = CupertinoColors.systemGreen.withValues(alpha: 0.15);
       fg = CupertinoColors.systemGreen;
       icon = CupertinoIcons.checkmark_circle_fill;
-      text = '已提交';
+      text = isQuiz ? '已作答' : '已提交';
     } else if (isOverdue) {
       bg = CupertinoColors.systemRed.withValues(alpha: 0.12);
       fg = CupertinoColors.systemRed;
       icon = CupertinoIcons.exclamationmark_circle_fill;
       text = '逾期';
     } else {
-      bg = CupertinoColors.activeBlue.withValues(alpha: 0.12);
-      fg = CupertinoColors.activeBlue;
-      icon = CupertinoIcons.clock;
-      text = '待提交';
+      if (isQuiz) {
+        bg = CupertinoColors.systemPurple.withValues(alpha: 0.15);
+        fg = CupertinoColors.systemPurple;
+        icon = CupertinoIcons.pencil_ellipsis_rectangle;
+        text = '待作答';
+      } else {
+        bg = CupertinoColors.activeBlue.withValues(alpha: 0.12);
+        fg = CupertinoColors.activeBlue;
+        icon = CupertinoIcons.clock;
+        text = '待提交';
+      }
     }
 
     return CupertinoButton(
@@ -454,6 +461,31 @@ class TaskPage extends StatelessWidget {
                   deadline.forceRefreshStatus();
                 } else {
                   deadline.status = TaskStatus.completed;
+                }
+                final isCompleted = deadline.status == TaskStatus.completed;
+                if (deadline.fromUid != null &&
+                    deadline.fromUid!.startsWith('courses-todo:')) {
+                  final aid =
+                      deadline.fromUid!.substring('courses-todo:'.length);
+                  TodoTaskSync.recordHomeworkStatus(
+                    aid,
+                    completeness: isCompleted ? 'full' : 'incomplete',
+                    clearIfIncomplete: !isCompleted,
+                    isQuiz: deadline.isQuiz ? true : null,
+                  );
+                  if (Get.isRegistered<Rx<Scholar>>(tag: 'scholar')) {
+                    final scholarRx = Get.find<Rx<Scholar>>(tag: 'scholar');
+                    for (final todo in scholarRx.value.todos) {
+                      if (todo.id == aid) {
+                        todo.completeness = isCompleted ? 'full' : 'incomplete';
+                        todo.submissionStatus = isCompleted
+                            ? HomeworkSubmissionStatus.submitted
+                            : HomeworkSubmissionStatus.unsubmitted;
+                        break;
+                      }
+                    }
+                    scholarRx.refresh();
+                  }
                 }
                 _taskController.lastChangeIsHomeworkOnly.value = true;
                 _taskController.updateDeadlineList();

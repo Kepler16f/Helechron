@@ -146,9 +146,15 @@ class TodoCard extends StatelessWidget {
         icon = CupertinoIcons.exclamationmark_circle_fill;
         break;
       case HomeworkSubmissionStatus.unsubmitted:
-        bg = CupertinoColors.activeBlue.withValues(alpha: 0.12);
-        fg = CupertinoColors.activeBlue;
-        icon = CupertinoIcons.clock;
+        if (todo.isQuiz) {
+          bg = CupertinoColors.systemPurple.withValues(alpha: 0.15);
+          fg = CupertinoColors.systemPurple;
+          icon = CupertinoIcons.pencil_ellipsis_rectangle;
+        } else {
+          bg = CupertinoColors.activeBlue.withValues(alpha: 0.12);
+          fg = CupertinoColors.activeBlue;
+          icon = CupertinoIcons.clock;
+        }
         break;
     }
 
@@ -202,6 +208,24 @@ class TodoCard extends StatelessWidget {
         children: [
           Row(
             children: [
+              if (todo.isQuiz)
+                Container(
+                  margin: const EdgeInsets.only(right: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.systemPurple.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    '测验',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: CupertinoColors.systemPurple,
+                    ),
+                  ),
+                ),
               Expanded(
                 child: Text(
                   todo.course,
