@@ -7,6 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:get/get.dart';
 import 'package:celechron/services/ohos_native_service.dart';
 import 'package:celechron/services/secure_storage_service.dart';
+import 'package:celechron/worker/ecard_widget_messenger.dart';
 
 import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/design/persistent_headers.dart';
@@ -22,7 +23,8 @@ class ECardPayPage extends StatefulWidget {
   State<ECardPayPage> createState() => _ECardPayPageState();
 }
 
-class _ECardPayPageState extends State<ECardPayPage> {
+class _ECardPayPageState extends State<ECardPayPage>
+    with WidgetsBindingObserver {
   final HttpClient _httpClient = HttpClient();
 
   static const String _testAccount = '3200000000';
@@ -45,16 +47,25 @@ class _ECardPayPageState extends State<ECardPayPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     applyZjuNetworkDefense(_httpClient);
     _load();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     _countdownTimer?.cancel();
     _httpClient.close(force: true);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _requestNewCode(showErrors: false);
+    }
   }
 
   Future<void> _load() async {
@@ -64,17 +75,47 @@ class _ECardPayPageState extends State<ECardPayPage> {
 
   Future<void> _requestNewCode({bool showErrors = false}) async {
     const secureStorage = FlutterSecureStorage();
-    final synjonesAuth = await secureStorage.read(key: 'synjonesAuth');
+    var synjonesAuth = await secureStorage.read(key: 'synjonesAuth');
 
-    if (synjonesAuth == null || synjonesAuth == _testAccount) {
+    // 若本地尚无 synjonesAuth，但已保存学号密码，则先自动登录获取凭据
+    if (synjonesAuth == null || synjonesAuth.isEmpty) {
+      final reloginOk = await ECardWidgetMessenger.update(notifyNative: false);
+      if (reloginOk) {
+        synjonesAuth = await secureStorage.read(key: 'synjonesAuth');
+      }
+    }
+
+    if (synjonesAuth == null ||
+        synjonesAuth.isEmpty ||
+        synjonesAuth == _testAccount) {
       _viewState.value = _ViewState.notLoggedIn;
       _cancelTimers();
       return;
     }
 
-    final eCardAccount = await secureStorage.read(key: 'eCardAccount');
-    final account =
-        eCardAccount ?? await ECard.getAccount(_httpClient, synjonesAuth);
+    _httpClient.userAgent =
+        "E-CampusZJU/2.3.20 (iPhone; iOS 17.5.1; Scale/3.00)";
+
+    String? eCardAccount = await secureStorage.read(key: 'eCardAccount');
+    String account = eCardAccount ?? '';
+    if (account.isEmpty) {
+      try {
+        account = await ECard.getAccount(_httpClient, synjonesAuth);
+      } catch (_) {
+        // synjonesAuth 可能在墓碑后台过期，自动重登一次
+        final reloginOk =
+            await ECardWidgetMessenger.update(notifyNative: false);
+        if (reloginOk) {
+          synjonesAuth = await secureStorage.read(key: 'synjonesAuth') ?? '';
+          account = await secureStorage.read(key: 'eCardAccount') ?? '';
+          if (account.isEmpty && synjonesAuth.isNotEmpty) {
+            try {
+              account = await ECard.getAccount(_httpClient, synjonesAuth);
+            } catch (_) {}
+          }
+        }
+      }
+    }
     if (account.isEmpty) {
       _viewState.value = _ViewState.notLoggedIn;
       _cancelTimers();
@@ -82,10 +123,29 @@ class _ECardPayPageState extends State<ECardPayPage> {
     }
     await secureStorage.write(key: 'eCardAccount', value: account);
 
-    _httpClient.userAgent =
-        "E-CampusZJU/2.3.20 (iPhone; iOS 17.5.1; Scale/3.00)";
     try {
-      final code = await ECard.getBarcode(_httpClient, synjonesAuth, account);
+      String code;
+      try {
+        code = await ECard.getBarcode(_httpClient, synjonesAuth, account);
+      } catch (firstErr) {
+        // 墓碑后台唤醒或长时间未打开后 synjonesAuth 过期（HTTP 401/302/HTML 登录页）：
+        // 自动调用 CAS + Synjones OAuth2 重登并重试一次取码
+        final reloginOk =
+            await ECardWidgetMessenger.update(notifyNative: false);
+        if (!reloginOk) {
+          rethrow;
+        }
+        final freshAuth = await secureStorage.read(key: 'synjonesAuth');
+        final freshAccount = await secureStorage.read(key: 'eCardAccount');
+        if (freshAuth == null || freshAuth.isEmpty) {
+          rethrow;
+        }
+        synjonesAuth = freshAuth;
+        if (freshAccount != null && freshAccount.isNotEmpty) {
+          account = freshAccount;
+        }
+        code = await ECard.getBarcode(_httpClient, synjonesAuth, account);
+      }
       final fetchedAt = DateTime.now();
       _code.value = code;
       _fetchedAt.value = fetchedAt;
@@ -95,7 +155,7 @@ class _ECardPayPageState extends State<ECardPayPage> {
       await secureStorage.write(key: _cacheKeyCode, value: code);
       await secureStorage.write(
           key: _cacheKeyTime, value: fetchedAt.toIso8601String());
-      _syncPaymentCode(code, auth: synjonesAuth, account: account);
+      await _syncPaymentCode(code, auth: synjonesAuth, account: account);
       _scheduleCountdown(fetchedAt);
     } catch (e) {
       // 失败时尝试读取缓存码
@@ -134,12 +194,18 @@ class _ECardPayPageState extends State<ECardPayPage> {
       RegExp(r'^[A-Za-z0-9+/=_\-]{14,64}$');
   static bool _isValidBarcode(String s) => _validBarcodePattern.hasMatch(s);
 
-  void _syncPaymentCode(String code, {String? auth, String? account}) {
-    OhosNativeService.instance.updatePaymentCodeWidget(code: code);
+  Future<void> _syncPaymentCode(String code,
+      {String? auth, String? account}) async {
+    await OhosNativeService.instance.updatePaymentCodeWidget(code: code);
     if (auth != null && auth.isNotEmpty) {
-      OhosNativeService.instance.setPaymentCredentials(
+      const secureStorage = FlutterSecureStorage();
+      final username = await secureStorage.read(key: 'username');
+      final password = await secureStorage.read(key: 'password');
+      await OhosNativeService.instance.setPaymentCredentials(
         synjonesAuth: auth,
         eCardAccount: account ?? '',
+        username: username,
+        password: password,
       );
     }
   }
@@ -230,19 +296,40 @@ class _ECardPayPageState extends State<ECardPayPage> {
           ],
         );
       case _ViewState.showing:
-        return Stack(
-          alignment: Alignment.center,
-          children: [
-            Container(
-              width: 200,
-              height: 200,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-              ),
+        // 对齐官方电子校园卡物理尺寸与静区标准：
+        // 外框 204×204 纯白卡片，四周各留 22dp 纯白静区（Quiet Zone），
+        // 内部二维码 160×160dp，采用自动版本（20位纯数字为 21×21 模块）与 M 级纠错。
+        return GestureDetector(
+          onTap: () {
+            if (_viewState.value != _ViewState.loading) {
+              _viewState.value = _ViewState.loading;
+              _requestNewCode(showErrors: true);
+            }
+          },
+          child: Container(
+            width: 204,
+            height: 204,
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x14000000),
+                  blurRadius: 12,
+                  offset: Offset(0, 4),
+                ),
+              ],
             ),
-            QrImageView(data: _code.value, version: 3, size: 200),
-          ],
+            child: QrImageView(
+              data: _code.value,
+              version: QrVersions.auto,
+              errorCorrectionLevel: QrErrorCorrectLevel.M,
+              size: 160,
+              padding: EdgeInsets.zero,
+              backgroundColor: Colors.white,
+            ),
+          ),
         );
     }
   }
@@ -261,7 +348,7 @@ class _ECardPayPageState extends State<ECardPayPage> {
           );
         }
         return Text(
-          '剩余 ${_secondsRemaining.value}s 自动刷新',
+          '剩余 ${_secondsRemaining.value}s 自动刷新 · 点击二维码可刷新',
           style: const TextStyle(fontSize: 12),
         );
       case _ViewState.error:
@@ -342,7 +429,8 @@ class _ECardPayPageState extends State<ECardPayPage> {
             SliverFillRemaining(
               child: Column(
                 children: [
-                  const Spacer(flex: 4),
+                  // 上6下4的比例将二维码中心下移至屏幕高度约 52% 处（与官方电子校园卡一致）
+                  const Spacer(flex: 6),
                   Obx(() => _buildCenter(context)),
                   const SizedBox(height: 16),
                   Obx(() => _buildSubtitle(context)),
@@ -350,7 +438,7 @@ class _ECardPayPageState extends State<ECardPayPage> {
                   Obx(() => _buildCodeValue()),
                   const SizedBox(height: 24),
                   Obx(() => _buildRefreshButton(context)),
-                  const Spacer(flex: 6),
+                  const Spacer(flex: 4),
                 ],
               ),
             ),

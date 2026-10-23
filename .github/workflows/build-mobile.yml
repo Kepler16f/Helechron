@@ -1,0 +1,100 @@
+name: Build Aelechron (Android & iOS)
+
+on:
+  push:
+    branches: [main, master, dev]
+  pull_request:
+    branches: [main, master, dev]
+  workflow_dispatch:
+
+jobs:
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Get version
+        id: get_version
+        run: |
+          VERSION=$(grep "displayVersion =>" lib/worker/fuse.dart | sed "s/.*'\(.*\)'.*/\1/")
+          echo "version=${VERSION:-dev}" >> "$GITHUB_OUTPUT"
+
+      - name: Build APK (release)
+        run: flutter build apk --release
+        timeout-minutes: 40
+
+      - name: Rename APK
+        run: |
+          mkdir -p build/dist
+          cp build/app/outputs/flutter-apk/app-release.apk \
+            "build/dist/Aelechron_${{ steps.get_version.outputs.version }}_android.apk"
+          ls -lh build/dist
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Aelechron_${{ steps.get_version.outputs.version }}_android
+          path: build/dist/*.apk
+          retention-days: 30
+          if-no-files-found: error
+
+  ios:
+    name: iOS IPA (unsigned)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Get version
+        id: get_version
+        run: |
+          VERSION=$(grep "displayVersion =>" lib/worker/fuse.dart | sed "s/.*'\(.*\)'.*/\1/")
+          echo "version=${VERSION:-dev}" >> "$GITHUB_OUTPUT"
+
+      - name: Build iOS (no codesign)
+        run: flutter build ios --release --no-codesign
+        timeout-minutes: 60
+
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p build/dist/Payload
+          cp -R build/ios/iphoneos/Runner.app build/dist/Payload/
+          cd build/dist
+          zip -qr "Aelechron_${{ steps.get_version.outputs.version }}_ios_unsigned.ipa" Payload
+          rm -rf Payload
+          ls -lh
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Aelechron_${{ steps.get_version.outputs.version }}_ios_unsigned
+          path: build/dist/*.ipa
+          retention-days: 30
+          if-no-files-found: error
+

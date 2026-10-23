@@ -153,7 +153,7 @@ export default class EntryAbility extends FlutterAbility {
   /// 直接由原生把课程与付款码小组件刷新到最新状态（不经过 Dart）。
   private async pushAllWidgets(): Promise<void> {
     try {
-      const prefs = await this.getWidgetPrefs();
+      const prefs = await this.getWidgetPrefs(true);
       const courseIds = ((await prefs.get('course_form_ids', '')) as string)
         .split(',').filter(id => id.length > 0);
       if (courseIds.length > 0) {
@@ -1065,7 +1065,13 @@ export default class EntryAbility extends FlutterAbility {
   private widgetPrefsName = 'helechron_widget_data';
   private widgetPrefs: preferences.Preferences | null = null;
 
-  private async getWidgetPrefs(): Promise<preferences.Preferences> {
+  private async getWidgetPrefs(forceReload: boolean = false): Promise<preferences.Preferences> {
+    if (forceReload) {
+      try {
+        preferences.removePreferencesFromCacheSync(getContext(this), this.widgetPrefsName);
+        this.widgetPrefs = null;
+      } catch (_) {}
+    }
     if (this.widgetPrefs === null) {
       this.widgetPrefs = await preferences.getPreferences(
         getContext(this),
@@ -1098,7 +1104,7 @@ export default class EntryAbility extends FlutterAbility {
     try {
       const code = (call.argument('paymentCode') as string) || '';
       const name = (call.argument('displayName') as string) || '付款码';
-      const prefs = await this.getWidgetPrefs();
+      const prefs = await this.getWidgetPrefs(true);
       await prefs.put('paymentCode', code);
       await prefs.put('displayName', name);
       await prefs.put('hasCode', code.length > 0 ? '1' : '0');
@@ -1168,18 +1174,38 @@ export default class EntryAbility extends FlutterAbility {
     }
   }
 
-  /// 保存校园卡鉴权凭据，供付款码小组件在原生侧直接取码。
+  /// 保存校园卡鉴权凭据，供付款码小组件与放大页在原生侧直接取码及过期自动重登。
   private async setPaymentCredentials(call: MethodCall, result: MethodResult): Promise<void> {
     try {
       const synjonesAuth = (call.argument('synjonesAuth') as string) || '';
       const eCardAccount = (call.argument('eCardAccount') as string) || '';
-      if (synjonesAuth.length === 0) {
-        result.success(false);
+      const username = (call.argument('username') as string) || '';
+      const password = (call.argument('password') as string) || '';
+      const clear = call.argument('clear') === true;
+      const prefs = await this.getWidgetPrefs(true);
+      if (clear) {
+        await prefs.put('synjonesAuth', '');
+        await prefs.put('eCardAccount', '');
+        await prefs.put('zjuUsername', '');
+        await prefs.put('zjuPassword', '');
+        await prefs.put('paymentCode', '');
+        await prefs.put('hasCode', '0');
+        await prefs.flush();
+        result.success(true);
         return;
       }
-      const prefs = await this.getWidgetPrefs();
-      await prefs.put('synjonesAuth', synjonesAuth);
-      await prefs.put('eCardAccount', eCardAccount);
+      if (synjonesAuth.length > 0) {
+        await prefs.put('synjonesAuth', synjonesAuth);
+      }
+      if (eCardAccount.length > 0) {
+        await prefs.put('eCardAccount', eCardAccount);
+      }
+      if (username.length > 0) {
+        await prefs.put('zjuUsername', username);
+      }
+      if (password.length > 0) {
+        await prefs.put('zjuPassword', password);
+      }
       await prefs.flush();
       hilog.info(DOMAIN, TAG, 'setPaymentCredentials: stored');
       result.success(true);

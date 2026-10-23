@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'package:celechron/services/mobile_native_service.dart';
+import 'package:celechron/utils/platform_features.dart';
+
 class OhosNativeService {
   OhosNativeService._();
   static final OhosNativeService instance = OhosNativeService._();
@@ -18,6 +21,9 @@ class OhosNativeService {
 
   /// 检查日历权限
   Future<bool> checkCalendarPermission() async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.checkCalendarPermission();
+    }
     try {
       final result =
           await _channel.invokeMethod<bool>('checkCalendarPermission');
@@ -32,6 +38,9 @@ class OhosNativeService {
 
   /// 请求日历权限
   Future<bool> requestCalendarPermission() async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.requestCalendarPermission();
+    }
     try {
       final result =
           await _channel.invokeMethod<bool>('requestCalendarPermission');
@@ -53,6 +62,14 @@ class OhosNativeService {
     int reminderMinutes = 15,
     bool useAlarm = false,
   }) async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      final count = await MobileNativeService.instance.syncCalendarEvents(
+          events,
+          reminderMinutes: reminderMinutes,
+          useAlarm: useAlarm);
+      lastCalendarError = MobileNativeService.instance.lastCalendarError;
+      return count;
+    }
     try {
       lastCalendarError = null;
       final result = await _channel.invokeMethod<int>(
@@ -77,6 +94,9 @@ class OhosNativeService {
 
   /// 清除已同步的日历事件
   Future<int> clearCalendarEvents() async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.clearCalendarEvents();
+    }
     try {
       final result = await _channel.invokeMethod<int>('clearCalendarEvents');
       return result ?? 0;
@@ -90,6 +110,9 @@ class OhosNativeService {
 
   /// 检查是否存在已同步的 Helechron 日历
   Future<bool> hasSyncedCalendar() async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.hasSyncedCalendar();
+    }
     try {
       final result = await _channel.invokeMethod<bool>('hasSyncedCalendar');
       return result ?? false;
@@ -103,6 +126,9 @@ class OhosNativeService {
 
   /// 获取系统日历写入诊断信息（账户、事件总数、本应用事件数）
   Future<String> calendarDiagnostics() async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.calendarDiagnostics();
+    }
     try {
       final result = await _channel.invokeMethod<String>('calendarDiagnostics');
       return result ?? '';
@@ -115,6 +141,9 @@ class OhosNativeService {
 
   /// 自测：逐步测试日历 API 各环节（权限→获取日历→添加测试事件→回读→清理）
   Future<String> calendarSelfTest() async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.calendarSelfTest();
+    }
     try {
       final result = await _channel.invokeMethod<String>('calendarSelfTest');
       return result ?? '';
@@ -129,6 +158,9 @@ class OhosNativeService {
 
   /// 请求通知权限
   Future<bool> requestNotificationPermission() async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.requestNotificationPermission();
+    }
     try {
       final result = await _channel.invokeMethod<bool>(
         'requestNotificationPermission',
@@ -145,6 +177,9 @@ class OhosNativeService {
 
   /// 检查是否拥有通知权限
   Future<bool> isNotificationEnabled() async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.isNotificationEnabled();
+    }
     try {
       final result = await _channel.invokeMethod<bool>('isNotificationEnabled');
       return result ?? false;
@@ -163,6 +198,10 @@ class OhosNativeService {
     required String text,
     String? additionalText,
   }) async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance
+          .showNotification(id: id, title: title, text: text);
+    }
     try {
       final result = await _channel.invokeMethod<bool>('showNotification', {
         'id': id,
@@ -182,6 +221,9 @@ class OhosNativeService {
 
   /// 取消特定通知
   Future<bool> cancelNotification(int id) async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.cancelNotification(id);
+    }
     try {
       final result = await _channel.invokeMethod<bool>('cancelNotification', {
         'id': id,
@@ -197,6 +239,9 @@ class OhosNativeService {
 
   /// 取消所有通知
   Future<bool> cancelAllNotifications() async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.cancelAllNotifications();
+    }
     try {
       final result =
           await _channel.invokeMethod<bool>('cancelAllNotifications');
@@ -243,15 +288,21 @@ class OhosNativeService {
   }
 
   /// 将校园卡鉴权凭据写入小组件本地存储，
-  /// 供桌面小组件的「刷新」按钮在原生侧直接重新取码（无需拉起应用）。
+  /// 供桌面小组件与放大页在原生侧直接重新取码（包括墓碑后台/进程被杀时自动重登）。
   Future<void> setPaymentCredentials({
     required String synjonesAuth,
     required String eCardAccount,
+    String? username,
+    String? password,
+    bool clear = false,
   }) async {
     try {
       await _channel.invokeMethod('setPaymentCredentials', {
         'synjonesAuth': synjonesAuth,
         'eCardAccount': eCardAccount,
+        if (username != null) 'username': username,
+        if (password != null) 'password': password,
+        if (clear) 'clear': true,
       });
     } on PlatformException catch (e) {
       debugPrint('setPaymentCredentials failed: $e');
@@ -330,6 +381,9 @@ class OhosNativeService {
   /// 返回 {name, content}；用户取消、通道不可用或读取失败时返回 null。
   /// 选择器由系统授予临时读取授权，无需额外存储权限。
   Future<Map<String, String>?> pickTextFile() async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.pickTextFile();
+    }
     try {
       final result =
           await _channel.invokeMethod<Map<Object, Object?>>('pickTextFile');
@@ -354,6 +408,10 @@ class OhosNativeService {
   /// 返回包含 {'name': String, 'size': int, 'bytes': Uint8List} 的 Map；
   /// 用户取消、通道不可用或选择失败时返回 null。
   Future<Map<String, dynamic>?> pickAnyFile() async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      final list = await MobileNativeService.instance.pickAnyFiles(maxCount: 1);
+      return list.isEmpty ? null : list.first;
+    }
     try {
       final result =
           await _channel.invokeMethod<Map<Object, Object?>>('pickAnyFile');
@@ -379,6 +437,9 @@ class OhosNativeService {
   /// 返回包含 [{'name': String, 'size': int, 'bytes': Uint8List}, ...] 的列表；
   /// 用户取消、通道不可用或选择失败时返回空列表 []。
   Future<List<Map<String, dynamic>>> pickAnyFiles({int maxCount = 10}) async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.pickAnyFiles(maxCount: maxCount);
+    }
     try {
       lastFilePickError = null;
       final result = await _channel.invokeMethod<List<dynamic>>(

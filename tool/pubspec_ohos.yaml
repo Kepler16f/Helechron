@@ -1,0 +1,59 @@
+name: celechron
+description: Time scheduler for zjuers.
+publish_to: "none"
+version: 0.1.7-dev.5+92
+environment:
+  sdk: ">=3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  get:
+  cupertino_icons:
+  table_calendar:
+  hive:
+  hive_flutter:
+  uuid:
+  flutter_svg:
+  intl:
+  extended_sliver:
+  quiver: ^3.2.1
+  qr_flutter:
+  crypto:
+  timezone:
+  path_provider:
+    git:
+      url: "https://gitee.com/openharmony-sig/flutter_packages.git"
+      path: "packages/path_provider/path_provider"
+  share_plus:
+    git:
+      url: "https://gitee.com/openharmony-sig/flutter_plus_plugins.git"
+      path: "packages/share_plus/share_plus"
+  url_launcher:
+    git:
+      url: "https://gitee.com/openharmony-sig/flutter_packages.git"
+      path: "packages/url_launcher/url_launcher"
+  app_links: ^6.4.0
+
+dependency_overrides:
+  path_provider:
+    git:
+      url: "https://gitee.com/openharmony-sig/flutter_packages.git"
+      path: "packages/path_provider/path_provider"
+  url_launcher:
+    git:
+      url: "https://gitee.com/openharmony-sig/flutter_packages.git"
+      path: "packages/url_launcher/url_launcher"
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/

@@ -12,11 +12,13 @@ export default class EnlargedQRAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     hilog.info(DOMAIN, TAG, 'EnlargedQRAbility onCreate');
     this.extractPaymentCode(want);
+    AppStorage.setOrCreate('enlargedQrOpenSeq', Date.now());
   }
 
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     hilog.info(DOMAIN, TAG, 'EnlargedQRAbility onNewWant');
     this.extractPaymentCode(want);
+    AppStorage.setOrCreate('enlargedQrOpenSeq', Date.now());
     if (this.windowStage) {
       try {
         this.windowStage.getMainWindow().then((mainWindow: window.Window) => {
@@ -68,7 +70,7 @@ export default class EnlargedQRAbility extends UIAbility {
           mainWindow.setWindowBackgroundColor('#00000000');
           mainWindow.setWindowLayoutFullScreen(true);
         } catch (e) {
-          hilog.warn(DOMAIN, TAG, `setWindowBackgroundColor failed: ${JSON.stringify(e)}`);
+          hilog.warn(DOMAIN, TAG, `setWindowBackgroundColor/Brightness failed: ${JSON.stringify(e)}`);
         }
       }).catch((err: BusinessError) => {
         hilog.warn(DOMAIN, TAG, `getMainWindow failed: ${JSON.stringify(err)}`);

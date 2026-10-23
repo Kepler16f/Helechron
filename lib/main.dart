@@ -19,6 +19,7 @@ import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/utils/global.dart';
 import 'package:celechron/services/ohos_native_service.dart';
 import 'package:celechron/utils/platform_features.dart';
+import 'package:celechron/worker/mobile_background.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -68,6 +69,9 @@ void main() async {
 
   runApp(const CelechronApp());
 
+  // Android / iOS：注册后台定时刷新（成绩变动 / DDL 提醒）
+  unawaited(registerMobileBackgroundRefresh());
+
   // 应用级课程小组件同步：独立于页面生命周期，进程存活期间持续刷新，
   // 保证下课能及时切换到下一节课。主动刷新走 updateForm，不计入系统
   // 50 次/天配额，因此用 5 秒高频推送让倒计时尽量平滑；应用不在时由
@@ -78,6 +82,14 @@ void main() async {
     (_) => ScholarWidgetSync.sync(),
   );
 
+  // 启动时立即将校园卡凭据（含学号密码）同步至原生 Preferences 并刷新一次付款码，
+  // 不必等待教务/学在浙大爬虫完成，保证随时切后台或被杀后小组件放大页均可独立刷码。
+  unawaited(ECardWidgetMessenger.syncCredentialsToNative());
+  unawaited(
+    ECardWidgetMessenger.update()
+        .whenComplete(ECardWidgetMessenger.updatePaymentCode),
+  );
+
   var scholar = Get.find<Rx<Scholar>>(tag: 'scholar');
   if (scholar.value.isLogan) {
     unawaited(
@@ -85,9 +97,6 @@ void main() async {
           .whenComplete(ECardWidgetMessenger.update)
           .whenComplete(ECardWidgetMessenger.updatePaymentCode),
     );
-  } else {
-    unawaited(ECardWidgetMessenger.update());
-    unawaited(ECardWidgetMessenger.updatePaymentCode());
   }
 
   // 领取冷启动时由小组件传入的待处理路由
@@ -208,9 +217,8 @@ class _NativeBarVisibilityObserver extends NavigatorObserver {
 
   void _sync() {
     // 只有在根页面（只有1个页面路由）且没有任何PopupRoute（弹窗/选择器/对话框）且无底层通知时，才显示原生底栏
-    final bool shouldShow = _pageRoutes.length <= 1 &&
-        _popupRoutes.isEmpty &&
-        !_isSnackbarActive;
+    final bool shouldShow =
+        _pageRoutes.length <= 1 && _popupRoutes.isEmpty && !_isSnackbarActive;
     OhosNativeService.instance.setBottomBarVisible(shouldShow);
   }
 
@@ -283,8 +291,8 @@ class _CelechronAppState extends State<CelechronApp>
     // 监听AppLinks，用于跳转至付款码页面
     _initAppLinks();
 
-    // 在鸿蒙平台上尝试预热通知权限
-    if (PlatformFeatures.isOhos) {
+    // 在支持本地通知的平台上预热通知权限
+    if (PlatformFeatures.hasNotificationSupport) {
       _initOhosNotification();
     }
   }
@@ -370,11 +378,11 @@ class _CelechronAppState extends State<CelechronApp>
             data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
             child: child!,
           ),
-          title: 'Helechron',
-          home: const HomePage(title: 'Helechron'),
+          title: 'Aelechron',
+          home: const HomePage(title: 'Aelechron'),
           initialRoute: '/',
           routes: {
-            '/ecardpaypage': (context) => ECardPayPage(),
+            '/ecardpaypage': (context) => const ECardPayPage(),
           },
           debugShowCheckedModeBanner: false,
           navigatorKey: navigatorKey,

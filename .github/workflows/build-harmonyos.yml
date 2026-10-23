@@ -64,6 +64,15 @@ jobs:
           dart --version
           flutter doctor -v || true
 
+      - name: Switch to HarmonyOS dependency set
+        # 主 pubspec.yaml 面向 Android/iOS（pub.dev 标准依赖）；鸿蒙构建使用 openharmony-sig 依赖，
+        # 并用桩文件替换仅 Android/iOS 可用的插件封装。
+        run: |
+          cp tool/pubspec_ohos.yaml pubspec.yaml
+          rm -f pubspec.lock
+          cp tool/ohos_stubs/mobile_native_service.dart lib/services/mobile_native_service.dart
+          cp tool/ohos_stubs/mobile_background.dart lib/worker/mobile_background.dart
+
       - name: Get Flutter dependencies
         run: |
           for attempt in 1 2 3 4 5; do

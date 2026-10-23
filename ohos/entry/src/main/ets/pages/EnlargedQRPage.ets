@@ -1,25 +1,15 @@
 /// 桌面小组件点击放大按钮后，EnlargedQRAbility 启动时加载的页面。
-/// 以弹窗样式渲染付款码大图 + 刷新按钮 + 关闭按钮，
-/// 背景全透明并使用 ArkTS 原生 backgroundEffect 呈现高质感液态玻璃模糊，无灰色半透明蒙版。
-/// 侧滑返回或点击关闭/背景均直接 terminateSelf() 退出回桌面，完全不涉及 Flutter 主页面。
+/// 以弹窗样式渲染付款码大图 + 自动刷新 + 墓碑后台原生重登取码 + 高亮度护航，
+/// 二维码物理尺寸（160vp 码体 + 22vp 四周纯白静区）与垂直位置（约屏幕高度 52%）严格对齐学校电子校园卡。
 
 import common from '@ohos.app.ability.common';
 import hilog from '@ohos.hilog';
 import { window, promptAction } from '@kit.ArkUI';
-import { http } from '@kit.NetworkKit';
-import { formBindingData, formProvider } from '@kit.FormKit';
 import { BusinessError } from '@kit.BasicServicesKit';
-import preferences from '@ohos.data.preferences';
+import { ECardNativeHelper } from '../widget/ECardNativeHelper';
 
 const DOMAIN = 0x0000;
 const TAG = 'HelechronEnlargedQR';
-const PREFS_NAME = 'helechron_widget_data';
-const FORM_IDS_KEY = 'payment_form_ids';
-const TEST_ACCOUNT = '3200000000';
-const BARCODE_URL_PREFIX =
-  'https://elife.zju.edu.cn/berserker-app/ykt/tsm/batchGetBarCodeGet?account=';
-const BARCODE_URL_SUFFIX = '&payacc=%23%23%23&paytype=1&synAccessSource=app';
-const USER_AGENT = 'E-CampusZJU/2.3.20 (iPhone; iOS 17.5.1; Scale/3.00)';
 
 @Entry
 @Component
@@ -28,8 +18,30 @@ struct EnlargedQRPage {
   @State private paymentCode: string = '';
   @State private isRefreshing: boolean = false;
   @State private refreshAngle: number = 0;
+  @State private statusHint: string = '每分钟自动刷新，或点击二维码手动刷新';
+  @StorageLink('enlargedQrOpenSeq') @Watch('onOpenSeqChanged') openSeq: number = 0;
+  private autoRefreshTimerId: number = -1;
 
   aboutToAppear(): void {
+    this.setupWindowForScanning();
+    this.loadCachedCode();
+    // 每次打开放大窗立即自动刷新一次付款码，无需用户再手动点击刷新按钮
+    this.refreshPaymentCode(true);
+    this.startAutoRefreshLoop();
+  }
+
+  aboutToDisappear(): void {
+    this.stopAutoRefreshLoop();
+  }
+
+  onOpenSeqChanged(): void {
+    this.setupWindowForScanning();
+    this.loadCachedCode();
+    this.refreshPaymentCode(true);
+    this.startAutoRefreshLoop();
+  }
+
+  private setupWindowForScanning(): void {
     try {
       window.getLastWindow(this.context).then((mainWindow: window.Window) => {
         try {
@@ -38,26 +50,44 @@ struct EnlargedQRPage {
         } catch (e) {}
       }).catch(() => {});
     } catch (e) {}
+  }
 
+  private loadCachedCode(): void {
     try {
       const fromStorage: string | undefined = AppStorage.get<string>('enlargedQrPaymentCode');
       if (typeof fromStorage === 'string' && fromStorage.length > 0) {
         this.paymentCode = fromStorage;
         return;
       }
-      const prefs: preferences.Preferences = preferences.getPreferencesSync(this.context, { name: PREFS_NAME });
-      const stored: string = prefs.getSync('paymentCode', '') as string;
-      if (stored.length > 0) {
-        this.paymentCode = stored;
+      const prefs = ECardNativeHelper.getFreshPrefs(this.context);
+      if (prefs !== null) {
+        const stored: string = (prefs.getSync('paymentCode', '') as string) || '';
+        if (stored.length > 0) {
+          this.paymentCode = stored;
+        }
       }
     } catch (e) {
       hilog.warn(DOMAIN, TAG, `read initial code failed: ${JSON.stringify(e)}`);
     }
   }
 
+  private startAutoRefreshLoop(): void {
+    this.stopAutoRefreshLoop();
+    this.autoRefreshTimerId = setInterval(() => {
+      this.refreshPaymentCode(true);
+    }, 55000);
+  }
+
+  private stopAutoRefreshLoop(): void {
+    if (this.autoRefreshTimerId !== -1) {
+      clearInterval(this.autoRefreshTimerId);
+      this.autoRefreshTimerId = -1;
+    }
+  }
+
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      // 背景模糊层：纯透明背景配合 ArkTS 原生 backgroundEffect，无半透明灰色遮罩，点击窗口外区域退出
+      // 背景模糊层：纯透明背景配合 ArkTS 原生 backgroundEffect，点击窗口外区域退出
       Column()
         .width('100%')
         .height('100%')
@@ -71,8 +101,8 @@ struct EnlargedQRPage {
           this.close();
         })
 
-      // 居中付款码卡片（按标准比例适配卡片边距）
-      Column({ space: 14 }) {
+      // 付款码卡片：整体向下微移 24vp，使二维码中心点精确处于屏幕高度 ~52%（对齐官方电子校园卡黄金扫码位）
+      Column({ space: 12 }) {
         // 顶部标题与刷新按钮
         Row() {
           Text('付款码')
@@ -82,7 +112,7 @@ struct EnlargedQRPage {
 
           Blank()
 
-          // 刷新按钮：带单次 360 度旋转动画与原生取码
+          // 刷新按钮：带单次 360 度旋转动画与原生取码（含墓碑后台自动重登）
           Button({ type: ButtonType.Circle, stateEffect: true }) {
             Image($r('app.media.ic_widget_refresh'))
               .width(16)
@@ -96,46 +126,63 @@ struct EnlargedQRPage {
           .enabled(!this.isRefreshing)
           .opacity(this.isRefreshing ? 0.6 : 1.0)
           .onClick(() => {
-            this.refreshPaymentCode();
+            this.refreshPaymentCode(false);
           })
         }
         .width('100%')
-        .padding({ left: 22, right: 22, top: 18 })
+        .padding({ left: 22, right: 22, top: 20, bottom: 4 })
 
         if (this.paymentCode.length > 0) {
-          // 二维码容器：标准 200x200 黄金比例（与参考界面严格保持约 62%-64% 页面/卡片宽比，留白呼吸感自然）
+          // 二维码容器：严格对齐官方电子校园卡比例
+          // 160x160vp 码体（约占屏宽 42%）+ 四周 22vp 超宽纯白静区（总白底 204x204vp），
+          // 防止近距离贴靠校内刷卡机扫码窗时边角超出镜头视场或畸变；点击二维码可直接刷新。
           Column() {
             QRCode(this.paymentCode)
-              .width('100%')
-              .height('100%')
+              .width(160)
+              .height(160)
               .color('#000000')
+              .backgroundColor(Color.White)
           }
-          .width(200)
-          .height(200)
-          .padding(10)
+          .width(204)
+          .height(204)
+          .padding(22)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
           .backgroundColor(Color.White)
-          .borderRadius(12)
+          .borderRadius(16)
+          .border({ width: 1.5, color: '#260A59F7' })
+          .onClick(() => {
+            this.refreshPaymentCode(false);
+          })
 
-          // 条码文本容器：参考付款码界面胶囊式展示，等宽字体防变形
+          Text(this.statusHint)
+            .fontSize(11)
+            .fontColor(this.isRefreshing ? $r('app.color.widget_accent') : $r('app.color.widget_text_tertiary'))
+            .textAlign(TextAlign.Center)
+            .maxLines(1)
+
+          // 条码文本容器：胶囊式等宽数字展示
           Row() {
             Text(this.paymentCode)
-              .fontSize(15)
+              .fontSize(14)
               .fontFamily('monospace')
               .fontWeight(FontWeight.Medium)
-              .letterSpacing(1.4)
+              .letterSpacing(1.3)
               .fontColor($r('app.color.widget_text_primary'))
               .textAlign(TextAlign.Center)
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
           }
-          .padding({ left: 16, right: 16, top: 6, bottom: 6 })
+          .padding({ left: 14, right: 14, top: 5, bottom: 5 })
           .backgroundColor($r('app.color.widget_badge_background'))
           .borderRadius(8)
         } else {
-          Text('暂无可用的付款码')
-            .fontSize(14)
-            .fontColor($r('app.color.widget_text_tertiary'))
-            .margin({ top: 32, bottom: 32 })
+          Column({ space: 8 }) {
+            Text(this.isRefreshing ? '正在刷新付款码...' : '暂无可用的付款码')
+              .fontSize(14)
+              .fontColor($r('app.color.widget_text_tertiary'))
+          }
+          .margin({ top: 48, bottom: 48 })
         }
 
         Button('关闭')
@@ -145,161 +192,74 @@ struct EnlargedQRPage {
           .fontColor(Color.White)
           .fontSize(15)
           .fontWeight(FontWeight.Medium)
-          .margin({ bottom: 18 })
+          .margin({ top: 2, bottom: 18 })
           .onClick(() => {
             this.close();
           })
       }
       .width('82%')
-      .constraintSize({ maxWidth: 320, maxHeight: 450 })
+      .constraintSize({ maxWidth: 320, maxHeight: 460 })
       .backgroundColor($r('app.color.widget_background'))
       .borderRadius(18)
       .shadow({ radius: 24, color: '#33000000', offsetX: 0, offsetY: 8 })
       .alignItems(HorizontalAlign.Center)
+      .offset({ x: 0, y: 24 })
     }
     .width('100%')
     .height('100%')
   }
 
-  /// 刷新付款码：集成重试与完整网络头，失败时弹出友好弹窗提示
-  private async refreshPaymentCode(): Promise<void> {
+  /// 刷新付款码：支持打开时自动刷新（isAuto=true）与手动点击刷新（isAuto=false）。
+  /// 当主应用在后台被杀或处于墓碑后台导致 synjonesAuth 过期时，自动由 ECardNativeHelper 完成原生重登与取码。
+  private async refreshPaymentCode(isAuto: boolean): Promise<void> {
     if (this.isRefreshing) {
       return;
     }
     this.isRefreshing = true;
+    this.statusHint = '正在刷新付款码...';
 
     // 单次 360 度平滑旋转动画
     animateTo({
       duration: 700,
       curve: Curve.EaseInOut,
-      onFinish: () => {
-        this.isRefreshing = false;
-      }
+      onFinish: () => {}
     }, () => {
       this.refreshAngle += 360;
     });
 
     try {
-      const prefs: preferences.Preferences = preferences.getPreferencesSync(this.context, { name: PREFS_NAME });
-      const auth: string = (prefs.getSync('synjonesAuth', '') as string) || '';
-      const account: string = (prefs.getSync('eCardAccount', '') as string) || '';
-
-      if (auth.length === 0) {
-        hilog.warn(DOMAIN, TAG, 'refreshPaymentCode: no synjonesAuth in preferences');
-        this.showFailureDialog('未检测到校园卡登录态，请打开应用并在「设置 → 校园卡账户」中完成登录。');
-        return;
-      }
-
-      let newCode: string = '';
-      if (auth === TEST_ACCOUNT || account === TEST_ACCOUNT) {
-        for (let i = 0; i < 16; i++) {
-          newCode += Math.floor(Math.random() * 10).toString();
-        }
+      const res = await ECardNativeHelper.fetchBarcodeWithAutoRelogin(this.context);
+      if (res.code.length > 0) {
+        this.paymentCode = res.code;
+        AppStorage.setOrCreate('enlargedQrPaymentCode', res.code);
+        this.statusHint = '已更新 · 每分钟自动刷新，或点击二维码手动刷新';
       } else {
-        newCode = await this.requestBarcodeWithRetry(account, auth);
-      }
-
-      if (newCode.length > 0) {
-        this.paymentCode = newCode;
-        AppStorage.setOrCreate('enlargedQrPaymentCode', newCode);
-        prefs.putSync('paymentCode', newCode);
-        prefs.flush();
-
-        // 同步刷新所有已添加的桌面小组件
-        const rawIds: string = prefs.getSync(FORM_IDS_KEY, '') as string;
-        if (rawIds.length > 0) {
-          const ids: string[] = rawIds.split(',').filter((id: string) => id.length > 0);
-          const payData: Record<string, string> = {
-            'paymentCode': newCode,
-            'displayName': '付款码',
-            'hasCode': '1'
-          };
-          const bindingData: formBindingData.FormBindingData = formBindingData.createFormBindingData(payData);
-          for (const formId of ids) {
-            formProvider.updateForm(formId, bindingData).catch((err: BusinessError) => {
-              hilog.warn(DOMAIN, TAG, `updateForm failed for ${formId}: ${err.message}`);
+        this.statusHint = '点击二维码或右上角按钮重试刷新';
+        if (isAuto && this.paymentCode.length > 0) {
+          // 自动刷新失败但已有码展示时，使用轻提示避免阻断用户扫码操作
+          try {
+            promptAction.showToast({
+              message: res.errorMessage.length > 0 ? res.errorMessage : '自动刷新暂未成功，可点击二维码重试',
+              duration: 2500
             });
-          }
+          } catch (e) {}
+        } else {
+          this.showFailureDialog(
+            res.errorMessage.length > 0
+              ? res.errorMessage
+              : '获取付款码失败，请检查网络连接后重试。'
+          );
         }
-      } else {
-        this.showFailureDialog('获取付款码失败，请检查网络连接后重试。');
       }
     } catch (e) {
-      const errStr: string = String(e);
-      hilog.error(DOMAIN, TAG, `refreshPaymentCode failed: ${errStr}`);
-      if (errStr.indexOf('AUTH_EXPIRED') >= 0) {
-        this.showFailureDialog('校园卡登录态已过期，请打开应用重新登录校园卡。');
-      } else {
+      hilog.error(DOMAIN, TAG, `refreshPaymentCode unexpected error: ${String(e)}`);
+      this.statusHint = '点击二维码或右上角按钮重试刷新';
+      if (!isAuto || this.paymentCode.length === 0) {
         this.showFailureDialog('当前网络环境不稳定，刷新付款码超时。请检查网络信号后重试。');
       }
+    } finally {
+      this.isRefreshing = false;
     }
-  }
-
-  /// 发起取码网络请求，支持防丢包自动重试与标准移动端请求头
-  private async requestBarcodeWithRetry(account: string, auth: string): Promise<string> {
-    const url: string = `${BARCODE_URL_PREFIX}${account}${BARCODE_URL_SUFFIX}`;
-    const header: Record<string, string> = {
-      'synjones-auth': `bearer ${auth}`,
-      'User-Agent': USER_AGENT,
-      'Accept': 'application/json, text/plain, */*',
-      'Connection': 'keep-alive',
-      'Cache-Control': 'no-cache'
-    };
-
-    let lastErrMsg: string = '';
-    // 最多尝试 2 次，首次遇网络闪断或超时自动触发第二次重试
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      const httpRequest: http.HttpRequest = http.createHttp();
-      try {
-        const options: http.HttpRequestOptions = {
-          method: http.RequestMethod.GET,
-          header: header,
-          connectTimeout: 6000,
-          readTimeout: 6500,
-          expectDataType: http.HttpDataType.STRING
-        };
-        const response: http.HttpResponse = await httpRequest.request(url, options);
-        if (response.responseCode === 200) {
-          const text: string = response.result as string;
-          const payload: Record<string, Object> = JSON.parse(text) as Record<string, Object>;
-          const codeVal: Object = payload['code'];
-          if (codeVal === 401 || codeVal === '401' || payload['msg'] === 'token invalid') {
-            throw new Error('AUTH_EXPIRED');
-          }
-          const data: Record<string, Object> = payload['data'] as Record<string, Object>;
-          if (data !== undefined && data !== null) {
-            const barcodes: string[] = data['barcode'] as string[];
-            if (barcodes !== undefined && barcodes !== null && barcodes.length > 0) {
-              const rawCode: string = barcodes[0];
-              // 合法性校验
-              if (rawCode.length >= 14 && rawCode.length <= 64) {
-                return rawCode;
-              }
-            }
-          }
-          lastErrMsg = '未获取到有效付款码数据';
-        } else if (response.responseCode === 401 || response.responseCode === 403) {
-          throw new Error('AUTH_EXPIRED');
-        } else {
-          lastErrMsg = `服务器返回状态码 HTTP ${response.responseCode}`;
-        }
-      } catch (err) {
-        const errStr: string = String(err);
-        if (errStr.indexOf('AUTH_EXPIRED') >= 0) {
-          throw new Error('AUTH_EXPIRED');
-        }
-        lastErrMsg = '网络连接超时';
-        hilog.warn(DOMAIN, TAG, `requestBarcode attempt ${attempt} failed: ${errStr}`);
-      } finally {
-        httpRequest.destroy();
-      }
-
-      if (attempt < 2) {
-        await new Promise<void>((resolve) => setTimeout(resolve, 300));
-      }
-    }
-
-    throw new Error(lastErrMsg.length > 0 ? lastErrMsg : '网络连接失败');
   }
 
   /// 弹窗提示刷新失败原因
@@ -323,6 +283,7 @@ struct EnlargedQRPage {
   }
 
   private close(): void {
+    this.stopAutoRefreshLoop();
     try {
       AppStorage.setOrCreate('enlargedQrPaymentCode', '');
     } catch (e) {}

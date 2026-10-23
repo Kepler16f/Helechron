@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
+import 'package:flutter/material.dart' show Icons;
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
@@ -11,6 +12,7 @@ import 'package:celechron/page/calendar/calendar_view.dart';
 import 'package:celechron/page/option/option_view.dart';
 
 import 'package:celechron/services/ohos_native_service.dart';
+import 'package:celechron/utils/platform_features.dart';
 import 'package:celechron/worker/fuse.dart';
 
 class HomePage extends StatefulWidget {
@@ -63,7 +65,28 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final option = Get.find<Option>(tag: 'option');
     return Obx(() {
-      final bool floating = option.bottomBarFloating.value;
+      final bool useNativeBar = PlatformFeatures.isOhos;
+      final tabBar = CupertinoTabBar(
+        iconSize: 26,
+        backgroundColor: CupertinoDynamicColor.resolve(
+                CupertinoColors.secondarySystemBackground, context)
+            .withValues(alpha: 0.5),
+        items: const <BottomNavigationBarItem>[
+          BottomNavigationBarItem(
+              icon: Icon(CupertinoIcons.time), label: '接下来'),
+          BottomNavigationBarItem(
+              icon: Icon(CupertinoIcons.calendar), label: '日程'),
+          BottomNavigationBarItem(
+              icon: Icon(CupertinoIcons.check_mark), label: '任务'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.school_rounded), label: '学业'),
+          BottomNavigationBarItem(
+              icon: Icon(CupertinoIcons.settings), label: '设置'),
+        ],
+        currentIndex: _indexNum,
+        onTap: (int index) => _pageController.jumpToPage(index),
+      );
+      final bool floating = useNativeBar && option.bottomBarFloating.value;
 
       final ScrollBehavior scrollBehavior = ScrollConfiguration.of(context);
       Widget content = HeroMode(
@@ -95,7 +118,17 @@ class _HomePageState extends State<HomePage> {
       final EdgeInsets contentPadding =
           EdgeInsets.only(bottom: existingMediaQuery.viewInsets.bottom);
 
-      if (floating) {
+      if (!useNativeBar) {
+        // Android / iOS：Flutter 自绘半透明标签栏，栏高注入 MediaQuery.padding
+        if (tabBar.preferredSize.height > existingMediaQuery.viewInsets.bottom) {
+          newMediaQuery = newMediaQuery.copyWith(
+            padding: newMediaQuery.padding.copyWith(
+              bottom: tabBar.preferredSize.height +
+                  existingMediaQuery.padding.bottom,
+            ),
+          );
+        }
+      } else if (floating) {
         // 悬浮底栏：可滚动内容底部预留栏高，使最后一个条目能继续滚动到
         // 悬浮底栏上方；页面用 SafeArea(bottom:false) 把该值交给
         // CustomScrollView 作为 SliverPadding，内容仍延伸到栏后方（镂空）。
@@ -125,6 +158,10 @@ class _HomePageState extends State<HomePage> {
               data: newMediaQuery,
               child: Padding(padding: contentPadding, child: content),
             ),
+            if (!useNativeBar)
+              MediaQuery.withNoTextScaling(
+                child: Align(alignment: Alignment.bottomCenter, child: tabBar),
+              ),
           ],
         ),
       );

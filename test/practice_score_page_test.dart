@@ -77,7 +77,7 @@ void main() {
     final scholar = liveScholar();
     await tester.pumpWidget(
       CupertinoApp(
-        home: PracticeScorePage(scholar: scholar, categoryId: 2),
+        home: PracticeScorePage(scholar: scholar, initialCategoryId: 2),
       ),
     );
     expect(find.text('待学校审核 · 未计入总分'), findsOneWidget);
@@ -96,7 +96,7 @@ void main() {
       ..practiceDetailsAvailable = false;
     await tester.pumpWidget(
       CupertinoApp(
-        home: PracticeScorePage(scholar: scholar, categoryId: 1),
+        home: PracticeScorePage(scholar: scholar, initialCategoryId: 1),
       ),
     );
     expect(
