@@ -239,7 +239,8 @@ class _HomePageState extends State<HomePage> {
           constraints: BoxConstraints(
             maxWidth: capsuleWidth,
             minWidth: 260.0,
-            height: 56.0,
+            minHeight: 56.0,
+            maxHeight: 56.0,
           ),
           child: Container(
             decoration: BoxDecoration(
