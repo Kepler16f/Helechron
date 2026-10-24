@@ -36,6 +36,33 @@
                 <data android:scheme="celechron" android:host="ecardpaypage" />
             </intent-filter>
         </activity>
+
+        <!-- 课程小组件 -->
+        <receiver
+            android:name=".CourseWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="top.celechron.celechron.ACTION_REFRESH_COURSE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/course_widget_info" />
+        </receiver>
+
+        <!-- 付款码小组件 -->
+        <receiver
+            android:name=".PaymentCodeWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="top.celechron.celechron.ACTION_REFRESH_PAYMENT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/payment_widget_info" />
+        </receiver>
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

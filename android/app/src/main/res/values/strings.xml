@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Aelechron</string>
+    <string name="widget_course_title">课程小组件</string>
+    <string name="widget_course_desc">显示下一节课、教室地点与倒计时</string>
+    <string name="widget_payment_title">付款码小组件</string>
+    <string name="widget_payment_desc">桌面一键直显校园卡付款码与条形码</string>
+</resources>

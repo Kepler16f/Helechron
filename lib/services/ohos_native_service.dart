@@ -17,6 +17,9 @@ class OhosNativeService {
   /// 最近一次文件选择/读取失败的原生错误信息
   String? lastFilePickError;
 
+  /// Flutter 侧底栏显隐通知（用于 Android/iOS 自绘悬浮/原生底栏在路由/弹窗时平滑升降）
+  final ValueNotifier<bool> bottomBarVisibleNotifier = ValueNotifier<bool>(true);
+
   // ==================== Calendar ====================
 
   /// 检查日历权限
@@ -258,6 +261,9 @@ class OhosNativeService {
 
   /// 向原生写入小组件数据（通用键值）
   Future<void> setWidgetData(String key, String value) async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.setWidgetData(key, value);
+    }
     try {
       await _channel.invokeMethod('setWidgetData', {
         'key': key,
@@ -275,6 +281,12 @@ class OhosNativeService {
     required String code,
     String displayName = '付款码',
   }) async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.updatePaymentCodeWidget(
+        code: code,
+        displayName: displayName,
+      );
+    }
     try {
       await _channel.invokeMethod('updatePaymentCodeWidget', {
         'paymentCode': code,
@@ -322,6 +334,12 @@ class OhosNativeService {
     required String coursesJson,
     required int leadWindowMinutes,
   }) async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.updateCourseWidget(
+        coursesJson: coursesJson,
+        leadWindowMinutes: leadWindowMinutes,
+      );
+    }
     try {
       await _channel.invokeMethod('updateCourseWidget', {
         'coursesJson': coursesJson,
@@ -368,6 +386,7 @@ class OhosNativeService {
 
   /// 显示/隐藏原生底栏（弹出 Flutter 模态窗口时隐藏，避免遮挡弹窗）
   Future<void> setBottomBarVisible(bool visible) async {
+    bottomBarVisibleNotifier.value = visible;
     try {
       await _channel.invokeMethod('setBottomBarVisible', {'visible': visible});
     } on PlatformException catch (e) {
@@ -489,6 +508,9 @@ class OhosNativeService {
   /// 注册小组件点击跳转回调（原生 -> Dart）。
   void installWidgetRouteHandler(void Function(String target) handler) {
     _widgetRouteHandler = handler;
+    if (PlatformFeatures.usesFlutterPlugins) {
+      MobileNativeService.instance.ensureWidgetHandler(handler);
+    }
     _ensureIncomingHandlerInstalled();
   }
 
@@ -535,6 +557,9 @@ class OhosNativeService {
 
   /// 领取冷启动时由小组件传入的待处理路由。
   Future<String?> consumePendingRoute() async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.consumePendingRoute();
+    }
     try {
       final route = await _channel.invokeMethod<String>('consumePendingRoute');
       if (route != null && route.isNotEmpty) {

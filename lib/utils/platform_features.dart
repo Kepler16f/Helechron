@@ -10,7 +10,7 @@ final class PlatformFeatures {
   }
 
   static bool get hasWidgetSupport {
-    return false;
+    return isOhos || isAndroid || isIOS;
   }
 
   static bool get isMobile {

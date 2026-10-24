@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:device_calendar/device_calendar.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 
@@ -305,6 +306,77 @@ class MobileNativeService {
       lastFilePickError = '$e';
       debugPrint('pickAnyFiles failed: $e');
       return [];
+    }
+  }
+
+  // ==================== Desktop Widgets ====================
+
+  static const MethodChannel _widgetChannel =
+      MethodChannel('top.celechron.celechron/widget');
+  bool _widgetHandlerInstalled = false;
+
+  void ensureWidgetHandler(void Function(String target) handler) {
+    if (_widgetHandlerInstalled) return;
+    _widgetHandlerInstalled = true;
+    _widgetChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onWidgetRoute') {
+        final args = call.arguments;
+        if (args is Map && args['target'] is String) {
+          handler(args['target'] as String);
+        }
+      }
+      return null;
+    });
+  }
+
+  Future<void> updateCourseWidget({
+    required String coursesJson,
+    required int leadWindowMinutes,
+  }) async {
+    try {
+      await _widgetChannel.invokeMethod('updateCourseWidget', {
+        'coursesJson': coursesJson,
+        'leadWindowMinutes': leadWindowMinutes,
+      });
+    } on PlatformException catch (e) {
+      debugPrint('MobileNativeService updateCourseWidget failed: $e');
+    } on MissingPluginException {}
+  }
+
+  Future<void> updatePaymentCodeWidget({
+    required String code,
+    String displayName = '付款码',
+  }) async {
+    try {
+      await _widgetChannel.invokeMethod('updatePaymentCodeWidget', {
+        'paymentCode': code,
+        'displayName': displayName,
+      });
+    } on PlatformException catch (e) {
+      debugPrint('MobileNativeService updatePaymentCodeWidget failed: $e');
+    } on MissingPluginException {}
+  }
+
+  Future<void> setWidgetData(String key, String value) async {
+    try {
+      await _widgetChannel.invokeMethod('setWidgetData', {
+        'key': key,
+        'value': value,
+      });
+    } on PlatformException catch (e) {
+      debugPrint('MobileNativeService setWidgetData failed: $e');
+    } on MissingPluginException {}
+  }
+
+  Future<String?> consumePendingRoute() async {
+    try {
+      final result =
+          await _widgetChannel.invokeMethod<String>('consumePendingRoute');
+      return result;
+    } on PlatformException catch (_) {
+      return null;
+    } on MissingPluginException {
+      return null;
     }
   }
 }
