@@ -33,4 +33,16 @@ class MobileNativeService {
   Future<Map<String, String>?> pickTextFile() async => null;
   Future<List<Map<String, dynamic>>> pickAnyFiles({int maxCount = 10}) async =>
       [];
+
+  void ensureWidgetHandler(void Function(String target) handler) {}
+  Future<void> updateCourseWidget({
+    required String coursesJson,
+    required int leadWindowMinutes,
+  }) async {}
+  Future<void> updatePaymentCodeWidget({
+    required String code,
+    String displayName = '付款码',
+  }) async {}
+  Future<void> setWidgetData(String key, String value) async {}
+  Future<String?> consumePendingRoute() async => null;
 }
