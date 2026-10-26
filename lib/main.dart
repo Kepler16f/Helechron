@@ -211,15 +211,9 @@ Future<void> _refreshRestoredScholar(Rx<Scholar> scholar) async {
 /// 3. 弹出任何模态弹窗 (PopupRoute: ActionSheet/对话框/时间选择器等) 时自动隐藏底栏
 /// 4. 模态窗口全部关闭且回到首页后，恢复底栏显示
 class _NativeBarVisibilityObserver extends NavigatorObserver {
-  static _NativeBarVisibilityObserver? instance;
-
   final Set<Route<dynamic>> _popupRoutes = {};
   final Set<Route<dynamic>> _pageRoutes = {};
   bool _isSnackbarActive = false;
-
-  _NativeBarVisibilityObserver() {
-    instance = this;
-  }
 
   void setSnackbarActive(bool active) {
     if (_isSnackbarActive != active) {

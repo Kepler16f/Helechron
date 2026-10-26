@@ -305,7 +305,6 @@ class BackupService {
 
     final taskList = Get.find<RxList<Task>>(tag: 'taskList');
     final existingUids = taskList.map((task) => task.uid).toSet();
-    final cutoff = DateTime.now().subtract(const Duration(days: 1));
     final freshTasks = <Task>[];
     var duplicateCount = 0;
     var skippedPastCount = 0;
