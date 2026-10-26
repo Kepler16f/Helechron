@@ -299,13 +299,22 @@ jobs:
             -keystorePwd "$OHOS_STORE_FILE_PASSWORD" \
             -outFile "build/dist/Helechron_${VERSION}_ohos_signed.hap" \
             -compatibleVersion 12
+          # AppGallery 的 .app 容器使用标准 HAP 文件名，并让 pack.info 与实际 HAP 对应
+          cp "build/dist/Helechron_${VERSION}_ohos_signed.hap" "build/dist/entry-default.hap"
+          python3 - "$PACK_INFO" <<'PY'
+import json, sys
+path = sys.argv[1]
+data = json.load(open(path, encoding='utf-8'))
+data['hapList'] = ['entry-default.hap']
+json.dump(data, open(path, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+PY
           # App 打包指令的输入参数是 --hap-path（官方文档表5），--hap-list 不会被识别
           java -jar "$PACK_TOOL" --mode app \
             --pack-info-path "$PACK_INFO" \
-            --hap-path "build/dist/Helechron_${VERSION}_ohos_signed.hap" \
+            --hap-path "build/dist/entry-default.hap" \
             --out-path "build/dist/Helechron_${VERSION}_ohos_unsigned.app" \
             --replace-pack-info false --force true
-          # .app 外层同样需要签名，仅内层 HAP 已签名不足以通过市场校验
+          # .app 外层同样需要签名；-inForm zip 才能按 App Pack 容器签名
           java -jar "$SIGN_TOOL" sign-app \
             -mode localSign \
             -keyAlias "$OHOS_KEY_ALIAS" \
@@ -313,6 +322,7 @@ jobs:
             -appCertFile ohos/signature/release.cer \
             -profileFile ohos/signature/release.p7b \
             -inFile "build/dist/Helechron_${VERSION}_ohos_unsigned.app" \
+            -inForm zip \
             -signAlg SHA256withECDSA \
             -keystoreFile ohos/signature/release.p12 \
             -keystorePwd "$OHOS_STORE_FILE_PASSWORD" \
