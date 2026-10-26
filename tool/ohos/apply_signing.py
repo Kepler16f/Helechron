@@ -72,6 +72,13 @@ def main() -> int:
     cert_file = _load_material("OHOS_CERT_BASE64", "OHOS_CERT", "release.cer")
     profile_file = _load_material("OHOS_PROFILE_BASE64", "OHOS_PROFILE", "release.p7b")
 
+    if os.environ.get("OHOS_MATERIAL_ONLY", "") == "1":
+        print("已恢复签名材料（OHOS_MATERIAL_ONLY=1，跳过 hvigor 签名配置）")
+        print(f"证书: {cert_file}")
+        print(f"Profile: {profile_file}")
+        print(f"Keystore: {store_file}")
+        return 0
+
     if not BUILD_PROFILE.exists():
         print(f"找不到 {BUILD_PROFILE}", file=sys.stderr)
         return 2
