@@ -1,0 +1,267 @@
+name: Release to AppGallery
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: "打包平台"
+        required: true
+        default: both
+        type: choice
+        options:
+          - both
+          - android
+          - harmonyos
+
+jobs:
+  android:
+    name: Android signed APK
+    if: ${{ inputs.platforms == 'both' || inputs.platforms == 'android' }}
+    runs-on: ubuntu-latest
+    env:
+      PRIVACY_POLICY_URL: ${{ vars.PRIVACY_POLICY_URL }}
+      USER_AGREEMENT_URL: ${{ vars.USER_AGREEMENT_URL }}
+      ICP_FILING_NUMBER: ${{ vars.ICP_FILING_NUMBER }}
+      CALENDAR_CONFIG_URL: ${{ vars.CALENDAR_CONFIG_URL }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Restore Android signing config
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "::error::缺少 ANDROID_KEYSTORE_BASE64 secret"
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+          {
+            echo "storePassword=${ANDROID_KEYSTORE_PASSWORD}"
+            echo "keyPassword=${ANDROID_KEY_PASSWORD}"
+            echo "keyAlias=${ANDROID_KEY_ALIAS}"
+            echo "storeFile=app/release.keystore"
+          } > android/key.properties
+
+      - name: Get version
+        id: get_version
+        run: |
+          VERSION=$(grep "displayVersion =>" lib/worker/fuse.dart | sed "s/.*'\(.*\)'.*/\1/")
+          echo "version=${VERSION:-dev}" >> "$GITHUB_OUTPUT"
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Build signed APK
+        run: |
+          set -euo pipefail
+          DEFINES=""
+          if [ -n "${PRIVACY_POLICY_URL:-}" ]; then
+            DEFINES="$DEFINES --dart-define=PRIVACY_POLICY_URL=${PRIVACY_POLICY_URL}"
+          fi
+          if [ -n "${USER_AGREEMENT_URL:-}" ]; then
+            DEFINES="$DEFINES --dart-define=USER_AGREEMENT_URL=${USER_AGREEMENT_URL}"
+          fi
+          if [ -n "${ICP_FILING_NUMBER:-}" ]; then
+            DEFINES="$DEFINES --dart-define=ICP_FILING_NUMBER=${ICP_FILING_NUMBER}"
+          fi
+          if [ -n "${CALENDAR_CONFIG_URL:-}" ]; then
+            DEFINES="$DEFINES --dart-define=CALENDAR_CONFIG_URL=${CALENDAR_CONFIG_URL}"
+          fi
+          flutter build apk --release --target-platform android-arm64 $DEFINES
+
+      - name: Verify APK signature
+        run: |
+          set -euo pipefail
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -n 1)
+          "$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Package artifact
+        run: |
+          mkdir -p build/dist
+          cp build/app/outputs/flutter-apk/app-release.apk \
+            "build/dist/Helechron_${{ steps.get_version.outputs.version }}_android_signed.apk"
+          ls -lh build/dist
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Helechron_${{ steps.get_version.outputs.version }}_android_signed.apk
+          path: build/dist/*.apk
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+
+  harmonyos:
+    name: HarmonyOS signed HAP/APP
+    if: ${{ inputs.platforms == 'both' || inputs.platforms == 'harmonyos' }}
+    runs-on: ubuntu-latest
+    env:
+      FLUTTER_OHOS_REPO: https://gitcode.com/openharmony-tpc/flutter_flutter.git
+      FLUTTER_OHOS_REF: 3.27.5-ohos-1.0.8
+      PUB_HOSTED_URL: https://pub.flutter-io.cn
+      FLUTTER_STORAGE_BASE_URL: https://storage.flutter-io.cn
+      PRIVACY_POLICY_URL: ${{ vars.PRIVACY_POLICY_URL }}
+      USER_AGREEMENT_URL: ${{ vars.USER_AGREEMENT_URL }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup HarmonyOS SDK and command-line tools
+        uses: ErBWs/setup-ohos@v2
+        with:
+          version: 26.0.0.821
+          cache: true
+
+      - name: Verify HarmonyOS tools
+        run: |
+          hvigorw -v || true
+          ohpm -v || true
+
+      - name: Clone Flutter-ohos SDK
+        run: |
+          FLUTTER_OHOS_DIR="$RUNNER_TEMP/flutter_ohos"
+          git clone --branch "$FLUTTER_OHOS_REF" --depth 1 "$FLUTTER_OHOS_REPO" "$FLUTTER_OHOS_DIR"
+          cd "$FLUTTER_OHOS_DIR"
+          git fetch --tags --force || true
+          git config --global --add safe.directory "$FLUTTER_OHOS_DIR"
+          echo "$FLUTTER_OHOS_DIR/bin" >> "$GITHUB_PATH"
+          echo "FLUTTER_ROOT=$FLUTTER_OHOS_DIR" >> "$GITHUB_ENV"
+        timeout-minutes: 20
+
+      - name: Configure npm registry
+        run: |
+          echo "registry=https://repo.huaweicloud.com/repository/npm/" > ~/.npmrc
+          echo "@ohos:registry=https://repo.harmonyos.com/npm/" >> ~/.npmrc
+
+      - name: Verify Flutter-ohos
+        run: |
+          flutter --version
+          dart --version
+          flutter doctor -v || true
+
+      - name: Restore HarmonyOS signing material
+        env:
+          OHOS_STORE_FILE_BASE64: ${{ secrets.OHOS_STORE_FILE_BASE64 }}
+          OHOS_STORE_FILE_PASSWORD: ${{ secrets.OHOS_STORE_FILE_PASSWORD }}
+          OHOS_KEY_ALIAS: ${{ secrets.OHOS_KEY_ALIAS }}
+          OHOS_KEY_PASSWORD: ${{ secrets.OHOS_KEY_PASSWORD }}
+          OHOS_CERT_BASE64: ${{ secrets.OHOS_CERT_BASE64 }}
+          OHOS_PROFILE_BASE64: ${{ secrets.OHOS_PROFILE_BASE64 }}
+        run: python3 tool/ohos/apply_signing.py
+
+      - name: Switch to HarmonyOS dependency set
+        run: |
+          cp tool/pubspec_ohos.yaml pubspec.yaml
+          rm -f pubspec.lock
+          cp tool/ohos_stubs/mobile_native_service.dart lib/services/mobile_native_service.dart
+          cp tool/ohos_stubs/mobile_background.dart lib/worker/mobile_background.dart
+
+      - name: Get Flutter dependencies
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if flutter pub get; then
+              echo "flutter pub get succeeded on attempt $attempt"
+              exit 0
+            fi
+            echo "::warning::flutter pub get failed on attempt $attempt (gitee may be rate-limiting), retrying in 20s..."
+            sleep 20
+          done
+          echo "::error::flutter pub get failed after 5 attempts"
+          exit 1
+
+      - name: Get version
+        id: get_version
+        run: |
+          VERSION=$(grep "displayVersion =>" lib/worker/fuse.dart | sed "s/.*'\(.*\)'.*/\1/")
+          echo "version=${VERSION:-dev}" >> "$GITHUB_OUTPUT"
+
+      - name: Build signed HAP
+        run: |
+          set -euo pipefail
+          DEFINES=""
+          if [ -n "${PRIVACY_POLICY_URL:-}" ]; then
+            DEFINES="$DEFINES --dart-define=PRIVACY_POLICY_URL=${PRIVACY_POLICY_URL}"
+          fi
+          if [ -n "${USER_AGREEMENT_URL:-}" ]; then
+            DEFINES="$DEFINES --dart-define=USER_AGREEMENT_URL=${USER_AGREEMENT_URL}"
+          fi
+          if [ -n "${ICP_FILING_NUMBER:-}" ]; then
+            DEFINES="$DEFINES --dart-define=ICP_FILING_NUMBER=${ICP_FILING_NUMBER}"
+          fi
+          if [ -n "${CALENDAR_CONFIG_URL:-}" ]; then
+            DEFINES="$DEFINES --dart-define=CALENDAR_CONFIG_URL=${CALENDAR_CONFIG_URL}"
+          fi
+          flutter build hap --release --target-platform ohos-arm64 $DEFINES
+        timeout-minutes: 40
+
+      - name: Build signed APP package
+        working-directory: ohos
+        run: |
+          hvigorw --mode project -p product=default -p buildMode=release assembleApp --no-daemon
+        timeout-minutes: 30
+
+      - name: Collect packages
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.get_version.outputs.version }}"
+          mkdir -p build/dist
+
+          APP=$(find ohos -type f -name '*signed*.app' | head -n 1 || true)
+          if [ -z "$APP" ]; then
+            APP=$(find ohos -type f -name '*.app' | head -n 1 || true)
+          fi
+          HAP=$(find ohos -type f -name '*signed*.hap' | head -n 1 || true)
+          if [ -z "$HAP" ]; then
+            HAP=$(find ohos -type f -name '*.hap' | head -n 1 || true)
+          fi
+
+          if [ -z "$APP" ]; then
+            echo "::error::未找到 .app 产物，AppGallery 上架需要签名 .app"
+            find ohos -type f \( -name '*.app' -o -name '*.hap' \) -print || true
+            exit 1
+          fi
+          if [ -z "$HAP" ]; then
+            echo "::error::未找到 .hap 产物"
+            exit 1
+          fi
+
+          cp "$APP" "build/dist/Helechron_${VERSION}_ohos_signed.app"
+          cp "$HAP" "build/dist/Helechron_${VERSION}_ohos_signed.hap"
+          ls -lh build/dist
+
+      - name: Upload HarmonyOS artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: Helechron_${{ steps.get_version.outputs.version }}_ohos_signed
+          path: build/dist/Helechron_*_ohos_signed.*
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
