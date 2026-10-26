@@ -175,6 +175,7 @@ jobs:
           OHOS_KEY_PASSWORD: ${{ secrets.OHOS_KEY_PASSWORD }}
           OHOS_CERT_BASE64: ${{ secrets.OHOS_CERT_BASE64 }}
           OHOS_PROFILE_BASE64: ${{ secrets.OHOS_PROFILE_BASE64 }}
+          OHOS_MATERIAL_ONLY: "1"
         run: python3 tool/ohos/apply_signing.py
 
       - name: Switch to HarmonyOS dependency set
@@ -222,39 +223,62 @@ jobs:
           flutter build hap --release --target-platform ohos-arm64 $DEFINES
         timeout-minutes: 40
 
-      - name: Build signed APP package
-        working-directory: ohos
+      - name: Locate HarmonyOS signing tools
         run: |
-          hvigorw --mode project -p product=default -p buildMode=release assembleApp --no-daemon
-        timeout-minutes: 30
+          set -euo pipefail
+          SIGN_TOOL=$(find "$HOS_SDK_HOME" -maxdepth 8 -type f -name 'hap-sign-tool.jar' | head -n 1 || true)
+          PACK_TOOL=$(find "$HOS_SDK_HOME" -maxdepth 8 -type f -name 'app_packing_tool.jar' | head -n 1 || true)
+          echo "SIGN_TOOL=$SIGN_TOOL"
+          echo "PACK_TOOL=$PACK_TOOL"
+          if [ -z "$SIGN_TOOL" ] || [ -z "$PACK_TOOL" ]; then
+            echo "::error::未找到 hap-sign-tool.jar 或 app_packing_tool.jar"
+            find "$HOS_SDK_HOME" -maxdepth 8 -type f -name '*.jar' | head -n 50 || true
+            exit 1
+          fi
+          echo "SIGN_TOOL=$SIGN_TOOL" >> "$GITHUB_ENV"
+          echo "PACK_TOOL=$PACK_TOOL" >> "$GITHUB_ENV"
+
+      - name: Sign HAP and pack APP
+        env:
+          OHOS_STORE_FILE_PASSWORD: ${{ secrets.OHOS_STORE_FILE_PASSWORD }}
+          OHOS_KEY_PASSWORD: ${{ secrets.OHOS_KEY_PASSWORD }}
+          OHOS_KEY_ALIAS: ${{ secrets.OHOS_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.get_version.outputs.version }}"
+          mkdir -p build/dist
+          HAP=$(find ohos -type f -name '*unsigned*.hap' | head -n 1 || true)
+          if [ -z "$HAP" ]; then
+            HAP=$(find ohos -type f -name '*.hap' | head -n 1 || true)
+          fi
+          if [ -z "$HAP" ]; then
+            echo "::error::未找到未签名 HAP"
+            exit 1
+          fi
+          echo "Signing HAP: $HAP"
+          java -jar "$SIGN_TOOL" sign-app \
+            -mode localSign \
+            -keyAlias "$OHOS_KEY_ALIAS" \
+            -keyPwd "$OHOS_KEY_PASSWORD" \
+            -appCertFile ohos/signature/release.cer \
+            -profileFile ohos/signature/release.p7b \
+            -inFile "$HAP" \
+            -signAlg SHA256withECDSA \
+            -keystoreFile ohos/signature/release.p12 \
+            -keystorePwd "$OHOS_STORE_FILE_PASSWORD" \
+            -outFile "build/dist/Helechron_${VERSION}_ohos_signed.hap" \
+            -compatibleVersion 12
+          java -jar "$PACK_TOOL" --mode app \
+            --hap-list "build/dist/Helechron_${VERSION}_ohos_signed.hap" \
+            --out-path "build/dist/Helechron_${VERSION}_ohos_signed.app"
+          ls -lh build/dist
 
       - name: Collect packages
         run: |
           set -euo pipefail
           VERSION="${{ steps.get_version.outputs.version }}"
-          mkdir -p build/dist
-
-          APP=$(find ohos -type f -name '*signed*.app' | head -n 1 || true)
-          if [ -z "$APP" ]; then
-            APP=$(find ohos -type f -name '*.app' | head -n 1 || true)
-          fi
-          HAP=$(find ohos -type f -name '*signed*.hap' | head -n 1 || true)
-          if [ -z "$HAP" ]; then
-            HAP=$(find ohos -type f -name '*.hap' | head -n 1 || true)
-          fi
-
-          if [ -z "$APP" ]; then
-            echo "::error::未找到 .app 产物，AppGallery 上架需要签名 .app"
-            find ohos -type f \( -name '*.app' -o -name '*.hap' \) -print || true
-            exit 1
-          fi
-          if [ -z "$HAP" ]; then
-            echo "::error::未找到 .hap 产物"
-            exit 1
-          fi
-
-          cp "$APP" "build/dist/Helechron_${VERSION}_ohos_signed.app"
-          cp "$HAP" "build/dist/Helechron_${VERSION}_ohos_signed.hap"
+          test -s "build/dist/Helechron_${VERSION}_ohos_signed.hap"
+          test -s "build/dist/Helechron_${VERSION}_ohos_signed.app"
           ls -lh build/dist
 
       - name: Upload HarmonyOS artifacts
