@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Helechron - 课程表与时间管理</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f7faff;
+    --card: #ffffff;
+    --fg: #1c1c1e;
+    --muted: #6b6b70;
+    --accent: #3478f6;
+    --line: #e5e7eb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000;
+      --card: #1c1c1e;
+      --fg: #f2f2f7;
+      --muted: #98989f;
+      --accent: #6aa5ff;
+      --line: #2c2c2e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+  main { max-width: 720px; margin: 0 auto; padding: 56px 22px 72px; }
+  .brand { display: flex; align-items: center; gap: 18px; margin-bottom: 28px; }
+  .brand img { width: 92px; height: 92px; border-radius: 22px; }
+  h1 { font-size: 34px; margin: 0 0 4px; letter-spacing: -0.5px; }
+  .tagline { color: var(--muted); margin: 0; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 22px;
+    margin-top: 22px;
+  }
+  h2 { font-size: 18px; margin: 0 0 10px; }
+  p { margin: 0 0 10px; }
+  ul { margin: 8px 0 0; padding-left: 1.2em; }
+  li { margin: 4px 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+  .links a {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 8px 16px;
+    background: var(--card);
+  }
+  footer { margin-top: 42px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">
+    <img src="./icon.png" alt="Helechron 图标">
+    <div>
+      <h1>Helechron</h1>
+      <p class="tagline">课程表 · 日程 · DDL · 成绩</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>关于</h2>
+    <p>Helechron 是面向浙江大学学生的第三方开源课程表与时间管理工具，支持 HarmonyOS NEXT 与 Android。</p>
+    <p>日程一览、课表查看、DDL 助手、成绩查询、校园卡付款码、系统日历同步与桌面小组件。</p>
+  </div>
+
+  <div class="card">
+    <h2>隐私与协议</h2>
+    <p>账号密码、课表、成绩等数据仅保存在你的设备本地；本应用不运营收集这些信息的服务器，未接入广告或统计分析 SDK。</p>
+    <div class="links">
+      <a href="./privacy.html">隐私政策</a>
+      <a href="./terms.html">用户协议</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>开源与反馈</h2>
+    <ul>
+      <li>源码：<a href="https://github.com/Kepler16f/Helechron">github.com/Kepler16f/Helechron</a></li>
+      <li>问题反馈：<a href="https://github.com/Kepler16f/Helechron/issues">GitHub Issues</a></li>
+      <li>许可证：GPL-3.0</li>
+    </ul>
+  </div>
+
+  <footer>
+    Helechron 是第三方开源项目，非浙江大学官方应用，与浙江大学无隶属或合作关系。
+  </footer>
+</main>
+</body>
+</html>

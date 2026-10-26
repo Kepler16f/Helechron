@@ -7,9 +7,9 @@ import 'package:celechron/database/database_helper.dart';
 class Fuse {
   late DateTime lastUpdateTime;
 
-  final bool isBeta = true;
+  final bool isBeta = false;
   final version = [0, 1, 7];
-  final build = 92;
+  final build = 100;
   List<int>? remoteVersion;
   int? remoteBuild;
   bool hasNewVersion = false;
@@ -17,7 +17,7 @@ class Fuse {
   final HttpClient _httpClient = HttpClient();
   final DatabaseHelper _db = Get.find<DatabaseHelper>(tag: 'db');
 
-  String get displayVersion => '0.1.7_dev6';
+  String get displayVersion => '0.1.7';
 
   Fuse() {
     lastUpdateTime = DateTime(2001, 1, 1);

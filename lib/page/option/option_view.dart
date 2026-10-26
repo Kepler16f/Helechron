@@ -1,4 +1,5 @@
 import 'package:celechron/utils/platform_features.dart';
+import 'package:celechron/utils/legal_links.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -14,6 +15,7 @@ import 'credits_page.dart';
 import 'diagnostic_log_page.dart';
 import 'package:get/get.dart';
 import 'custom_license_page.dart';
+import 'package:celechron/page/legal_page.dart';
 import 'login_page.dart';
 import 'network_proxy_page.dart';
 import 'option_controller.dart';
@@ -618,7 +620,43 @@ class OptionPage extends StatelessWidget {
                           },
                         ),
                         CupertinoListTile(
-                          title: const Text('服务条款'),
+                          title: const Text('隐私政策'),
+                          trailing: const BackChervonRow(),
+                          onTap: () async {
+                            Navigator.of(context, rootNavigator: true).push(
+                                CupertinoPageRoute(
+                                    builder: (context) => LegalDocumentPage(
+                                          title: '隐私政策',
+                                          assetPath:
+                                              'assets/legal/privacy_policy.txt',
+                                          onlineUrl: privacyPolicyUrl,
+                                        )));
+                          },
+                        ),
+                        CupertinoListTile(
+                          title: const Text('用户协议'),
+                          trailing: const BackChervonRow(),
+                          onTap: () async {
+                            Navigator.of(context, rootNavigator: true).push(
+                                CupertinoPageRoute(
+                                    builder: (context) => LegalDocumentPage(
+                                          title: '用户协议',
+                                          assetPath:
+                                              'assets/legal/user_agreement.txt',
+                                          onlineUrl: userAgreementUrl,
+                                        )));
+                          },
+                        ),
+                        if (icpFilingNumber.isNotEmpty)
+                          CupertinoListTile(
+                            title: const Text('ICP 备案号'),
+                            trailing: BackChervonRow(
+                              child: Text(icpFilingNumber,
+                                  style: trailingTextStyle),
+                            ),
+                          ),
+                        CupertinoListTile(
+                          title: const Text('开源许可证'),
                           trailing: const BackChervonRow(),
                           onTap: () async {
                             Navigator.of(context, rootNavigator: true).push(

@@ -155,7 +155,7 @@ class _CreditsPageState extends State<CreditsPage> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 32),
                     child: Text(
-                      'Celechron 的 OpenHarmony 移植版本，基于上游 1.3.0，有问题请到仓库反馈。\n目前图标采用"求是鸡"梗图占位，不代表本应用和 Celechron 原应用以及浙江大学官方有关。若涉及侵权请在 GitHub 联系作者更换，有好的图标建议也请在 GitHub 联系作者。',
+                      'Celechron 的 OpenHarmony 移植版本，基于上游 1.3.0，有问题请到仓库反馈。\n本应用为非官方第三方开源项目，与浙江大学及 Celechron 原应用无隶属或合作关系。',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 11,

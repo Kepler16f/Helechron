@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Aelechron</string>
+    <string name="app_name">Helechron</string>
     <string name="widget_course_title">课程小组件</string>
     <string name="widget_course_desc">显示下一节课、教室地点与倒计时</string>
     <string name="widget_payment_title">付款码小组件</string>

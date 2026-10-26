@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Aelechron</string>
+	<string>Helechron</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Aelechron</string>
+	<string>Helechron</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -25,13 +25,13 @@
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>NSCalendarsUsageDescription</key>
-	<string>Aelechron 需要访问日历，以便把课程表同步到系统日历。</string>
+	<string>Helechron 需要访问日历，以便把课程表同步到系统日历。</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Aelechron 需要访问日历，以便把课程表同步到系统日历。</string>
+	<string>Helechron 需要访问日历，以便把课程表同步到系统日历。</string>
 	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
-	<string>Aelechron 需要写入日历，以便把课程表同步到系统日历。</string>
+	<string>Helechron 需要写入日历，以便把课程表同步到系统日历。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Aelechron 需要访问相册，以便选择作业附件图片。</string>
+	<string>Helechron 需要访问相册，以便选择作业附件图片。</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

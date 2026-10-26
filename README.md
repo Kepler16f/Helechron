@@ -52,6 +52,17 @@ flutter build hap --release
 2. 配置签名证书（调试或发布）
 3. 点击 Run 运行调试，或 Build > Build Hap(s) 打包
 
+## 发布到华为应用市场（AppGallery）
+
+- 完整上架手册（账号、备案、软著、签名、送审、驳回处理）：[store/appgallery/README.md](store/appgallery/README.md)
+- 商店文案、权限与隐私申报表：[store/appgallery/listing.md](store/appgallery/listing.md)
+- 签名发布工作流：`.github/workflows/release-appgallery.yml`（手动触发，产出签名 `.app` / `.apk`）
+- 隐私政策与用户协议：`docs/privacy.html`、`docs/terms.html`
+- 当前发布版本：`0.1.7`（versionCode `100`）
+
+首次上架前需要完成：华为开发者实名认证、工信部 APP 备案、AGC 发布证书/Profile、
+可用测试账号、商店截图，以及软件著作权/电子版权（如审核要求）。
+
 ## 功能说明
 
 ### 核心功能

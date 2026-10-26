@@ -889,3 +889,10 @@ DerivedData/
 !**/ios/**/default.pbxuser
 !**/ios/**/default.perspectivev3
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
+
+# 发布签名材料（绝不提交）
+android/key.properties
+android/app/*.keystore
+android/app/*.jks
+ohos/signature/
+__pycache__/

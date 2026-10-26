@@ -9,8 +9,10 @@ import 'package:app_links/app_links.dart';
 
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/model/option.dart';
+import 'package:celechron/page/consent_page.dart';
 import 'package:celechron/page/home_page.dart';
 import 'package:celechron/page/option/ecard_pay_page.dart';
+import 'package:celechron/services/consent_store.dart';
 import 'package:celechron/services/diagnostic_log_service.dart';
 import 'package:celechron/services/refresh_coordinator.dart';
 import 'package:celechron/services/scholar_widget_sync.dart';
@@ -37,6 +39,18 @@ void main() async {
     );
   };
 
+  // 同意隐私政策之前只初始化本地存储，不读取学校账号、不发起网络请求。
+  await Hive.initFlutter();
+  if (!await ConsentStore.hasAgreed()) {
+    runApp(ConsentApp(onAgreed: _bootstrap));
+    return;
+  }
+
+  await _bootstrap();
+}
+
+/// 完成应用初始化并启动主界面。仅在用户同意隐私政策后调用。
+Future<void> _bootstrap() async {
   ECardWidgetMessenger.installNativeHandler();
   OhosNativeService.instance.installWidgetRouteHandler(_handleWidgetRoute);
   OhosNativeService.instance.installBackPressedHandler(_handleBackPressed);
@@ -45,7 +59,6 @@ void main() async {
   await RefreshCoordinator.setForegroundActive(true);
 
   // 初始化数据库
-  await Hive.initFlutter();
   var db = Get.put(DatabaseHelper(), tag: 'db');
   await db.init();
 
@@ -378,8 +391,8 @@ class _CelechronAppState extends State<CelechronApp>
             data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
             child: child!,
           ),
-          title: 'Aelechron',
-          home: const HomePage(title: 'Aelechron'),
+          title: 'Helechron',
+          home: const HomePage(title: 'Helechron'),
           initialRoute: '/',
           routes: {
             '/ecardpaypage': (context) => const ECardPayPage(),
