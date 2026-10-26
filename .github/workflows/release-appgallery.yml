@@ -204,9 +204,9 @@ jobs:
           VERSION=$(grep "displayVersion =>" lib/worker/fuse.dart | sed "s/.*'\(.*\)'.*/\1/")
           echo "version=${VERSION:-dev}" >> "$GITHUB_OUTPUT"
 
-      - name: Build signed HAP
+      - name: Build unsigned HAP
         run: |
-          set -euo pipefail
+          set +e
           DEFINES=""
           if [ -n "${PRIVACY_POLICY_URL:-}" ]; then
             DEFINES="$DEFINES --dart-define=PRIVACY_POLICY_URL=${PRIVACY_POLICY_URL}"
@@ -221,6 +221,16 @@ jobs:
             DEFINES="$DEFINES --dart-define=CALENDAR_CONFIG_URL=${CALENDAR_CONFIG_URL}"
           fi
           flutter build hap --release --target-platform ohos-arm64 $DEFINES
+          FLUTTER_BUILD_STATUS=$?
+          set -e
+          HAP=$(find ohos -type f -name '*unsigned*.hap' | head -n 1 || true)
+          if [ -z "$HAP" ]; then
+            echo "::error::flutter build hap failed (exit $FLUTTER_BUILD_STATUS) and no unsigned HAP was produced"
+            exit 1
+          fi
+          if [ "$FLUTTER_BUILD_STATUS" -ne 0 ]; then
+            echo "::notice::flutter exited with $FLUTTER_BUILD_STATUS (expected without signing config); using unsigned HAP: $HAP"
+          fi
         timeout-minutes: 40
 
       - name: Locate HarmonyOS signing tools
