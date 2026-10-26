@@ -327,11 +327,21 @@ jobs:
           test -s "build/dist/Helechron_${VERSION}_ohos_signed.app"
           ls -lh build/dist
 
-      - name: Upload HarmonyOS artifacts
+      # archive:false 仅支持单文件，.hap 与 .app 分别上传
+      - name: Upload signed HAP
         uses: actions/upload-artifact@v7
         with:
-          name: Helechron_${{ steps.get_version.outputs.version }}_ohos_signed
-          path: build/dist/Helechron_*_ohos_signed.*
+          name: Helechron_${{ steps.get_version.outputs.version }}_ohos_signed.hap
+          path: build/dist/Helechron_${{ steps.get_version.outputs.version }}_ohos_signed.hap
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload signed APP
+        uses: actions/upload-artifact@v7
+        with:
+          name: Helechron_${{ steps.get_version.outputs.version }}_ohos_signed.app
+          path: build/dist/Helechron_${{ steps.get_version.outputs.version }}_ohos_signed.app
           archive: false
           retention-days: 30
           if-no-files-found: error
