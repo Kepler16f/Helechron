@@ -233,6 +233,15 @@ jobs:
           fi
         timeout-minutes: 40
 
+      - name: Assemble unsigned APP
+        working-directory: ohos
+        run: |
+          set +e
+          hvigorw --mode project -p product=default -p buildMode=release assembleApp --no-daemon
+          echo "assembleApp exit: $?"
+          set -e
+          find . -type f \( -name 'pack.info' -o -name '*.app' \) -print || true
+
       - name: Locate HarmonyOS signing tools
         run: |
           set -euo pipefail
@@ -265,6 +274,18 @@ jobs:
             echo "::error::未找到未签名 HAP"
             exit 1
           fi
+          # app 模式必需 pack.info：优先用上方 assembleApp 生成的，找不到则从 HAP 包内提取（hvigor 构建时会内嵌 pack.info 到 HAP 根目录）
+          PACK_INFO=$(find ohos -type f -name 'pack.info' | head -n 1 || true)
+          if [ -z "$PACK_INFO" ]; then
+            unzip -p "$HAP" pack.info > build/dist/pack.info || true
+            PACK_INFO=build/dist/pack.info
+          fi
+          if [ ! -s "$PACK_INFO" ]; then
+            echo "::error::未找到可用的 pack.info，HAP 包内容如下："
+            unzip -l "$HAP" | head -n 30
+            exit 1
+          fi
+          echo "Using pack.info: $PACK_INFO"
           echo "Signing HAP: $HAP"
           java -jar "$SIGN_TOOL" sign-app \
             -mode localSign \
@@ -278,9 +299,24 @@ jobs:
             -keystorePwd "$OHOS_STORE_FILE_PASSWORD" \
             -outFile "build/dist/Helechron_${VERSION}_ohos_signed.hap" \
             -compatibleVersion 12
+          # App 打包指令的输入参数是 --hap-path（官方文档表5），--hap-list 不会被识别
           java -jar "$PACK_TOOL" --mode app \
-            --hap-list "build/dist/Helechron_${VERSION}_ohos_signed.hap" \
-            --out-path "build/dist/Helechron_${VERSION}_ohos_signed.app"
+            --pack-info-path "$PACK_INFO" \
+            --hap-path "build/dist/Helechron_${VERSION}_ohos_signed.hap" \
+            --out-path "build/dist/Helechron_${VERSION}_ohos_unsigned.app" \
+            --replace-pack-info false --force true
+          # .app 外层同样需要签名，仅内层 HAP 已签名不足以通过市场校验
+          java -jar "$SIGN_TOOL" sign-app \
+            -mode localSign \
+            -keyAlias "$OHOS_KEY_ALIAS" \
+            -keyPwd "$OHOS_KEY_PASSWORD" \
+            -appCertFile ohos/signature/release.cer \
+            -profileFile ohos/signature/release.p7b \
+            -inFile "build/dist/Helechron_${VERSION}_ohos_unsigned.app" \
+            -signAlg SHA256withECDSA \
+            -keystoreFile ohos/signature/release.p12 \
+            -keystorePwd "$OHOS_STORE_FILE_PASSWORD" \
+            -outFile "build/dist/Helechron_${VERSION}_ohos_signed.app"
           ls -lh build/dist
 
       - name: Collect packages
