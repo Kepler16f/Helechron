@@ -91,7 +91,7 @@ class CalendarToIcal {
     buffer.writeln('BEGIN:VCALENDAR');
     buffer.writeln('X-WR-CALNAME:$calendarName');
     buffer.writeln('X-APPLE-CALENDAR-COLOR:#2BBFF0');
-    buffer.writeln('PRODID:-//Celechron//Course Calendar 1.0//CN');
+    buffer.writeln('PRODID:-//Helechron//Course Calendar 1.0//CN');
     buffer.writeln('VERSION:2.0');
     buffer.writeln('METHOD:PUBLISH');
 
@@ -191,7 +191,7 @@ class CalendarToIcal {
 
       final directory = await getApplicationDocumentsDirectory();
       final fileName =
-          'celechron_schedule_${DateTime.now().millisecondsSinceEpoch}.ics';
+          'helechron_schedule_${DateTime.now().millisecondsSinceEpoch}.ics';
       final tempFile = File('${directory.path}/$fileName');
 
       await tempFile.writeAsString(icalContent);
@@ -199,7 +199,7 @@ class CalendarToIcal {
       await Share.shareXFiles(
         [XFile(tempFile.path)],
         subject: '浙大课程表',
-        text: '从 Celechron 导出的课程表文件，可导入到其他日历应用中使用。',
+        text: '从 Helechron 导出的课程表文件，可导入到其他日历应用中使用。',
       );
 
       _showAlert('成功', '课程表已导出，请选择保存位置或分享');
@@ -223,7 +223,7 @@ class CalendarToIcal {
 
       final directory = await getApplicationDocumentsDirectory();
       final fileName =
-          'celechron_${semesterName.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}.ics';
+          'helechron_${semesterName.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}.ics';
       final tempFile = File('${directory.path}/$fileName');
 
       await tempFile.writeAsString(icalContent);
@@ -231,7 +231,7 @@ class CalendarToIcal {
       await Share.shareXFiles(
         [XFile(tempFile.path)],
         subject: '浙大课程表-$semesterName',
-        text: '从 Celechron 导出的 $semesterName 课程表文件。',
+        text: '从 Helechron 导出的 $semesterName 课程表文件。',
       );
 
       _showAlert('成功', '$semesterName 课程表已导出');
@@ -254,7 +254,7 @@ class CalendarToIcal {
 
       final directory = await getApplicationDocumentsDirectory();
       final fileName =
-          'celechron_all_semesters_${DateTime.now().millisecondsSinceEpoch}.ics';
+          'helechron_all_semesters_${DateTime.now().millisecondsSinceEpoch}.ics';
       final tempFile = File('${directory.path}/$fileName');
 
       await tempFile.writeAsString(icalContent);
@@ -262,7 +262,7 @@ class CalendarToIcal {
       await Share.shareXFiles(
         [XFile(tempFile.path)],
         subject: '浙大课程表-完整版',
-        text: '从 Celechron 导出的完整课程表文件，包含所有学期。',
+        text: '从 Helechron 导出的完整课程表文件，包含所有学期。',
       );
 
       _showAlert('成功', '完整课程表已导出');

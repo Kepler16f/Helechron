@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 """把 assets/legal 下的纯文本协议转换为可托管的静态网页。
 
+协议文本里的 ``{{DEVELOPER_NAME}}`` 等占位符会在转换前由
+``tool/store/legal_identity.py`` 替换成当前生效的开发者名称、主体类型与
+ICP 备案号，因此生成出来的页面里不会出现 ``{{...}}`` 残留。
+
+发布时可用环境变量覆盖默认值（与 Dart 侧 `--dart-define=` 对齐）::
+
+    $env:DEVELOPER_NAME = "胡天泽"
+    $env:DEVELOPER_SUBJECT_TYPE = "个人开发者"
+    $env:ICP_FILING_NUMBER = "浙ICP备2026XXXXXX号"
+
 用法: python tool/store/build_legal_html.py
 输出: docs/privacy.html, docs/terms.html
 """
@@ -9,7 +19,13 @@ from __future__ import annotations
 
 import html
 import re
+import sys
 from pathlib import Path
+
+# 允许从任意目录调用本脚本：把同目录的 legal_identity 加入模块搜索路径。
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from legal_identity import substitute  # noqa: E402  (需在 sys.path 调整之后导入)
 
 ROOT = Path(__file__).resolve().parents[2]
 DOCS = ROOT / "docs"
@@ -64,7 +80,7 @@ TEMPLATE = """<!DOCTYPE html>
 <nav><a href="./index.html">Helechron</a> / {title}</nav>
 <h1>{title}</h1>
 {body}
-<footer>Helechron 是第三方开源项目，非浙江大学官方应用。本页面内容与应用内文本不一致时，以应用内最新版本为准。</footer>
+<footer>Helechron 由个人开发者独立开发与维护，是第三方开源项目，非浙江大学官方应用，也非 Celechron 官方应用，与浙江大学、Celechron 及其任何附属机构不存在隶属、授权、合作或背书关系。本页面内容与应用内文本不一致时，以应用内最新版本为准。</footer>
 </main>
 </body>
 </html>
@@ -106,7 +122,9 @@ def main() -> None:
         "terms": ROOT / "assets" / "legal" / "user_agreement.txt",
     }
     for name, source in sources.items():
-        title, body = convert(source.read_text(encoding="utf-8"))
+        raw = source.read_text(encoding="utf-8")
+        # 先把占位符替换成具体的主体信息，再转 HTML。
+        title, body = convert(substitute(raw))
         target = DOCS / f"{name}.html"
         target.write_text(
             TEMPLATE.format(title=title, body=body),

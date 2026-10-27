@@ -22,15 +22,17 @@ HarmonyOS 版和 Android 版在 AGC 中是**两个独立应用记录**，包名�
 | 项目 | 状态 | 位置 |
 |---|---|---|
 | 版本号统一为 0.1.7 / 100 | ✅ | `pubspec.yaml`、`tool/pubspec_ohos.yaml`、`ohos/AppScope/app.json5`、`lib/worker/fuse.dart` |
-| 首次启动隐私同意门 | ✅ | `lib/page/consent_page.dart`、`lib/services/consent_store.dart`、`lib/main.dart` |
-| 应用内隐私政策 / 用户协议 | ✅ | `assets/legal/*.txt`、`lib/page/legal_page.dart` |
+| 首次启动隐私同意门 | ✅ | `lib/page/consent_page.dart`、`lib/services/consent_store.dart`、`lib/main.dart`；空白复选框默认未勾选，未勾选时「同意并继续」置灰不可点，底部常驻「不同意并退出应用」 |
+| 应用内隐私政策 / 用户协议 | ✅ | `assets/legal/*.txt`、`lib/page/legal_page.dart`；`{{DEVELOPER_NAME}}`、`{{DEVELOPER_SUBJECT_TYPE}}`、`{{ICP_FILING_NUMBER}}` 占位符由 `lib/utils/legal_links.dart` 渲染时替换 |
 | 在线隐私政策 / 用户协议 | ✅ | `docs/privacy.html`、`docs/terms.html`（需部署） |
 | 设置页隐私入口 | ✅ | 设置 → 关于 → 隐私政策 / 用户协议 |
 | Android release 签名 | ✅ | `android/app/build.gradle.kts`、`android/key.properties.example` |
 | HarmonyOS 发布签名 | ✅ | `tool/ohos/apply_signing.py` |
 | 签名发布 CI | ✅ | `.github/workflows/release-appgallery.yml` |
-| 商店图标（K 手绘笔记本） | ✅ | `store/appgallery/icon/`（已应用到各平台） |
+| 商店图标（K 手绘笔记本） | ✅ | `store/appgallery/icon/`（已应用到各平台）；包内单层图标 1024×1024 |
+| 开发者名称统一（个人开发者） | ✅ | `lib/utils/legal_links.dart`（`developerName` / `developerSubjectType`） |
 | APP 备案 | ⏳ 待你完成 | 见 `docs/APP备案指南.md` |
+| APP 备案号展示 | ⏳ 待完成 | 应用内目前显示占位符 `【ICP备案号待补充】`；拿到备案号后用 `--dart-define=ICP_FILING_NUMBER=...` 重新构建 |
 | 软著 / 电子版权 | ⏳ 待你完成 | 中国版权保护中心或华为合作渠道 |
 | AGC 证书 / Profile | ⏳ 待你完成 | 见第 4 节 |
 | 测试账号 | ⏳ 待你完成 | 见第 3.4 节 |
@@ -68,7 +70,8 @@ HarmonyOS 版和 Android 版在 AGC 中是**两个独立应用记录**，包名�
 - 详细草稿、表单字段和时间线见 [docs/APP备案指南.md](../../docs/APP备案指南.md)。
 - 拿到备案号后：
   1. 回填 AGC 应用信息；
-  2. 用 `--dart-define=ICP_FILING_NUMBER=...` 重新构建，设置页会显示备案号（`lib/utils/legal_links.dart` 已支持）。
+  2. 用 `--dart-define=ICP_FILING_NUMBER=...` 重新构建，设置页会显示备案号（`lib/utils/legal_links.dart` 已支持）；
+  3. 用 `--dart-define=DEVELOPER_NAME=...` 确认应用内展示的开发者名称与 AGC「开发者信息」完全一致（默认 `胡天泽`，个人开发者）；不一致会被以「用户协议展示的公司名称与开发者信息不一致」驳回。
 
 ### 3.3 软件著作权 / 电子版权
 
@@ -244,12 +247,15 @@ gh secret set OHOS_PROFILE_BASE64 --body "$(base64 -w0 ohos/signature/release.p7
 |---|---|---|
 | `PRIVACY_POLICY_URL` | `https://你的已备案域名/privacy.html` | 构建时注入隐私政策地址 |
 | `USER_AGREEMENT_URL` | `https://你的已备案域名/terms.html` | 构建时注入用户协议地址 |
-| `ICP_FILING_NUMBER` | `浙ICP备XXXXXXXX号-XA` | 设置页展示备案号 |
+| `DEVELOPER_NAME` | `胡天泽` | 构建时注入应用内展示的开发者名称，**必须与 AGC「开发者信息」中的名称完全一致**，否则会被以「用户协议展示的公司名称与开发者信息不一致」驳回 |
+| `DEVELOPER_SUBJECT_TYPE` | `个人开发者` | 可选：主体类型，个人主体填「个人开发者」，企业主体填「企业」 |
+| `ICP_FILING_NUMBER` | `浙ICP备XXXXXXXX号-XA` | 设置页展示备案号；**未设置时应用内显示 `【ICP备案号待补充】` 占位符，上架前必须填** |
 | `CALENDAR_CONFIG_URL` | `https://你的已备案域名/calendar/` | 可选：把校历配置从 HTTP 上游换成自己的 HTTPS 镜像 |
 
 ```bash
 gh variable set PRIVACY_POLICY_URL --body "https://你的已备案域名/privacy.html"
 gh variable set USER_AGREEMENT_URL --body "https://你的已备案域名/terms.html"
+gh variable set DEVELOPER_NAME --body "胡天泽"
 gh variable set ICP_FILING_NUMBER --body "浙ICP备XXXXXXXX号-XA"
 gh variable set CALENDAR_CONFIG_URL --body "https://你的已备案域名/calendar/"
 ```
@@ -325,29 +331,38 @@ gh variable set CALENDAR_CONFIG_URL --body "https://你的已备案域名/calend
    - 鸿蒙：`.app`
    - 安卓：`.apk`
 3. 版本号必须与包内一致：`0.1.7` / `100`。
-4. 填写更新说明、测试账号、审核备注。
-5. 提交审核。
-6. 审核通过后选择“立即发布”或定时发布。
+4. **提交前确认包内单层图标为 1024×1024**（`ohos/entry/src/main/resources/base/media/icon.png`、
+   `ohos/AppScope/resources/base/media/app_icon.png`）；AGC 后台商店图标用 216×216 版本。
+   单层图小于 1024×1024 会被以「应用图标单层图尺寸不满足 1024×1024」驳回。
+5. 填写更新说明、测试账号、审核备注。
+6. 提交审核。
+7. 审核通过后选择“立即发布”或定时发布。
 
 ### 审核备注模板（可直接改）
+
+> 本次驳回整改版本（覆盖开发者名称与主体类型、首次启动明示同意流程、包内单层图标
+> 1024×1024 三点）见 [listing.md 第 8 节](./listing.md#8-审核备注模板)，直接用该版本。
 
 ```text
 审核老师您好：
 
-1. 本应用 Helechron 是第三方开源课程表与时间管理工具，非浙江大学官方应用，
-   与浙江大学及其附属机构无隶属、授权或合作关系。应用内“关于”页和隐私政策
-   均有相同声明。
-2. 测试账号：账号 [填写]，密码 [填写]，验证方式 [填写]。
+1. 开发者名称：胡天泽，主体类型：个人开发者（非企业主体），与 AGC 开发者信息一致；
+   应用内用户协议、隐私政策、关于页展示的开发者名称同源同值。
+2. 本应用 Helechron 是第三方开源课程表与时间管理工具，非浙江大学官方应用，
+   也非 Celechron 官方应用，与浙江大学、Celechron 及其附属机构无隶属、授权或
+   合作关系。应用内“关于”页和隐私政策均有相同声明。
+3. 测试账号：账号 [填写]，密码 [填写]，验证方式 [填写]。
    登录路径：启动 → 同意隐私政策 → 设置 → 登录。
    核心功能路径：首页“接下来”、日历、任务、学业。
-3. 本应用不提供支付、借贷、理财等金融服务。校园卡页面仅展示用户本人已登录
+4. 本应用不提供支付、借贷、理财等金融服务。校园卡页面仅展示用户本人已登录
    账户的付款码，不进行支付清算，也不将凭据上传到任何开发者服务器。
-4. 隐私政策首次启动弹窗展示；设置 → 关于 → 隐私政策 可再次查看。
-   在线地址：[填写]。
-5. 应用为 GPL-3.0 开源项目，源码地址：
+5. 隐私政策首次启动同意页展示：默认未勾选的空白复选框，未勾选时“同意并继续”
+   置灰不可点，底部常驻“不同意并退出应用”；同意前不读取账号、不联网。
+   设置 → 关于 → 隐私政策 / 用户协议 可再次查看。在线地址：[填写]。
+6. 应用为 GPL-3.0 开源项目，源码地址：
    https://github.com/Kepler16f/Helechron
-6. 版本号：0.1.7（versionCode 100）；备案号：[填写]。
-7. 若部分校园系统需要校园网/VPN，请使用测试账号在公网环境验证；
+7. 版本号：0.1.7（versionCode 100）；备案号：[填写]。
+8. 若部分校园系统需要校园网/VPN，请使用测试账号在公网环境验证；
    如仍无法访问，请告知，我们会补充演示数据或说明。
 ```
 
@@ -355,11 +370,14 @@ gh variable set CALENDAR_CONFIG_URL --body "https://你的已备案域名/calend
 
 | 驳回原因 | 处理 |
 |---|---|
+| 用户协议展示的公司名称与 AGC 开发者信息不一致 | 应用内开发者名称已统一到 `lib/utils/legal_links.dart` 的 `developerName`（默认 `胡天泽`，个人开发者），协议/隐私政策/关于页同源；确认 AGC 开发者信息里的名称与该值**逐字一致**，不一致时用 `--dart-define=DEVELOPER_NAME=...` 覆盖后重新构建 |
+| 应用图标单层图尺寸不满足 1024×1024 | 包内 `ohos/entry/src/main/resources/base/media/icon.png` 与 `ohos/AppScope/resources/base/media/app_icon.png` 均为 1024×1024；商店后台上传 216×216 版本即可，两者为同一设计 |
+| 隐私政策未以明示同意方式取得同意 | 已改为空白复选框默认未勾选 + 同意按钮置灰 + 「不同意并退出应用」常驻；确认构建包含 `consent_page.dart`，同意前不读取账号、不联网；隐私政策需有「六、同意的取得方式」章节 |
 | 首次启动未展示隐私政策 | 已实现同意门；确认构建包含 `consent_page.dart` 且同意前不联网 |
 | 隐私政策链接无法访问 | 换到已备案域名/国内可访问的 HTTPS 地址；同步更新 GitHub variable 并重新构建 |
 | 未提供测试账号 / 核心功能无法验证 | 提供专用测试账号、验证方式、功能路径；必要时增加演示模式 |
 | 图标/名称侵犯第三方权利 | 已换原创图标；介绍中保留非官方声明；如仍被问询，提供授权或彻底移除校名 |
-| 缺少 APP 备案号 | 完成备案并回填 AGC |
+| 缺少 APP 备案号 | 完成备案并回填 AGC；未注入时应用内显示 `【ICP备案号待补充】` 占位符，需用 `--dart-define=ICP_FILING_NUMBER=...` 重新构建 |
 | 缺少软著 | 提供电子版权认证或软著证书 |
 | 权限超范围/未说明 | 按 `listing.md` 权限表填写；确认包内没有多余权限 |
 | 明文 HTTP 传输 | `calendar.celechron.top` 目前是 HTTP；在隐私政策中已披露。审核追问时说明用途，长期建议迁移 HTTPS |

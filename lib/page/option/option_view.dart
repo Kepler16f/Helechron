@@ -647,14 +647,27 @@ class OptionPage extends StatelessWidget {
                                         )));
                           },
                         ),
-                        if (icpFilingNumber.isNotEmpty)
-                          CupertinoListTile(
-                            title: const Text('ICP 备案号'),
-                            trailing: BackChervonRow(
-                              child: Text(icpFilingNumber,
-                                  style: trailingTextStyle),
-                            ),
+                        CupertinoListTile(
+                          title: const Text('开发者'),
+                          subtitle: const Text('与应用内协议展示的名称一致'),
+                          trailing: BackChervonRow(
+                            child: Text(developerName, style: trailingTextStyle),
                           ),
+                        ),
+                        CupertinoListTile(
+                          title: const Text('开发者类型'),
+                          trailing: BackChervonRow(
+                            child: Text(developerSubjectType,
+                                style: trailingTextStyle),
+                          ),
+                        ),
+                        CupertinoListTile(
+                          title: const Text('ICP 备案号'),
+                          trailing: BackChervonRow(
+                            child: Text(icpFilingNumber,
+                                style: trailingTextStyle),
+                          ),
+                        ),
                         CupertinoListTile(
                           title: const Text('开源许可证'),
                           trailing: const BackChervonRow(),

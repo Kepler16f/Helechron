@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/design/persistent_headers.dart';
 import 'package:celechron/http/github_service.dart';
+import 'package:celechron/utils/legal_links.dart';
 
 class CreditsPage extends StatefulWidget {
   final String version;
@@ -155,7 +156,10 @@ class _CreditsPageState extends State<CreditsPage> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 32),
                     child: Text(
-                      'Celechron 的 OpenHarmony 移植版本，基于上游 1.3.0，有问题请到仓库反馈。\n本应用为非官方第三方开源项目，与浙江大学及 Celechron 原应用无隶属或合作关系。',
+                      '由 $developerName（$developerSubjectType）独立开发的第三方开源课程表与时间管理工具，'
+                      '非浙江大学官方应用，也非 Celechron 官方应用，与浙江大学、Celechron 及其附属机构无隶属、授权或合作关系。\n'
+                      '基于上游 Celechron 1.3.0 移植，GPL-3.0 开源，有问题请到仓库反馈。\n'
+                      'APP 备案号：$icpFilingNumber',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 11,

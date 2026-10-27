@@ -14,11 +14,42 @@ const String userAgreementUrl = String.fromEnvironment(
 );
 
 /// 隐私政策版本号。修改隐私政策内容时必须递增，以便重新征得同意。
-const int privacyPolicyVersion = 1;
+const int privacyPolicyVersion = 2;
 
-/// 工信部 APP 备案号。拿到备案号后可通过
-/// `--dart-define=ICP_FILING_NUMBER=浙ICP备...` 注入，或在设置页展示。
+/// 开发者（个人信息处理者）名称。
+///
+/// 上架审核会核对「应用内用户协议展示的名称」与「AppGallery Connect 开发者信息」
+/// 是否一致，不一致会直接驳回。个人主体填实名姓名，企业主体填营业执照全称，
+/// 必须与 AGC 逐字相同。
+///
+/// 发布时通过 `--dart-define=DEVELOPER_NAME=...` 覆盖；默认值与
+/// `tool/store/legal_identity.py` 保持一致（由 `tool/store/check_release.py` 校验）。
+const String developerName = String.fromEnvironment(
+  'DEVELOPER_NAME',
+  defaultValue: '胡天泽',
+);
+
+/// 开发者主体类型。个人主体填“个人开发者”，企业主体填“企业”。
+const String developerSubjectType = String.fromEnvironment(
+  'DEVELOPER_SUBJECT_TYPE',
+  defaultValue: '个人开发者',
+);
+
+/// 工信部 APP 备案号。
+///
+/// 备案号是上架硬性门槛，拿到后通过 `--dart-define=ICP_FILING_NUMBER=...` 注入，
+/// 应用内「关于」页会展示；未注入时显示占位文本提醒发布者补齐。
 const String icpFilingNumber = String.fromEnvironment(
   'ICP_FILING_NUMBER',
-  defaultValue: '',
+  defaultValue: '【ICP备案号待补充】',
 );
+
+/// 协议文本中的占位符。
+///
+/// `assets/legal/*.txt` 与在线版 `docs/*.html` 共用同一套占位符，渲染时替换为
+/// 上面的常量，保证应用内文本与商店在线文本一致。
+const Map<String, String> legalPlaceholders = <String, String>{
+  '{{DEVELOPER_NAME}}': developerName,
+  '{{DEVELOPER_SUBJECT_TYPE}}': developerSubjectType,
+  '{{ICP_FILING_NUMBER}}': icpFilingNumber,
+};

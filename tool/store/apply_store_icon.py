@@ -6,6 +6,9 @@
 iOS 与 assets/logo.png。执行前请确认这是你想要的产品决策；
 旧图标仍可从 git 历史恢复。
 
+鸿蒙单层图标规范要求 1024×1024，包内任何单层图标都不能小于该尺寸，
+否则上架检测会报「应用图标单层图尺寸不满足规范」。
+
 用法: python tool/store/apply_store_icon.py
 """
 
@@ -22,7 +25,8 @@ MASTER = ROOT / "store" / "appgallery" / "icon" / "helechron_icon_1024.png"
 TARGETS: dict[Path, tuple[int, int]] = {
     ROOT / "assets" / "logo.png": (512, 512),
     ROOT / "ohos" / "AppScope" / "resources" / "base" / "media" / "app_icon.png": (1024, 1024),
-    ROOT / "ohos" / "entry" / "src" / "main" / "resources" / "base" / "media" / "icon.png": (192, 192),
+    # entry 模块图标同样会被打进 HAP，必须满足鸿蒙单层图 1024×1024 规范
+    ROOT / "ohos" / "entry" / "src" / "main" / "resources" / "base" / "media" / "icon.png": (1024, 1024),
     ROOT / "android" / "app" / "src" / "main" / "res" / "mipmap-mdpi" / "ic_launcher.png": (48, 48),
     ROOT / "android" / "app" / "src" / "main" / "res" / "mipmap-hdpi" / "ic_launcher.png": (72, 72),
     ROOT / "android" / "app" / "src" / "main" / "res" / "mipmap-xhdpi" / "ic_launcher.png": (96, 96),
