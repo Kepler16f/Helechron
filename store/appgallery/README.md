@@ -29,7 +29,7 @@ HarmonyOS 版和 Android 版在 AGC 中是**两个独立应用记录**，包名�
 | Android release 签名 | ✅ | `android/app/build.gradle.kts`、`android/key.properties.example` |
 | HarmonyOS 发布签名 | ✅ | `tool/ohos/apply_signing.py` |
 | 签名发布 CI | ✅ | `.github/workflows/release-appgallery.yml` |
-| 商店图标（K 手绘笔记本） | ✅ | `store/appgallery/icon/`（已应用到各平台）；包内单层图标 1024×1024 |
+| 商店图标（K 手绘笔记本） | ✅ | `store/appgallery/icon/`（已应用到各平台）；鸿蒙包内为分层图标，前景/背景 1024×1024 |
 | 开发者名称统一（个人开发者） | ✅ | `lib/utils/legal_links.dart`（`developerName` / `developerSubjectType`） |
 | APP 备案 | ⏳ 待你完成 | 见 `docs/APP备案指南.md` |
 | APP 备案号展示 | ⏳ 待完成 | 应用内目前显示占位符 `【ICP备案号待补充】`；拿到备案号后用 `--dart-define=ICP_FILING_NUMBER=...` 重新构建 |

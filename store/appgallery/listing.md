@@ -163,9 +163,11 @@ developerName / developerSubjectType），与本条及 AGC 开发者信息保持
 隐私政策新增「六、同意的取得方式」章节，对上述流程作出说明。
 
 【三、应用图标规格】
-应用包内单层图标为 1024×1024 像素（ohos/entry/src/main/resources/base/media/icon.png
-与 ohos/AppScope/resources/base/media/app_icon.png 均为 1024×1024），
-符合鸿蒙应用图标单层图不小于 1024×1024 的要求；商店后台上传的应用图标使用
+应用采用鸿蒙官方推荐的分层图标（Adaptive Icon）：前景图 foreground.png 与背景图
+background.png 均为 1024×1024 像素，由 app.json5 / module.json5 的
+"$media:layered_image" 引用，系统会对两层叠加后统一施加遮罩，保证桌面图标显示
+一致；启动页使用独立单层图标 startIcon.png（1024×1024）。原 192×192 的单层图已
+整体移除，不再存在尺寸不足 1024×1024 的单层图标。商店后台上传的应用图标使用
 216×216 版本，与包内图标为同一套原创设计。
 
 【其他】
@@ -202,10 +204,10 @@ developerName / developerSubjectType），与本条及 AGC 开发者信息保持
 
 > 两种尺寸都要正确，不要混用：
 > - **AGC 后台上传的应用图标为 216×216**（`helechron_icon_216.png`）；
-> - **安装包内单层图标必须为 1024×1024**，不得小于该尺寸，否则会被以
->   「应用图标单层图尺寸不满足 1024×1024」驳回。
->   当前包内 `ohos/entry/src/main/resources/base/media/icon.png` 与
->   `ohos/AppScope/resources/base/media/app_icon.png` 均为 1024×1024。
+> - **安装包内使用分层图标**：前景图 `foreground.png` 与背景图 `background.png`
+>   均为 1024×1024，通过 `layered_image.json` 组合、由 `"$media:layered_image"`
+>   引用。构建工具会把单层图压到 512×512（低于规范要求的 1024×1024），
+>   因此包内不再保留单层图，只保留启动页用的 `startIcon.png`（1024×1024）。
 > - 两套尺寸来自同一份原创设计，图形内容保持一致，仅分辨率不同。
 
 截图建议顺序：
@@ -246,7 +248,7 @@ developerName / developerSubjectType），与本条及 AGC 开发者信息保持
 | 驳回问题 | 审核原文要点 | 本次整改内容 | 对应代码 / 文档位置 |
 |---|---|---|---|
 | 开发者名称不一致 | 用户协议展示的公司名称与开发者信息不一致 | 应用内统一引入「开发者名称 / 主体类型」概念，取值集中到一处：开发者名称默认 `胡天泽`，主体类型 `个人开发者`；协议、隐私政策、关于页、同意页展示的名称全部同源。措辞明确声明非浙江大学官方应用、非 Celechron 官方应用，与两者及其附属机构无隶属、授权或合作关系 | `lib/utils/legal_links.dart`（`developerName` / `developerSubjectType`）、`assets/legal/user_agreement.txt`、`assets/legal/privacy_policy.txt`、`lib/page/legal_page.dart`、`lib/page/consent_page.dart` |
-| 图标单层图尺寸不合规 | 应用图标单层图尺寸不满足 1024×1024 | entry 模块单层图已由 192×192 替换为 1024×1024；AppScope 的 `app_icon.png` 原本即 1024×1024 | `ohos/entry/src/main/resources/base/media/icon.png`、`ohos/AppScope/resources/base/media/app_icon.png` |
+| 图标单层图尺寸不合规 | 应用图标单层图尺寸不满足 1024×1024 | 改用官方推荐的分层图标：AppScope 与 entry 各新增 `foreground.png` + `background.png`（均 1024×1024）与 `layered_image.json`，`app.json5` / `module.json5` 的 icon 指向 `$media:layered_image`；移除 192×192 的 `icon.png` 与单层 `app_icon.png`，启动页另用 `startIcon.png`（1024×1024） | `ohos/AppScope/resources/base/media/`、`ohos/entry/src/main/resources/base/media/`、`ohos/AppScope/app.json5`、`ohos/entry/src/main/module.json5`、`tool/store/make_layered_icon.py` |
 | 隐私政策未以明示同意取得同意 | 隐私政策未以明示同意方式取得同意 | 首次启动同意页增加默认未勾选的空白复选框（「我已阅读并同意《Helechron 隐私政策》和《Helechron 用户协议》」），未勾选时「同意并继续」置灰不可点，底部常驻「不同意并退出应用」；协议详情页底部同样提供复选框与同意/拒绝按钮；同意前不读取账号、不初始化数据库、不联网。隐私政策新增「六、同意的取得方式」章节 | `lib/page/consent_page.dart`、`lib/page/legal_page.dart`、`lib/services/consent_store.dart`、`lib/main.dart`、`assets/legal/privacy_policy.txt` |
 | 宣传为 Celechron 官方应用 | 应用宣传为Celechron官方应用，但未提供官方授权或关联证明，可能导致用户产生混淆、误认（审核指南 11.3） | 全应用内不再以「Celechron」自称：导出日历的 `PRODID` 与分享文案、导出文件名统一改为 Helechron；关于页、同意页、隐私政策、用户协议均显式声明「非 Celechron 官方应用」，并说明本应用是个人开发者对上游项目的移植版本；商店介绍同步改为「由个人开发者独立开发与维护，非 Celechron 官方应用」 | `lib/model/calendar_to_ical.dart`（`PRODID` / 文件名 / 分享文案）、`lib/page/option/credits_page.dart`、`lib/page/consent_page.dart`、`assets/legal/*.txt`、本文件第 2 节 |
 | 备案号缺失（未驳回但为上架前置） | — | 代码内预留占位符 `【ICP备案号待补充】`，拿到备案号后注入 | `lib/utils/legal_links.dart`（`icpFilingNumber`） |
@@ -259,11 +261,11 @@ developerName / developerSubjectType），与本条及 AGC 开发者信息保持
 | 2 | 用户与访问 → 开发者信息 | 确认主体类型为个人（企业/机构） | 与应用内「个人开发者（非企业主体）」表述保持一致 |
 | 3 | 我的应用 → 应用信息 | 回填 ICP 备案号（**待填**） | 拿到工信部备案号后填写，格式形如 `浙ICP备XXXXXXXX号-XA` |
 | 4 | 我的应用 → 应用信息 | 核对应用内展示的备案号 | 回填后用 `--dart-define=ICP_FILING_NUMBER=...` 重新构建，「设置 → 关于 → ICP 备案号」展示同一号码 |
-| 5 | 我的应用 → 应用发布 → 版本 | 重新上传签名包（`.app` / `.apk`） | 必须使用已含 1024×1024 单层图与新同意流程的构建产物 |
+| 5 | 我的应用 → 应用发布 → 版本 | 重新上传签名包（`.app` / `.apk`） | 必须使用已含分层图标与新同意流程的构建产物 |
 | 6 | 我的应用 → 应用发布 → 版本 → 审核备注 | 粘贴第 8 节的整改说明模板 | 逐条说明开发者名称、明示同意流程、图标尺寸 |
 | 7 | 我的应用 → 应用发布 → 版本 → 测试账号 | 填写测试账号（**待填**） | 核心功能依赖浙大统一身份认证，缺少测试账号极可能被判功能无法验证 |
 | 8 | 我的应用 → 应用信息 → 隐私政策 / 用户协议地址 | 填写已部署的在线地址（**待填**） | 需与包内离线文本内容一致；建议使用已备案域名 |
-| 9 | 我的应用 → 应用图标 | 上传 216×216 版本 | 商店图标 216×216，包内单层图标 1024×1024，两者为同一设计 |
+| 9 | 我的应用 → 应用图标 | 上传 216×216 版本 | 商店图标 216×216，包内为分层图标（前景/背景 1024×1024），两者为同一设计 |
 | 10 | 我的应用 → 应用发布 → 版本 → 应用介绍 | 用第 2 节文案整体替换 | 旧文案容易被判「宣传为官方应用」；新版首句即声明「非浙江大学官方应用，也非 Celechron 官方应用」，并写明由个人开发者独立开发维护 |
 | 11 | 我的应用 → 应用信息 → 官网 / 项目页 | 填 `https://github.com/Kepler16f/Helechron` | 不要填 `celechron.top`；该域名属于上游项目，填它会加深「官方应用」的误认 |
 | 12 | 我的应用 → 应用发布 → 版本 → 一句话简介 | 用第 1 节表格里的简介替换 | 原文「面向浙大学生的第三方课程表与时间管理工具」缺少主体信息，新版写明「个人开发者维护的第三方开源课表工具」 |
@@ -271,7 +273,7 @@ developerName / developerSubjectType），与本条及 AGC 开发者信息保持
 
 > 重新提交前自查清单：
 > - [ ] AGC 开发者名称 = 应用内 `developerName` = `胡天泽`
-> - [ ] 包内 `icon.png` / `app_icon.png` 均为 1024×1024
+> - [ ] 包内分层图标前景/背景均为 1024×1024，且不再有 192×192 之类的单层图
 > - [ ] 首次启动复选框默认未勾选，同意按钮置灰，拒绝入口可见
 > - [ ] ICP 备案号已回填 AGC 且应用内已展示（无占位符）
 > - [ ] 测试账号、隐私政策地址、审核备注均已填写
