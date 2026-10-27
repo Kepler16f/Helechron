@@ -362,27 +362,25 @@ jobs:
           rm -rf build/icon-check
           mkdir -p build/icon-check
           unzip -o -q build/dist/entry-default.hap -d build/icon-check || true
-          echo "::group::包内图标尺寸（鸿蒙单层图标要求 ≥ 1024×1024）"
+          cat > build/png_size.py <<'PY'
+          import struct, sys
+          for path in sys.argv[1:]:
+              with open(path, 'rb') as fh:
+                  data = fh.read(33)
+          w, h = struct.unpack('>II', data[16:24])
+          print(f"{w}x{h}")
+          PY
+          echo "::group::包内图标尺寸（鸿蒙单层图标要求 1024x1024）"
           found_bad=0
-          while IFS= read -r f; do
-            size=$(python3 -c "
-import struct, sys
-with open(sys.argv[1], 'rb') as fh:
-    data = fh.read(33)
-w, h = struct.unpack('>II', data[16:24])
-print(f'{w}x{h}')
-" "$f")
+          find build/icon-check -path "*resources/base/media*" -name "*.png" | sort | while IFS= read -r f; do
+            size=$(python3 build/png_size.py "$f")
             echo "$size  ${f#build/icon-check/}"
-            case "$size" in
-              1024x1024) ;;
-              *) echo "::warning::包内图标尺寸不合规: $size ${f#build/icon-check/}（标准要求 1024x1024）"
-                 found_bad=1 ;;
-            esac
-          done < <(find build/icon-check -path "*resources/base/media*" -name "*.png" | sort)
+            if [ "$size" != "1024x1024" ]; then
+              echo "::warning::包内图标尺寸不合规: $size ${f#build/icon-check/}（标准要求 1024x1024）"
+              found_bad=1
+            fi
+          done
           echo "::endgroup::"
-          if [ "$found_bad" -ne 0 ]; then
-            echo "::warning::存在不合规的单层图标，上架检测会驳回"
-          fi
 
       - name: Collect packages
         run: |
