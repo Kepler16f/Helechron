@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'package:celechron/page/legal_page.dart';
@@ -42,7 +43,17 @@ class _ConsentPageState extends State<ConsentPage> {
   bool _busy = false;
 
   /// 同意复选框状态。默认未勾选，必须由用户主动勾选。
-  bool _checked = false;
+  ///
+  /// 用 [ValueNotifier] 而不是普通字段：协议详情页是独立路由，其页脚里的
+  /// 复选框与本页共用同一个状态，但路由子树不会随本页重建，用字段会导致
+  /// 勾选后界面不刷新。
+  final ValueNotifier<bool> _checked = ValueNotifier<bool>(false);
+
+  @override
+  void dispose() {
+    _checked.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -145,7 +156,7 @@ class _ConsentPageState extends State<ConsentPage> {
               ),
               _ConsentActions(
                 checked: _checked,
-                onCheckedChanged: (value) => setState(() => _checked = value),
+                onCheckedChanged: (value) => _checked.value = value,
                 busy: _busy,
                 onAgree: _agree,
                 onDeny: _deny,
@@ -161,7 +172,7 @@ class _ConsentPageState extends State<ConsentPage> {
     if (_busy) {
       return;
     }
-    if (!_checked) {
+    if (!_checked.value) {
       return;
     }
     setState(() => _busy = true);
@@ -253,7 +264,7 @@ class _ConsentPageState extends State<ConsentPage> {
           // 协议页同样提供勾选与拒绝入口，审核时在弹窗内即可完成明示同意或拒绝。
           footer: _ConsentActions(
             checked: _checked,
-            onCheckedChanged: (value) => setState(() => _checked = value),
+            onCheckedChanged: (value) => _checked.value = value,
             busy: _busy,
             onAgree: () async {
               Navigator.of(context).pop();
@@ -274,7 +285,7 @@ class _ConsentPageState extends State<ConsentPage> {
 ///
 /// 复选框默认未勾选，未勾选时“同意并继续”不可点击；拒绝入口始终可见。
 class _ConsentActions extends StatelessWidget {
-  final bool checked;
+  final ValueListenable<bool> checked;
   final ValueChanged<bool> onCheckedChanged;
   final bool busy;
   final Future<void> Function() onAgree;
@@ -290,62 +301,70 @@ class _ConsentActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final canAgree = checked && !busy;
-    return Container(
-      decoration: const BoxDecoration(
-        color: CupertinoColors.white,
-        border: Border(
-          top: BorderSide(color: Color(0xFFE3E8F0), width: 0.5),
-        ),
-      ),
-      padding: const EdgeInsets.fromLTRB(24, 10, 24, 8),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _ConsentCheckbox(checked: checked, onChanged: onCheckedChanged),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: CupertinoButton(
-              color: _ConsentPageState._primary,
-              disabledColor: const Color(0xFFBFC9D8),
-              borderRadius: BorderRadius.circular(12),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              onPressed: canAgree ? onAgree : null,
-              child: busy
-                  ? const CupertinoActivityIndicator(
-                      color: CupertinoColors.white,
-                    )
-                  : const Text(
-                      '同意并继续',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+    return ValueListenableBuilder<bool>(
+      valueListenable: checked,
+      builder: (context, isChecked, _) {
+        final canAgree = isChecked && !busy;
+        return Container(
+          decoration: const BoxDecoration(
+            color: CupertinoColors.white,
+            border: Border(
+              top: BorderSide(color: Color(0xFFE3E8F0), width: 0.5),
             ),
           ),
-          if (!checked)
-            const Padding(
-              padding: EdgeInsets.only(top: 6),
-              child: Text(
-                '请先勾选上面的复选框，表示你已阅读并同意隐私政策与用户协议',
-                style: TextStyle(fontSize: 12, color: Color(0xFF8E8E93)),
+          padding: const EdgeInsets.fromLTRB(24, 10, 24, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _ConsentCheckbox(
+                checked: isChecked,
+                onChanged: onCheckedChanged,
               ),
-            ),
-          CupertinoButton(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            onPressed: busy ? null : onDeny,
-            child: const Text(
-              '不同意并退出应用',
-              style: TextStyle(
-                fontSize: 15,
-                color: Color(0xFF8E8E93),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: CupertinoButton(
+                  color: _ConsentPageState._primary,
+                  disabledColor: const Color(0xFFBFC9D8),
+                  borderRadius: BorderRadius.circular(12),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  onPressed: canAgree ? onAgree : null,
+                  child: busy
+                      ? const CupertinoActivityIndicator(
+                          color: CupertinoColors.white,
+                        )
+                      : const Text(
+                          '同意并继续',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                ),
               ),
-            ),
+              if (!isChecked)
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    '请先勾选上面的复选框，表示你已阅读并同意隐私政策与用户协议',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF8E8E93)),
+                  ),
+                ),
+              CupertinoButton(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                onPressed: busy ? null : onDeny,
+                child: const Text(
+                  '不同意并退出应用',
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: Color(0xFF8E8E93),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
