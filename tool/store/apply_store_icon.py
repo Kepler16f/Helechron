@@ -27,6 +27,9 @@ MASTER = ROOT / "store" / "appgallery" / "icon" / "helechron_icon_1024.png"
 
 TARGETS: dict[Path, tuple[int, int]] = {
     ROOT / "assets" / "logo.png": (512, 512),
+    # entry 模块保留一份 1024 的单层图：构建工具在缺少该文件时会注入模板自带的
+    # 114×114 图标，审核检测会把包内最小的图标判定为不合规
+    ROOT / "ohos" / "entry" / "src" / "main" / "resources" / "base" / "media" / "icon.png": (1024, 1024),
     # ohosTest 模块的资源会被合并进发布包，里面的图标也要满足 1024×1024
     ROOT / "ohos" / "entry" / "src" / "ohosTest" / "resources" / "base" / "media" / "icon.png": (1024, 1024),
     ROOT / "android" / "app" / "src" / "main" / "res" / "mipmap-mdpi" / "ic_launcher.png": (48, 48),
