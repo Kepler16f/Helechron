@@ -205,7 +205,7 @@ class _ConsentPageState extends State<ConsentPage> {
             isDefaultAction: true,
             child: const Text('返回阅读'),
             onPressed: () => Navigator.of(context).pop(false),
-          },
+          ),
           CupertinoDialogAction(
             isDestructiveAction: true,
             child: const Text('退出应用'),
@@ -383,7 +383,7 @@ class _ConsentCheckbox extends StatelessWidget {
             ),
             child: checked
                 ? const Icon(
-                    CupertinoIcons.check_mark_alt,
+                    CupertinoIcons.check_mark,
                     size: 18,
                     color: CupertinoColors.white,
                   )
