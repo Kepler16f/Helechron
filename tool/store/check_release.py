@@ -30,6 +30,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -252,13 +253,20 @@ def check_subject_consistency(root: Path, checker: Checker) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 4. 鸿蒙单层图标尺寸
+# 4. 鸿蒙分层图标
 # ---------------------------------------------------------------------------
 def check_harmony_icons(root: Path, checker: Checker) -> None:
-    title = "鸿蒙单层图标尺寸 (1024x1024)"
+    title = "鸿蒙分层图标 (前景/背景 1024x1024)"
     required = [
-        root / "ohos" / "AppScope" / "resources" / "base" / "media" / "app_icon.png",
-        root / "ohos" / "entry" / "src" / "main" / "resources" / "base" / "media" / "icon.png",
+        root / "ohos" / "AppScope" / "resources" / "base" / "media" / "foreground.png",
+        root / "ohos" / "AppScope" / "resources" / "base" / "media" / "background.png",
+        root / "ohos" / "entry" / "src" / "main" / "resources" / "base" / "media" / "foreground.png",
+        root / "ohos" / "entry" / "src" / "main" / "resources" / "base" / "media" / "background.png",
+        root / "ohos" / "entry" / "src" / "main" / "resources" / "base" / "media" / "startIcon.png",
+    ]
+    configs = [
+        root / "ohos" / "AppScope" / "resources" / "base" / "media" / "layered_image.json",
+        root / "ohos" / "entry" / "src" / "main" / "resources" / "base" / "media" / "layered_image.json",
     ]
     hint = root / "ohos" / "entry" / "src" / "ohosTest" / "resources" / "base" / "media" / "icon.png"
 
@@ -282,6 +290,23 @@ def check_harmony_icons(root: Path, checker: Checker) -> None:
             )
         else:
             lines.append(f"{_rel(root, path)}: {width}x{height} OK")
+
+    for path in configs:
+        if not path.exists():
+            ok = False
+            lines.append(f"{_rel(root, path)}: 文件不存在")
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            layered = data.get("layered-image", {})
+            if layered.get("foreground") and layered.get("background"):
+                lines.append(f"{_rel(root, path)}: 前景/背景引用 OK")
+            else:
+                ok = False
+                lines.append(f"{_rel(root, path)}: 缺少 foreground/background 引用")
+        except Exception as exc:  # pragma: no cover - 解析失败即视为不通过
+            ok = False
+            lines.append(f"{_rel(root, path)}: 解析失败 {exc}")
 
     if hint.exists():
         with Image.open(hint) as img:

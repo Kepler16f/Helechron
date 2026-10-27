@@ -6,8 +6,9 @@
 iOS 与 assets/logo.png。执行前请确认这是你想要的产品决策；
 旧图标仍可从 git 历史恢复。
 
-鸿蒙单层图标规范要求 1024×1024，包内任何单层图标都不能小于该尺寸，
-否则上架检测会报「应用图标单层图尺寸不满足规范」。
+鸿蒙端使用**分层图标**（前景图 + 背景图，均为 1024×1024），由
+`make_layered_icon.py` 生成；单层图会被构建工具压到 512×512，不满足上架
+检测「单层图 1024×1024」的要求。
 
 用法: python tool/store/apply_store_icon.py
 """
@@ -15,6 +16,8 @@ iOS 与 assets/logo.png。执行前请确认这是你想要的产品决策；
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 from PIL import Image
@@ -24,9 +27,6 @@ MASTER = ROOT / "store" / "appgallery" / "icon" / "helechron_icon_1024.png"
 
 TARGETS: dict[Path, tuple[int, int]] = {
     ROOT / "assets" / "logo.png": (512, 512),
-    ROOT / "ohos" / "AppScope" / "resources" / "base" / "media" / "app_icon.png": (1024, 1024),
-    # entry 模块图标同样会被打进 HAP，必须满足鸿蒙单层图 1024×1024 规范
-    ROOT / "ohos" / "entry" / "src" / "main" / "resources" / "base" / "media" / "icon.png": (1024, 1024),
     ROOT / "android" / "app" / "src" / "main" / "res" / "mipmap-mdpi" / "ic_launcher.png": (48, 48),
     ROOT / "android" / "app" / "src" / "main" / "res" / "mipmap-hdpi" / "ic_launcher.png": (72, 72),
     ROOT / "android" / "app" / "src" / "main" / "res" / "mipmap-xhdpi" / "ic_launcher.png": (96, 96),
@@ -60,6 +60,12 @@ def main() -> None:
             width = round(float(match.group(1)) * int(match.group(3)))
             height = round(float(match.group(2)) * int(match.group(3)))
             _save(master, (width, height), icon)
+
+    # 鸿蒙分层图标（前景图 + 背景图 + 启动页图标）
+    subprocess.run(
+        [sys.executable, str(Path(__file__).with_name("make_layered_icon.py"))],
+        check=True,
+    )
 
 
 if __name__ == "__main__":
