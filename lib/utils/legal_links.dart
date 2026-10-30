@@ -14,7 +14,16 @@ const String userAgreementUrl = String.fromEnvironment(
 );
 
 /// 隐私政策版本号。修改隐私政策内容时必须递增，以便重新征得同意。
-const int privacyPolicyVersion = 2;
+const int privacyPolicyVersion = 3;
+
+/// 所有面向用户的入口共用的项目来源与身份说明。
+const String appOriginStatement = 'Helechron 是基于 Celechron 开源项目移植并扩展功能的非官方版本，'
+    '由 $developerName（$developerSubjectType）负责移植适配、独立开发新增功能及后续维护与发布。'
+    '本应用不是 Celechron 官方应用，不代表 Celechron 原项目或其维护团队，'
+    '也不是浙江大学官方应用。';
+
+const String projectUrl = 'https://github.com/Kepler16f/Helechron';
+const String releasesUrl = '$projectUrl/releases';
 
 /// 开发者（个人信息处理者）名称。
 ///

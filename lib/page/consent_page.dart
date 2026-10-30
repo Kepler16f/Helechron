@@ -100,7 +100,7 @@ class _ConsentPageState extends State<ConsentPage> {
                       ),
                       const SizedBox(height: 12),
                       const Text(
-                        '在开始使用前，请阅读并同意以下条款。我们会严格按照《隐私政策》处理你的信息。',
+                        '$appOriginStatement\n\n在开始使用前，请阅读并同意以下条款。我们会严格按照《隐私政策》处理你的信息。',
                         style: TextStyle(
                           fontSize: 16,
                           height: 1.5,
@@ -389,9 +389,8 @@ class _ConsentCheckbox extends StatelessWidget {
             height: 22,
             margin: const EdgeInsets.only(top: 1),
             decoration: BoxDecoration(
-              color: checked
-                  ? _ConsentPageState._primary
-                  : CupertinoColors.white,
+              color:
+                  checked ? _ConsentPageState._primary : CupertinoColors.white,
               borderRadius: BorderRadius.circular(6),
               border: Border.all(
                 color: checked

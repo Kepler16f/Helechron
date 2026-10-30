@@ -80,7 +80,7 @@ TEMPLATE = """<!DOCTYPE html>
 <nav><a href="./index.html">Helechron</a> / {title}</nav>
 <h1>{title}</h1>
 {body}
-<footer>Helechron 由个人开发者独立开发与维护，是第三方开源项目，非浙江大学官方应用，也非 Celechron 官方应用，与浙江大学、Celechron 及其任何附属机构不存在隶属、授权、合作或背书关系。本页面内容与应用内文本不一致时，以应用内最新版本为准。</footer>
+<footer>Helechron 是基于 Celechron 开源项目移植并扩展功能的非官方版本，由本项目维护者负责移植适配、独立开发新增功能及后续维护与发布。本应用不是 Celechron 官方应用，不代表 Celechron 原项目或其维护团队，也不是浙江大学官方应用。 与 Celechron 原项目及浙江大学无隶属、品牌授权、合作或背书关系。本页面内容与应用内文本不一致时，以应用内最新版本为准。</footer>
 </main>
 </body>
 </html>

@@ -156,13 +156,14 @@ class _CreditsPageState extends State<CreditsPage> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 32),
                     child: Text(
-                      '由 $developerName（$developerSubjectType）独立开发的第三方开源课程表与时间管理工具，'
-                      '非浙江大学官方应用，也非 Celechron 官方应用，与浙江大学、Celechron 及其附属机构无隶属、授权或合作关系。\n'
-                      '基于上游 Celechron 1.3.0 移植，GPL-3.0 开源，有问题请到仓库反馈。\n'
+                      '$appOriginStatement\n'
+                      '与 Celechron 原项目及浙江大学无隶属、品牌授权、合作或背书关系。\n'
+                      '以下上游署名仅说明代码与设计来源，不代表原作者参与本应用的发布或运营。'
+                      '本应用按 GPL-3.0 开源，有问题请到 Helechron 仓库反馈。\n'
                       'APP 备案号：$icpFilingNumber',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 14,
                         color: CupertinoDynamicColor.resolve(
                             CupertinoColors.secondaryLabel, context),
                       ),
@@ -172,7 +173,7 @@ class _CreditsPageState extends State<CreditsPage> {
                     height: 24,
                   ),
                   const Text(
-                    '移植制作人员',
+                    'Helechron 移植、开发与维护',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
@@ -204,7 +205,7 @@ class _CreditsPageState extends State<CreditsPage> {
                     height: 24,
                   ),
                   const Text(
-                    '上游 Celechron 制作人员',
+                    '开源来源致谢：Celechron',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontWeight: FontWeight.bold,

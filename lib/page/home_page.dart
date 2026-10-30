@@ -18,6 +18,7 @@ import 'package:celechron/page/option/option_view.dart';
 import 'package:celechron/services/ohos_native_service.dart';
 import 'package:celechron/utils/platform_features.dart';
 import 'package:celechron/worker/fuse.dart';
+import 'package:celechron/utils/legal_links.dart';
 
 class _BarItemDef {
   final IconData icon;
@@ -216,16 +217,11 @@ class _HomePageState extends State<HomePage> {
     final double capsuleWidth = math.min(screenWidth * 0.92, 500.0);
 
     final Color bgColor = isDark
-        ? (immersiveLight
-            ? const Color(0x991E1E22)
-            : const Color(0xDE222226))
-        : (immersiveLight
-            ? const Color(0x88FFFFFF)
-            : const Color(0xDEFFFFFF));
+        ? (immersiveLight ? const Color(0x991E1E22) : const Color(0xDE222226))
+        : (immersiveLight ? const Color(0x88FFFFFF) : const Color(0xDEFFFFFF));
 
-    final Color borderColor = isDark
-        ? const Color(0x33FFFFFF)
-        : const Color(0x55FFFFFF);
+    final Color borderColor =
+        isDark ? const Color(0x33FFFFFF) : const Color(0x55FFFFFF);
 
     return Align(
       alignment: Alignment.bottomCenter,
@@ -383,10 +379,10 @@ class _HomePageState extends State<HomePage> {
                   },
                 ),
                 CupertinoDialogAction(
-                  child: const Text('访问网站'),
+                  child: const Text('查看 Helechron 发布'),
                   onPressed: () async {
                     await launchUrlString(
-                      'https://celechron.top',
+                      releasesUrl,
                       mode: LaunchMode.externalApplication,
                     );
                   },

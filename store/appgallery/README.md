@@ -42,7 +42,7 @@ HarmonyOS 版和 Android 版在 AGC 中是**两个独立应用记录**，包名�
 
 | 时间 | 动作 |
 |---|---|
-| 今天 | 华为开发者联盟实名认证；确定个人/企业主体；确认 `celechron.top` 归属；开始软著/电子版权申请 |
+| 今天 | 华为开发者联盟实名认证；确定个人/企业主体；确认自有域名（如有）归属；开始软著/电子版权申请 |
 | 今天 | 在 AGC 创建 HarmonyOS 应用，包名 `top.celechron.helechron` |
 | 今天 | 生成鸿蒙发布证书、Profile、`.p12`；配置 GitHub Secrets |
 | 1–2 天内 | 跑通 `Release to AppGallery`，拿到签名 `.app` 和 `.apk` |
@@ -66,7 +66,7 @@ HarmonyOS 版和 Android 版在 AGC 中是**两个独立应用记录**，包名�
 - 2023 年起，境内分发、上架的 APP 必须完成工信部 APP 备案；应用商店会校验备案号。
 - 备案通过接入服务商提交：鸿蒙端可在 AGC 的 “ICP 备案” 服务中走；其他安卓渠道在各自后台登记同一个备案号。
 - 个人可备案，但需要提供主体信息、APP 信息、接入信息；通常需要一个已完成 ICP 备案的域名作为接入域名。
-- Helechron 没有自建后端，但 `api.celechron.top` / `calendar.celechron.top` 不属于你运营，不要把它们填成你的接入域名；按“无自建服务”如实填写，具体以接入商表单为准。
+- Helechron 没有自建后端，但 `calendar.celechron.top` 不属于你运营，不要把它们填成你的接入域名；按“无自建服务”如实填写，具体以接入商表单为准。
 - 详细草稿、表单字段和时间线见 [docs/APP备案指南.md](../../docs/APP备案指南.md)。
 - 拿到备案号后：
   1. 回填 AGC 应用信息；
@@ -113,7 +113,7 @@ Helechron 的核心功能依赖浙江大学统一身份认证。审核员没有�
   `python tool/store/export_store_icon.py <icon.png>` 导出，再运行
   `python tool/store/apply_store_icon.py` 应用到各平台。
 - 应用名称统一为 **Helechron**；Android `android:label` 已从 `Aelechron` 改为 `Helechron`。
-- 应用介绍中保留“非浙江大学官方应用，与浙江大学无隶属或合作关系”的声明；不要在名称/图标/宣传图里使用校名、校徽。
+- 应用介绍首段明确“基于 Celechron 开源项目移植并扩展功能的非官方版本，非 Celechron 官方应用，不代表原项目或其维护团队，也非浙江大学官方应用”；不要在名称/图标/宣传图里使用校名、校徽。
 - 校园卡付款码属于敏感功能：审核备注中说明“仅展示用户本人已登录账户的付款码，不提供支付、清算、资金托管服务”。如首次审核被重点问询，可临时隐藏入口后再提交。
 
 ## 4. 签名

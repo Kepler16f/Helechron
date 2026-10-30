@@ -1,10 +1,10 @@
 Helechron 隐私政策
-更新日期：2026年10月27日
-生效日期：2026年10月27日
-版本：2.0
+更新日期：2026年10月29日
+生效日期：2026年10月29日
+版本：3.0
 
 【特别说明】
-Helechron（以下简称“本应用”）是由 {{DEVELOPER_NAME}}（{{DEVELOPER_SUBJECT_TYPE}}）独立开发和维护的第三方开源课程表与时间管理工具。本应用不是浙江大学官方应用，也不是 Celechron 官方应用，与浙江大学、Celechron 及其任何附属机构不存在隶属、授权、合作或背书关系。本应用所展示的课程、成绩、考试、作业、校园卡等信息均来自你本人登录的学校系统，仅供参考，请以学校官方系统为准。
+Helechron（以下简称“本应用”）是由 {{DEVELOPER_NAME}}（{{DEVELOPER_SUBJECT_TYPE}}）负责移植适配、独立开发新增功能及后续维护与发布的第三方开源课程表与时间管理工具，基于 Celechron 开源项目移植并扩展功能。本应用不是浙江大学官方应用，也不是 Celechron 官方应用，与浙江大学、Celechron 及其任何附属机构不存在隶属、品牌授权、合作或背书关系。本应用所展示的课程、成绩、考试、作业、校园卡等信息均来自你本人登录的学校系统，仅供参考，请以学校官方系统为准。
 
 我们深知个人信息对你的重要性，将按照《中华人民共和国个人信息保护法》《中华人民共和国网络安全法》《中华人民共和国数据安全法》等法律法规的要求，遵循合法、正当、必要和诚信原则处理你的个人信息。请在使用本应用前仔细阅读本政策；如果你不同意本政策，请不要使用本应用。
 
@@ -24,7 +24,7 @@ Helechron（以下简称“本应用”）是由 {{DEVELOPER_NAME}}（{{DEVELOPE
 三、信息如何对外提供
 为实现功能，本应用会以你的身份直接访问以下第三方系统，相关请求受其运营方的隐私政策约束：
 1. 你所在学校的相关系统：zjuam.zju.edu.cn（统一身份认证）、courses.zju.edu.cn（学在浙大）、eta.zju.edu.cn（三全育人）、zdbk.zju.edu.cn（教务）、yjsy.zju.edu.cn（研究生院）、elife.zju.edu.cn、classroom.zju.edu.cn、sztz.zju.edu.cn 等。
-2. 版本检查：api.celechron.top/checkUpdate?platform=ohos，仅发送平台标识，不发送账号、设备标识或其他个人信息。
+2. 版本检查：api.github.com/repos/Kepler16f/Helechron/releases/latest，仅查询 Helechron 本项目的公开发布信息，不发送账号、设备标识或其他个人信息。
 3. 校历配置：calendar.celechron.top，用于获取校历配置，不包含个人信息。该接口目前使用 HTTP 明文传输，我们会在条件允许时推动其升级为 HTTPS。
 4. 开源项目信息：api.github.com，仅在你打开“关于”页面时用于获取贡献者列表。
 5. 外部链接：当你主动点击地址或帮助链接时，可能跳转至高德地图、GitHub 等第三方应用或网站。
@@ -73,7 +73,7 @@ Helechron（以下简称“本应用”）是由 {{DEVELOPER_NAME}}（{{DEVELOPE
 
 十一、开发者与备案信息
 开发者名称：{{DEVELOPER_NAME}}
-主体类型：{{DEVELOPER_SUBJECT_TYPE}}（本应用由个人独立开发、独立运维，没有企业法人主体）
+主体类型：{{DEVELOPER_SUBJECT_TYPE}}（本应用由个人在开源项目基础上移植、独立开发新增功能并独立运维，没有企业法人主体）
 APP 备案号：{{ICP_FILING_NUMBER}}
 联系渠道：https://github.com/Kepler16f/Helechron/issues
 本应用为开源非商业项目，不设专职客服，请优先通过 Issues 反馈。

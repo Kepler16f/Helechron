@@ -30,25 +30,28 @@ class Fuse {
         return null;
       }
 
-      var checkUpdateUrl =
-          "https://api.celechron.top/checkUpdate?platform=ohos";
+      // 仅检查本移植项目的发布版本，不能把上游版本当作 Helechron 更新。
+      const checkUpdateUrl =
+          'https://api.github.com/repos/Kepler16f/Helechron/releases/latest';
 
       var request = await _httpClient
           .getUrl(Uri.parse(checkUpdateUrl))
           .timeout(const Duration(seconds: 8));
+      request.headers.set(HttpHeaders.userAgentHeader, 'Helechron');
+      request.headers
+          .set(HttpHeaders.acceptHeader, 'application/vnd.github+json');
       var response = await request.close().timeout(const Duration(seconds: 8));
       var html = await response.transform(utf8.decoder).join();
+      if (response.statusCode != HttpStatus.ok) return null;
+      final release = jsonDecode(html) as Map<String, dynamic>;
+      final tag = release['tag_name']?.toString() ?? '';
+      final match =
+          RegExp(r'^v?(\d+)\.(\d+)\.(\d+)(?:\+(\d+))?$').firstMatch(tag);
+      if (match == null || release['draft'] == true) return null;
+      remoteVersion = [for (var i = 1; i <= 3; i++) int.parse(match.group(i)!)];
+      remoteBuild = int.tryParse(match.group(4) ?? '') ?? 0;
 
-      var match = RegExp('[0-9.]+').allMatches(html);
-      remoteVersion = match
-          .elementAt(0)
-          .group(0)!
-          .split('.')
-          .map((e) => int.parse(e))
-          .toList();
-      remoteBuild = int.parse(match.elementAt(1).group(0)!);
-
-      hasNewVersion = _compareVersion(html.contains('beta'));
+      hasNewVersion = _compareVersion(release['prerelease'] == true);
       lastUpdateTime = DateTime.now();
       await _db.setFuse(this);
 

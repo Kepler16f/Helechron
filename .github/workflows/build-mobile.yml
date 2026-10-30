@@ -1,4 +1,4 @@
-name: Build Aelechron (Android & iOS)
+name: Build Helechron (Android & iOS)
 
 on:
   push:
@@ -44,13 +44,13 @@ jobs:
         run: |
           mkdir -p build/dist
           cp build/app/outputs/flutter-apk/app-release.apk \
-            "build/dist/Aelechron_${{ steps.get_version.outputs.version }}_android.apk"
+            "build/dist/Helechron_${{ steps.get_version.outputs.version }}_android.apk"
           ls -lh build/dist
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
         with:
-          name: Aelechron_${{ steps.get_version.outputs.version }}_android.apk
+          name: Helechron_${{ steps.get_version.outputs.version }}_android.apk
           path: build/dist/*.apk
           archive: false
           retention-days: 30
@@ -87,14 +87,14 @@ jobs:
           mkdir -p build/dist/Payload
           cp -R build/ios/iphoneos/Runner.app build/dist/Payload/
           cd build/dist
-          zip -qr "Aelechron_${{ steps.get_version.outputs.version }}_ios_unsigned.ipa" Payload
+          zip -qr "Helechron_${{ steps.get_version.outputs.version }}_ios_unsigned.ipa" Payload
           rm -rf Payload
           ls -lh
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v7
         with:
-          name: Aelechron_${{ steps.get_version.outputs.version }}_ios_unsigned.ipa
+          name: Helechron_${{ steps.get_version.outputs.version }}_ios_unsigned.ipa
           path: build/dist/*.ipa
           archive: false
           retention-days: 30

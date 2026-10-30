@@ -3,7 +3,9 @@
 <div style="text-align: center; ">
 
 
-服务于浙大学生的时间管理器 Celechron 的 HarmonyOS NEXT 构建
+Helechron 是基于 Celechron 开源项目移植并扩展功能的非官方版本，由胡天泽负责移植适配、独立开发新增功能及后续维护与发布。本应用不是 Celechron 官方应用，不代表 Celechron 原项目或其维护团队，也不是浙江大学官方应用。
+
+本项目按 GPL-3.0 许可证使用和分发相关开源代码。保留原项目与贡献者署名仅用于说明代码来源，不代表 Celechron 原项目对本应用的官方身份、品牌使用或发布提供授权、合作或背书。
 
 日程一览 · 课表查看 · DDL 助手 · 成绩查询
 

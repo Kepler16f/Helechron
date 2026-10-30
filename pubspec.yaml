@@ -1,5 +1,5 @@
 name: celechron
-description: Aelechron / Helechron - Time scheduler for zjuers.
+description: Helechron - An unofficial open-source port of Celechron.
 publish_to: "none"
 version: 0.1.7+100
 environment:

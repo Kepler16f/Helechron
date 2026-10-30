@@ -15,7 +15,7 @@ class MobileNativeService {
   MobileNativeService._();
   static final MobileNativeService instance = MobileNativeService._();
 
-  static const String calendarName = 'Aelechron课表';
+  static const String calendarName = 'Helechron课表';
   static const String _notificationChannelId = 'aelechron_default';
   static const String _notificationChannelName = '成绩与 DDL 提醒';
 
@@ -50,7 +50,7 @@ class MobileNativeService {
     final r = await _calendar.retrieveCalendars();
     if (!r.isSuccess) return null;
     for (final c in r.data ?? const <Calendar>[]) {
-      if (c.name == calendarName) return c;
+      if (c.name == calendarName || c.name == 'Aelechron课表') return c;
     }
     return null;
   }
@@ -60,7 +60,7 @@ class MobileNativeService {
     if (existing?.id != null) return existing!.id;
     final created = await _calendar.createCalendar(
       calendarName,
-      localAccountName: 'Aelechron',
+      localAccountName: 'Helechron',
     );
     if (created.isSuccess && created.data != null) return created.data;
     // 创建失败时回退到任意可写日历
@@ -152,7 +152,7 @@ class MobileNativeService {
       final r = await _calendar.retrieveCalendars();
       final list = r.data ?? const <Calendar>[];
       final mine = list.where((c) => c.name == calendarName).length;
-      return '日历总数=${list.length}，Aelechron 日历=$mine';
+      return '日历总数=${list.length}，Helechron 日历=$mine';
     } catch (e) {
       return 'diagnostics failed: $e';
     }
@@ -380,4 +380,3 @@ class MobileNativeService {
     }
   }
 }
-

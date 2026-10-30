@@ -185,7 +185,7 @@ class DiagnosticLogService {
     await _fileQueue;
     final directory = await _exportDirectory();
     final now = DateTime.now();
-    final fileName = 'celechron-test-log-${_fileTimestamp(now)}.txt';
+    final fileName = 'helechron-test-log-${_fileTimestamp(now)}.txt';
     final file = File('${directory.path}${Platform.pathSeparator}$fileName');
     final logs = await _readRecentLines();
     final bundle = const DiagnosticReportParser().parse(logs);
@@ -220,7 +220,8 @@ class DiagnosticLogService {
     final exportDirectory = await _exportDirectory();
     await for (final entity in exportDirectory.list()) {
       if (entity is File &&
-          entity.path.contains('celechron-test-log-') &&
+          (entity.path.contains('celechron-test-log-') ||
+              entity.path.contains('helechron-test-log-')) &&
           entity.path.endsWith('.txt')) {
         await entity.delete();
       }
@@ -284,7 +285,8 @@ class DiagnosticLogService {
         .list()
         .where((entity) =>
             entity is File &&
-            entity.path.contains('celechron-test-log-') &&
+            (entity.path.contains('celechron-test-log-') ||
+                entity.path.contains('helechron-test-log-')) &&
             entity.path.endsWith('.txt'))
         .cast<File>()
         .toList();
