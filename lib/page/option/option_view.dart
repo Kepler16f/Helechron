@@ -605,10 +605,6 @@ class OptionPage extends StatelessWidget {
                           padding: const EdgeInsets.only(left: 16),
                           child: Text('关于', style: headerFooterTextStyle)),
                       children: <CupertinoListTile>[
-                        const CupertinoListTile(
-                          title: Text('开源移植版 · 非官方'),
-                          subtitle: Text(appOriginStatement),
-                        ),
                         CupertinoListTile(
                           title: const Text('关于 Helechron'),
                           trailing: BackChervonRow(
@@ -652,21 +648,6 @@ class OptionPage extends StatelessWidget {
                           },
                         ),
                         CupertinoListTile(
-                          title: const Text('开发者'),
-                          subtitle: const Text('与应用内协议展示的名称一致'),
-                          trailing: BackChervonRow(
-                            child:
-                                Text(developerName, style: trailingTextStyle),
-                          ),
-                        ),
-                        CupertinoListTile(
-                          title: const Text('开发者类型'),
-                          trailing: BackChervonRow(
-                            child: Text(developerSubjectType,
-                                style: trailingTextStyle),
-                          ),
-                        ),
-                        CupertinoListTile(
                           title: const Text('ICP 备案号'),
                           trailing: BackChervonRow(
                             child:
@@ -684,50 +665,11 @@ class OptionPage extends StatelessWidget {
                           },
                         ),
                         CupertinoListTile(
-                          title: const Text('Helechron 项目与版本发布'),
+                          title: const Text('Helechron项目网站'),
                           trailing: const BackChervonRow(),
                           onTap: () async {
                             await launchUrlString(
-                              releasesUrl,
-                              mode: LaunchMode.externalApplication,
-                            );
-                          },
-                        ),
-                        CupertinoListTile(
-                          title: const Text('Celechron 开源来源（致谢）'),
-                          subtitle: const Text('原项目链接，不是本应用的发布或支持渠道'),
-                          trailing: const BackChervonRow(),
-                          onTap: () async {
-                            await launchUrlString(
-                              'https://github.com/Celechron/Celechron',
-                              mode: LaunchMode.externalApplication,
-                            );
-                          },
-                        ),
-                        CupertinoListTile(
-                          title: const Text('Helechron 版本更新'),
-                          trailing: BackChervonRow(
-                            child: Obx(() {
-                              if (_optionController.hasNewVersion) {
-                                return Row(children: [
-                                  Container(
-                                    margin: const EdgeInsets.only(right: 4),
-                                    width: 8,
-                                    height: 8,
-                                    decoration: BoxDecoration(
-                                        color: CupertinoColors.systemRed,
-                                        borderRadius: BorderRadius.circular(4)),
-                                  ),
-                                  Text('有新版本可用', style: trailingTextStyle)
-                                ]);
-                              } else {
-                                return const Text('');
-                              }
-                            }),
-                          ),
-                          onTap: () async {
-                            await launchUrlString(
-                              releasesUrl,
+                              projectUrl,
                               mode: LaunchMode.externalApplication,
                             );
                           },

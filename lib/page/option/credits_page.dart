@@ -193,7 +193,7 @@ class _CreditsPageState extends State<CreditsPage> {
                       children: <Widget>[
                         Expanded(
                           child: Text(
-                            'Kepler16f',
+                            developerName,
                             textAlign: TextAlign.center,
                             style: TextStyle(fontSize: 14),
                           ),
