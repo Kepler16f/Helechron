@@ -421,8 +421,10 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-      # 本次 beta：把签名 .hap 作为 GitHub Release 附件上传（tag 惯例沿用仓库 v 前缀，
-      # 如 v0.1.6；beta 版建议 v0.1.7-beta1）。标记 --prerelease：
+      # 本次 beta：把未签名 .hap 作为 GitHub Release 附件上传（tag 惯例沿用仓库 v 前缀，
+      # 如 v0.1.6；beta 版建议 v0.1.7-beta1）。仓库是公开的，Release 公开版本只放
+      # unsigned 包，签名包（AGC 上架用的 .app）仅走 Artifacts 30 天私有通道。
+      # 标记 --prerelease：
       #   1) 应用内更新检查走 /releases/latest，官方语义会忽略 prerelease，beta 不会误推给正式版用户；
       #   2) 即便被读到，tag 正则也不匹配 "-beta1"，同样不会触发提示。
       # release_tag 输入留空则跳过本步骤，仅保留 Artifacts（恢复正式版发布方式）。
@@ -434,22 +436,30 @@ jobs:
           VERSION: ${{ steps.get_version.outputs.version }}
         run: |
           set -euo pipefail
-          HAP="build/dist/Helechron_${VERSION}_ohos_signed.hap"
+          SRC=$(find ohos -type f -name '*unsigned*.hap' | head -n 1 || true)
+          if [ -z "$SRC" ]; then
+            echo "::error::未找到未签名 HAP，无法发布"
+            exit 1
+          fi
+          HAP="build/dist/Helechron_${VERSION}_ohos_unsigned.hap"
+          cp "$SRC" "$HAP"
           test -s "$HAP"
-          # 幂等：beta 反复出包时先删除同名 Release（含其 tag）再重建
+          # 幂等：beta 反复出包时先删除同名 Release（含其 tag 与旧 signed 资产）再重建
           gh release delete "$RELEASE_TAG" --yes --cleanup-tag || true
           gh release create "$RELEASE_TAG" "$HAP" \
             --prerelease \
-            --title "Helechron ${VERSION}（仅鸿蒙 beta）" \
+            --title "Helechron ${VERSION}（仅鸿蒙 beta，未签名）" \
             --notes "Helechron ${VERSION} 鸿蒙 beta 包（本次不发布 Android 产物）。
 
-          - 附件 \`Helechron_${VERSION}_ohos_signed.hap\`：真机安装测试用（DevEco Studio / hdc 安装）。
-          - AGC 上架用的签名 \`.app\` 外层包不挂 Release，见本次 run 的 Artifacts：\`Helechron_${VERSION}_ohos_signed.app\`。
+          - 附件 \`Helechron_${VERSION}_ohos_unsigned.hap\` 为未签名包：不能直接在真机安装，
+            需用 DevEco Studio 调试签名自行重签后再装，仅供代码/资源审阅与自行构建参考。
+          - 签名产物（含 AGC 上架用的 \`.app\`）不公开分发，见本次 run 的 Artifacts：
+            \`Helechron_${VERSION}_ohos_signed.app\` / \`Helechron_${VERSION}_ohos_signed.hap\`。
           - 真实包版本仍为 0.1.7 (versionCode 100)，与 AGC 审核中的版本一致；\`${VERSION}\` 仅为应用内展示文本。"
 
       # ————— 本地拉取产物惯例（GitHub runner 无法写入本机，CI 成功后在本地 Git Bash 执行）—————
       # 产物均为 archive:false 单文件，直存无需解压（$VERSION 形如 0.1.7beta1，$RUN_ID 为本次 run ID）：
-      #   # .hap（真机测试，直接从 Release 取）：
+      #   # .hap（未签名，公开审阅用；真机安装需自行重签调试证书）：
       #   gh release download v0.1.7-beta1 -D "$USERPROFILE/Downloads"
       #   # .app（AGC 手动上架用，从 Artifacts 直存 zip）：
       #   ART_ID=$(gh api "repos/Kepler16f/Helechron/actions/runs/$RUN_ID/artifacts" \
