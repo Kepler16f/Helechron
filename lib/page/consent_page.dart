@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'package:celechron/page/legal_page.dart';
+import 'package:celechron/services/consent_store.dart';
+import 'package:celechron/services/ohos_native_service.dart';
 import 'package:celechron/utils/legal_links.dart';
 
 /// 首次启动时的隐私同意页。
@@ -48,6 +50,15 @@ class _ConsentPageState extends State<ConsentPage> {
   /// 复选框与本页共用同一个状态，但路由子树不会随本页重建，用字段会导致
   /// 勾选后界面不刷新。
   final ValueNotifier<bool> _checked = ValueNotifier<bool>(false);
+
+  @override
+  void initState() {
+    super.initState();
+    // 同意页必须全屏：原生 Tab 栏叠在 FlutterView 之上，而主应用控制其
+    // 可见性的路由观察者此时还不存在，不显式隐藏就会从底部露出来。
+    // 同意后由主应用的 _NativeBarVisibilityObserver 重新显示，无需恢复。
+    OhosNativeService.instance.setBottomBarVisible(false);
+  }
 
   @override
   void dispose() {
@@ -136,14 +147,14 @@ class _ConsentPageState extends State<ConsentPage> {
                           color: const Color(0xFFEAF1FF),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Text(
+                        child: const Text(
                           '要点提示：\n'
                           '· 账号密码仅保存在你的设备本地，不会上传到我们运营的服务器；\n'
                           '· 课表、成绩、校园卡等数据来自你本人登录的学校系统；\n'
                           '· 本应用为第三方开源工具，非浙江大学官方应用，非 Celechron 官方应用；\n'
                           '· 开发者：$developerName（$developerSubjectType）；APP 备案号：$icpFilingNumber；\n'
                           '· 你可以随时退出登录、清除应用数据或卸载应用来删除本地信息。',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14,
                             height: 1.65,
                             color: Color(0xFF3D3D42),
@@ -177,6 +188,8 @@ class _ConsentPageState extends State<ConsentPage> {
     }
     setState(() => _busy = true);
     try {
+      // 先落盘同意状态，保证后续启动不再重复弹出隐私同意页。
+      await ConsentStore.agree();
       await widget.onAgreed();
     } catch (error) {
       if (!mounted) {
@@ -285,6 +298,10 @@ class _ConsentPageState extends State<ConsentPage> {
 ///
 /// 复选框默认未勾选，未勾选时“同意并继续”不可点击；拒绝入口始终可见。
 class _ConsentActions extends StatelessWidget {
+  /// 同意按钮的前景色：用恒定 [Color] 而非 [CupertinoColors.white]
+  /// 这类动态颜色，避免深色外观下被解析成深色。
+  static const Color _buttonContent = Color(0xFFFFFFFF);
+
   final ValueListenable<bool> checked;
   final ValueChanged<bool> onCheckedChanged;
   final bool busy;
@@ -326,13 +343,15 @@ class _ConsentActions extends StatelessWidget {
                 child: CupertinoButton(
                   color: _ConsentPageState._primary,
                   disabledColor: const Color(0xFFBFC9D8),
+                  // 显式指定前景色：primaryContrastingColor 是动态颜色，
+                  // 在深色系统外观下会解析成与背景同系的深色，导致蓝底上
+                  // 文字几乎看不见、糊成一块蓝；这里用恒定白色避开解析。
+                  foregroundColor: _buttonContent,
                   borderRadius: BorderRadius.circular(12),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   onPressed: canAgree ? onAgree : null,
                   child: busy
-                      ? const CupertinoActivityIndicator(
-                          color: CupertinoColors.white,
-                        )
+                      ? const CupertinoActivityIndicator(color: _buttonContent)
                       : const Text(
                           '同意并继续',
                           style: TextStyle(
@@ -342,14 +361,19 @@ class _ConsentActions extends StatelessWidget {
                         ),
                 ),
               ),
-              if (!isChecked)
-                const Padding(
-                  padding: EdgeInsets.only(top: 6),
-                  child: Text(
+              // 提示文字始终占位、只切换透明度：勾选时不再把按钮挤走，
+              // 避免按钮下移与版式跳动。
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 150),
+                  opacity: (!isChecked && !busy) ? 1.0 : 0.0,
+                  child: const Text(
                     '请先勾选上面的复选框，表示你已阅读并同意隐私政策与用户协议',
                     style: TextStyle(fontSize: 12, color: Color(0xFF8E8E93)),
                   ),
                 ),
+              ),
               CupertinoButton(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 onPressed: busy ? null : onDeny,
