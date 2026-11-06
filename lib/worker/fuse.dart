@@ -7,7 +7,7 @@ import 'package:celechron/database/database_helper.dart';
 class Fuse {
   late DateTime lastUpdateTime;
 
-  final bool isBeta = false;
+  final bool isBeta = true;
   final version = [0, 1, 7];
   final build = 100;
   List<int>? remoteVersion;
@@ -17,7 +17,11 @@ class Fuse {
   final HttpClient _httpClient = HttpClient();
   final DatabaseHelper _db = Get.find<DatabaseHelper>(tag: 'db');
 
-  String get displayVersion => '0.1.7';
+  // 应用内展示文本（关于页/诊断日志/版权页均取此值）。beta 阶段仅改显示，
+  // 真实构建版本仍为 version=[0,1,7] / build=100，与 pubspec 0.1.7+100、
+  // ohos app.json5 versionCode=100/versionName=0.1.7 保持一致，避免破坏
+  // CI 打包产物命名与 AGC 审核中版本的一致性。
+  String get displayVersion => '0.1.7beta1';
 
   Fuse() {
     lastUpdateTime = DateTime(2001, 1, 1);

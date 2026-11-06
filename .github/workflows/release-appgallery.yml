@@ -6,12 +6,19 @@ on:
       platforms:
         description: "打包平台"
         required: true
-        default: both
+        # 0.1.7beta1 为"仅鸿蒙"beta：本次发版默认只构建 harmonyos，跳过 Android APK。
+        # Android job 与其 if 条件原样保留，恢复双平台时把 default 改回 both 即可。
+        default: harmonyos
         type: choice
         options:
           - both
           - android
           - harmonyos
+      release_tag:
+        description: "GitHub Release tag（留空则不发布 Release，仅保留 Artifacts）"
+        required: false
+        default: "v0.1.7-beta1"
+        type: string
 
 jobs:
   android:
@@ -120,6 +127,8 @@ jobs:
     name: HarmonyOS signed HAP/APP
     if: ${{ inputs.platforms == 'both' || inputs.platforms == 'harmonyos' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # 发布 beta GitHub Release（上传 .hap 附件）需要写权限
     env:
       FLUTTER_OHOS_REPO: https://gitcode.com/openharmony-tpc/flutter_flutter.git
       FLUTTER_OHOS_REF: 3.27.5-ohos-1.0.8
@@ -408,3 +417,40 @@ jobs:
           archive: false
           retention-days: 30
           if-no-files-found: error
+
+      # 本次 beta：把签名 .hap 作为 GitHub Release 附件上传（tag 惯例沿用仓库 v 前缀，
+      # 如 v0.1.6；beta 版建议 v0.1.7-beta1）。标记 --prerelease：
+      #   1) 应用内更新检查走 /releases/latest，官方语义会忽略 prerelease，beta 不会误推给正式版用户；
+      #   2) 即便被读到，tag 正则也不匹配 "-beta1"，同样不会触发提示。
+      # release_tag 输入留空则跳过本步骤，仅保留 Artifacts（恢复正式版发布方式）。
+      - name: Publish beta GitHub Release
+        if: ${{ inputs.release_tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: |
+          set -euo pipefail
+          HAP="build/dist/Helechron_${VERSION}_ohos_signed.hap"
+          test -s "$HAP"
+          # 幂等：beta 反复出包时先删除同名 Release（含其 tag）再重建
+          gh release delete "$RELEASE_TAG" --yes --cleanup-tag || true
+          gh release create "$RELEASE_TAG" "$HAP" \
+            --prerelease \
+            --title "Helechron ${VERSION}（仅鸿蒙 beta）" \
+            --notes "Helechron ${VERSION} 鸿蒙 beta 包（本次不发布 Android 产物）。
+
+          - 附件 \`Helechron_${VERSION}_ohos_signed.hap\`：真机安装测试用（DevEco Studio / hdc 安装）。
+          - AGC 上架用的签名 \`.app\` 外层包不挂 Release，见本次 run 的 Artifacts：\`Helechron_${VERSION}_ohos_signed.app\`。
+          - 真实包版本仍为 0.1.7 (versionCode 100)，与 AGC 审核中的版本一致；\`${VERSION}\` 仅为应用内展示文本。"
+
+      # ————— 本地拉取产物惯例（GitHub runner 无法写入本机，CI 成功后在本地 Git Bash 执行）—————
+      # 产物均为 archive:false 单文件，直存无需解压（$VERSION 形如 0.1.7beta1，$RUN_ID 为本次 run ID）：
+      #   # .hap（真机测试，直接从 Release 取）：
+      #   gh release download v0.1.7-beta1 -D "$USERPROFILE/Downloads"
+      #   # .app（AGC 手动上架用，从 Artifacts 直存 zip）：
+      #   ART_ID=$(gh api "repos/Kepler16f/Helechron/actions/runs/$RUN_ID/artifacts" \
+      #     --jq ".artifacts[] | select(.name | endswith(\"_ohos_signed.app\")) | .id")
+      #   gh api "repos/Kepler16f/Helechron/actions/artifacts/$ART_ID/zip" \
+      #     > "$USERPROFILE/Downloads/Helechron_${VERSION}_ohos_signed.app"
+      #   # .app 是 zip 容器，落盘后缀用 .app 即可，AGC 网页端直接上传该文件。
