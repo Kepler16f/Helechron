@@ -343,10 +343,6 @@ class _ConsentActions extends StatelessWidget {
                 child: CupertinoButton(
                   color: _ConsentPageState._primary,
                   disabledColor: const Color(0xFFBFC9D8),
-                  // 显式指定前景色：primaryContrastingColor 是动态颜色，
-                  // 在深色系统外观下会解析成与背景同系的深色，导致蓝底上
-                  // 文字几乎看不见、糊成一块蓝；这里用恒定白色避开解析。
-                  foregroundColor: _buttonContent,
                   borderRadius: BorderRadius.circular(12),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   onPressed: canAgree ? onAgree : null,
@@ -354,9 +350,15 @@ class _ConsentActions extends StatelessWidget {
                       ? const CupertinoActivityIndicator(color: _buttonContent)
                       : const Text(
                           '同意并继续',
+                          // 前景色显式写死白色：按钮默认前景走
+                          // primaryContrastingColor 动态解析，在部分外观下
+                          // 与蓝色背景同系导致文字不可见。不能用
+                          // CupertinoButton.foregroundColor —— CI 的
+                          // flutter-ohos 3.27 SDK 没有该参数，写了会编译失败。
                           style: TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w600,
+                            color: _buttonContent,
                           ),
                         ),
                 ),
