@@ -113,31 +113,47 @@ class ZhiyunService {
     return null;
   }
 
-  /// 提取纯净课程名称（去除末尾教学班编号、括号编号等，提高智云课堂检索命中率）
+  static final _semesterTagRegex = RegExp(
+    r'[\(\[（【]\s*(\d{4}[-~]\d{4})?\s*(秋冬|春夏|秋学期|冬学期|春学期|夏学期|前半学期|后半学期|秋|冬|春|夏|前半|后半)\s*[\)\]）】]',
+    caseSensitive: false,
+  );
+  static final _academicYearTagRegex = RegExp(
+    r'[\(\[（【]?\b\d{4}[-~]\d{4}(秋冬|春夏|秋|冬|春|夏)?\b[\)\]）】]?',
+    caseSensitive: false,
+  );
+
+  /// 提取纯净课程名称（去除末尾教学班编号、学期修饰、括号编号等，提高智云课堂检索命中率）
   static String cleanCourseName(String courseName) {
     var cleaned = courseName.trim();
     // 替换中文全角括号为半角便于统一处理
     cleaned = cleaned.replaceAll('（', '(').replaceAll('）', ')');
     cleaned = cleaned.replaceAll('【', '[').replaceAll('】', ']');
-    // 去除末尾诸如 (01), (02), (01班), [01], [01班] 的班级编号
-    cleaned = cleaned.replaceAll(RegExp(r'[\(\[]\s*\d+\s*(班)?\s*[\)\]]$'), '');
+    // 去除秋冬/春夏学期及学年标签（解决冬学期换学期导致的匹配失败）
+    cleaned = cleaned.replaceAll(_semesterTagRegex, '');
+    cleaned = cleaned.replaceAll(_academicYearTagRegex, '');
+    // 去除末尾诸如 (01), (02), (01班), [01], [01班] 的班级编号（保留单数字如 (3) 的课程序号）
+    cleaned = cleaned.replaceAll(
+        RegExp(r'[\(\[]\s*(0\d+|\d{2,}|\d+班)\s*[\)\]]$'), '');
     cleaned = cleaned.replaceAll(RegExp(r'-\d+$'), '');
     return cleaned.trim();
   }
 
-  /// 提取核心课程名称（去除荣誉 (H) 标记、班级号、以及 (网络)/(线上)/(双语)/(全英文)/(MOOC)/(慕课) 等模式标签）
+  /// 提取核心课程名称（去除荣誉 (H) 标记、班级号、学期标记以及 (网络)/(线上)/(双语)/(全英文)/(MOOC)/(慕课) 等模式标签）
   static String extractCoreCourseName(String name) {
     var s = stripHonorsTag(name).trim();
     s = s.replaceAll('（', '(').replaceAll('）', ')');
     s = s.replaceAll('【', '[').replaceAll('】', ']');
+    // 移除学期与学年修饰
+    s = s.replaceAll(_semesterTagRegex, '');
+    s = s.replaceAll(_academicYearTagRegex, '');
     // 移除常见教学修饰标签
     s = s.replaceAll(
         RegExp(
             r'[\(\[]\s*(网络|线上|线下|双语|全英文|英文|mooc|MOOC|慕课|研讨|实验|翻转|翻转课堂|理论|通识|通识核心|选修|必修)\s*[\)\]]',
             caseSensitive: false),
         '');
-    // 移除班级号如 (01), (01班)
-    s = s.replaceAll(RegExp(r'[\(\[]\s*\d+\s*(班)?\s*[\)\]]'), '');
+    // 移除班级号如 (01), (01班)（保留 (3) 单数字序号）
+    s = s.replaceAll(RegExp(r'[\(\[]\s*(0\d+|\d{2,}|\d+班)\s*[\)\]]'), '');
     s = s.replaceAll(RegExp(r'-\d+$'), '');
     return s.trim();
   }
@@ -196,13 +212,29 @@ class ZhiyunService {
     return null;
   }
 
+  /// 安全解析智云可能为秒级或毫秒级的时间戳
+  static DateTime? parseZhiyunTimestamp(dynamic value) {
+    if (value == null) return null;
+    final numVal = int.tryParse(value.toString());
+    if (numVal == null || numVal <= 0) return null;
+    if (numVal > 100000000000) {
+      return DateTime.fromMillisecondsSinceEpoch(numVal);
+    } else {
+      return DateTime.fromMillisecondsSinceEpoch(numVal * 1000);
+    }
+  }
+
   /// 对课程名进行多维度归一化处理（用于智能模糊匹配教务网课程与智云“我的课程”）
   static String normalizeCourseName(String name) {
     var s = stripHonorsTag(name).trim().toLowerCase();
     // 替换中文全角括号为半角
     s = s.replaceAll('（', '(').replaceAll('）', ')');
-    // 去除末尾诸如 (01), (02), (1) 的教学班编号
-    s = s.replaceAll(RegExp(r'\(\d+\)$'), '');
+    s = s.replaceAll('【', '[').replaceAll('】', ']');
+    // 移除学期标签与学年标签
+    s = s.replaceAll(_semesterTagRegex, '');
+    s = s.replaceAll(_academicYearTagRegex, '');
+    // 去除末尾诸如 (01), (02), (1班) 的教学班编号（绝不去除 (3) 单数字序号）
+    s = s.replaceAll(RegExp(r'\((0\d+|\d{2,}|\d+班)\)$'), '');
     // 统一罗马数字为阿拉伯数字
     s = s
         .replaceAll('ⅰ', '1')
@@ -302,6 +334,26 @@ class ZhiyunService {
       }
     } catch (e) {
       debugPrint('[ZhiyunService] 读取已同步课程列表失败: $e');
+    }
+    return const [];
+  }
+
+  /// 获取本地持久化缓存的“我的课程”具体排课节次列表（包含上课时间、直播与回放映射）
+  static List<Map<String, dynamic>> getMySyncedSessions() {
+    try {
+      final box = _getHiveBox();
+      final raw = box?.get('zhiyun_my_sessions');
+      if (raw != null && raw is String && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          return decoded
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        }
+      }
+    } catch (e) {
+      debugPrint('[ZhiyunService] 读取已同步排课节次失败: $e');
     }
     return const [];
   }
@@ -409,12 +461,12 @@ class ZhiyunService {
   }
 
   /// 查询指定课程的智云 course_id
-  /// 优先级：1. 内存运行时缓存 > 2. 用户持久化手动绑定 > 3. 动态同步的“我的课程”
-  /// 坚决不使用任何死板硬编码，完全按用户实际账号数据匹配
+  /// 优先级：1. 用户显式手动绑定 > 2. 动态匹配用户“我的课程”（按当前学期/月份高优排序） > 3. 内存运行时缓存 > 4. 历史缓存
   static String? getKnownCourseId(
     String courseName, {
     String? courseCode,
     String? teacher,
+    List<String>? candidateTeachers,
   }) {
     final cleaned = cleanCourseName(courseName);
     final normalized = normalizeCourseName(courseName);
@@ -452,10 +504,119 @@ class ZhiyunService {
       return null;
     }
 
-    // 2. 检查内存缓存 (已成功解析或用户手动绑定)
-    if (_userCourseIds.containsKey(cleaned)) {
-      return _userCourseIds[cleaned];
+    final box = _getHiveBox();
+
+    // 2. 检查用户显式手动绑定 (例如在弹窗中手动输入的 ID)
+    if (box != null) {
+      final manualCid = box.get('zhiyun_manual_cid_$cleaned') ??
+          box.get('zhiyun_manual_cid_$courseName') ??
+          box.get('zhiyun_manual_cid_$normalized') ??
+          (core.isNotEmpty ? box.get('zhiyun_manual_cid_$core') : null) ??
+          (courseCode != null
+              ? box.get('zhiyun_manual_cid_$courseCode')
+              : null);
+      if (manualCid != null && manualCid.toString().isNotEmpty) {
+        return manualCid.toString();
+      }
     }
+
+    // 整合所有教师候选
+    final allTeachers = <String>{};
+    if (teacher != null && teacher.trim().isNotEmpty) {
+      allTeachers.add(teacher.trim());
+    }
+    if (candidateTeachers != null) {
+      for (final t in candidateTeachers) {
+        if (t.trim().isNotEmpty) allTeachers.add(t.trim());
+      }
+    }
+
+    // 3. 核心：从用户专属“我的课程”列表中动态智能匹配（按当前学期/月份高优排序，杜绝跨学期错绑旧课程）
+    final myCourses = getMySyncedCourses();
+    if (myCourses.isNotEmpty) {
+      final now = DateTime.now();
+      final curMonth = now.month;
+      // 浙大学期判定：11-2月为冬学期，9-10月为秋学期，3-4月为春学期，5-7月为夏学期
+      final isWinter =
+          curMonth == 11 || curMonth == 12 || curMonth == 1 || curMonth == 2;
+      final isAutumn = curMonth == 9 || curMonth == 10;
+      final isSpring = curMonth == 3 || curMonth == 4;
+      final isSummer =
+          curMonth == 5 || curMonth == 6 || curMonth == 7;
+
+      // 筛选所有课程名称匹配的候选智云课程
+      final matchingCourses = <Map<String, dynamic>>[];
+      for (final item in myCourses) {
+        final tTitle = item['course_title']?.toString() ?? '';
+        final tCid = item['course_id']?.toString() ?? '';
+        if (tCid.isNotEmpty && matchesCourseName(courseName, tTitle)) {
+          matchingCourses.add(item);
+        }
+      }
+
+      if (matchingCourses.isNotEmpty) {
+        // 对候选课程计算匹配得分
+        Map<String, dynamic>? bestItem;
+        int bestScore = -1;
+
+        for (final item in matchingCourses) {
+          int score = 10;
+          final tTitle = item['course_title']?.toString() ?? '';
+          final tTeacher = item['teacher']?.toString() ?? '';
+
+          // 教师匹配得分（+50）
+          if (allTeachers.isNotEmpty && tTeacher.isNotEmpty) {
+            for (final t in allTeachers) {
+              if (tTeacher.contains(t) || t.contains(tTeacher)) {
+                score += 50;
+                break;
+              }
+            }
+          }
+
+          // 当前学期匹配得分（+40）
+          if (isWinter &&
+              (tTitle.contains('冬') || tTitle.contains('后半'))) {
+            score += 40;
+          } else if (isAutumn &&
+              (tTitle.contains('秋') || tTitle.contains('前半'))) {
+            score += 40;
+          } else if (isSpring &&
+              (tTitle.contains('春') || tTitle.contains('前半'))) {
+            score += 40;
+          } else if (isSummer &&
+              (tTitle.contains('夏') || tTitle.contains('后半'))) {
+            score += 40;
+          }
+
+          // 如果该课程在当月有排课节次记录（+30）
+          final curMonthKey =
+              '${now.year}-${curMonth.toString().padLeft(2, '0')}';
+          if (item['active_months'] is List &&
+              (item['active_months'] as List).contains(curMonthKey)) {
+            score += 30;
+          }
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestItem = item;
+          }
+        }
+
+        if (bestItem != null) {
+          final bestCid = bestItem['course_id']?.toString() ?? '';
+          if (bestCid.isNotEmpty) {
+            _userCourseIds[cleaned] = bestCid;
+            _userCourseIds[courseName] = bestCid;
+            _userCourseIds[normalized] = bestCid;
+            return bestCid;
+          }
+        }
+      }
+    }
+
+    // 4. 检查内存缓存
+    if (_userCourseIds.containsKey(cleaned)) return _userCourseIds[cleaned];
     if (_userCourseIds.containsKey(courseName)) {
       return _userCourseIds[courseName];
     }
@@ -473,9 +634,7 @@ class ZhiyunService {
       return _userCourseIds[courseCode];
     }
 
-    // 3. 检查持久化存储 (Hive 用户显式保存的 ID 或上次同步的 ID)
-    final box = _getHiveBox();
-    final myCourses = getMySyncedCourses();
+    // 5. 兜底检查持久化存储
     if (box != null) {
       final savedCid = box.get('zhiyun_cid_$cleaned') ??
           box.get('zhiyun_cid_$courseName') ??
@@ -487,69 +646,8 @@ class ZhiyunService {
           (courseCode != null ? box.get('zhiyun_cid_$courseCode') : null);
       if (savedCid != null && savedCid.toString().isNotEmpty) {
         final cidStr = savedCid.toString();
-
-        // 脏数据与错配校验：若在已同步课程中能找到此 CID，但课程名称/荣誉类型不匹配，立即清洗
-        if (myCourses.isNotEmpty) {
-          Map<String, dynamic>? matchedInMy;
-          for (final c in myCourses) {
-            if (c['course_id']?.toString() == cidStr) {
-              matchedInMy = c;
-              break;
-            }
-          }
-          if (matchedInMy != null) {
-            final tTitle = matchedInMy['course_title']?.toString() ?? '';
-            if (tTitle.isNotEmpty && !matchesCourseName(courseName, tTitle)) {
-              box.delete('zhiyun_cid_$cleaned');
-              box.delete('zhiyun_cid_$courseName');
-              box.delete('zhiyun_cid_$normalized');
-              if (courseCode != null) box.delete('zhiyun_cid_$courseCode');
-              _userCourseIds.remove(cleaned);
-              _userCourseIds.remove(courseName);
-              _userCourseIds.remove(normalized);
-            } else {
-              _userCourseIds[cleaned] = cidStr;
-              return cidStr;
-            }
-          } else {
-            _userCourseIds[cleaned] = cidStr;
-            return cidStr;
-          }
-        } else {
-          _userCourseIds[cleaned] = cidStr;
-          return cidStr;
-        }
-      }
-    }
-
-    // 4. 核心：从用户专属“我的课程”列表中动态智能匹配（千人千面，不死板硬编码）
-    if (myCourses.isNotEmpty) {
-      // 优先：课程名匹配且教师匹配（精准匹配特定教师的教学班，区分如陈锦辉与谈之奕）
-      if (teacher != null && teacher.trim().isNotEmpty) {
-        final tTrimmed = teacher.trim();
-        for (final item in myCourses) {
-          final tTitle = item['course_title']?.toString() ?? '';
-          final tTeacher = item['teacher']?.toString() ?? '';
-          final tCid = item['course_id']?.toString() ?? '';
-          if (tCid.isNotEmpty &&
-              matchesCourseName(courseName, tTitle) &&
-              (tTeacher.contains(tTrimmed) || tTrimmed.contains(tTeacher))) {
-            _userCourseIds[cleaned] = tCid;
-            _userCourseIds[courseName] = tCid;
-            return tCid;
-          }
-        }
-      }
-
-      // 次优：课程名智能模糊匹配（如 Python程序设计、大学英语等）
-      for (final item in myCourses) {
-        final tTitle = item['course_title']?.toString() ?? '';
-        final tCid = item['course_id']?.toString() ?? '';
-        if (tCid.isNotEmpty && matchesCourseName(courseName, tTitle)) {
-          _userCourseIds[cleaned] = tCid;
-          _userCourseIds[courseName] = tCid;
-          return tCid;
-        }
+        _userCourseIds[cleaned] = cidStr;
+        return cidStr;
       }
     }
 
@@ -1036,6 +1134,16 @@ class ZhiyunService {
         await box.delete('zhiyun_unbind_$courseCode');
       }
 
+      await box.put('zhiyun_manual_cid_$cleaned', courseId);
+      await box.put('zhiyun_manual_cid_$courseName', courseId);
+      await box.put('zhiyun_manual_cid_$normalized', courseId);
+      if (core.isNotEmpty) {
+        await box.put('zhiyun_manual_cid_$core', courseId);
+      }
+      if (courseCode != null && courseCode.isNotEmpty) {
+        await box.put('zhiyun_manual_cid_$courseCode', courseId);
+      }
+
       await box.put('zhiyun_cid_$cleaned', courseId);
       await box.put('zhiyun_cid_$courseName', courseId);
       await box.put('zhiyun_cid_$normalized', courseId);
@@ -1080,6 +1188,12 @@ class ZhiyunService {
 
     final box = _getHiveBox();
     if (box != null) {
+      await box.delete('zhiyun_manual_cid_$cleaned');
+      await box.delete('zhiyun_manual_cid_$courseName');
+      await box.delete('zhiyun_manual_cid_$normalized');
+      if (core.isNotEmpty) await box.delete('zhiyun_manual_cid_$core');
+      if (courseCode != null) await box.delete('zhiyun_manual_cid_$courseCode');
+
       await box.delete('zhiyun_cid_$cleaned');
       await box.delete('zhiyun_cid_$courseName');
       await box.delete('zhiyun_cid_$normalized');
@@ -1186,32 +1300,7 @@ class ZhiyunService {
   }) {
     final now = DateTime.now();
 
-    // 0. 时间合理性硬核防线：如果指定了 period，且当前时间完全不在该节课的时间窗口内，绝不是该节课直播
-    if (period != null) {
-      if (now.isBefore(
-              period.startTime.subtract(const Duration(minutes: 20))) ||
-          now.isAfter(period.endTime.add(const Duration(minutes: 20)))) {
-        return false;
-      }
-    }
-
-    // 若 item 包含明确的开始/结束时间戳，如果距离当前时间已经结束或尚未开始，亦排除
-    final startAt = int.tryParse(item?['start_at']?.toString() ?? '');
-    final endAt = int.tryParse(item?['end_at']?.toString() ?? '');
-    if (endAt != null && endAt > 0) {
-      final eDt = DateTime.fromMillisecondsSinceEpoch(endAt * 1000);
-      if (now.isAfter(eDt.add(const Duration(minutes: 30)))) {
-        return false;
-      }
-    }
-    if (startAt != null && startAt > 0) {
-      final sDt = DateTime.fromMillisecondsSinceEpoch(startAt * 1000);
-      if (now.isBefore(sDt.subtract(const Duration(minutes: 20)))) {
-        return false;
-      }
-    }
-
-    // 1. 检查 item 中的状态标记
+    // 1. 绝对权威：智云服务端返回的实时直播信号（直播标记具有最高优先级）
     if (item != null) {
       final statusLabel = item['status_label']?.toString() ?? '';
       if (statusLabel == '直播' ||
@@ -1227,8 +1316,8 @@ class ZhiyunService {
         return true;
       }
       final status = item['status']?.toString();
-      // 智云状态码 2 表示直播中
-      if (status == '2') {
+      // 智云状态码 1 与 2 均可能表示正在进行中/直播
+      if (status == '1' || status == '2') {
         return true;
       }
       final liveType = item['live_type']?.toString();
@@ -1237,38 +1326,31 @@ class ZhiyunService {
       }
     }
 
-    // 2. 时间维度辅助判断：如果当前正处于该节课的上课时间窗口内
+    // 2. 时间窗口辅助判定：
+    final sDt = parseZhiyunTimestamp(item?['start_at']);
+    final eDt = parseZhiyunTimestamp(item?['end_at']);
+
     if (period != null) {
-      final start = period.startTime;
-      final end = period.endTime;
-      // 节次开始前 10 分钟到结束后 10 分钟
-      if (now.isAfter(start.subtract(const Duration(minutes: 10))) &&
-          now.isBefore(end.add(const Duration(minutes: 10)))) {
+      // 若处于当前节次时间范围内（前10分钟到后10分钟）
+      if (now.isAfter(period.startTime.subtract(const Duration(minutes: 10))) &&
+          now.isBefore(period.endTime.add(const Duration(minutes: 10)))) {
         final statusLabel = item?['status_label']?.toString() ?? '';
         final status = item?['status']?.toString();
-        // 若已生成回放或已明确结束，则不算直播
         if (statusLabel != '回放' && statusLabel != '已结束' && status != '4') {
           return true;
         }
       }
-    } else if (targetDate != null) {
-      if (targetDate.year == now.year &&
-          targetDate.month == now.month &&
-          targetDate.day == now.day) {
-        if (startAt != null && endAt != null && startAt > 0 && endAt > 0) {
-          final sDt = DateTime.fromMillisecondsSinceEpoch(startAt * 1000);
-          final eDt = DateTime.fromMillisecondsSinceEpoch(endAt * 1000);
-          if (now.isAfter(sDt.subtract(const Duration(minutes: 10))) &&
-              now.isBefore(eDt.add(const Duration(minutes: 10)))) {
-            final statusLabel = item?['status_label']?.toString() ?? '';
-            final status = item?['status']?.toString();
-            if (statusLabel != '回放' && statusLabel != '已结束' && status != '4') {
-              return true;
-            }
-          }
+    } else if (sDt != null && eDt != null) {
+      if (now.isAfter(sDt.subtract(const Duration(minutes: 10))) &&
+          now.isBefore(eDt.add(const Duration(minutes: 15)))) {
+        final statusLabel = item?['status_label']?.toString() ?? '';
+        final status = item?['status']?.toString();
+        if (statusLabel != '回放' && statusLabel != '已结束' && status != '4') {
+          return true;
         }
       }
     }
+
     return false;
   }
 
@@ -1281,7 +1363,9 @@ class ZhiyunService {
 
     // 1. 检查 item 中的状态标记
     final statusLabel = item['status_label']?.toString() ?? '';
-    if (statusLabel == '回放' || statusLabel.contains('回放')) {
+    if (statusLabel == '回放' ||
+        statusLabel.contains('回放') ||
+        statusLabel.contains('录播')) {
       return true;
     }
     final status = item['status']?.toString();
@@ -1302,12 +1386,7 @@ class ZhiyunService {
 
     // 2. 时间维度：如果是未来的课节，绝无回放
     final now = DateTime.now();
-    final lessonDate = targetDate ??
-        (item['start_at'] != null &&
-                int.tryParse(item['start_at'].toString()) != null
-            ? DateTime.fromMillisecondsSinceEpoch(
-                int.parse(item['start_at'].toString()) * 1000)
-            : null);
+    final lessonDate = targetDate ?? parseZhiyunTimestamp(item['start_at']);
     if (lessonDate != null && lessonDate.isAfter(now)) {
       return false;
     }
@@ -1315,15 +1394,14 @@ class ZhiyunService {
     // 3. 如果状态为未开始或正在直播，无回放
     if (statusLabel == '未开始' ||
         statusLabel.contains('直播') ||
-        status == '2' ||
-        status == '1') {
+        item['is_live'] == true) {
       return false;
     }
 
-    // 4. 如果过去发生且有 sub_id，且距离开课已超过 1 小时
+    // 4. 如果过去发生且有 sub_id，且距离开课已超过 30 分钟（录播转码分段切片）
     final subId = item['sub_id']?.toString() ?? item['id']?.toString();
     if (subId != null && subId.isNotEmpty && lessonDate != null) {
-      if (now.difference(lessonDate) > const Duration(hours: 1)) {
+      if (now.difference(lessonDate) > const Duration(minutes: 30)) {
         return true;
       }
     }
@@ -1334,15 +1412,15 @@ class ZhiyunService {
   /// 从课程目录项中提取时间
   static DateTime? _extractCatalogueItemDateTime(
       Map<String, dynamic> item, DateTime fallbackDate) {
-    final startAt = int.tryParse(item['start_at']?.toString() ?? '');
-    if (startAt != null && startAt > 0) {
-      return DateTime.fromMillisecondsSinceEpoch(startAt * 1000);
+    final parsed = parseZhiyunTimestamp(item['start_at']);
+    if (parsed != null) {
+      return parsed;
     }
     final dateVal = item['date']?.toString();
     if (dateVal != null && dateVal.isNotEmpty) {
-      final parsed = DateTime.tryParse(dateVal);
-      if (parsed != null && (parsed.hour != 0 || parsed.minute != 0)) {
-        return parsed;
+      final p = DateTime.tryParse(dateVal);
+      if (p != null && (p.hour != 0 || p.minute != 0)) {
+        return p;
       }
     }
     final title =
@@ -1379,11 +1457,8 @@ class ZhiyunService {
     // 1. 筛选出属于目标日期的所有候选课节
     final sameDateItems = <Map<String, dynamic>>[];
     for (final item in catalogue) {
-      final startAt = int.tryParse(item['start_at']?.toString() ?? '');
-      DateTime? itemDate;
-      if (startAt != null && startAt > 0) {
-        itemDate = DateTime.fromMillisecondsSinceEpoch(startAt * 1000);
-      } else if (item['date'] != null) {
+      DateTime? itemDate = parseZhiyunTimestamp(item['start_at']);
+      if (itemDate == null && item['date'] != null) {
         itemDate = DateTime.tryParse(item['date'].toString());
       }
 
@@ -1553,21 +1628,112 @@ class ZhiyunService {
       );
     }
 
-    // 2. 解析 course_id（从手动绑定、已同步课程动态匹配）
+    // 收集所有候选教师（秋冬/春夏不同学期教学班可能分配不同教师）
+    final candidateTeachers = <String>{};
+    if (course.teacher != null && course.teacher!.trim().isNotEmpty) {
+      candidateTeachers.add(course.teacher!.trim());
+    }
+    for (final s in course.sessions) {
+      if (s.teacher.trim().isNotEmpty) {
+        candidateTeachers.add(s.teacher.trim());
+      }
+    }
+
+    // 自动检查同步时效：若尚未同步或缓存已超过 12 小时（跨学期过渡期），自动触发后台更新
+    final box = _getHiveBox();
+    final lastSyncStr = box?.get('zhiyun_my_courses_time')?.toString();
+    final lastSync =
+        lastSyncStr != null ? DateTime.tryParse(lastSyncStr) : null;
+    final isStale = lastSync == null ||
+        DateTime.now().difference(lastSync) > const Duration(hours: 12);
+    if (getMySyncedCourses().isEmpty || isStale) {
+      await syncFromMyCourses();
+    }
+
+    // 2. 优先策略：从用户专属“我的排课节次”中动态精准查找目标日期的直播/回放节次
+    if (targetDate != null) {
+      final dateKey =
+          '${targetDate.year}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}';
+      final shortDateKey = '${targetDate.month}月${targetDate.day}日';
+
+      final matchingTodaySessions = getMySyncedSessions().where((s) {
+        if (s['date'] != dateKey) return false;
+        final t =
+            s['course_title']?.toString() ?? s['title']?.toString() ?? '';
+        return matchesCourseName(course.name, t);
+      }).toList();
+
+      if (matchingTodaySessions.isNotEmpty) {
+        Map<String, dynamic>? bestSession;
+        if (period != null) {
+          // 优先匹配当前正在直播的节次
+          for (final s in matchingTodaySessions) {
+            if (checkIsLive(item: s, targetDate: targetDate, period: period)) {
+              bestSession = s;
+              break;
+            }
+          }
+          // 其次匹配上课时间最接近的节次
+          if (bestSession == null) {
+            int minDiff = 1 << 62;
+            for (final s in matchingTodaySessions) {
+              final sDt = parseZhiyunTimestamp(s['start_at']);
+              if (sDt != null) {
+                final diff =
+                    (sDt.difference(period.startTime)).abs().inMilliseconds;
+                if (diff < minDiff) {
+                  minDiff = diff;
+                  bestSession = s;
+                }
+              }
+            }
+          }
+        }
+        bestSession ??= matchingTodaySessions.first;
+
+        final sCid = bestSession['course_id']?.toString();
+        final sSubId = bestSession['sub_id']?.toString();
+        if (sCid != null &&
+            sCid.isNotEmpty &&
+            sSubId != null &&
+            sSubId.isNotEmpty) {
+          final isLive = checkIsLive(
+              item: bestSession, targetDate: targetDate, period: period);
+          final hasReplay =
+              checkHasReplay(item: bestSession, targetDate: targetDate);
+          return ZhiyunReplayInfo(
+            courseId: sCid,
+            subId: sSubId,
+            courseName: course.name,
+            lessonTitle: bestSession['title']?.toString() ??
+                (isLive ? '$shortDateKey 课堂直播' : '$shortDateKey 课堂录播'),
+            lessonDate: targetDate,
+            hasReplay: hasReplay,
+            isLive: isLive,
+            isLessonSpecific: true,
+            livingroomUrl: buildLivingroomUrl(sCid, sSubId),
+          );
+        }
+      }
+    }
+
+    // 3. 解析 course_id（从用户排课、动态同步的课程智能排序匹配）
     var courseId = getKnownCourseId(
       course.name,
       courseCode: course.id,
       teacher: course.teacher,
+      candidateTeachers: candidateTeachers.toList(),
     );
 
-    // 如果未找到且尚未同步过“我的课程”，尝试静默自动同步
-    if (courseId == null && getMySyncedCourses().isEmpty) {
+    // 如果未找到，尝试强制同步
+    if (courseId == null) {
       final synced = await syncFromMyCourses();
       if (synced > 0) {
         courseId = getKnownCourseId(
           course.name,
           courseCode: course.id,
           teacher: course.teacher,
+          candidateTeachers: candidateTeachers.toList(),
         );
       }
     }
@@ -1578,10 +1744,41 @@ class ZhiyunService {
       teacher: course.teacher,
     );
 
-    // 3. 如果成功匹配到 course_id
+    // 4. 如果成功匹配到 course_id
     if (courseId != null) {
       // 尝试拉取智云课程目录
-      final catalogue = await fetchCourseCatalogue(courseId);
+      var catalogue = await fetchCourseCatalogue(courseId);
+
+      // 跨学期残留检测：如果目录全部为 45 天前的历史旧课节，且当前已进入新学期（冬/夏学期）
+      final now = DateTime.now();
+      final hasRecentLessons = catalogue.any((item) {
+        final dt = parseZhiyunTimestamp(item['start_at']);
+        if (dt != null) {
+          return (dt.difference(now)).abs().inDays < 45;
+        }
+        return false;
+      });
+
+      if (!hasRecentLessons && catalogue.isNotEmpty) {
+        // 当前绑定的课程 ID 仅包含历史旧课节，属于跨学期（如秋学期->冬学期）残留数据
+        final cleaned = cleanCourseName(course.name);
+        _userCourseIds.remove(cleaned);
+        _userCourseIds.remove(course.name);
+        box?.delete('zhiyun_cid_$cleaned');
+        box?.delete('zhiyun_cid_${course.name}');
+
+        await syncFromMyCourses();
+        final refreshedId = getKnownCourseId(
+          course.name,
+          courseCode: course.id,
+          teacher: course.teacher,
+          candidateTeachers: candidateTeachers.toList(),
+        );
+        if (refreshedId != null && refreshedId != courseId) {
+          courseId = refreshedId;
+          catalogue = await fetchCourseCatalogue(courseId);
+        }
+      }
 
       if (targetDate != null) {
         final dateKey =
@@ -1705,7 +1902,7 @@ class ZhiyunService {
       );
     }
 
-    // 4. 未找到智云课程：返回智云搜索与手动绑定入口
+    // 5. 未找到智云课程：返回智云搜索与手动绑定入口
     return ZhiyunReplayInfo(
       courseId: null,
       subId: null,
@@ -1788,28 +1985,35 @@ class ZhiyunService {
       }
 
       final now = DateTime.now();
-      // 动态生成本学年涉及的所有月份（格式带前导零 YYYY-MM）
-      final monthsToQuery = <String>{
-        '${now.year}-${now.month.toString().padLeft(2, '0')}',
-        '${now.year}-${(now.month == 1 ? 12 : now.month - 1).toString().padLeft(2, '0')}',
-        '${now.year}-${(now.month == 12 ? 1 : now.month + 1).toString().padLeft(2, '0')}',
-      };
+      // 动态生成本学年涉及的所有月份，当前月份优先（解决跨学期课程版本覆盖）
+      final curMonthStr = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+      final prevMonthStr =
+          '${now.year}-${(now.month == 1 ? 12 : now.month - 1).toString().padLeft(2, '0')}';
+      final nextMonthStr =
+          '${now.year}-${(now.month == 12 ? 1 : now.month + 1).toString().padLeft(2, '0')}';
+
+      final orderedMonths = <String>[curMonthStr, prevMonthStr, nextMonthStr];
       final academicStartYear = now.month >= 8 ? now.year : now.year - 1;
       final academicEndYear = academicStartYear + 1;
       // 8月（夏学期末/新生军训与军事理论课集中开展月份）
-      monthsToQuery.add('$academicStartYear-08');
+      if (!orderedMonths.contains('$academicStartYear-08')) {
+        orderedMonths.add('$academicStartYear-08');
+      }
       // 秋学期 9-12月
       for (int m = 9; m <= 12; m++) {
-        monthsToQuery.add('$academicStartYear-${m.toString().padLeft(2, '0')}');
+        final s = '$academicStartYear-${m.toString().padLeft(2, '0')}';
+        if (!orderedMonths.contains(s)) orderedMonths.add(s);
       }
       // 冬/春/夏学期 1-7月
       for (int m = 1; m <= 7; m++) {
-        monthsToQuery.add('$academicEndYear-${m.toString().padLeft(2, '0')}');
+        final s = '$academicEndYear-${m.toString().padLeft(2, '0')}';
+        if (!orderedMonths.contains(s)) orderedMonths.add(s);
       }
 
       final foundCoursesMap = <String, Map<String, dynamic>>{};
+      final foundSessions = <Map<String, dynamic>>[];
 
-      for (final m in monthsToQuery) {
+      for (final m in orderedMonths) {
         try {
           final uri = Uri.parse(
               '$_kZhiyunBaseUrl/courseapi/v2/course-live/get-my-course-month?month=$m&tenant_code=$_kTenantCode');
@@ -1852,6 +2056,8 @@ class ZhiyunService {
                           final subId = c['sub_id']?.toString();
                           final startAt =
                               int.tryParse(c['start_at']?.toString() ?? '');
+                          final endAt =
+                              int.tryParse(c['end_at']?.toString() ?? '');
                           final teacher = c['realname']?.toString() ??
                               c['teacher']?.toString() ??
                               c['lecturer_name']?.toString();
@@ -1860,19 +2066,24 @@ class ZhiyunService {
                               cid.isNotEmpty &&
                               title != null &&
                               title.isNotEmpty) {
-                            foundCoursesMap[cid] = {
-                              'course_id': cid,
-                              'course_title': title,
-                              if (teacher != null && teacher.isNotEmpty)
-                                'teacher': teacher,
-                            };
+                            foundCoursesMap.putIfAbsent(
+                              cid,
+                              () => {
+                                'course_id': cid,
+                                'course_title': title,
+                                if (teacher != null && teacher.isNotEmpty)
+                                  'teacher': teacher,
+                                'active_months': <String>[],
+                              },
+                            );
+                            final activeMonths =
+                                foundCoursesMap[cid]!['active_months'] as List;
+                            if (!activeMonths.contains(m)) {
+                              activeMonths.add(m);
+                            }
 
-                            if (subId != null &&
-                                subId.isNotEmpty &&
-                                startAt != null &&
-                                startAt > 0) {
-                              final dt = DateTime.fromMillisecondsSinceEpoch(
-                                  startAt * 1000);
+                            final dt = parseZhiyunTimestamp(startAt);
+                            if (dt != null && subId != null && subId.isNotEmpty) {
                               final dKey =
                                   '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
                               _knownSubIds['${cid}_$dKey'] = subId;
@@ -1880,6 +2091,24 @@ class ZhiyunService {
                               _knownSubIds[
                                       '${cid}_${dKey}_${dt.hour}_${dt.minute}'] =
                                   subId;
+
+                              foundSessions.add({
+                                'course_id': cid,
+                                'course_title': title,
+                                'sub_id': subId,
+                                if (teacher != null && teacher.isNotEmpty)
+                                  'teacher': teacher,
+                                'start_at': startAt,
+                                'end_at': endAt,
+                                'date': dKey,
+                                'status': c['status']?.toString(),
+                                'is_live': c['is_live'] == true ||
+                                    c['is_live'] == 1 ||
+                                    c['is_live'] == '1',
+                                'status_label':
+                                    c['status_label']?.toString() ?? '',
+                                'month': m,
+                              });
                             }
                           }
                         }
@@ -1930,12 +2159,16 @@ class ZhiyunService {
                       cid.isNotEmpty &&
                       title != null &&
                       title.isNotEmpty) {
-                    foundCoursesMap[cid] = {
-                      'course_id': cid,
-                      'course_title': title,
-                      if (teacher != null && teacher.isNotEmpty)
-                        'teacher': teacher,
-                    };
+                    foundCoursesMap.putIfAbsent(
+                      cid,
+                      () => {
+                        'course_id': cid,
+                        'course_title': title,
+                        if (teacher != null && teacher.isNotEmpty)
+                          'teacher': teacher,
+                        'active_months': <String>[],
+                      },
+                    );
                   }
                 }
               }
@@ -1948,7 +2181,17 @@ class ZhiyunService {
 
       final box = _getHiveBox();
       int count = 0;
-      for (final entry in foundCoursesMap.values) {
+      final assignedCleaned = <String>{};
+
+      // 排序：当前学期/当月课程高优写入，防止跨学期旧课程冲掉当季课程绑定
+      final sortedCourses = foundCoursesMap.values.toList()
+        ..sort((a, b) {
+          final aActive = (a['active_months'] as List?)?.contains(curMonthStr) == true ? 1 : 0;
+          final bActive = (b['active_months'] as List?)?.contains(curMonthStr) == true ? 1 : 0;
+          return bActive.compareTo(aActive);
+        });
+
+      for (final entry in sortedCourses) {
         final cid = entry['course_id'] as String;
         final title = entry['course_title'] as String;
         final cleaned = cleanCourseName(title);
@@ -1965,27 +2208,37 @@ class ZhiyunService {
           continue;
         }
 
-        _userCourseIds[cleaned] = cid;
-        _userCourseIds[title] = cid;
-        _userCourseIds[normalized] = cid;
-        if (core.isNotEmpty) _userCourseIds[core] = cid;
-        if (coreNormalized.isNotEmpty) _userCourseIds[coreNormalized] = cid;
+        // 高优当季课程优先记录，已绑定的当季课程不被后续旧课覆盖
+        if (assignedCleaned.add(cleaned)) {
+          _userCourseIds[cleaned] = cid;
+          _userCourseIds[title] = cid;
+          _userCourseIds[normalized] = cid;
+          if (core.isNotEmpty) _userCourseIds[core] = cid;
+          if (coreNormalized.isNotEmpty) _userCourseIds[coreNormalized] = cid;
 
-        if (box != null) {
-          await box.put('zhiyun_cid_$cleaned', cid);
-          await box.put('zhiyun_cid_$title', cid);
-          await box.put('zhiyun_cid_$normalized', cid);
-          if (core.isNotEmpty) await box.put('zhiyun_cid_$core', cid);
-          if (coreNormalized.isNotEmpty) {
-            await box.put('zhiyun_cid_$coreNormalized', cid);
+          if (box != null) {
+            await box.put('zhiyun_cid_$cleaned', cid);
+            await box.put('zhiyun_cid_$title', cid);
+            await box.put('zhiyun_cid_$normalized', cid);
+            if (core.isNotEmpty) await box.put('zhiyun_cid_$core', cid);
+            if (coreNormalized.isNotEmpty) {
+              await box.put('zhiyun_cid_$coreNormalized', cid);
+            }
           }
+          count++;
         }
-        count++;
       }
 
-      if (box != null && foundCoursesMap.isNotEmpty) {
+      if (box != null) {
+        if (foundCoursesMap.isNotEmpty) {
+          await box.put(
+              'zhiyun_my_courses', jsonEncode(foundCoursesMap.values.toList()));
+        }
+        if (foundSessions.isNotEmpty) {
+          await box.put('zhiyun_my_sessions', jsonEncode(foundSessions));
+        }
         await box.put(
-            'zhiyun_my_courses', jsonEncode(foundCoursesMap.values.toList()));
+            'zhiyun_my_courses_time', DateTime.now().toIso8601String());
       }
 
       debugPrint('[ZhiyunService] 从“我的课程”成功同步 $count 门专属课程 ID');

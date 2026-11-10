@@ -6,12 +6,50 @@ void main() {
     test('课程名称归一化测试', () {
       expect(ZhiyunService.normalizeCourseName('微积分（甲）Ⅰ(01)'), equals('微积分甲1'));
       expect(ZhiyunService.normalizeCourseName('微积分(乙)Ⅱ'), equals('微积分乙2'));
-      expect(ZhiyunService.normalizeCourseName('线性代数Ⅰ(H)'), equals('线性代数1h'));
+      expect(ZhiyunService.normalizeCourseName('线性代数Ⅰ(H)'), equals('线性代数1'));
       expect(ZhiyunService.normalizeCourseName('大学英语(3)'), equals('大学英语3'));
       expect(ZhiyunService.normalizeCourseName('大学英语（三）'), equals('大学英语3'));
       expect(ZhiyunService.normalizeCourseName('大学英语Ⅲ'), equals('大学英语3'));
       expect(ZhiyunService.normalizeCourseName('面向对象程序设计（Python）'),
           equals('面向对象程序设计python'));
+      expect(ZhiyunService.normalizeCourseName('微积分（甲）Ⅰ (冬)'), equals('微积分甲1'));
+      expect(ZhiyunService.normalizeCourseName('离散数学 (2026-2027秋冬)'), equals('离散数学'));
+    });
+
+    test('秋冬/春夏跨学期与冬学期课程智能匹配', () {
+      expect(
+        ZhiyunService.matchesCourseName('微积分（甲）Ⅰ', '微积分(甲)Ⅰ (冬)'),
+        isTrue,
+      );
+      expect(
+        ZhiyunService.matchesCourseName('微积分(甲)Ⅰ (冬)', '微积分（甲）Ⅰ'),
+        isTrue,
+      );
+      expect(
+        ZhiyunService.matchesCourseName('微积分（甲）Ⅰ', '微积分（甲）Ⅰ (2026-2027秋冬)'),
+        isTrue,
+      );
+      expect(
+        ZhiyunService.matchesCourseName('离散数学', '离散数学 (冬学期)'),
+        isTrue,
+      );
+      expect(
+        ZhiyunService.matchesCourseName('大学物理', '大学物理 (后半学期)'),
+        isTrue,
+      );
+      expect(
+        ZhiyunService.matchesCourseName('大学英语(3)', '大学英语Ⅲ (秋冬)'),
+        isTrue,
+      );
+    });
+
+    test('智云秒级与毫秒级时间戳解析兼容性测试', () {
+      final secDt = ZhiyunService.parseZhiyunTimestamp(1731229200);
+      final msDt = ZhiyunService.parseZhiyunTimestamp(1731229200000);
+      expect(secDt, isNotNull);
+      expect(msDt, isNotNull);
+      expect(secDt!.millisecondsSinceEpoch, equals(msDt!.millisecondsSinceEpoch));
+      expect(secDt.year, equals(2024));
     });
 
     test('Python 课程智能模糊匹配', () {

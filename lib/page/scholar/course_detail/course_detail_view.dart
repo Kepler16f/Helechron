@@ -1010,46 +1010,6 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
     );
   }
 
-  Widget _buildCopyButton(
-      BuildContext context, String url, String courseName, String detailName) {
-    return CupertinoButton(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      color: CupertinoDynamicColor.resolve(
-          CupertinoColors.secondarySystemFill, context),
-      borderRadius: BorderRadius.circular(8),
-      minSize: 36,
-      child: const FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(CupertinoIcons.link, size: 16),
-            SizedBox(width: 4),
-            Text('复制链接', style: TextStyle(fontSize: 13)),
-          ],
-        ),
-      ),
-      onPressed: () async {
-        await Clipboard.setData(ClipboardData(text: url));
-        if (context.mounted) {
-          showCupertinoDialog(
-            context: context,
-            builder: (dialogCtx) => CupertinoAlertDialog(
-              title: const Text('已复制链接'),
-              content: Text('课程「$courseName」($detailName) 的智云课堂直达链接已复制到剪贴板。'),
-              actions: [
-                CupertinoDialogAction(
-                  child: const Text('好'),
-                  onPressed: () => Navigator.of(dialogCtx).pop(),
-                ),
-              ],
-            ),
-          );
-        }
-      },
-    );
-  }
-
   Widget _buildMyCoursesButton(BuildContext context) {
     return CupertinoButton(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -1144,7 +1104,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                             size: 16, color: CupertinoColors.white),
                         SizedBox(width: 6),
                         Text(
-                          '应用内看直播',
+                          '观看直播',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -1174,8 +1134,6 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                 onPressed: () => _openAndRecord(info.livingroomUrl, '实时直播',
                     courseId: info.courseId, subId: info.subId),
               ),
-              const SizedBox(width: 8),
-              _buildCopyButton(context, info.livingroomUrl, c.name, '实时直播'),
               if (info.courseId != null) ...[
                 const SizedBox(width: 8),
                 CupertinoButton(
@@ -1222,7 +1180,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                         Icon(CupertinoIcons.play_arrow_solid, size: 16),
                         SizedBox(width: 6),
                         Text(
-                          '应用内观看回放',
+                          '观看回放',
                           style: TextStyle(
                               fontSize: 14, fontWeight: FontWeight.w600),
                         ),
@@ -1250,9 +1208,6 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                     info.livingroomUrl, info.lessonTitle,
                     courseId: info.courseId, subId: info.subId),
               ),
-              const SizedBox(width: 8),
-              _buildCopyButton(
-                  context, info.livingroomUrl, c.name, info.lessonTitle),
               if (info.courseId != null) ...[
                 const SizedBox(width: 8),
                 CupertinoButton(
@@ -1380,7 +1335,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          '应用内进入课堂',
+                          '进入课堂',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -1412,8 +1367,6 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                 onPressed: () => _openAndRecord(info.livingroomUrl, '课程房间',
                     courseId: info.courseId),
               ),
-              const SizedBox(width: 8),
-              _buildCopyButton(context, info.livingroomUrl, c.name, '课程主页'),
               const SizedBox(width: 8),
               CupertinoButton(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -1658,12 +1611,12 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
               ),
               CupertinoDialogAction(
                 isDefaultAction: true,
-                child: const Text('选择打开方式'),
+                child: const Text('打开'),
                 onPressed: () {
                   Navigator.pop(dialogCtx);
                   OhosNativeService.instance.openFileWithSystem(
                     savedPath,
-                    title: '选择打开方式',
+                    title: '打开文件',
                   );
                 },
               ),
@@ -1715,54 +1668,140 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '学在浙大 / 智云课堂课件下载',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: CupertinoDynamicColor.resolve(
-                                    CupertinoColors.label, context),
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            if (_items.isEmpty) {
+                              if (!_loading) _fetchCourseware();
+                            } else {
+                              setState(() {
+                                _expanded = !_expanded;
+                              });
+                            }
+                          },
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '学在浙大 / 智云课堂课件下载',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: CupertinoDynamicColor.resolve(
+                                      CupertinoColors.label, context),
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '支持一键下载课程讲义、作业附件并唤起系统打开方式',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: CupertinoDynamicColor.resolve(
-                                    CupertinoColors.secondaryLabel, context),
+                              const SizedBox(height: 2),
+                              Text(
+                                _items.isNotEmpty
+                                    ? '已获取 ${_items.length} 个附件 · 点击${_expanded ? "收起" : "展开"}'
+                                    : '支持一键下载课程讲义、作业附件并唤起系统打开',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: CupertinoDynamicColor.resolve(
+                                      CupertinoColors.secondaryLabel, context),
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                      CupertinoButton(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        minSize: 32,
-                        color: CupertinoColors.activeBlue,
-                        borderRadius: BorderRadius.circular(8),
-                        onPressed: _loading ? null : _fetchCourseware,
-                        child: Row(
+                      const SizedBox(width: 8),
+                      if (_items.isEmpty)
+                        CupertinoButton(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          minSize: 32,
+                          color: CupertinoColors.activeBlue,
+                          borderRadius: BorderRadius.circular(8),
+                          onPressed: _loading ? null : _fetchCourseware,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_loading)
+                                const CupertinoActivityIndicator(
+                                    radius: 7, color: CupertinoColors.white)
+                              else ...[
+                                const Icon(
+                                    CupertinoIcons.arrow_down_circle_fill,
+                                    size: 15,
+                                    color: CupertinoColors.white),
+                                const SizedBox(width: 4),
+                                const Text(
+                                  '展开课件',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: CupertinoColors.white,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        )
+                      else
+                        Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(CupertinoIcons.arrow_down_circle_fill,
-                                size: 15, color: CupertinoColors.white),
-                            const SizedBox(width: 4),
-                            Text(
-                              _expanded ? '刷新课件' : '课件下载',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: CupertinoColors.white,
+                            CupertinoButton(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 6),
+                              minSize: 32,
+                              color: CupertinoDynamicColor.resolve(
+                                  CupertinoColors.secondarySystemFill, context),
+                              borderRadius: BorderRadius.circular(8),
+                              onPressed: _loading ? null : _fetchCourseware,
+                              child: _loading
+                                  ? const CupertinoActivityIndicator(radius: 7)
+                                  : const Icon(CupertinoIcons.arrow_clockwise,
+                                      size: 14),
+                            ),
+                            const SizedBox(width: 6),
+                            CupertinoButton(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              minSize: 32,
+                              color: _expanded
+                                  ? CupertinoDynamicColor.resolve(
+                                      CupertinoColors.secondarySystemFill,
+                                      context)
+                                  : CupertinoColors.activeBlue,
+                              borderRadius: BorderRadius.circular(8),
+                              onPressed: () {
+                                setState(() {
+                                  _expanded = !_expanded;
+                                });
+                              },
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _expanded
+                                        ? CupertinoIcons.chevron_up
+                                        : CupertinoIcons.chevron_down,
+                                    size: 13,
+                                    color: _expanded
+                                        ? CupertinoDynamicColor.resolve(
+                                            CupertinoColors.label, context)
+                                        : CupertinoColors.white,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _expanded ? '收起' : '展开',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: _expanded
+                                          ? CupertinoDynamicColor.resolve(
+                                              CupertinoColors.label, context)
+                                          : CupertinoColors.white,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
-                      ),
                     ],
                   ),
                   if (_expanded) ...[
@@ -1862,7 +1901,7 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
                                     );
                                   },
                                   child: const Text(
-                                    '打开方式',
+                                    '打开',
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,

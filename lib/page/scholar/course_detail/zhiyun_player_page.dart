@@ -327,8 +327,8 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                     const SizedBox(width: 8),
                     Text(
                       activeStream?.isLive == true
-                          ? '在应用内观看实时直播 (${activeStream!.label})'
-                          : '在应用内全屏播放视频 (${activeStream?.label ?? "回放"})',
+                          ? '观看实时直播 (${activeStream!.label})'
+                          : '播放视频 (${activeStream?.label ?? "回放"})',
                       style: const TextStyle(
                           fontSize: 15, fontWeight: FontWeight.w600),
                     ),
@@ -338,7 +338,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
             ),
           ] else ...[
             Text(
-              '当前课节暂未生成直接视频流（可能尚未开课或录播转码中），您仍可尝试应用内网页播放或查看下方 PPT 与语音转写。',
+              '当前课节暂未生成直接视频流（可能尚未开课或录播转码中），您仍可尝试播放网页版或查看下方 PPT 与语音转写。',
               style: TextStyle(
                 fontSize: 12,
                 color: CupertinoDynamicColor.resolve(
@@ -354,7 +354,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                 borderRadius: BorderRadius.circular(12),
                 onPressed: () => _launchInAppPlayer(_currentLivingroomUrl),
                 child: const Text(
-                  '尝试应用内网页播放器打开',
+                  '打开网页播放器',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
