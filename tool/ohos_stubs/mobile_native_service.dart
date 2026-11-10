@@ -33,6 +33,19 @@ class MobileNativeService {
   Future<Map<String, String>?> pickTextFile() async => null;
   Future<List<Map<String, dynamic>>> pickAnyFiles({int maxCount = 10}) async =>
       [];
+  Future<String?> pickDirectory() async => null;
+  Future<bool> openFileWithSystem(
+    String filePath, {
+    String? mimeType,
+    String? title,
+  }) async =>
+      false;
+  Future<bool> openInAppVideoPlayer({
+    required String url,
+    required String title,
+    List<Map<String, String>> streams = const [],
+  }) async =>
+      false;
 
   void ensureWidgetHandler(void Function(String target) handler) {}
   Future<void> updateCourseWidget({

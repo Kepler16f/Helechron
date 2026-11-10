@@ -77,10 +77,16 @@ struct Index {
   /// 弹出 Flutter 模态窗口时隐藏原生底栏，避免遮挡弹窗
   @StorageLink('bottomBarHidden') bottomBarHidden: boolean = false;
   @StorageLink('bottomBarCurrentTab') @Watch('onCurrentTabChanged') bottomBarCurrentTab: number = 0;
+  @StorageLink('inAppVideoVisible') inAppVideoVisible: boolean = false;
+  @StorageLink('inAppVideoUrl') inAppVideoUrl: string = '';
+  @StorageLink('inAppVideoTitle') inAppVideoTitle: string = '智云课堂';
   @State private safeBottom: number = 0;
   @State private apiLevel: number = 12;
   @State private immersiveSupported: boolean = true;
+  @State private videoSpeed: PlaybackSpeed = PlaybackSpeed.Speed_Forward_1_00_X;
+  @State private videoSpeedLabel: string = '1.0x';
   private tabsController: HdsTabsController = new HdsTabsController();
+  private videoController: VideoController = new VideoController();
 
   aboutToAppear(): void {
     this.loadSafeArea();
@@ -153,6 +159,25 @@ struct Index {
       this.context.eventHub.emit('bottomBarTabChanged', index);
     } catch (e) {
       hilog.warn(DOMAIN, TAG, `emit bottomBarTabChanged failed: ${JSON.stringify(e)}`);
+    }
+  }
+
+  private cycleVideoSpeed(): void {
+    if (this.videoSpeedLabel === '0.75x') {
+      this.videoSpeed = PlaybackSpeed.Speed_Forward_1_00_X;
+      this.videoSpeedLabel = '1.0x';
+    } else if (this.videoSpeedLabel === '1.0x') {
+      this.videoSpeed = PlaybackSpeed.Speed_Forward_1_25_X;
+      this.videoSpeedLabel = '1.25x';
+    } else if (this.videoSpeedLabel === '1.25x') {
+      this.videoSpeed = PlaybackSpeed.Speed_Forward_1_75_X;
+      this.videoSpeedLabel = '1.75x';
+    } else if (this.videoSpeedLabel === '1.75x') {
+      this.videoSpeed = PlaybackSpeed.Speed_Forward_2_00_X;
+      this.videoSpeedLabel = '2.0x';
+    } else {
+      this.videoSpeed = PlaybackSpeed.Speed_Forward_0_75_X;
+      this.videoSpeedLabel = '0.75x';
     }
   }
 
@@ -272,7 +297,7 @@ struct Index {
       .width('100%')
       .height('100%')
 
-      if (!this.bottomBarHidden) {
+      if (!this.bottomBarHidden && !this.inAppVideoVisible) {
         if (this.useSystemMaterial()) {
           this.SystemMaterialBar()
         } else if (this.bottomBarFloating) {
@@ -300,12 +325,67 @@ struct Index {
           .backgroundColor($r('sys.color.ohos_id_color_bottom_tab_bg'))
         }
       }
+
+      if (this.inAppVideoVisible && this.inAppVideoUrl.length > 0) {
+        Column() {
+          Row() {
+            Button('关闭')
+              .height(32)
+              .fontSize(13)
+              .backgroundColor('#33FFFFFF')
+              .fontColor(Color.White)
+              .onClick(() => {
+                this.inAppVideoVisible = false;
+              })
+
+            Text(this.inAppVideoTitle)
+              .fontSize(15)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(Color.White)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .layoutWeight(1)
+              .margin({ left: 12, right: 12 })
+
+            Button(`倍速 ${this.videoSpeedLabel}`)
+              .height(32)
+              .fontSize(13)
+              .backgroundColor('#33FFFFFF')
+              .fontColor(Color.White)
+              .onClick(() => {
+                this.cycleVideoSpeed();
+              })
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16, top: 44, bottom: 12 })
+          .backgroundColor('#E6000000')
+
+          Video({
+            src: this.inAppVideoUrl,
+            currentProgressRate: this.videoSpeed,
+            controller: this.videoController
+          })
+            .width('100%')
+            .layoutWeight(1)
+            .autoPlay(true)
+            .controls(true)
+            .objectFit(ImageFit.Contain)
+            .backgroundColor(Color.Black)
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor(Color.Black)
+      }
     }
     .width('100%')
     .height('100%')
   }
 
   onBackPress(): boolean {
+    if (this.inAppVideoVisible) {
+      this.inAppVideoVisible = false;
+      return true;
+    }
     this.context.eventHub.emit(EVENT_BACK_PRESS);
     return true;
   }

@@ -219,4 +219,238 @@ class ECard {
   static final RegExp _validBarcodePattern =
       RegExp(r'^[A-Za-z0-9+/=_\-]{14,64}$');
   static bool _isValidBarcode(String s) => _validBarcodePattern.hasMatch(s);
+
+  /// 查询校园卡流水账单（新中新 Berserker Search 接口）
+  ///
+  /// 参考开源项目：
+  /// - OpenAHU/AHUTong-Android (`berserker-search/search/personal/turnover`)
+  /// - Mercury000/HUEL-yktwx (`berserker-search/search/personal/turnover`)
+  /// - Chiu-xaH/HFUT-Schedule (`berserker-search/search/personal/turnover`)
+  static Future<ECardTransactionPage> getTransactions(
+    HttpClient httpClient,
+    String synjonesAuth, {
+    int page = 1,
+    int size = 30,
+    String? timeFrom,
+    String? timeTo,
+    String? eCardAccount,
+  }) async {
+    final queryParams = <String, String>{
+      'size': '$size',
+      'current': '$page',
+      'synAccessSource': 'h5',
+    };
+    if (timeFrom != null && timeFrom.isNotEmpty) {
+      queryParams['timeFrom'] = timeFrom;
+    }
+    if (timeTo != null && timeTo.isNotEmpty) {
+      queryParams['timeTo'] = timeTo;
+    }
+    if (eCardAccount != null && eCardAccount.isNotEmpty) {
+      queryParams['fromAccount'] = eCardAccount;
+    }
+
+    final uri = Uri.https(
+      'elife.zju.edu.cn',
+      '/berserker-search/search/personal/turnover',
+      queryParams,
+    );
+    final request = await httpClient
+        .getUrl(uri)
+        .timeout(const Duration(seconds: 12),
+            onTimeout: () => throw ExceptionWithMessage("账单查询请求超时"));
+    request.headers.add("Synjones-Auth", "bearer $synjonesAuth");
+    request.headers.add(
+        "User-Agent", "E-CampusZJU/2.3.20 (iPhone; iOS 17.5.1; Scale/3.00)");
+    request.headers.add("Accept", "application/json, text/plain, */*");
+    request.followRedirects = false;
+
+    final response = await request.close().timeout(
+        const Duration(seconds: 12),
+        onTimeout: () => throw ExceptionWithMessage("账单查询响应超时"));
+    final body =
+        await readResponseText(response, context: '校园卡账单接口', expectJson: true);
+    final payload =
+        decodeJsonMap(body, context: '校园卡账单接口；HTTP ${response.statusCode}');
+    if (jsonIndicatesAuthenticationFailure(payload)) {
+      throw AuthenticationExpiredException('校园卡账单接口：登录态已失效');
+    }
+
+    final data = asStringMap(payload['data']) ?? const {};
+    final recordsRaw = asDynamicList(data['records']) ?? const [];
+    final records = recordsRaw
+        .map(asStringMap)
+        .whereType<Map<String, dynamic>>()
+        .map(ECardTransaction.fromJson)
+        .toList();
+    final total = (asDouble(data['total']) ?? records.length.toDouble()).toInt();
+    final pages = (asDouble(data['pages']) ?? 1.0).toInt();
+
+    return ECardTransactionPage(
+      records: records,
+      total: total,
+      pages: pages,
+      currentPage: page,
+    );
+  }
+
+  /// 查询指定日期区间的校园卡总收支统计（单位：元）
+  static Future<ECardMonthlySummary?> getTurnoverCount(
+    HttpClient httpClient,
+    String synjonesAuth, {
+    required String timeFrom,
+    required String timeTo,
+  }) async {
+    try {
+      final uri = Uri.https(
+        'elife.zju.edu.cn',
+        '/berserker-search/statistics/turnover/count',
+        {
+          'timeFrom': timeFrom,
+          'timeTo': timeTo,
+          'synAccessSource': 'h5',
+        },
+      );
+      final request = await httpClient
+          .getUrl(uri)
+          .timeout(const Duration(seconds: 10),
+              onTimeout: () => throw ExceptionWithMessage("统计查询超时"));
+      request.headers.add("Synjones-Auth", "bearer $synjonesAuth");
+      request.headers.add(
+          "User-Agent", "E-CampusZJU/2.3.20 (iPhone; iOS 17.5.1; Scale/3.00)");
+      request.headers.add("Accept", "application/json, text/plain, */*");
+      request.followRedirects = false;
+      final response = await request.close().timeout(
+          const Duration(seconds: 10),
+          onTimeout: () => throw ExceptionWithMessage("统计响应超时"));
+      final body = await readResponseText(response,
+          context: '校园卡收支统计接口', expectJson: true);
+      final payload = decodeJsonMap(body,
+          context: '校园卡收支统计接口；HTTP ${response.statusCode}');
+      final data = asStringMap(payload['data']);
+      if (data == null) return null;
+      final expensesCents = asDouble(data['expenses']) ?? 0.0;
+      final incomeCents = asDouble(data['income']) ?? 0.0;
+      return ECardMonthlySummary(
+        expenses: expensesCents / 100.0,
+        income: incomeCents / 100.0,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+class ECardMonthlySummary {
+  final double expenses;
+  final double income;
+
+  const ECardMonthlySummary({
+    required this.expenses,
+    required this.income,
+  });
+}
+
+class ECardTransactionPage {
+  final List<ECardTransaction> records;
+  final int total;
+  final int pages;
+  final int currentPage;
+
+  const ECardTransactionPage({
+    required this.records,
+    required this.total,
+    required this.pages,
+    required this.currentPage,
+  });
+}
+
+class ECardTransaction {
+  final String orderId;
+  final double amount;
+  final bool isIncome;
+  final String turnoverType;
+  final String merchant;
+  final String summary;
+  final String dateTimeStr;
+  final DateTime? dateTime;
+  final double? balanceAfter;
+
+  const ECardTransaction({
+    required this.orderId,
+    required this.amount,
+    required this.isIncome,
+    required this.turnoverType,
+    required this.merchant,
+    required this.summary,
+    required this.dateTimeStr,
+    this.dateTime,
+    this.balanceAfter,
+  });
+
+  factory ECardTransaction.fromJson(Map<String, dynamic> json) {
+    final cents = asDouble(json['tranamt']) ??
+        asDouble(json['amount']) ??
+        0.0;
+    final typeFrom = asString(json['typeFrom']) ?? '';
+    final turnoverType = asString(json['turnoverType']) ??
+        asString(json['consumeTypeName']) ??
+        '消费';
+    final resume = asString(json['resume']) ?? '';
+    final merchant = asString(json['toMerchant']) ??
+        asString(json['merchantName']) ??
+        (resume.isNotEmpty ? resume.split('-').first.trim() : turnoverType);
+    final dtStr = asString(json['effectdateStr']) ??
+        asString(json['jndatetimeStr']) ??
+        '';
+    final dt = dtStr.isNotEmpty
+        ? DateTime.tryParse(dtStr.replaceFirst(' ', 'T'))
+        : null;
+    final balCents = asDouble(json['cardBalance']);
+    final isInc = typeFrom == '1' ||
+        turnoverType.contains('充值') ||
+        turnoverType.contains('圈存') ||
+        turnoverType.contains('补助') ||
+        turnoverType.contains('退款') ||
+        resume.contains('充值') ||
+        resume.contains('补助');
+
+    return ECardTransaction(
+      orderId: asString(json['orderId']) ?? '$dtStr-$cents',
+      amount: (cents.abs()) / 100.0,
+      isIncome: isInc,
+      turnoverType: turnoverType,
+      merchant: merchant.isEmpty ? turnoverType : merchant,
+      summary: resume.isEmpty ? turnoverType : resume,
+      dateTimeStr: dtStr,
+      dateTime: dt,
+      balanceAfter: balCents != null ? balCents / 100.0 : null,
+    );
+  }
+
+  String get category {
+    if (isIncome) return '充值/转入';
+    final text = '$merchant $summary $turnoverType';
+    if (RegExp(r'餐|食堂|美食|面|饭|茶|咖啡|烘焙|糕|小吃|风味|麦当劳|肯德基|玉湖|临湖|银泉|休闲|食天|东区|西区|澄月|留食|清真|麦香|早点|夜宵|包子|粉|粥|烧腊|铁板|麻辣|香锅|烤')
+        .hasMatch(text)) {
+      return '餐饮美食';
+    }
+    if (RegExp(r'超市|商贸|便利|购|文印|打印|书店|启真|教育超市|全家|罗森|百货|水果')
+        .hasMatch(text)) {
+      return '商超购物';
+    }
+    if (RegExp(r'洗浴|水控|热水|淋浴|洗衣|吹风|开水|直饮水|电控|电费|水费|能耗')
+        .hasMatch(text)) {
+      return '生活水电';
+    }
+    if (RegExp(r'校医院|医疗|门诊|药|体测|体育|游泳|羽毛球|网球|健身|球馆')
+        .hasMatch(text)) {
+      return '医疗运动';
+    }
+    if (RegExp(r'校车|班车|通行|巴士|观光车|小白车|停车')
+        .hasMatch(text)) {
+      return '校园出行';
+    }
+    return '其他消费';
+  }
 }

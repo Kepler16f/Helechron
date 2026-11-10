@@ -45,8 +45,16 @@ class OptionController extends GetxController {
 
     _calendarManager.checkInitialCalendarSyncStatus();
 
+    // 同步低余额阈值至桌面小组件/大码页存储
+    OhosNativeService.instance.setWidgetData(
+      'ecardLowBalanceThreshold',
+      _option.ecardLowBalanceThreshold.value.toString(),
+    );
+
     if (PlatformFeatures.hasBackgroundRefresh) {
-      if (_option.pushOnGradeChange.value || _option.pushOnDdlReminder.value) {
+      if (_option.pushOnGradeChange.value ||
+          _option.pushOnDdlReminder.value ||
+          _option.pushOnExamReminder.value) {
         _startPeriodicRefresh();
       }
     }
@@ -73,7 +81,8 @@ class OptionController extends GetxController {
   }
 
   void _updateBackgroundWorker() {
-    final enabled = pushOnGradeChange || pushOnDdlReminder;
+    final enabled =
+        pushOnGradeChange || pushOnDdlReminder || pushOnExamReminder;
     if (enabled) {
       _startPeriodicRefresh();
       OhosNativeService.instance.requestNotificationPermission();
@@ -127,6 +136,33 @@ class OptionController extends GetxController {
     _db.setPushOnDdlReminder(value);
     _db.secureStorage.write(key: 'pushOnDdlReminder', value: value.toString());
     _updateBackgroundWorker();
+  }
+
+  bool get pushOnExamReminder => _option.pushOnExamReminder.value;
+
+  set pushOnExamReminder(bool value) {
+    _option.pushOnExamReminder.value = value;
+    _db.setPushOnExamReminder(value);
+    _db.secureStorage.write(key: 'pushOnExamReminder', value: value.toString());
+    _updateBackgroundWorker();
+  }
+
+  double get ecardLowBalanceThreshold => _option.ecardLowBalanceThreshold.value;
+
+  set ecardLowBalanceThreshold(double value) {
+    _option.ecardLowBalanceThreshold.value = value;
+    _db.setEcardLowBalanceThreshold(value);
+    OhosNativeService.instance.setWidgetData(
+      'ecardLowBalanceThreshold',
+      value.toString(),
+    );
+  }
+
+  String get downloadPath => _option.downloadPath.value;
+
+  set downloadPath(String value) {
+    _option.downloadPath.value = value;
+    _db.setDownloadPath(value);
   }
 
   BrightnessMode get brightnessMode => _option.brightnessMode.value;

@@ -16,6 +16,8 @@ Helechron 是基于 Celechron 开源项目移植并扩展功能的非官方版�
 | 平台 | 状态 |
 |------|------|
 | HarmonyOS NEXT (API 12+) | ✅ |
+| Android | ✅ |
+| iOS | ✅ |
 
 ## 构建 HarmonyOS NEXT 应用
 
@@ -82,28 +84,50 @@ flutter build hap --release
 - **"接下来" (Flow)** — 时间流视图，展示即将发生的事件
 - **日程 (Calendar)** — 日历视图，展示每日课表和日程安排
 - **任务 (Task/DDL)** — 截止日期管理器
-- **学业 (Scholar)** — 课程列表、成绩查询、考试列表
-- **设置 (Option)** — 登录、校园卡付款码、深色模式、系统日历同步
+- **学业 (Scholar)** — 课程列表、成绩查询、考试列表、二三四课堂与培养方案进度、智云课堂应用内直播/回放与 PPT/字幕、学在浙大/智云课件下载与原生打开方式
+- **设置 (Option)** — 登录、校园卡付款码（含自定义低余额预警阈值与桌面大码预警）、校园卡月度账单与分类消费统计、考前 1 小时通知提醒、课件下载路径配置、深色模式、系统日历同步
 
-### HarmonyOS NEXT 适配说明
+### HarmonyOS NEXT / Android / iOS 适配说明
 
-本项目通过 Flutter-ohos (OpenHarmony Flutter 分支) 适配到 HarmonyOS NEXT。
+本项目通过 Flutter-ohos (OpenHarmony Flutter 分支) 及原生插件通道同时适配 HarmonyOS NEXT、Android 与 iOS 三端。
 
-**已适配功能：**
-- 核心 UI 和业务逻辑
-- 网络请求和数据同步（参考elychron项目进行数据刷新保护；通过更改请求头提高刷新成功概率）
-- 本地存储 (Hive)
+**已适配与扩展功能：**
+- 核心 UI 和业务逻辑（含考试周紧凑倒计时横幅、日历指定日期跳转、调休补课换日映射）
+- 网络请求和数据同步（参考 Elychron 项目进行数据刷新保护；通过更改请求头提高刷新成功概率；支持节流防抖）
+- 本地存储 (Hive) 与数据备份恢复
 - 课程表导出/导入 (iCal)
-- 校园卡付款码
-- 应用图标（原创时钟 / 笔记本图标，单层图 1024×1024，不含任何高校校名或校徽元素）
-- 深色模式完整支持
-- 本地通知推送（成绩变动提醒、DDL 截止提醒）
-- 后台定时刷新（通过 MethodChannel 桥接 ArkTS 原生能力）
-- 系统日历同步（通过 ArkTS Calendar Kit 将课程表同步到系统日历）
-- 关于页面（含上游 Celechron 项目链接）
-- ArkTS原生实现悬浮底栏和沉浸光感
-- 桌面课程倒计时和课程简报小组件
-- 桌面付款码小组件（点击放大按钮可弹窗放大，快捷直达付款码）
+- 校园卡付款码、自定义低余额预警阈值（支持付款码页与桌面大码弹窗同步预警）
+- 校园卡月度流水账单与分类消费统计（餐饮/商超/水电占比与常去商户排行）
+- 智云课堂应用内原生视频/直播播放、课堂 PPT 幻灯片浏览保存、课堂语音转写字幕检索
+- 学在浙大与智云课堂课件一键下载、自定义保存路径与系统原生“打开方式”弹窗调用
+- 本地通知推送（成绩变动提醒、DDL 截止提醒、考试前 1 小时考场/座位/物品清单提醒）
+- 后台定时刷新（通过 MethodChannel 桥接 ArkTS / Android / iOS 原生能力）
+- 系统日历同步（通过 ArkTS Calendar Kit / DeviceCalendar 将课程表同步到系统日历）
+- ArkTS 鸿蒙原生 / Flutter 原生悬浮底栏与液态玻璃沉浸光感
+- 桌面课程倒计时、课程简报与付款码小组件（HarmonyOS / Android / iOS）
+
+## 致谢与参考开源项目
+
+Helechron 在移植适配与新功能研发过程中，参考或使用了以下优秀开源项目的代码、接口协议整理或思路设计，特此致以诚挚感谢（排名不分先后）：
+
+1. **[Celechron/Celechron](https://github.com/Celechron/Celechron)**
+   - 上游原项目，提供时间流规划算法、基础架构与核心 UI 设计。
+2. **[Elyyyyyyyyxer/Elychron](https://github.com/Elyyyyyyyyxer/Elychron)**
+   - 参考其数据刷新防降级保护机制与校园网请求头优化方案。
+3. **[5dbwat4/login-ZJU](https://github.com/5dbwat4/login-ZJU)**
+   - 参考其浙大统一身份认证 (ZJUAM)、学在浙大 (`courses.zju.edu.cn`) 与智云课堂 CAS/OAuth2 登录握手与重定向链实现。
+4. **[PeiPei233/zju-learning-assistant](https://github.com/PeiPei233/zju-learning-assistant)**
+   - 参考其学在浙大活动附件/作业课件列表解析、智云课堂直播流 (`getscreenstream`) 与录播目录接口协议。
+5. **[8eoyw/zju-learning-cli](https://github.com/8eoyw/zju-learning-cli)**
+   - 参考其学在浙大课件多级回退下载（含仅预览文档 `preview=true` 签名直链提取）与教务接口设计。
+6. **[Anchorite-no/zju-skill-public](https://github.com/Anchorite-no/zju-skill-public)**
+   - 参考其智云课堂单节详情 (`get-sub-info`)、PPT 幻灯片抓取 (`search-ppt`) 与语音转写字幕 (`search-trans-result`) 接口协议。
+7. **[Lucent-Snow/zju-scholar](https://github.com/Lucent-Snow/zju-scholar)** & **[iamNCJ/ZJU-Tronclass-Courseware-Downloader](https://github.com/iamNCJ/ZJU-Tronclass-Courseware-Downloader)**
+   - 参考其智云课堂及学在浙大 TronClass 课件下载相关 API 端点整理。
+8. **[determ1ne/zju_ecard](https://github.com/determ1ne/zju_ecard)**、**[OpenAHU/AHUTong-Android](https://github.com/OpenAHU/AHUTong-Android)**、**[Mercury000/HUEL-yktwx](https://github.com/Mercury000/HUEL-yktwx)**、**[Chiu-xaH/HFUT-Schedule](https://github.com/Chiu-xaH/HFUT-Schedule)**
+   - 参考其新中新 (Synjones / 慧新e校) 校园一卡通 `berserker-app` / `berserker-search` 卡片余额、付款码及个人流水账单 (`search/personal/turnover`)、收支统计 (`statistics/turnover/count`) 接口协议。
+9. **[OpenHarmony-TPC / flutter_flutter](https://gitcode.com/openharmony-tpc/flutter_flutter)** & **[openharmony-sig / flutter_packages](https://gitcode.com/openharmony-tpc/flutter_packages)**
+   - 提供 HarmonyOS NEXT 平台的 Flutter 引擎与三方插件适配支持。
 
 ## 许可证
 

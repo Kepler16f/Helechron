@@ -19,6 +19,8 @@ struct EnlargedQRPage {
   @State private isRefreshing: boolean = false;
   @State private refreshAngle: number = 0;
   @State private statusHint: string = '每分钟自动刷新，或点击二维码手动刷新';
+  @State private balance: number = -1;
+  @State private lowBalanceThreshold: number = 15;
   @StorageLink('enlargedQrOpenSeq') @Watch('onOpenSeqChanged') openSeq: number = 0;
   private autoRefreshTimerId: number = -1;
 
@@ -54,12 +56,24 @@ struct EnlargedQRPage {
 
   private loadCachedCode(): void {
     try {
+      const prefs = ECardNativeHelper.getFreshPrefs(this.context);
+      if (prefs !== null) {
+        const rawBal: string = (prefs.getSync('ecardBalance', '') as string) || '';
+        const parsedBal = parseFloat(rawBal);
+        if (!isNaN(parsedBal) && parsedBal >= 0) {
+          this.balance = parsedBal;
+        }
+        const rawThreshold: string = (prefs.getSync('ecardLowBalanceThreshold', '15') as string) || '15';
+        const parsedThreshold = parseFloat(rawThreshold);
+        if (!isNaN(parsedThreshold) && parsedThreshold >= 0) {
+          this.lowBalanceThreshold = parsedThreshold;
+        }
+      }
       const fromStorage: string | undefined = AppStorage.get<string>('enlargedQrPaymentCode');
       if (typeof fromStorage === 'string' && fromStorage.length > 0) {
         this.paymentCode = fromStorage;
         return;
       }
-      const prefs = ECardNativeHelper.getFreshPrefs(this.context);
       if (prefs !== null) {
         const stored: string = (prefs.getSync('paymentCode', '') as string) || '';
         if (stored.length > 0) {
@@ -176,6 +190,28 @@ struct EnlargedQRPage {
           .padding({ left: 14, right: 14, top: 5, bottom: 5 })
           .backgroundColor($r('app.color.widget_badge_background'))
           .borderRadius(8)
+
+          if (this.balance >= 0) {
+            Column({ space: 2 }) {
+              Text(`余额 ¥${this.balance.toFixed(2)}`)
+                .fontSize(13)
+                .fontWeight(this.lowBalanceThreshold > 0 && this.balance < this.lowBalanceThreshold
+                  ? FontWeight.Bold
+                  : FontWeight.Normal)
+                .fontColor(this.lowBalanceThreshold > 0 && this.balance < this.lowBalanceThreshold
+                  ? '#FF9500'
+                  : $r('app.color.widget_text_tertiary'))
+                .textAlign(TextAlign.Center)
+
+              if (this.lowBalanceThreshold > 0 && this.balance < this.lowBalanceThreshold) {
+                Text(`⚠️ 余额不足 ¥${this.lowBalanceThreshold}，请注意充值`)
+                  .fontSize(11)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor('#FF9500')
+                  .textAlign(TextAlign.Center)
+              }
+            }
+          }
         } else {
           Column({ space: 8 }) {
             Text(this.isRefreshing ? '正在刷新付款码...' : '暂无可用的付款码')
@@ -198,7 +234,7 @@ struct EnlargedQRPage {
           })
       }
       .width('82%')
-      .constraintSize({ maxWidth: 320, maxHeight: 460 })
+      .constraintSize({ maxWidth: 320, maxHeight: 500 })
       .backgroundColor($r('app.color.widget_background'))
       .borderRadius(18)
       .shadow({ radius: 24, color: '#33000000', offsetX: 0, offsetY: 8 })
@@ -233,6 +269,11 @@ struct EnlargedQRPage {
         this.paymentCode = res.code;
         AppStorage.setOrCreate('enlargedQrPaymentCode', res.code);
         this.statusHint = '已更新 · 每分钟自动刷新，或点击二维码手动刷新';
+        ECardNativeHelper.fetchAndSaveBalance(this.context).then((yuan: number) => {
+          if (yuan >= 0) {
+            this.balance = yuan;
+          }
+        }).catch(() => {});
       } else {
         this.statusHint = '点击二维码或右上角按钮重试刷新';
         if (isAuto && this.paymentCode.length > 0) {

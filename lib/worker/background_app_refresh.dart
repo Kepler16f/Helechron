@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:celechron/http/zjuServices/exceptions.dart';
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/services/diagnostic_log_service.dart';
+import 'package:celechron/services/exam_reminder_service.dart';
 import 'package:celechron/services/ohos_native_service.dart';
 import 'package:celechron/services/refresh_coordinator.dart';
 import 'package:celechron/services/secure_storage_service.dart';
@@ -130,6 +131,13 @@ Future<void> refreshScholar() async {
         value: jsonEncode(notifiedDdlIds.toList()),
       );
     }
+
+    // 考前 1 小时提醒通知
+    await ExamReminderService.checkAndNotifyUpcomingExams(
+      scholar,
+      requestPermissionIfNeeded: false,
+      force: true,
+    );
   } on Object catch (error, stackTrace) {
     if (kDebugMode) {
       debugPrint('后台学业刷新失败：${error.runtimeType}: $error\n$stackTrace');

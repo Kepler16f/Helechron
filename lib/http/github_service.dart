@@ -26,12 +26,17 @@ class GitHubService {
           const Duration(seconds: 10),
           onTimeout: () => throw requestTimeout());
 
+      request.headers.set(HttpHeaders.userAgentHeader, 'Helechron');
       request.headers.add('Accept', 'application/vnd.github+json');
       request.headers.add('X-GitHub-Api-Version', '2022-11-28');
       request.followRedirects = false;
 
       var response = await request.close().timeout(const Duration(seconds: 10),
           onTimeout: () => throw requestTimeout());
+
+      if (response.statusCode != HttpStatus.ok) {
+        return Tuple(null, defaultContributors);
+      }
 
       final jsonString = await readResponseText(
         response,
@@ -46,6 +51,8 @@ class GitHubService {
           .whereType<Map<String, dynamic>>()
           .map((item) => asString(item['login']))
           .whereType<String>()
+          .where((login) =>
+              login.trim().isNotEmpty && !login.toLowerCase().endsWith('[bot]'))
           .toList();
 
       // 如果抓取到的列表为空，返回默认作者名单

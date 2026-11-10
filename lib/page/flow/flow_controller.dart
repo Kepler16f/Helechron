@@ -6,6 +6,7 @@ import 'package:celechron/model/task.dart';
 import 'package:celechron/model/period.dart';
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/page/task/task_controller.dart';
+import 'package:celechron/services/exam_reminder_service.dart';
 import 'package:celechron/utils/utils.dart';
 
 class FlowController extends GetxController {
@@ -30,12 +31,22 @@ class FlowController extends GetxController {
   void onInit() {
     refreshScholarFlowList();
     walkFlowList();
+    unawaited(ExamReminderService.checkAndNotifyUpcomingExams(
+      scholar.value,
+      requestPermissionIfNeeded: true,
+      force: true,
+    ));
 
     _timer = Timer.periodic(const Duration(seconds: 1), (Timer t) => _onTick());
 
     ever(scholar, (callback) {
       refreshScholarFlowList();
       _walkPending = true;
+      unawaited(ExamReminderService.checkAndNotifyUpcomingExams(
+        scholar.value,
+        requestPermissionIfNeeded: true,
+        force: true,
+      ));
     });
     ever(taskList, (callback) {
       _walkPending = true;
@@ -52,6 +63,10 @@ class FlowController extends GetxController {
     if (_walkPending || !now.isBefore(_nextWalkAt)) {
       _walkPending = false;
       walkFlowList();
+      unawaited(ExamReminderService.checkAndNotifyUpcomingExams(
+        scholar.value,
+        requestPermissionIfNeeded: false,
+      ));
     } else if (flowList.isNotEmpty && !flowList.first.startTime.isAfter(now)) {
       _syncFlowProgress(now);
     }

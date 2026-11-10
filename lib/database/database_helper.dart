@@ -61,6 +61,9 @@ class DatabaseHelper {
   final String kBottomBarFloating = 'bottomBarFloating';
   final String kBottomBarImmersiveLight = 'bottomBarImmersiveLight';
   final String kBottomBarMaterialLevel = 'bottomBarMaterialLevel';
+  final String kPushOnExamReminder = 'pushOnExamReminder';
+  final String kEcardLowBalanceThreshold = 'ecardLowBalanceThreshold';
+  final String kDownloadPath = 'downloadPath';
 
   Option getOption() {
     return Option(
@@ -78,6 +81,9 @@ class DatabaseHelper {
       bottomBarFloating: getBottomBarFloating().obs,
       bottomBarImmersiveLight: getBottomBarImmersiveLight().obs,
       bottomBarMaterialLevel: getBottomBarMaterialLevel().obs,
+      pushOnExamReminder: getPushOnExamReminder().obs,
+      ecardLowBalanceThreshold: getEcardLowBalanceThreshold().obs,
+      downloadPath: getDownloadPath().obs,
     );
   }
 
@@ -227,6 +233,43 @@ class DatabaseHelper {
 
   Future<void> setBottomBarMaterialLevel(int level) async {
     await optionsBox.put(kBottomBarMaterialLevel, level);
+  }
+
+  bool getPushOnExamReminder() {
+    if (optionsBox.get(kPushOnExamReminder) == null) {
+      optionsBox.put(kPushOnExamReminder, true);
+    }
+    return optionsBox.get(kPushOnExamReminder);
+  }
+
+  Future<void> setPushOnExamReminder(bool pushOnExamReminder) async {
+    await optionsBox.put(kPushOnExamReminder, pushOnExamReminder);
+  }
+
+  double getEcardLowBalanceThreshold() {
+    if (optionsBox.get(kEcardLowBalanceThreshold) == null) {
+      optionsBox.put(kEcardLowBalanceThreshold, 15.0);
+    }
+    final raw = optionsBox.get(kEcardLowBalanceThreshold);
+    if (raw is num) {
+      return raw.toDouble();
+    }
+    return 15.0;
+  }
+
+  Future<void> setEcardLowBalanceThreshold(double threshold) async {
+    await optionsBox.put(kEcardLowBalanceThreshold, threshold);
+  }
+
+  String getDownloadPath() {
+    if (optionsBox.get(kDownloadPath) == null) {
+      optionsBox.put(kDownloadPath, '');
+    }
+    return optionsBox.get(kDownloadPath)?.toString() ?? '';
+  }
+
+  Future<void> setDownloadPath(String path) async {
+    await optionsBox.put(kDownloadPath, path);
   }
 
   List<CourseIdMap> getCourseIdMappingList() {

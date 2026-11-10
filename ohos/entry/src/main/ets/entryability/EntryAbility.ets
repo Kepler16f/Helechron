@@ -1,9 +1,9 @@
 import { FlutterAbility, FlutterEngine, MethodChannel, MethodCall, MethodResult } from '@ohos/flutter_ohos';
 import { GeneratedPluginRegistrant } from '../plugins/GeneratedPluginRegistrant';
-import { Want, AbilityConstant } from '@kit.AbilityKit';
+import { Want, AbilityConstant, wantConstant } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { formBindingData, formProvider } from '@kit.FormKit';
-import { picker, fileIo } from '@kit.CoreFileKit';
+import { picker, fileIo, fileUri } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import notificationManager from '@ohos.notificationManager';
 import { calendarManager } from '@kit.CalendarKit';
@@ -110,6 +110,10 @@ export default class EntryAbility extends FlutterAbility {
       AppStorage.setOrCreate('bottomBarImmersiveLight', immersiveLight);
       AppStorage.setOrCreate('bottomBarMaterialLevel', materialLevel);
       AppStorage.setOrCreate('bottomBarCurrentTab', 0);
+      AppStorage.setOrCreate('bottomBarHidden', false);
+      AppStorage.setOrCreate('inAppVideoVisible', false);
+      AppStorage.setOrCreate('inAppVideoUrl', '');
+      AppStorage.setOrCreate('inAppVideoTitle', '智云课堂');
       hilog.info(DOMAIN, TAG, `initAppStorageFromPrefs: floating=${floating}, immersiveLight=${immersiveLight}, materialLevel=${materialLevel}`);
     } catch (e) {
       hilog.warn(DOMAIN, TAG, `initAppStorageFromPrefs failed: ${JSON.stringify(e)}`);
@@ -117,6 +121,10 @@ export default class EntryAbility extends FlutterAbility {
       AppStorage.setOrCreate('bottomBarImmersiveLight', false);
       AppStorage.setOrCreate('bottomBarMaterialLevel', 10);
       AppStorage.setOrCreate('bottomBarCurrentTab', 0);
+      AppStorage.setOrCreate('bottomBarHidden', false);
+      AppStorage.setOrCreate('inAppVideoVisible', false);
+      AppStorage.setOrCreate('inAppVideoUrl', '');
+      AppStorage.setOrCreate('inAppVideoTitle', '智云课堂');
     }
   }
 
@@ -411,6 +419,105 @@ export default class EntryAbility extends FlutterAbility {
     }
   }
 
+  /// 选择或创建课件下载保存目录（优先调用系统 DocumentViewPicker DOWNLOAD 模式授权公共下载目录，回退沙箱目录）
+  private async pickDirectory(result: MethodResult): Promise<void> {
+    try {
+      const saveOptions = new picker.DocumentSaveOptions();
+      saveOptions.pickerMode = picker.DocumentPickerMode.DOWNLOAD;
+      const documentPicker = new picker.DocumentViewPicker(this.context);
+      const uris: Array<string> = await documentPicker.save(saveOptions);
+      if (uris && uris.length > 0 && uris[0].length > 0) {
+        const dirPath = new fileUri.FileUri(uris[0]).path;
+        hilog.info(DOMAIN, TAG, `pickDirectory via DOWNLOAD mode: ${dirPath}`);
+        result.success(dirPath);
+        return;
+      }
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, `pickDirectory DOWNLOAD mode fallback: ${JSON.stringify(e)}`);
+    }
+    try {
+      const fallbackDir = `${this.context.filesDir}/courseware`;
+      try {
+        if (!fileIo.accessSync(fallbackDir)) {
+          fileIo.mkdirSync(fallbackDir);
+        }
+      } catch (e) {}
+      result.success(fallbackDir);
+    } catch (err) {
+      result.success(null);
+    }
+  }
+
+  /// 拉起系统原生“打开方式”弹窗打开已下载的课件/附件文件
+  private async openFileWithSystem(call: MethodCall, result: MethodResult): Promise<void> {
+    try {
+      const filePath = (call.argument('filePath') as string) || '';
+      const rawMime = (call.argument('mimeType') as string) || '';
+      if (filePath.length === 0) {
+        result.success(false);
+        return;
+      }
+      const uri = filePath.indexOf('file://') === 0 ? filePath : fileUri.getUriFromPath(filePath);
+      const mimeType = rawMime.length > 0 ? rawMime : this.inferMimeType(filePath);
+      const want: Want = {
+        action: 'ohos.want.action.viewData',
+        uri: uri,
+        type: mimeType,
+        flags: wantConstant.Flags.FLAG_AUTH_READ_URI_PERMISSION | wantConstant.Flags.FLAG_AUTH_WRITE_URI_PERMISSION
+      };
+      try {
+        await this.context.startAbility(want);
+        result.success(true);
+        return;
+      } catch (firstErr) {
+        hilog.warn(DOMAIN, TAG, `openFileWithSystem primary want failed (${JSON.stringify(firstErr)}), trying wildcard type`);
+        const fallbackWant: Want = {
+          action: 'ohos.want.action.viewData',
+          uri: uri,
+          flags: wantConstant.Flags.FLAG_AUTH_READ_URI_PERMISSION
+        };
+        await this.context.startAbility(fallbackWant);
+        result.success(true);
+      }
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, `openFileWithSystem failed: ${JSON.stringify(err)}`);
+      result.success(false);
+    }
+  }
+
+  private inferMimeType(filePath: string): string {
+    const lower = filePath.toLowerCase();
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    if (lower.endsWith('.ppt') || lower.endsWith('.pptx')) return 'application/vnd.ms-powerpoint';
+    if (lower.endsWith('.doc') || lower.endsWith('.docx')) return 'application/msword';
+    if (lower.endsWith('.xls') || lower.endsWith('.xlsx')) return 'application/vnd.ms-excel';
+    if (lower.endsWith('.zip') || lower.endsWith('.rar') || lower.endsWith('.7z')) return 'application/zip';
+    if (lower.endsWith('.mp4') || lower.endsWith('.mkv') || lower.endsWith('.mov')) return 'video/mp4';
+    if (lower.endsWith('.mp3') || lower.endsWith('.wav') || lower.endsWith('.m4a')) return 'audio/*';
+    if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/*';
+    if (lower.endsWith('.txt') || lower.endsWith('.md') || lower.endsWith('.csv')) return 'text/plain';
+    return '*/*';
+  }
+
+  /// 在应用内唤起原生 ArkUI Video 播放器浮层观看智云课堂直播或回放
+  private openInAppVideoPlayer(call: MethodCall, result: MethodResult): void {
+    try {
+      const url = (call.argument('url') as string) || '';
+      const title = (call.argument('title') as string) || '智云课堂';
+      if (url.length === 0) {
+        result.success(false);
+        return;
+      }
+      AppStorage.setOrCreate('inAppVideoUrl', url);
+      AppStorage.setOrCreate('inAppVideoTitle', title);
+      AppStorage.setOrCreate('inAppVideoVisible', true);
+      result.success(true);
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, `openInAppVideoPlayer failed: ${JSON.stringify(err)}`);
+      result.success(false);
+    }
+  }
+
   private handleMethodCall(call: MethodCall, result: MethodResult): void {
     hilog.info(DOMAIN, TAG, `Received method call: ${call.method}`);
     switch (call.method) {
@@ -482,6 +589,15 @@ export default class EntryAbility extends FlutterAbility {
         break;
       case 'pickAnyFiles':
         this.pickAnyFiles(call, result);
+        break;
+      case 'pickDirectory':
+        this.pickDirectory(result);
+        break;
+      case 'openFileWithSystem':
+        this.openFileWithSystem(call, result);
+        break;
+      case 'openInAppVideoPlayer':
+        this.openInAppVideoPlayer(call, result);
         break;
       case 'exitApp':
         hilog.info(DOMAIN, TAG, 'exitApp requested from Dart');

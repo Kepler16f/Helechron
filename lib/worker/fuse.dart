@@ -8,8 +8,8 @@ class Fuse {
   late DateTime lastUpdateTime;
 
   final bool isBeta = true;
-  final version = [0, 1, 7];
-  final build = 100;
+  final version = [0, 1, 8];
+  final build = 101;
   List<int>? remoteVersion;
   int? remoteBuild;
   bool hasNewVersion = false;
@@ -17,11 +17,8 @@ class Fuse {
   final HttpClient _httpClient = HttpClient();
   final DatabaseHelper _db = Get.find<DatabaseHelper>(tag: 'db');
 
-  // 应用内展示文本（关于页/诊断日志/版权页均取此值）。beta 阶段仅改显示，
-  // 真实构建版本仍为 version=[0,1,7] / build=100，与 pubspec 0.1.7+100、
-  // ohos app.json5 versionCode=100/versionName=0.1.7 保持一致，避免破坏
-  // CI 打包产物命名与 AGC 审核中版本的一致性。
-  String get displayVersion => '0.1.7beta1';
+  // 应用内展示文本（关于页/诊断日志/版权页均取此值）。
+  String get displayVersion => '0.1.8_dev1';
 
   Fuse() {
     lastUpdateTime = DateTime(2001, 1, 1);

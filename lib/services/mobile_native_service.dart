@@ -309,6 +309,59 @@ class MobileNativeService {
     }
   }
 
+  Future<String?> pickDirectory() async {
+    try {
+      lastFilePickError = null;
+      final dir = await FilePicker.getDirectoryPath();
+      if (dir != null && dir.trim().isNotEmpty) {
+        return dir.trim();
+      }
+      return null;
+    } catch (e) {
+      lastFilePickError = '$e';
+      debugPrint('pickDirectory failed: $e');
+      return null;
+    }
+  }
+
+  Future<bool> openFileWithSystem(
+    String filePath, {
+    String? mimeType,
+    String? title,
+  }) async {
+    try {
+      final result =
+          await _widgetChannel.invokeMethod<bool>('openFileWithSystem', {
+        'filePath': filePath,
+        'mimeType': mimeType ?? '',
+        'title': title ?? '',
+      });
+      return result ?? false;
+    } catch (e) {
+      debugPrint('MobileNativeService openFileWithSystem failed: $e');
+      return false;
+    }
+  }
+
+  Future<bool> openInAppVideoPlayer({
+    required String url,
+    required String title,
+    List<Map<String, String>> streams = const [],
+  }) async {
+    try {
+      final result =
+          await _widgetChannel.invokeMethod<bool>('openInAppVideoPlayer', {
+        'url': url,
+        'title': title,
+        'streams': streams,
+      });
+      return result ?? false;
+    } catch (e) {
+      debugPrint('MobileNativeService openInAppVideoPlayer failed: $e');
+      return false;
+    }
+  }
+
   // ==================== Desktop Widgets ====================
 
   static const MethodChannel _widgetChannel =

@@ -934,7 +934,10 @@ class ZhiyunService {
   }
 
   /// 构建智云课堂整门课程专属房间直达 URL
-  static String buildCourseLivingroomUrl(String courseId) {
+  static String buildCourseLivingroomUrl(String courseId, {String? subId}) {
+    if (subId != null && subId.isNotEmpty) {
+      return buildLivingroomUrl(courseId, subId);
+    }
     return '$_kZhiyunBaseUrl/livingroom?course_id=$courseId&tenant_code=$_kTenantCode';
   }
 
@@ -2155,5 +2158,411 @@ class ZhiyunService {
         ? buildCourseLivingroomUrl(courseId)
         : buildSearchContentUrl(courseName);
     await Clipboard.setData(ClipboardData(text: url));
+  }
+
+  /// 获取智云课堂单节课的直播/回放流媒体地址（MP4 / HLS m3u8）
+  ///
+  /// 参考开源项目：
+  /// - Anchorite-no/zju-skill-public (`courseapi/v3/portal-home-setting/get-sub-info`)
+  /// - PeiPei233/zju-learning-assistant (`courseapi/index.php/v2/meta/getscreenstream`)
+  /// - Lucent-Snow/zju-scholar
+  static Future<List<ZhiyunStreamOption>> fetchLessonStreams({
+    required String courseId,
+    required String subId,
+  }) async {
+    final client = createHttpClient();
+    final streams = <ZhiyunStreamOption>[];
+    final seenUrls = <String>{};
+
+    void addStream(String label, String? rawUrl, {bool isLive = false}) {
+      if (rawUrl == null) return;
+      final url = rawUrl.trim();
+      if (url.isEmpty || !url.startsWith('http')) return;
+      if (seenUrls.add(url)) {
+        streams.add(ZhiyunStreamOption(
+          label: label,
+          url: url,
+          isLive: isLive,
+        ));
+      }
+    }
+
+    try {
+      final token = getCachedZhiyunToken();
+      final subInfoUri = Uri.parse(
+        'https://yjapi.cmc.zju.edu.cn/courseapi/v3/portal-home-setting/get-sub-info?course_id=$courseId&sub_id=$subId',
+      );
+      final req = await client.getUrl(subInfoUri);
+      if (token != null && token.isNotEmpty) {
+        req.headers.set('Authorization', 'Bearer $token');
+        req.headers.set('Cookie', '_token=$token; token=$token');
+      }
+      req.headers.set('Origin', 'https://classroom.zju.edu.cn');
+      req.headers.set('Referer', 'https://classroom.zju.edu.cn/');
+      req.headers.set('User-Agent',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+
+      final resp = await req.close().timeout(const Duration(seconds: 8));
+      if (resp.statusCode == 200) {
+        final body = await resp.transform(utf8.decoder).join();
+        final decoded = jsonDecode(body);
+        if (decoded is Map) {
+          final data = decoded['data'];
+          if (data is Map) {
+            // 1. 回放流 playurl
+            final playurl = data['playurl'];
+            if (playurl is String) {
+              addStream('课堂回放视频', playurl);
+            } else if (playurl is Map) {
+              playurl.forEach((k, v) {
+                if (v is String) {
+                  addStream('回放 ($k)', v);
+                }
+              });
+            }
+
+            // 2. content JSON 中的 playback.url / file_list
+            final rawContent = data['content'];
+            Map? contentMap;
+            if (rawContent is String && rawContent.trim().startsWith('{')) {
+              try {
+                contentMap = jsonDecode(rawContent) as Map?;
+              } catch (_) {}
+            } else if (rawContent is Map) {
+              contentMap = rawContent;
+            }
+            if (contentMap != null) {
+              final playback = contentMap['playback'];
+              if (playback is Map) {
+                addStream('课堂回放主视角', playback['url']?.toString());
+              }
+              final fileList = contentMap['file_list'];
+              if (fileList is List) {
+                for (int i = 0; i < fileList.length; i++) {
+                  final item = fileList[i];
+                  if (item is Map) {
+                    addStream(
+                      item['title']?.toString() ?? '回放视角 ${i + 1}',
+                      item['file_name']?.toString() ?? item['url']?.toString(),
+                    );
+                  }
+                }
+              }
+            }
+
+            // 3. 直播 HLS 流 live_url
+            final liveUrl = data['live_url'];
+            if (liveUrl is Map) {
+              final output = liveUrl['output'];
+              if (output is Map) {
+                addStream('教师画面直播 (HLS)', output['m3u8']?.toString(),
+                    isLive: true);
+              }
+              final outputStudent = liveUrl['output_student'];
+              if (outputStudent is Map) {
+                addStream('板书/课件直播 (HLS)', outputStudent['m3u8']?.toString(),
+                    isLive: true);
+              }
+            }
+          }
+        }
+      }
+
+      // 4. 直播备用接口 getscreenstream
+      final screenUri = Uri.parse(
+        'https://yjapi.cmc.zju.edu.cn/courseapi/index.php/v2/meta/getscreenstream?sub_id=$subId',
+      );
+      final screenReq = await client.getUrl(screenUri);
+      if (token != null && token.isNotEmpty) {
+        screenReq.headers.set('Authorization', 'Bearer $token');
+        screenReq.headers.set('Cookie', '_token=$token; token=$token');
+      }
+      screenReq.headers.set('Origin', 'https://classroom.zju.edu.cn');
+      screenReq.headers.set('Referer', 'https://classroom.zju.edu.cn/');
+      final screenResp =
+          await screenReq.close().timeout(const Duration(seconds: 6));
+      if (screenResp.statusCode == 200) {
+        final screenBody = await screenResp.transform(utf8.decoder).join();
+        final screenJson = jsonDecode(screenBody);
+        if (screenJson is Map && screenJson['result'] is Map) {
+          final dataList = screenJson['result']['data'];
+          if (dataList is List) {
+            for (final item in dataList) {
+              if (item is Map) {
+                final m3u8 = item['stream_m3u8']?.toString();
+                final type = item['type']?.toString() ?? '';
+                final label = type == '2'
+                    ? '课件投屏直播'
+                    : type == '3'
+                        ? '教师摄像直播'
+                        : '课堂实时直播';
+                addStream(label, m3u8, isLive: true);
+              }
+            }
+          }
+        }
+      }
+
+      // 5. 若 каталог 缓存中含有该 sub_id 的视频直链，一并提取
+      final catList = await fetchCourseCatalogue(courseId);
+      for (final item in catList) {
+        final itemSubId =
+            item['sub_id']?.toString() ?? item['id']?.toString() ?? '';
+        if (itemSubId != subId) continue;
+        final rawContent = item['content'];
+        Map? contentMap;
+        if (rawContent is String && rawContent.trim().startsWith('{')) {
+          try {
+            contentMap = jsonDecode(rawContent) as Map?;
+          } catch (_) {}
+        } else if (rawContent is Map) {
+          contentMap = rawContent;
+        }
+        if (contentMap != null) {
+          final playback = contentMap['playback'];
+          if (playback is Map) {
+            addStream('目录回放流', playback['url']?.toString());
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[ZhiyunService] fetchLessonStreams error: $e');
+    } finally {
+      client.close(force: true);
+    }
+
+    return streams;
+  }
+
+  /// 获取智云课堂单节课的 PPT 幻灯片截图列表（按时间轴排序）
+  static Future<List<ZhiyunPptSlide>> fetchLessonPptSlides({
+    required String courseId,
+    required String subId,
+  }) async {
+    final client = createHttpClient();
+    final slides = <ZhiyunPptSlide>[];
+    final seenUrls = <String>{};
+
+    try {
+      final token = getCachedZhiyunToken();
+      final uri = Uri.parse(
+        '$_kZhiyunBaseUrl/pptnote/v1/schedule/search-ppt?course_id=$courseId&sub_id=$subId&page=1&per_page=100',
+      );
+      final req = await client.getUrl(uri);
+      if (token != null && token.isNotEmpty) {
+        req.headers.set('Authorization', 'Bearer $token');
+        req.headers.set('Cookie', '_token=$token; token=$token');
+      }
+      req.headers.set('Referer', 'https://classroom.zju.edu.cn/');
+      final resp = await req.close().timeout(const Duration(seconds: 8));
+      if (resp.statusCode == 200) {
+        final body = await resp.transform(utf8.decoder).join();
+        final decoded = jsonDecode(body);
+        if (decoded is Map) {
+          final list = decoded['list'] ??
+              (decoded['data'] is Map ? decoded['data']['list'] : null);
+          if (list is List) {
+            for (final item in list) {
+              if (item is! Map) continue;
+              final sec =
+                  int.tryParse(item['created_sec']?.toString() ?? '0') ?? 0;
+              var imgUrl = item['pptimgurl']?.toString() ?? '';
+              final contentRaw = item['content'];
+              if (imgUrl.isEmpty && contentRaw is String) {
+                try {
+                  final cMap = jsonDecode(contentRaw);
+                  if (cMap is Map) {
+                    imgUrl = cMap['pptimgurl']?.toString() ?? '';
+                  }
+                } catch (_) {}
+              } else if (imgUrl.isEmpty && contentRaw is Map) {
+                imgUrl = contentRaw['pptimgurl']?.toString() ?? '';
+              }
+              if (imgUrl.isNotEmpty && seenUrls.add(imgUrl)) {
+                slides.add(ZhiyunPptSlide(
+                  imageUrl: imgUrl,
+                  createdSec: sec,
+                ));
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[ZhiyunService] fetchLessonPptSlides error: $e');
+    } finally {
+      client.close(force: true);
+    }
+
+    return slides;
+  }
+
+  /// 获取智云课堂单节课的语音转写字幕列表
+  static Future<List<ZhiyunTranscriptSegment>> fetchLessonTranscript({
+    required String subId,
+  }) async {
+    final client = createHttpClient();
+    final segments = <ZhiyunTranscriptSegment>[];
+
+    try {
+      final token = getCachedZhiyunToken();
+      final uri = Uri.parse(
+        'https://yjapi.cmc.zju.edu.cn/courseapi/v3/web-socket/search-trans-result?sub_id=$subId&format=json',
+      );
+      final req = await client.getUrl(uri);
+      if (token != null && token.isNotEmpty) {
+        req.headers.set('Authorization', 'Bearer $token');
+        req.headers.set('Cookie', '_token=$token; token=$token');
+      }
+      req.headers.set('Origin', 'https://classroom.zju.edu.cn');
+      req.headers.set('Referer', 'https://classroom.zju.edu.cn/');
+      final resp = await req.close().timeout(const Duration(seconds: 8));
+      if (resp.statusCode == 200) {
+        final body = await resp.transform(utf8.decoder).join();
+        final decoded = jsonDecode(body);
+        if (decoded is Map) {
+          final list = decoded['list'];
+          if (list is List && list.isNotEmpty) {
+            final first = list.first;
+            if (first is Map && first['all_content'] is List) {
+              for (final seg in first['all_content'] as List) {
+                if (seg is! Map) continue;
+                final text = seg['Text']?.toString().trim() ?? '';
+                if (text.isEmpty) continue;
+                final begin =
+                    int.tryParse(seg['BeginSec']?.toString() ?? '0') ?? 0;
+                final end = int.tryParse(seg['EndSec']?.toString() ?? '0') ?? 0;
+                segments.add(ZhiyunTranscriptSegment(
+                  beginSec: begin,
+                  endSec: end,
+                  text: text,
+                ));
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[ZhiyunService] fetchLessonTranscript error: $e');
+    } finally {
+      client.close(force: true);
+    }
+
+    return segments;
+  }
+
+  /// 从智云课堂目录接口提取教师上传的共享课件直链列表
+  static Future<List<Map<String, String>>> fetchZhiyunCourseware(
+      String courseId) async {
+    final client = createHttpClient();
+    final files = <Map<String, String>>[];
+    final seenUrls = <String>{};
+
+    try {
+      final token = getCachedZhiyunToken();
+      final uri = Uri.parse(
+        'https://yjapi.cmc.zju.edu.cn/courseapi/v2/course/catalogue?course_id=$courseId',
+      );
+      final req = await client.getUrl(uri);
+      if (token != null && token.isNotEmpty) {
+        req.headers.set('Authorization', 'Bearer $token');
+        req.headers.set('Cookie', '_token=$token; token=$token');
+      }
+      req.headers.set('Origin', 'https://classroom.zju.edu.cn');
+      req.headers.set('Referer', 'https://classroom.zju.edu.cn/');
+      final resp = await req.close().timeout(const Duration(seconds: 8));
+      if (resp.statusCode == 200) {
+        final body = await resp.transform(utf8.decoder).join();
+        final decoded = jsonDecode(body);
+        if (decoded is Map && decoded['result'] is Map) {
+          final dataList = decoded['result']['data'];
+          if (dataList is List) {
+            for (final item in dataList) {
+              if (item is! Map) continue;
+              final lessonTitle = item['title']?.toString() ?? '智云课件';
+              final rawContent = item['content'];
+              Map? contentMap;
+              if (rawContent is String && rawContent.trim().startsWith('{')) {
+                try {
+                  contentMap = jsonDecode(rawContent) as Map?;
+                } catch (_) {}
+              } else if (rawContent is Map) {
+                contentMap = rawContent;
+              }
+              final downloadMap = contentMap?['download'];
+              if (downloadMap is Map) {
+                downloadMap.forEach((_, val) {
+                  if (val is Map) {
+                    final name = val['file_name']?.toString() ?? '';
+                    final url = val['url']?.toString() ?? '';
+                    if (name.isNotEmpty &&
+                        url.startsWith('http') &&
+                        seenUrls.add(url)) {
+                      files.add({
+                        'name': name,
+                        'url': url,
+                        'sectionTitle': lessonTitle,
+                      });
+                    }
+                  }
+                });
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[ZhiyunService] fetchZhiyunCourseware error: $e');
+    } finally {
+      client.close(force: true);
+    }
+
+    return files;
+  }
+}
+
+class ZhiyunStreamOption {
+  final String label;
+  final String url;
+  final bool isLive;
+
+  const ZhiyunStreamOption({
+    required this.label,
+    required this.url,
+    this.isLive = false,
+  });
+}
+
+class ZhiyunPptSlide {
+  final String imageUrl;
+  final int createdSec;
+
+  const ZhiyunPptSlide({
+    required this.imageUrl,
+    required this.createdSec,
+  });
+
+  String get timeLabel {
+    final m = (createdSec ~/ 60).toString().padLeft(2, '0');
+    final s = (createdSec % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+}
+
+class ZhiyunTranscriptSegment {
+  final int beginSec;
+  final int endSec;
+  final String text;
+
+  const ZhiyunTranscriptSegment({
+    required this.beginSec,
+    required this.endSec,
+    required this.text,
+  });
+
+  String get timeLabel {
+    final m = (beginSec ~/ 60).toString().padLeft(2, '0');
+    final s = (beginSec % 60).toString().padLeft(2, '0');
+    return '$m:$s';
   }
 }

@@ -1,5 +1,8 @@
 import Flutter
 import UIKit
+import AVKit
+import AVFoundation
+import SafariServices
 import workmanager_apple
 import UserNotifications
 #if canImport(WidgetKit)
@@ -9,6 +12,7 @@ import WidgetKit
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var pendingRoute: String?
+  private var documentInteractionController: UIDocumentInteractionController?
 
   override func application(
     _ application: UIApplication,
@@ -89,10 +93,82 @@ import WidgetKit
         self?.pendingRoute = nil
         result(route)
 
+      case "openFileWithSystem":
+        if let args = call.arguments as? [String: Any],
+           let filePath = args["filePath"] as? String,
+           !filePath.isEmpty {
+          let ok = self?.openFileWithSystem(filePath: filePath, controller: controller) ?? false
+          result(ok)
+        } else {
+          result(false)
+        }
+
+      case "openInAppVideoPlayer":
+        if let args = call.arguments as? [String: Any],
+           let urlStr = args["url"] as? String,
+           !urlStr.isEmpty {
+          let ok = self?.openInAppVideoPlayer(urlStr: urlStr, controller: controller) ?? false
+          result(ok)
+        } else {
+          result(false)
+        }
+
       default:
         result(FlutterMethodNotImplemented)
       }
     }
+  }
+
+  private func openFileWithSystem(filePath: String, controller: UIViewController) -> Bool {
+    let fileUrl: URL
+    if filePath.hasPrefix("file://"), let parsed = URL(string: filePath) {
+      fileUrl = parsed
+    } else {
+      fileUrl = URL(fileURLWithPath: filePath)
+    }
+    guard FileManager.default.fileExists(atPath: fileUrl.path) else {
+      return false
+    }
+    DispatchQueue.main.async { [weak self] in
+      let docController = UIDocumentInteractionController(url: fileUrl)
+      self?.documentInteractionController = docController
+      if !docController.presentOptionsMenu(from: controller.view.bounds, in: controller.view, animated: true) {
+        let activityVC = UIActivityViewController(activityItems: [fileUrl], applicationActivities: nil)
+        if let pop = activityVC.popoverPresentationController {
+          pop.sourceView = controller.view
+          pop.sourceRect = CGRect(x: controller.view.bounds.midX, y: controller.view.bounds.midY, width: 1, height: 1)
+        }
+        controller.present(activityVC, animated: true)
+      }
+    }
+    return true
+  }
+
+  private func openInAppVideoPlayer(urlStr: String, controller: UIViewController) -> Bool {
+    guard let url = URL(string: urlStr) else {
+      return false
+    }
+    let lower = urlStr.lowercased()
+    DispatchQueue.main.async {
+      if lower.contains(".mp4") || lower.contains(".m3u8") {
+        let headers = [
+          "Referer": "https://classroom.zju.edu.cn/",
+          "Origin": "https://classroom.zju.edu.cn"
+        ]
+        let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
+        let item = AVPlayerItem(asset: asset)
+        let player = AVPlayer(playerItem: item)
+        let playerVC = AVPlayerViewController()
+        playerVC.player = player
+        controller.present(playerVC, animated: true) {
+          player.play()
+        }
+      } else {
+        let safariVC = SFSafariViewController(url: url)
+        controller.present(safariVC, animated: true)
+      }
+    }
+    return true
   }
 
   override func application(

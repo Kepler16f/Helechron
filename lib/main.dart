@@ -223,15 +223,21 @@ class _NativeBarVisibilityObserver extends NavigatorObserver {
   }
 
   void _sync() {
-    // 只有在根页面（只有1个页面路由）且没有任何PopupRoute（弹窗/选择器/对话框）且无底层通知时，才显示原生底栏
-    final bool shouldShow =
-        _pageRoutes.length <= 1 && _popupRoutes.isEmpty && !_isSnackbarActive;
+    // 只有在根页面（只有1个页面路由且无非首屏路由）且没有任何PopupRoute（弹窗/选择器/对话框）且无底层通知时，才显示原生底栏
+    final bool hasSubRoute = _pageRoutes.any((r) => !r.isFirst);
+    final bool shouldShow = !hasSubRoute &&
+        _pageRoutes.length <= 1 &&
+        _popupRoutes.isEmpty &&
+        !_isSnackbarActive;
     OhosNativeService.instance.setBottomBarVisible(shouldShow);
   }
 
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
     super.didPush(route, previousRoute);
+    if (previousRoute != null && previousRoute is! PopupRoute) {
+      _pageRoutes.add(previousRoute);
+    }
     if (route is PopupRoute) {
       _popupRoutes.add(route);
     } else {
@@ -306,7 +312,9 @@ class _CelechronAppState extends State<CelechronApp>
 
   void _initOhosNotification() async {
     final option = Get.find<Option>(tag: 'option');
-    if (option.pushOnGradeChange.value || option.pushOnDdlReminder.value) {
+    if (option.pushOnGradeChange.value ||
+        option.pushOnDdlReminder.value ||
+        option.pushOnExamReminder.value) {
       await OhosNativeService.instance.requestNotificationPermission();
     }
   }

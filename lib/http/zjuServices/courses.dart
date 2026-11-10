@@ -1359,6 +1359,305 @@ class Courses {
     _session = null;
     _iPlanetDirectoryPro = null;
   }
+
+  /// 查询某门课程在“学在浙大”(courses.zju.edu.cn) 上的所有课件与作业附件列表
+  ///
+  /// 参考开源项目：
+  /// - PeiPei233/zju-learning-assistant
+  /// - 8eoyw/zju-learning-cli
+  /// - iamNCJ/ZJU-Tronclass-Courseware-Downloader
+  static Future<List<CoursewareItem>> fetchCoursewareList(
+    HttpClient httpClient, {
+    required String courseName,
+    String? courseCode,
+  }) async {
+    final session = await ensureSession(httpClient);
+    if (session == null) {
+      return const [];
+    }
+
+    final tcCourseIds = await _resolveTronClassCourseIds(
+      httpClient,
+      session,
+      courseName: courseName,
+      courseCode: courseCode,
+    );
+    if (tcCourseIds.isEmpty) {
+      return const [];
+    }
+
+    final results = <CoursewareItem>[];
+    final seenKeys = <String>{};
+
+    for (final tcId in tcCourseIds) {
+      final endpoints = [
+        Uri.parse('https://courses.zju.edu.cn/api/courses/$tcId/activities'),
+        Uri.parse(
+            'https://courses.zju.edu.cn/api/courses/$tcId/homework-activities?page=1&page_size=50&reloadPage=false'),
+      ];
+      for (final uri in endpoints) {
+        try {
+          final req = await httpClient.getUrl(uri).timeout(
+                const Duration(seconds: 10),
+                onTimeout: () => throw requestTimeout(),
+              );
+          req.cookies.add(session);
+          req.headers.set(HttpHeaders.acceptHeader, 'application/json');
+          final resp = await req.close().timeout(
+                const Duration(seconds: 10),
+                onTimeout: () => throw requestTimeout(),
+              );
+          if (resp.statusCode != HttpStatus.ok) continue;
+          final body = await readResponseBody(resp, context: '学在浙大课件列表');
+          final json = decodeJsonMap(body, context: '学在浙大课件列表');
+          final actList = asDynamicList(json['activities']) ??
+              asDynamicList(json['homework_activities']) ??
+              const [];
+          for (final rawAct in actList) {
+            final act = asStringMap(rawAct);
+            if (act == null) continue;
+            final actTitle = asString(act['title']) ?? '课程资料';
+            final uploads = asDynamicList(act['uploads']) ?? const [];
+            for (final rawUp in uploads) {
+              final up = asStringMap(rawUp);
+              if (up == null) continue;
+              final uploadId = (asDouble(up['id']) ?? 0).toInt();
+              final refId = (asDouble(up['reference_id']) ?? 0).toInt();
+              final name = asString(up['name']) ?? '';
+              final size = (asDouble(up['size']) ?? 0).toInt();
+              if (name.isEmpty || (uploadId <= 0 && refId <= 0)) continue;
+              final key = '${uploadId}_${refId}_$name';
+              if (seenKeys.add(key)) {
+                results.add(CoursewareItem(
+                  name: name,
+                  sectionTitle: actTitle,
+                  sizeBytes: size,
+                  uploadId: uploadId,
+                  referenceId: refId,
+                  source: '学在浙大',
+                ));
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('fetchCoursewareList ($uri) error: $e');
+        }
+      }
+    }
+
+    return results;
+  }
+
+  static Future<List<int>> _resolveTronClassCourseIds(
+    HttpClient httpClient,
+    Cookie session, {
+    required String courseName,
+    String? courseCode,
+  }) async {
+    final uri = Uri.parse('https://courses.zju.edu.cn/api/my-courses');
+    try {
+      final req = await httpClient.postUrl(uri).timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => throw requestTimeout(),
+          );
+      req.cookies.add(session);
+      req.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+      req.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      final payload = jsonEncode({
+        'fields':
+            'id,name,course_code,department(id,name),start_date,end_date,is_started,is_closed,academic_year_id,semester_id,credit,display_name,instructors(id,name)',
+        'page': 1,
+        'page_size': 100,
+        'conditions': {
+          'status': ['ongoing', 'notStarted', 'closed'],
+          'keyword': '',
+          'classify_type': 'recently_started',
+          'display_studio_list': false,
+        },
+        'showScorePassedStatus': false,
+      });
+      final payloadBytes = utf8.encode(payload);
+      req.contentLength = payloadBytes.length;
+      req.add(payloadBytes);
+
+      final resp = await req.close().timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => throw requestTimeout(),
+          );
+      if (resp.statusCode != HttpStatus.ok) return const [];
+      final body = await readResponseBody(resp, context: '学在浙大我的课程');
+      final json = decodeJsonMap(body, context: '学在浙大我的课程');
+      final courses = asDynamicList(json['courses']) ?? const [];
+
+      final cleanTarget = courseName
+          .replaceAll('（', '(')
+          .replaceAll('）', ')')
+          .replaceAll(RegExp(r'\s+'), '')
+          .toLowerCase();
+      final matchedIds = <int>[];
+
+      for (final raw in courses) {
+        final c = asStringMap(raw);
+        if (c == null) continue;
+        final id = (asDouble(c['id']) ?? 0).toInt();
+        if (id <= 0) continue;
+        final cCode = asString(c['course_code']) ?? '';
+        final cName = (asString(c['name']) ?? asString(c['display_name']) ?? '')
+            .replaceAll('（', '(')
+            .replaceAll('）', ')')
+            .replaceAll(RegExp(r'\s+'), '')
+            .toLowerCase();
+        if (courseCode != null &&
+            courseCode.isNotEmpty &&
+            cCode.isNotEmpty &&
+            (cCode.contains(courseCode) || courseCode.contains(cCode))) {
+          matchedIds.add(id);
+          continue;
+        }
+        if (cName.isNotEmpty &&
+            cleanTarget.isNotEmpty &&
+            (cName == cleanTarget ||
+                cName.contains(cleanTarget) ||
+                cleanTarget.contains(cName))) {
+          matchedIds.add(id);
+        }
+      }
+      return matchedIds;
+    } catch (e) {
+      debugPrint('_resolveTronClassCourseIds error: $e');
+      return const [];
+    }
+  }
+
+  /// 下载课件或附件到本地指定目录（包含 4 级回退下载链，支持仅预览 PDF 课件提取直链下载）
+  static Future<String?> downloadCoursewareFile(
+    HttpClient httpClient, {
+    required CoursewareItem item,
+    required String saveDir,
+  }) async {
+    final session = await ensureSession(httpClient);
+    final candidateUrls = <String>[];
+
+    if (item.directUrl != null && item.directUrl!.isNotEmpty) {
+      candidateUrls.add(item.directUrl!);
+    }
+    if (item.referenceId > 0) {
+      candidateUrls.add(
+          'https://courses.zju.edu.cn/api/uploads/reference/${item.referenceId}/blob');
+    }
+    if (item.uploadId > 0) {
+      candidateUrls
+          .add('https://courses.zju.edu.cn/api/uploads/${item.uploadId}/blob');
+    }
+
+    // 针对禁止直接下载但允许预览的 PDF/Office 课件，通过 preview=true 接口获取签名直链
+    if (item.referenceId > 0 && session != null) {
+      try {
+        final previewUri = Uri.parse(
+            'https://courses.zju.edu.cn/api/uploads/reference/document/${item.referenceId}/url?preview=true');
+        final req = await httpClient
+            .getUrl(previewUri)
+            .timeout(const Duration(seconds: 8));
+        req.cookies.add(session);
+        req.headers.set(HttpHeaders.acceptHeader, 'application/json');
+        final resp = await req.close().timeout(const Duration(seconds: 8));
+        if (resp.statusCode == HttpStatus.ok) {
+          final body = await readResponseBody(resp, context: '学在浙大课件预览链接');
+          final json = decodeJsonMap(body, context: '学在浙大课件预览链接');
+          final signedUrl = asString(json['url']);
+          if (signedUrl != null && signedUrl.isNotEmpty) {
+            candidateUrls.add(signedUrl);
+          }
+        }
+      } catch (_) {}
+    }
+
+    final dir = Directory(saveDir);
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    final safeName = item.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final targetFile = File('${dir.path}/$safeName');
+
+    for (final urlStr in candidateUrls) {
+      try {
+        var currentUri = Uri.parse(urlStr);
+        for (int hop = 0; hop < 6; hop++) {
+          final req = await httpClient
+              .getUrl(currentUri)
+              .timeout(const Duration(seconds: 15));
+          req.followRedirects = false;
+          if (session != null && currentUri.host.contains('zju.edu.cn')) {
+            req.cookies.add(session);
+          }
+          final resp = await req.close().timeout(const Duration(seconds: 30));
+          if (resp.isRedirect ||
+              resp.statusCode == HttpStatus.movedPermanently ||
+              resp.statusCode == HttpStatus.found ||
+              resp.statusCode == HttpStatus.seeOther ||
+              resp.statusCode == HttpStatus.temporaryRedirect) {
+            final loc = resp.headers.value(HttpHeaders.locationHeader);
+            await resp.drain();
+            if (loc != null && loc.isNotEmpty) {
+              currentUri = currentUri.resolve(loc);
+              continue;
+            }
+            break;
+          }
+          if (resp.statusCode == HttpStatus.ok) {
+            final contentType =
+                resp.headers.value(HttpHeaders.contentTypeHeader) ?? '';
+            if (contentType.contains('text/html')) {
+              await resp.drain();
+              break;
+            }
+            final sink = targetFile.openWrite();
+            await resp.pipe(sink);
+            await sink.flush();
+            await sink.close();
+            if (await targetFile.exists() && await targetFile.length() > 0) {
+              return targetFile.path;
+            }
+          } else {
+            await resp.drain();
+          }
+          break;
+        }
+      } catch (e) {
+        debugPrint('downloadCoursewareFile candidate ($urlStr) failed: $e');
+      }
+    }
+    return null;
+  }
+}
+
+class CoursewareItem {
+  final String name;
+  final String sectionTitle;
+  final int sizeBytes;
+  final int uploadId;
+  final int referenceId;
+  final String? directUrl;
+  final String source;
+
+  const CoursewareItem({
+    required this.name,
+    required this.sectionTitle,
+    required this.sizeBytes,
+    this.uploadId = 0,
+    this.referenceId = 0,
+    this.directUrl,
+    this.source = '学在浙大',
+  });
+
+  String get formattedSize {
+    if (sizeBytes <= 0) return source;
+    if (sizeBytes < 1024) return '$sizeBytes B · $source';
+    if (sizeBytes < 1024 * 1024) {
+      return '${(sizeBytes / 1024).toStringAsFixed(1)} KB · $source';
+    }
+    return '${(sizeBytes / (1024 * 1024)).toStringAsFixed(2)} MB · $source';
+  }
 }
 
 class _CachedTodos {

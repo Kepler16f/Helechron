@@ -14,8 +14,9 @@ class CreditsPage extends StatefulWidget {
 }
 
 class _CreditsPageState extends State<CreditsPage> {
-  List<String> _contributors = [];
-  bool _isLoading = true;
+  List<String> _contributors = List<String>.from(
+    GitHubService.defaultContributors,
+  );
   final _githubService = GitHubService();
   final _httpClient = HttpClient();
 
@@ -28,14 +29,16 @@ class _CreditsPageState extends State<CreditsPage> {
   Future<void> _loadContributors() async {
     try {
       var result = await _githubService.getContributors(_httpClient);
-      setState(() {
-        _contributors = result.item2;
-        _isLoading = false;
-      });
+      if (!mounted) return;
+      if (result.item2.isNotEmpty) {
+        setState(() {
+          _contributors = result.item2;
+        });
+      }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _contributors = GitHubService.defaultContributors;
-        _isLoading = false;
+        _contributors = List<String>.from(GitHubService.defaultContributors);
       });
     }
   }
@@ -47,61 +50,60 @@ class _CreditsPageState extends State<CreditsPage> {
   }
 
   Widget _buildContributorsList() {
-    if (_isLoading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        child: CupertinoActivityIndicator(),
-      );
-    }
-
+    final list = _contributors.isNotEmpty
+        ? _contributors
+        : GitHubService.defaultContributors;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32),
       child: Column(
-        children: _buildContributorRows(),
+        mainAxisSize: MainAxisSize.min,
+        children: _buildContributorRows(list),
       ),
     );
   }
 
-  List<Widget> _buildContributorRows() {
+  List<Widget> _buildContributorRows(List<String> contributors) {
     List<Widget> rows = [];
-    for (int i = 0; i < _contributors.length; i += 2) {
-      List<Widget> children = [];
-
-      children.add(
-        Expanded(
-          child: Text(
-            _contributors[i],
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 14),
-          ),
-        ),
-      );
-
-      if (i + 1 < _contributors.length) {
-        children.add(
-          Expanded(
-            child: Text(
-              _contributors[i + 1],
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14),
-            ),
-          ),
-        );
-      }
+    for (int i = 0; i < contributors.length; i += 2) {
+      final String left = contributors[i];
+      final String? right =
+          (i + 1 < contributors.length) ? contributors[i + 1] : null;
 
       rows.add(
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          mainAxisSize: MainAxisSize.max,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          verticalDirection: VerticalDirection.down,
-          children: children,
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisSize: MainAxisSize.max,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Text(
+                    left,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 14, height: 1.35),
+                  ),
+                ),
+              ),
+              if (right != null)
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Text(
+                      right,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 14, height: 1.35),
+                    ),
+                  ),
+                )
+              else
+                const Expanded(child: SizedBox.shrink()),
+            ],
+          ),
         ),
       );
-
-      if (i + 2 < _contributors.length) {
-        rows.add(const SizedBox(height: 8));
-      }
     }
 
     return rows;
@@ -266,14 +268,38 @@ class _CreditsPageState extends State<CreditsPage> {
                     height: 8,
                   ),
                   _buildContributorsList(),
-                ],
-              ),
-            ),
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
+                  const SizedBox(height: 28),
+                  const Text(
+                    '📚 参考与致谢开源项目',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 28),
+                    child: Text(
+                      '• Celechron/Celechron (github.com/Celechron/Celechron)\n'
+                      '• Elyyyyyyyyxer/Elychron (github.com/Elyyyyyyyyxer/Elychron)\n'
+                      '• 5dbwat4/login-ZJU (github.com/5dbwat4/login-ZJU)\n'
+                      '• PeiPei233/zju-learning-assistant (github.com/PeiPei233/zju-learning-assistant)\n'
+                      '• 8eoyw/zju-learning-cli (github.com/8eoyw/zju-learning-cli)\n'
+                      '• Anchorite-no/zju-skill-public (github.com/Anchorite-no/zju-skill-public)\n'
+                      '• Lucent-Snow/zju-scholar & iamNCJ/ZJU-Tronclass-Courseware-Downloader\n'
+                      '• determ1ne/zju_ecard、OpenAHU/AHUTong-Android、Mercury000/HUEL-yktwx、Chiu-xaH/HFUT-Schedule\n'
+                      '• OpenHarmony-TPC/flutter_flutter (gitcode.com/openharmony-tpc/flutter_flutter)',
+                      textAlign: TextAlign.left,
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.5,
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.secondaryLabel, context),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
                   Text(
                     '本程序采用 GPLv3 协议开源',
                     textAlign: TextAlign.center,
@@ -294,7 +320,7 @@ class _CreditsPageState extends State<CreditsPage> {
                           CupertinoColors.secondaryLabel, context),
                     ),
                   ),
-                  const NativeBottomBarSpacer(extra: 32),
+                  const NativeBottomBarSpacer(extra: 48),
                 ],
               ),
             ),

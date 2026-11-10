@@ -498,6 +498,83 @@ class OhosNativeService {
     }
   }
 
+  /// 选择一个目录用于保存课件下载文件
+  Future<String?> pickDirectory() async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.pickDirectory();
+    }
+    try {
+      final result = await _channel.invokeMethod<String>('pickDirectory');
+      if (result != null && result.trim().isNotEmpty) {
+        return result.trim();
+      }
+      return null;
+    } on PlatformException catch (e) {
+      lastFilePickError = e.message ?? e.code;
+      debugPrint('pickDirectory failed: $e');
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
+  /// 调用系统原生“打开方式”弹窗打开已下载的文件
+  Future<bool> openFileWithSystem(
+    String filePath, {
+    String? mimeType,
+    String? title,
+  }) async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.openFileWithSystem(
+        filePath,
+        mimeType: mimeType,
+        title: title,
+      );
+    }
+    try {
+      final result = await _channel.invokeMethod<bool>('openFileWithSystem', {
+        'filePath': filePath,
+        'mimeType': mimeType ?? '',
+        'title': title ?? '',
+      });
+      return result ?? false;
+    } on PlatformException catch (e) {
+      debugPrint('openFileWithSystem failed: $e');
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  /// 在应用内打开原生视频/直播播放器浮层
+  Future<bool> openInAppVideoPlayer({
+    required String url,
+    required String title,
+    List<Map<String, String>> streams = const [],
+  }) async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.openInAppVideoPlayer(
+        url: url,
+        title: title,
+        streams: streams,
+      );
+    }
+    try {
+      final result =
+          await _channel.invokeMethod<bool>('openInAppVideoPlayer', {
+        'url': url,
+        'title': title,
+        'streams': streams,
+      });
+      return result ?? false;
+    } on PlatformException catch (e) {
+      debugPrint('openInAppVideoPlayer failed: $e');
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
   // ==================== Widget Routes & Native Tab ====================
 
   static void Function(String target)? _widgetRouteHandler;

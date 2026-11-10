@@ -11,6 +11,8 @@ import 'package:celechron/worker/ecard_widget_messenger.dart';
 
 import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/design/persistent_headers.dart';
+import 'package:celechron/model/option.dart';
+import 'ecard_bill_page.dart';
 import '../../http/zjuServices/ecard.dart';
 import '../../http/zjuServices/network_defense.dart';
 
@@ -42,8 +44,12 @@ class _ECardPayPageState extends State<ECardPayPage>
   final _secondsRemaining = 0.obs;
   final _balance = Rxn<double>();
 
-  /// 余额低于该值（元）时在付款码页给出提示，避免到刷卡机才发现余额不足。
-  static const double _lowBalanceThreshold = 15.0;
+  double get _lowBalanceThreshold {
+    if (Get.isRegistered<Option>(tag: 'option')) {
+      return Get.find<Option>(tag: 'option').ecardLowBalanceThreshold.value;
+    }
+    return 15.0;
+  }
 
   Timer? _refreshTimer;
   Timer? _countdownTimer;
@@ -394,6 +400,10 @@ class _ECardPayPageState extends State<ECardPayPage>
       final value =
           await ECard.getBalance(_httpClient, auth, eCardAccount: account);
       if (mounted) _balance.value = value;
+      await OhosNativeService.instance
+          .setWidgetData('ecardBalance', value.toStringAsFixed(2));
+      await OhosNativeService.instance.setWidgetData(
+          'ecardLowBalanceThreshold', _lowBalanceThreshold.toString());
     } catch (_) {
       // 余额只是附加信息，失败时保留上一次的数值，不打扰付款流程
     }
@@ -404,7 +414,8 @@ class _ECardPayPageState extends State<ECardPayPage>
     if (balance == null || _viewState.value != _ViewState.showing) {
       return const SizedBox.shrink();
     }
-    final low = balance < _lowBalanceThreshold;
+    final threshold = _lowBalanceThreshold;
+    final low = threshold > 0 && balance < threshold;
     final color =
         low ? CupertinoColors.systemOrange : CupertinoColors.secondaryLabel;
     return Padding(
@@ -423,7 +434,7 @@ class _ECardPayPageState extends State<ECardPayPage>
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text(
-                '余额不足 ¥${_lowBalanceThreshold.toStringAsFixed(0)}，请注意充值',
+                '余额不足 ¥${threshold.toStringAsFixed(threshold == threshold.roundToDouble() ? 0 : 1)}，请注意充值',
                 style: const TextStyle(
                     fontSize: 12, color: CupertinoColors.systemOrange),
               ),
@@ -488,6 +499,26 @@ class _ECardPayPageState extends State<ECardPayPage>
                   Obx(() => _buildBalance()),
                   const SizedBox(height: 24),
                   Obx(() => _buildRefreshButton(context)),
+                  const SizedBox(height: 12),
+                  CupertinoButton(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    onPressed: () {
+                      Navigator.of(context, rootNavigator: true).push(
+                        CupertinoPageRoute(
+                          builder: (context) => const ECardBillPage(),
+                        ),
+                      );
+                    },
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(CupertinoIcons.chart_bar_alt_fill, size: 16),
+                        SizedBox(width: 6),
+                        Text('消费账单与统计', style: TextStyle(fontSize: 14)),
+                      ],
+                    ),
+                  ),
                   const Spacer(flex: 4),
                 ],
               ),

@@ -400,6 +400,75 @@ export class ECardNativeHelper {
     }
   }
 
+  /// 查询校园卡余额（单位：元）并写入 Preferences 供桌面大码页展示预警
+  static async fetchAndSaveBalance(context: common.Context): Promise<number> {
+    const prefs = ECardNativeHelper.getFreshPrefs(context);
+    if (prefs === null) {
+      return -1;
+    }
+    const auth: string = (prefs.getSync('synjonesAuth', '') as string) || '';
+    const targetAcc: string = (prefs.getSync('eCardAccount', '') as string) || '';
+    if (auth.length === 0) {
+      return -1;
+    }
+    const httpRequest = http.createHttp();
+    try {
+      const cardHeader: Record<string, string> = {
+        'Synjones-Auth': `Bearer ${auth}`,
+        'User-Agent': USER_AGENT,
+        'Accept': 'application/json, text/plain, */*'
+      };
+      const options: http.HttpRequestOptions = {
+        method: http.RequestMethod.GET,
+        header: cardHeader,
+        connectTimeout: 8000,
+        readTimeout: 8000,
+        usingProxy: false,
+        expectDataType: http.HttpDataType.STRING
+      };
+      const response = await httpRequest.request(CAMPUS_CARDS_URL, options);
+      if (response.responseCode !== 200) {
+        return -1;
+      }
+      const text = (response.result as string) || '';
+      const payload = JSON.parse(text) as Record<string, Object>;
+      const data = payload['data'] as Record<string, Object>;
+      if (!data) {
+        return -1;
+      }
+      const cardList = data['card'] as Array<Record<string, Object>>;
+      if (!cardList || cardList.length === 0) {
+        return -1;
+      }
+      let bestBalanceCents = -1;
+      for (let i = 0; i < cardList.length; i++) {
+        const card = cardList[i];
+        const acc = String(card['account'] || '');
+        const bal = Number(card['db_balance'] || 0);
+        if (targetAcc.length > 0 && acc === targetAcc) {
+          bestBalanceCents = bal;
+          break;
+        }
+        if (bal > bestBalanceCents) {
+          bestBalanceCents = bal;
+        }
+      }
+      if (bestBalanceCents >= 0) {
+        const yuan = bestBalanceCents / 100.0;
+        try {
+          prefs.putSync('ecardBalance', yuan.toFixed(2));
+          prefs.flush();
+        } catch (e) {}
+        return yuan;
+      }
+      return -1;
+    } catch (e) {
+      return -1;
+    } finally {
+      httpRequest.destroy();
+    }
+  }
+
   /// 原生侧完整执行 ZJU CAS 统一身份认证 -> 换取校园卡 synjones-auth 与 account
   private static async reloginSynjones(
     username: string,

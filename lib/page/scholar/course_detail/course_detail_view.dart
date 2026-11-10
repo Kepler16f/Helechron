@@ -1,14 +1,21 @@
+import 'dart:io';
+
 import 'package:celechron/page/scholar/course_list/course_brief_card.dart';
 import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/design/sub_title.dart';
 import 'package:celechron/design/custom_colors.dart';
 import 'package:celechron/design/persistent_headers.dart';
 import 'package:celechron/design/round_rectangle_card.dart';
+import 'package:celechron/http/zjuServices/courses.dart';
+import 'package:celechron/http/zjuServices/network_defense.dart';
+import 'package:celechron/model/option.dart';
 import 'package:celechron/services/diagnostic_log_service.dart';
+import 'package:celechron/services/ohos_native_service.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:celechron/model/course.dart';
 import 'package:celechron/model/period.dart';
 
@@ -16,6 +23,7 @@ import 'package:celechron/model/exam.dart';
 import 'package:celechron/model/session.dart';
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/services/zhiyun_service.dart';
+import 'zhiyun_player_page.dart';
 
 class CourseDetailPage extends StatelessWidget {
   final Course? course;
@@ -537,6 +545,9 @@ class CourseDetailPage extends StatelessWidget {
             SliverToBoxAdapter(
               child: createZhiyunCard(context, c),
             ),
+          SliverToBoxAdapter(
+            child: CoursewareDownloadCard(course: c),
+          ),
           if (c.sessions.isNotEmpty)
             SliverToBoxAdapter(
               child: Container(
@@ -610,6 +621,70 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
     if (mounted) {
       setState(() {});
     }
+  }
+
+  Future<void> _openInAppPlayer(
+    BuildContext context, {
+    required String url,
+    required String title,
+    String? courseId,
+    String? subId,
+  }) async {
+    await ZhiyunService.saveLastWatchedReplay(
+      courseName: widget.course.name,
+      lessonTitle: title,
+      livingroomUrl: url,
+      courseId: courseId,
+      subId: subId,
+    );
+    if (mounted) {
+      setState(() {});
+    }
+
+    if (courseId != null && courseId.isNotEmpty) {
+      final rawCat = await ZhiyunService.fetchCourseCatalogue(courseId);
+      final replayList = <ZhiyunReplayInfo>[];
+      for (final item in rawCat) {
+        final sid =
+            item['sub_id']?.toString() ?? item['id']?.toString() ?? '';
+        if (sid.isEmpty) continue;
+        final t = item['title']?.toString() ??
+            item['sub_title']?.toString() ??
+            '课节 $sid';
+        final status = item['status']?.toString() ?? '';
+        final isLive = status == '1' || item['is_live'] == true;
+        replayList.add(ZhiyunReplayInfo(
+          courseId: courseId,
+          subId: sid,
+          courseName: widget.course.name,
+          lessonTitle: t,
+          hasReplay: true,
+          isLive: isLive,
+          isLessonSpecific: true,
+          livingroomUrl:
+              ZhiyunService.buildCourseLivingroomUrl(courseId, subId: sid),
+        ));
+      }
+      if (!context.mounted) return;
+      Navigator.of(context, rootNavigator: true).push(
+        CupertinoPageRoute(
+          builder: (_) => ZhiyunPlayerPage(
+            courseName: widget.course.name,
+            courseId: courseId,
+            initialSubId: subId,
+            initialTitle: title,
+            livingroomUrl: url,
+            replays: replayList,
+          ),
+        ),
+      );
+      return;
+    }
+
+    await OhosNativeService.instance.openInAppVideoPlayer(
+      url: url,
+      title: '${widget.course.name} · $title',
+    );
   }
 
   Future<void> _handleSyncMyCourses(BuildContext context) async {
@@ -851,8 +926,16 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                                     padding: const EdgeInsets.only(top: 6),
                                     child: GestureDetector(
                                       onTap: url != null && url.isNotEmpty
-                                          ? () => _openAndRecord(url, title,
-                                              courseId: widget.course.id)
+                                          ? () => _openInAppPlayer(
+                                                context,
+                                                url: url,
+                                                title: title,
+                                                courseId: lastWatched['courseId']
+                                                        ?.toString() ??
+                                                    widget.course.id,
+                                                subId: lastWatched['subId']
+                                                    ?.toString(),
+                                              )
                                           : null,
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(
@@ -1061,7 +1144,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                             size: 16, color: CupertinoColors.white),
                         SizedBox(width: 6),
                         Text(
-                          '进入实时直播',
+                          '应用内看直播',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -1071,9 +1154,25 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                       ],
                     ),
                   ),
-                  onPressed: () => _openAndRecord(info.livingroomUrl, '实时直播',
-                      courseId: info.courseId, subId: info.subId),
+                  onPressed: () => _openInAppPlayer(
+                    context,
+                    url: info.livingroomUrl,
+                    title: '实时直播',
+                    courseId: info.courseId,
+                    subId: info.subId,
+                  ),
                 ),
+              ),
+              const SizedBox(width: 8),
+              CupertinoButton(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.secondarySystemFill, context),
+                borderRadius: BorderRadius.circular(8),
+                minSize: 36,
+                child: const Icon(CupertinoIcons.compass, size: 16),
+                onPressed: () => _openAndRecord(info.livingroomUrl, '实时直播',
+                    courseId: info.courseId, subId: info.subId),
               ),
               const SizedBox(width: 8),
               _buildCopyButton(context, info.livingroomUrl, c.name, '实时直播'),
@@ -1123,17 +1222,33 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                         Icon(CupertinoIcons.play_arrow_solid, size: 16),
                         SizedBox(width: 6),
                         Text(
-                          '直达本节录播',
+                          '应用内观看回放',
                           style: TextStyle(
                               fontSize: 14, fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
                   ),
-                  onPressed: () => _openAndRecord(
-                      info.livingroomUrl, info.lessonTitle,
-                      courseId: info.courseId, subId: info.subId),
+                  onPressed: () => _openInAppPlayer(
+                    context,
+                    url: info.livingroomUrl,
+                    title: info.lessonTitle,
+                    courseId: info.courseId,
+                    subId: info.subId,
+                  ),
                 ),
+              ),
+              const SizedBox(width: 8),
+              CupertinoButton(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.secondarySystemFill, context),
+                borderRadius: BorderRadius.circular(8),
+                minSize: 36,
+                child: const Icon(CupertinoIcons.compass, size: 16),
+                onPressed: () => _openAndRecord(
+                    info.livingroomUrl, info.lessonTitle,
+                    courseId: info.courseId, subId: info.subId),
               ),
               const SizedBox(width: 8),
               _buildCopyButton(
@@ -1265,7 +1380,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          '进入课程房间',
+                          '应用内进入课堂',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -1278,9 +1393,24 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                       ],
                     ),
                   ),
-                  onPressed: () => _openAndRecord(info.livingroomUrl, '课程房间',
-                      courseId: info.courseId),
+                  onPressed: () => _openInAppPlayer(
+                    context,
+                    url: info.livingroomUrl,
+                    title: '课程房间',
+                    courseId: info.courseId,
+                  ),
                 ),
+              ),
+              const SizedBox(width: 8),
+              CupertinoButton(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.secondarySystemFill, context),
+                borderRadius: BorderRadius.circular(8),
+                minSize: 36,
+                child: const Icon(CupertinoIcons.compass, size: 16),
+                onPressed: () => _openAndRecord(info.livingroomUrl, '课程房间',
+                    courseId: info.courseId),
               ),
               const SizedBox(width: 8),
               _buildCopyButton(context, info.livingroomUrl, c.name, '课程主页'),
@@ -1389,6 +1519,392 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
           ],
         );
       },
+    );
+  }
+}
+
+class CoursewareDownloadCard extends StatefulWidget {
+  final Course course;
+
+  const CoursewareDownloadCard({super.key, required this.course});
+
+  @override
+  State<CoursewareDownloadCard> createState() => _CoursewareDownloadCardState();
+}
+
+class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
+  bool _expanded = false;
+  bool _loading = false;
+  String? _error;
+  final List<CoursewareItem> _items = [];
+  final Map<String, String> _downloadedPaths = {};
+  final Set<String> _downloadingKeys = {};
+
+  Future<String> _resolveSaveDir() async {
+    if (Get.isRegistered<Option>(tag: 'option')) {
+      final custom = Get.find<Option>(tag: 'option').downloadPath.value.trim();
+      if (custom.isNotEmpty) {
+        return custom;
+      }
+    }
+    final doc = await getApplicationDocumentsDirectory();
+    return '${doc.path}/courseware';
+  }
+
+  Future<void> _fetchCourseware() async {
+    setState(() {
+      _expanded = true;
+      _loading = true;
+      _error = null;
+    });
+
+    final client = HttpClient();
+    applyZjuNetworkDefense(client);
+    try {
+      final list = <CoursewareItem>[];
+      final tronItems = await Courses.fetchCoursewareList(
+        client,
+        courseName: widget.course.name,
+        courseCode: widget.course.id,
+      );
+      list.addAll(tronItems);
+
+      final zhiyunCid = ZhiyunService.getKnownCourseId(
+        widget.course.name,
+        courseCode: widget.course.id,
+      );
+      if (zhiyunCid != null && zhiyunCid.isNotEmpty) {
+        final zyFiles = await ZhiyunService.fetchZhiyunCourseware(zhiyunCid);
+        for (final f in zyFiles) {
+          list.add(CoursewareItem(
+            name: f['name'] ?? '智云课件',
+            sectionTitle: f['sectionTitle'] ?? '智云课堂',
+            sizeBytes: 0,
+            directUrl: f['url'],
+            source: '智云课堂',
+          ));
+        }
+      }
+
+      // 检查本地是否已下载
+      final saveDir = await _resolveSaveDir();
+      final downloaded = <String, String>{};
+      for (final item in list) {
+        final safeName = item.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+        final file = File('$saveDir/$safeName');
+        if (await file.exists() && await file.length() > 0) {
+          downloaded[_itemKey(item)] = file.path;
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _items
+          ..clear()
+          ..addAll(list);
+        _downloadedPaths
+          ..clear()
+          ..addAll(downloaded);
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = '$e';
+      });
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  String _itemKey(CoursewareItem item) =>
+      '${item.source}_${item.uploadId}_${item.referenceId}_${item.name}';
+
+  Future<void> _downloadItem(BuildContext context, CoursewareItem item) async {
+    final key = _itemKey(item);
+    if (_downloadingKeys.contains(key)) return;
+    setState(() {
+      _downloadingKeys.add(key);
+    });
+
+    final client = HttpClient();
+    applyZjuNetworkDefense(client);
+    try {
+      final saveDir = await _resolveSaveDir();
+      final savedPath = await Courses.downloadCoursewareFile(
+        client,
+        item: item,
+        saveDir: saveDir,
+      );
+      if (!mounted) return;
+      setState(() {
+        _downloadingKeys.remove(key);
+        if (savedPath != null) {
+          _downloadedPaths[key] = savedPath;
+        }
+      });
+
+      if (savedPath != null && context.mounted) {
+        showCupertinoDialog(
+          context: context,
+          builder: (dialogCtx) => CupertinoAlertDialog(
+            title: const Text('课件下载完成'),
+            content: Text('文件已保存至：\n$savedPath'),
+            actions: [
+              CupertinoDialogAction(
+                child: const Text('稍后查看'),
+                onPressed: () => Navigator.pop(dialogCtx),
+              ),
+              CupertinoDialogAction(
+                isDefaultAction: true,
+                child: const Text('选择打开方式'),
+                onPressed: () {
+                  Navigator.pop(dialogCtx);
+                  OhosNativeService.instance.openFileWithSystem(
+                    savedPath,
+                    title: '选择打开方式',
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      } else if (context.mounted) {
+        Get.snackbar('下载失败', '未能获取该课件的下载文件流，请确认已登录学在浙大',
+            snackPosition: SnackPosition.TOP);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _downloadingKeys.remove(key);
+      });
+      Get.snackbar('下载异常', '$e', snackPosition: SnackPosition.TOP);
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+      child: Column(
+        children: [
+          SubSubtitleRow(subtitle: '课程课件与附件'),
+          RoundRectangleCard(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.activeBlue,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          CupertinoIcons.folder_fill_badge_person_crop,
+                          size: 18,
+                          color: CupertinoColors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '学在浙大 / 智云课堂课件下载',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: CupertinoDynamicColor.resolve(
+                                    CupertinoColors.label, context),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '支持一键下载课程讲义、作业附件并唤起系统打开方式',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: CupertinoDynamicColor.resolve(
+                                    CupertinoColors.secondaryLabel, context),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      CupertinoButton(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        minSize: 32,
+                        color: CupertinoColors.activeBlue,
+                        borderRadius: BorderRadius.circular(8),
+                        onPressed: _loading ? null : _fetchCourseware,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(CupertinoIcons.arrow_down_circle_fill,
+                                size: 15, color: CupertinoColors.white),
+                            const SizedBox(width: 4),
+                            Text(
+                              _expanded ? '刷新课件' : '课件下载',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: CupertinoColors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_expanded) ...[
+                    const SizedBox(height: 12),
+                    if (_loading)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        child: Center(
+                          child: Column(
+                            children: [
+                              CupertinoActivityIndicator(),
+                              SizedBox(height: 6),
+                              Text('正在同步学在浙大与智云课堂课件...',
+                                  style: TextStyle(fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      )
+                    else if (_error != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Text(
+                          '获取课件失败：$_error',
+                          style: const TextStyle(
+                              fontSize: 12, color: CupertinoColors.systemRed),
+                        ),
+                      )
+                    else if (_items.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Text(
+                          '暂未在学在浙大或智云课堂检索到该课程的公开课件附件。',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.secondaryLabel, context),
+                          ),
+                        ),
+                      )
+                    else
+                      ..._items.map((item) {
+                        final key = _itemKey(item);
+                        final downloading = _downloadingKeys.contains(key);
+                        final savedPath = _downloadedPaths[key];
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(
+                            children: [
+                              Icon(
+                                CupertinoIcons.doc_on_doc_fill,
+                                size: 18,
+                                color: CupertinoDynamicColor.resolve(
+                                    CupertinoColors.activeBlue, context),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    Text(
+                                      '${item.sectionTitle} · ${item.formattedSize}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: CupertinoDynamicColor.resolve(
+                                            CupertinoColors.secondaryLabel,
+                                            context),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              if (savedPath != null) ...[
+                                CupertinoButton(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 5),
+                                  minSize: 28,
+                                  color: CupertinoColors.activeGreen
+                                      .withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                  onPressed: () {
+                                    OhosNativeService.instance
+                                        .openFileWithSystem(
+                                      savedPath,
+                                      title: '选择打开方式',
+                                    );
+                                  },
+                                  child: const Text(
+                                    '打开方式',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: CupertinoColors.activeGreen,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                              ],
+                              CupertinoButton(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 5),
+                                minSize: 28,
+                                color: CupertinoColors.activeBlue
+                                    .withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(6),
+                                onPressed: downloading
+                                    ? null
+                                    : () => _downloadItem(context, item),
+                                child: downloading
+                                    ? const CupertinoActivityIndicator(
+                                        radius: 7)
+                                    : Text(
+                                        savedPath != null ? '重新下载' : '下载',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: CupertinoColors.activeBlue,
+                                        ),
+                                      ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

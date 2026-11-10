@@ -42,6 +42,9 @@ class Option {
 
   /// 沉浸光感强度档位：10=跟随系统(自适应) 0=精致 1=柔和 2=流畅
   RxInt bottomBarMaterialLevel;
+  RxBool pushOnExamReminder;
+  RxDouble ecardLowBalanceThreshold;
+  RxString downloadPath;
 
   Option({
     required this.workTime,
@@ -58,5 +61,10 @@ class Option {
     required this.bottomBarFloating,
     required this.bottomBarImmersiveLight,
     required this.bottomBarMaterialLevel,
-  });
+    RxBool? pushOnExamReminder,
+    RxDouble? ecardLowBalanceThreshold,
+    RxString? downloadPath,
+  })  : pushOnExamReminder = pushOnExamReminder ?? true.obs,
+        ecardLowBalanceThreshold = ecardLowBalanceThreshold ?? 15.0.obs,
+        downloadPath = downloadPath ?? ''.obs;
 }

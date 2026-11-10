@@ -13,9 +13,11 @@ import 'allow_time_edit_page.dart';
 import 'course_id_mapping_edit_page.dart';
 import 'credits_page.dart';
 import 'diagnostic_log_page.dart';
+import 'ecard_bill_page.dart';
 import 'package:get/get.dart';
 import 'custom_license_page.dart';
 import 'package:celechron/page/legal_page.dart';
+import 'package:celechron/services/ohos_native_service.dart';
 import 'login_page.dart';
 import 'network_proxy_page.dart';
 import 'option_controller.dart';
@@ -74,7 +76,8 @@ class OptionPage extends StatelessWidget {
                             padding: const EdgeInsets.only(left: 16),
                             child: Text('教务', style: headerFooterTextStyle)),
                         footer: (_optionController.pushOnGradeChange ||
-                                    _optionController.pushOnDdlReminder) &&
+                                    _optionController.pushOnDdlReminder ||
+                                    _optionController.pushOnExamReminder) &&
                                 _optionController.scholar.value.isLogan
                             ? Padding(
                                 padding: const EdgeInsets.only(left: 16),
@@ -192,6 +195,19 @@ class OptionPage extends StatelessWidget {
                                           .hasBackgroundRefresh
                                       ? (value) async {
                                           _optionController.pushOnDdlReminder =
+                                              value;
+                                        }
+                                      : null,
+                                )),
+                            CupertinoListTile(
+                                title: const Text('推送考前 1 小时提醒'),
+                                subtitle: const Text('考试开始前 1 小时发送座位号与物品清单通知'),
+                                trailing: CupertinoSwitch(
+                                  value: _optionController.pushOnExamReminder,
+                                  onChanged: PlatformFeatures
+                                          .hasBackgroundRefresh
+                                      ? (value) async {
+                                          _optionController.pushOnExamReminder =
                                               value;
                                         }
                                       : null,
@@ -481,6 +497,47 @@ class OptionPage extends StatelessWidget {
                               .pushNamed('/ecardpaypage');
                         },
                       ),
+                      CupertinoListTile(
+                        title: const Text('校园卡账单与消费统计'),
+                        subtitle: const Text('按月查看流水、餐饮/商超/水电分类消费占比'),
+                        trailing: const BackChervonRow(),
+                        onTap: () {
+                          Navigator.of(context, rootNavigator: true).push(
+                            CupertinoPageRoute(
+                              builder: (context) => const ECardBillPage(),
+                            ),
+                          );
+                        },
+                      ),
+                      Obx(() {
+                        final threshold =
+                            _optionController.ecardLowBalanceThreshold;
+                        final label = threshold <= 0
+                            ? '已关闭'
+                            : '¥${threshold.toStringAsFixed(threshold == threshold.roundToDouble() ? 0 : 1)}';
+                        return CupertinoListTile(
+                          title: const Text('付款码低余额预警阈值'),
+                          subtitle: const Text('付款码页与桌面大码低于该值时提醒充值'),
+                          trailing: BackChervonRow(
+                            child: Text(label, style: trailingTextStyle),
+                          ),
+                          onTap: () => _showLowBalanceThresholdPicker(context),
+                        );
+                      }),
+                      Obx(() {
+                        final path = _optionController.downloadPath;
+                        final displayPath = path.isEmpty ? '应用默认目录' : path;
+                        return CupertinoListTile(
+                          title: const Text('课件下载保存路径'),
+                          subtitle: Text(
+                            displayPath,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: const BackChervonRow(),
+                          onTap: () => _showDownloadPathPicker(context),
+                        );
+                      }),
                     ])),
                 // 网络与环境
                 SliverToBoxAdapter(
@@ -759,6 +816,171 @@ class OptionPage extends StatelessWidget {
             onPressed: () => Navigator.pop(context),
             child: const Text('取消'),
           ),
+        );
+      },
+    );
+  }
+
+  void _showLowBalanceThresholdPicker(BuildContext context) {
+    final presets = <double, String>{
+      0: '关闭低余额预警',
+      10: '¥10',
+      15: '¥15（默认）',
+      20: '¥20',
+      30: '¥30',
+      50: '¥50',
+    };
+    showCupertinoModalPopup(
+      context: context,
+      builder: (BuildContext sheetContext) {
+        return CupertinoActionSheet(
+          title: const Text('付款码低余额预警阈值'),
+          message: const Text('当校园卡余额低于设定金额时，在付款码页及桌面大码页显示充值提醒'),
+          actions: [
+            ...presets.entries.map((entry) => CupertinoActionSheetAction(
+                  onPressed: () {
+                    _optionController.ecardLowBalanceThreshold = entry.key;
+                    Navigator.pop(sheetContext);
+                  },
+                  child: Text(entry.value),
+                )),
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(sheetContext);
+                _showCustomThresholdDialog(context);
+              },
+              child: const Text('自定义金额...'),
+            ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(sheetContext),
+            child: const Text('取消'),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showCustomThresholdDialog(BuildContext context) {
+    final controller = TextEditingController(
+      text: _optionController.ecardLowBalanceThreshold > 0
+          ? _optionController.ecardLowBalanceThreshold.toStringAsFixed(0)
+          : '15',
+    );
+    showCupertinoDialog(
+      context: context,
+      builder: (dialogContext) {
+        return CupertinoAlertDialog(
+          title: const Text('自定义低余额预警阈值（元）'),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: CupertinoTextField(
+              controller: controller,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              placeholder: '输入金额（0 表示关闭）',
+              autofocus: true,
+            ),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              child: const Text('取消'),
+              onPressed: () => Navigator.pop(dialogContext),
+            ),
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              child: const Text('确定'),
+              onPressed: () {
+                final val = double.tryParse(controller.text.trim());
+                if (val != null && val >= 0) {
+                  _optionController.ecardLowBalanceThreshold = val;
+                }
+                Navigator.pop(dialogContext);
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showDownloadPathPicker(BuildContext context) {
+    showCupertinoModalPopup(
+      context: context,
+      builder: (sheetContext) {
+        return CupertinoActionSheet(
+          title: const Text('课件下载保存路径'),
+          message: Text(_optionController.downloadPath.isEmpty
+              ? '当前：应用默认课件目录（支持直接唤起系统“打开方式”）'
+              : '当前：${_optionController.downloadPath}'),
+          actions: [
+            CupertinoActionSheetAction(
+              onPressed: () async {
+                Navigator.pop(sheetContext);
+                final picked =
+                    await OhosNativeService.instance.pickDirectory();
+                if (picked != null && picked.isNotEmpty) {
+                  _optionController.downloadPath = picked;
+                }
+              },
+              child: const Text('通过系统选择器选择文件夹'),
+            ),
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(sheetContext);
+                _showCustomDownloadPathDialog(context);
+              },
+              child: const Text('手动输入保存路径...'),
+            ),
+            if (_optionController.downloadPath.isNotEmpty)
+              CupertinoActionSheetAction(
+                isDestructiveAction: true,
+                onPressed: () {
+                  _optionController.downloadPath = '';
+                  Navigator.pop(sheetContext);
+                },
+                child: const Text('恢复应用默认目录'),
+              ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(sheetContext),
+            child: const Text('取消'),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showCustomDownloadPathDialog(BuildContext context) {
+    final controller =
+        TextEditingController(text: _optionController.downloadPath);
+    showCupertinoDialog(
+      context: context,
+      builder: (dialogContext) {
+        return CupertinoAlertDialog(
+          title: const Text('设置课件下载目录'),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: CupertinoTextField(
+              controller: controller,
+              placeholder: '留空使用应用默认目录',
+              autofocus: true,
+            ),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              child: const Text('取消'),
+              onPressed: () => Navigator.pop(dialogContext),
+            ),
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              child: const Text('保存'),
+              onPressed: () {
+                _optionController.downloadPath = controller.text.trim();
+                Navigator.pop(dialogContext);
+              },
+            ),
+          ],
         );
       },
     );
