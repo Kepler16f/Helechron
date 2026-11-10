@@ -109,6 +109,53 @@ class ECard {
     return asString(cards.first['account'])!;
   }
 
+  /// 查询指定账户（缺省取余额最高的卡）的现金余额，单位：元。
+  ///
+  /// `getCampusCards` 返回的 `db_balance` 以「分」为单位。
+  static Future<double> getBalance(
+      HttpClient httpClient, String synjonesAuth,
+      {String? eCardAccount}) async {
+    final request = await httpClient
+        .getUrl(Uri.parse(
+            "https://elife.zju.edu.cn/berserker-app/ykt/tsm/getCampusCards"))
+        .timeout(const Duration(seconds: 10),
+            onTimeout: () => throw ExceptionWithMessage("请求超时"));
+    request.headers.add("Synjones-Auth", "Bearer $synjonesAuth");
+    request.headers.add(
+        "User-Agent", "E-CampusZJU/2.3.20 (iPhone; iOS 17.5.1; Scale/3.00)");
+    request.headers.add("Accept", "application/json, text/plain, */*");
+    request.followRedirects = false;
+    final response = await request.close().timeout(const Duration(seconds: 10),
+        onTimeout: () => throw ExceptionWithMessage("请求超时"));
+    final body =
+        await readResponseText(response, context: '校园卡余额接口', expectJson: true);
+    final payload =
+        decodeJsonMap(body, context: '校园卡余额接口；HTTP ${response.statusCode}');
+    if (jsonIndicatesAuthenticationFailure(payload)) {
+      throw AuthenticationExpiredException('校园卡余额接口：登录态已失效');
+    }
+    final cards = (asDynamicList(asStringMap(payload['data'])?['card']) ??
+            const [])
+        .map(asStringMap)
+        .whereType<Map<String, dynamic>>()
+        .where((card) => asString(card['account'])?.isNotEmpty == true)
+        .toList();
+    if (cards.isEmpty) {
+      throw ExceptionWithMessage(
+          '校园卡余额接口：未返回有效卡片；响应摘要：${responseSummary(body)}');
+    }
+    cards.sort((a, b) => (asDouble(b['db_balance']) ?? 0.0)
+        .compareTo(asDouble(a['db_balance']) ?? 0.0));
+    final card = cards.firstWhere(
+        (c) => eCardAccount != null && asString(c['account']) == eCardAccount,
+        orElse: () => cards.first);
+    final cents = asDouble(card['db_balance']);
+    if (cents == null) {
+      throw ExceptionWithMessage('校园卡余额接口：缺少余额字段');
+    }
+    return cents / 100.0;
+  }
+
   static Future<String> getBarcode(
       HttpClient httpClient, String synjonesAuth, String eCardAccount) async {
     Object? lastError;

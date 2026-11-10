@@ -14,6 +14,7 @@ import 'package:celechron/design/sub_title.dart';
 import 'package:celechron/design/round_rectangle_card.dart';
 import 'package:celechron/page/scholar/course_detail/course_detail_view.dart';
 import 'flow_controller.dart';
+import 'exam_week_banner.dart';
 
 class FlowPage extends StatefulWidget {
   const FlowPage({super.key});
@@ -717,6 +718,9 @@ class _FlowPageState extends State<FlowPage> {
             ),
             const SliverToBoxAdapter(
               child: SizedBox(height: 0),
+            ),
+            SliverToBoxAdapter(
+              child: ExamWeekBanner(now: _flowController.timeNow),
             ),
             Obx(
               () {

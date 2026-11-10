@@ -40,6 +40,10 @@ class _ECardPayPageState extends State<ECardPayPage>
   final _isCached = false.obs;
   final _errorMsg = ''.obs;
   final _secondsRemaining = 0.obs;
+  final _balance = Rxn<double>();
+
+  /// 余额低于该值（元）时在付款码页给出提示，避免到刷卡机才发现余额不足。
+  static const double _lowBalanceThreshold = 15.0;
 
   Timer? _refreshTimer;
   Timer? _countdownTimer;
@@ -157,6 +161,7 @@ class _ECardPayPageState extends State<ECardPayPage>
           key: _cacheKeyTime, value: fetchedAt.toIso8601String());
       await _syncPaymentCode(code, auth: synjonesAuth, account: account);
       _scheduleCountdown(fetchedAt);
+      unawaited(_loadBalance(synjonesAuth, account));
     } catch (e) {
       // 失败时尝试读取缓存码
       final cached = await _readCachedBarcode(secureStorage);
@@ -384,6 +389,50 @@ class _ECardPayPageState extends State<ECardPayPage>
     );
   }
 
+  Future<void> _loadBalance(String auth, String account) async {
+    try {
+      final value =
+          await ECard.getBalance(_httpClient, auth, eCardAccount: account);
+      if (mounted) _balance.value = value;
+    } catch (_) {
+      // 余额只是附加信息，失败时保留上一次的数值，不打扰付款流程
+    }
+  }
+
+  Widget _buildBalance() {
+    final balance = _balance.value;
+    if (balance == null || _viewState.value != _ViewState.showing) {
+      return const SizedBox.shrink();
+    }
+    final low = balance < _lowBalanceThreshold;
+    final color =
+        low ? CupertinoColors.systemOrange : CupertinoColors.secondaryLabel;
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '余额 ¥${balance.toStringAsFixed(2)}',
+            style: TextStyle(
+                fontSize: 14,
+                fontWeight: low ? FontWeight.w600 : FontWeight.w400,
+                color: color),
+          ),
+          if (low)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                '余额不足 ¥${_lowBalanceThreshold.toStringAsFixed(0)}，请注意充值',
+                style: const TextStyle(
+                    fontSize: 12, color: CupertinoColors.systemOrange),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildRefreshButton(BuildContext context) {
     if (_viewState.value == _ViewState.notLoggedIn) {
       return const SizedBox.shrink();
@@ -436,6 +485,7 @@ class _ECardPayPageState extends State<ECardPayPage>
                   Obx(() => _buildSubtitle(context)),
                   const SizedBox(height: 12),
                   Obx(() => _buildCodeValue()),
+                  Obx(() => _buildBalance()),
                   const SizedBox(height: 24),
                   Obx(() => _buildRefreshButton(context)),
                   const Spacer(flex: 4),
