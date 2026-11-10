@@ -129,11 +129,11 @@ class ExamWeekBanner extends StatelessWidget {
                   Text('带好：身份证 · 校园卡 · 文具 · 计算器（按考试要求）',
                       style: TextStyle(fontSize: 12, color: secondary)),
                   if (others.isNotEmpty) ...[
-                    Divider(
+                    Container(
+                      height: 0.5,
+                      margin: const EdgeInsets.symmetric(vertical: 10),
                       color: CupertinoDynamicColor.resolve(
                           CupertinoColors.separator, context),
-                      height: 20,
-                      thickness: 0,
                     ),
                     for (final e in others)
                       Padding(
