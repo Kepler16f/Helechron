@@ -2,8 +2,8 @@
   "app": {
     "bundleName": "top.celechron.helechron",
     "vendor": "Helechron",
-    "versionCode": 101,
-    "versionName": "0.1.8_dev1",
+    "versionCode": 102,
+    "versionName": "0.1.8_dev2",
     "icon": "$media:layered_image",
     "label": "$string:app_name"
   }
