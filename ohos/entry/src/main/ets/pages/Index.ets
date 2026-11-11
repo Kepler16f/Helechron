@@ -1417,7 +1417,7 @@ struct Index {
                             this.isSeeking = false;
                             this.videoCurrentTime = value;
                             try {
-                              this.avPlayer?.seek(Math.floor(value * 1000), media.SeekMode.SEEK_PREVIOUS_SYNC);
+                              this.avPlayer?.seek(Math.floor(value * 1000), media.SeekMode.SEEK_PREV_SYNC);
                             } catch (seekErr) {
                               hilog.warn(DOMAIN, TAG, `AVPlayer seek failed: ${JSON.stringify(seekErr)}`);
                             }
