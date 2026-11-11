@@ -107,6 +107,13 @@ struct Index {
   @State private activeStreamIndex: number = 0;
   @State private videoStreams: StreamSource[] = [];
   @State private useWebFallback: boolean = false;
+  @State private isPlayerFullscreen: boolean = false;
+  @State private isPlayerMiniWindow: boolean = false;
+  @State private sensorRotation: boolean = true;
+  @State private miniOffsetX: number = 0;
+  @State private miniOffsetY: number = 0;
+  private dragStartX: number = 0;
+  private dragStartY: number = 0;
   private tabsController: HdsTabsController = new HdsTabsController();
   private videoController: VideoController = new VideoController();
   private webController: webview.WebviewController = new webview.WebviewController();
@@ -187,6 +194,11 @@ struct Index {
 
   onVideoOverlayChanged(): void {
     if (!this.inAppVideoVisible) {
+      this.isPlayerFullscreen = false;
+      this.isPlayerMiniWindow = false;
+      this.miniOffsetX = 0;
+      this.miniOffsetY = 0;
+      this.applyPlayerWindowMode();
       return;
     }
     const parsed: StreamSource[] = [];
@@ -210,6 +222,9 @@ struct Index {
     }
     this.videoStreams = parsed;
     this.activeStreamIndex = 0;
+    this.isPlayerMiniWindow = false;
+    this.miniOffsetX = 0;
+    this.miniOffsetY = 0;
     if (isDirectStreamUrl(this.inAppVideoUrl)) {
       this.activeVideoUrl = this.inAppVideoUrl;
       this.useWebFallback = false;
@@ -219,6 +234,71 @@ struct Index {
     } else {
       this.activeVideoUrl = this.webFallbackTarget();
       this.useWebFallback = true;
+    }
+    this.applyPlayerWindowMode();
+  }
+
+  private async applyPlayerWindowMode(): Promise<void> {
+    try {
+      const win = await window.getLastWindow(this.context);
+      if (this.inAppVideoVisible && this.isPlayerFullscreen && !this.isPlayerMiniWindow) {
+        await win.setPreferredOrientation(window.Orientation.AUTO_ROTATION_LANDSCAPE);
+        await win.setWindowSystemBarEnable([]);
+      } else if (this.inAppVideoVisible && !this.isPlayerMiniWindow) {
+        await win.setPreferredOrientation(
+          this.sensorRotation
+            ? window.Orientation.AUTO_ROTATION
+            : window.Orientation.PORTRAIT
+        );
+        await win.setWindowSystemBarEnable(['status', 'navigation']);
+      } else {
+        await win.setPreferredOrientation(window.Orientation.UNSPECIFIED);
+        await win.setWindowSystemBarEnable(['status', 'navigation']);
+      }
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, `applyPlayerWindowMode failed: ${JSON.stringify(e)}`);
+    }
+  }
+
+  private closeVideoOverlay(): void {
+    this.isPlayerFullscreen = false;
+    this.isPlayerMiniWindow = false;
+    this.miniOffsetX = 0;
+    this.miniOffsetY = 0;
+    this.inAppVideoVisible = false;
+    this.applyPlayerWindowMode();
+  }
+
+  private enterLandscapeFullscreen(): void {
+    this.isPlayerMiniWindow = false;
+    this.isPlayerFullscreen = true;
+    this.applyPlayerWindowMode();
+  }
+
+  private exitLandscapeFullscreen(): void {
+    this.isPlayerFullscreen = false;
+    this.applyPlayerWindowMode();
+  }
+
+  private enterMiniWindow(): void {
+    this.isPlayerFullscreen = false;
+    this.isPlayerMiniWindow = true;
+    this.applyPlayerWindowMode();
+  }
+
+  private injectWebTokenJs(): void {
+    if (this.inAppVideoToken.length === 0) {
+      return;
+    }
+    const safeTk = this.inAppVideoToken
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'")
+      .replace(/\n/g, '');
+    const js = `try{localStorage.setItem('token','${safeTk}');localStorage.setItem('_token','${safeTk}');document.cookie='_token=${safeTk};path=/';document.cookie='token=${safeTk};path=/';}catch(e){}`;
+    try {
+      this.webController.runJavaScript(js);
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, `runJavaScript failed: ${JSON.stringify(e)}`);
     }
   }
 
@@ -377,7 +457,7 @@ struct Index {
       .width('100%')
       .height('100%')
 
-      if (!this.bottomBarHidden && !this.inAppVideoVisible) {
+      if (!this.bottomBarHidden && (!this.inAppVideoVisible || this.isPlayerMiniWindow)) {
         if (this.useSystemMaterial()) {
           this.SystemMaterialBar()
         } else if (this.bottomBarFloating) {
@@ -407,112 +487,268 @@ struct Index {
       }
 
       if (this.inAppVideoVisible && (this.inAppVideoUrl.length > 0 || this.inAppVideoLivingroomUrl.length > 0)) {
-        Column() {
-          Row() {
-            Button('关闭')
-              .height(32)
-              .fontSize(13)
-              .backgroundColor('#33FFFFFF')
-              .fontColor(Color.White)
-              .onClick(() => {
-                this.inAppVideoVisible = false;
+        if (this.isPlayerMiniWindow) {
+          Stack({ alignContent: Alignment.TopEnd }) {
+            Column() {
+              if (this.useWebFallback && this.webFallbackTarget().length > 0) {
+                Web({ src: this.webFallbackTarget(), controller: this.webController })
+                  .width('100%')
+                  .height('100%')
+                  .javaScriptAccess(true)
+                  .domStorageAccess(true)
+                  .mediaPlayGestureAccess(false)
+                  .mixedMode(MixedMode.All)
+                  .onPageBegin(() => {
+                    this.injectWebTokenJs();
+                  })
+                  .onPageEnd(() => {
+                    this.injectWebTokenJs();
+                  })
+              } else {
+                Video({
+                  src: this.activeVideoUrl.length > 0 ? this.activeVideoUrl : this.inAppVideoUrl,
+                  currentProgressRate: this.videoSpeed,
+                  controller: this.videoController
+                })
+                  .width('100%')
+                  .height('100%')
+                  .autoPlay(true)
+                  .controls(true)
+                  .objectFit(ImageFit.Contain)
+                  .backgroundColor(Color.Black)
+                  .onError(() => {
+                    this.switchNextStreamOrWeb();
+                  })
+              }
+            }
+            .width('100%')
+            .height('100%')
+
+            Row({ space: 6 }) {
+              Button('全屏')
+                .height(24)
+                .fontSize(11)
+                .padding({ left: 8, right: 8 })
+                .backgroundColor('#99000000')
+                .fontColor(Color.White)
+                .onClick(() => {
+                  this.enterLandscapeFullscreen();
+                })
+              Button('✕')
+                .height(24)
+                .fontSize(11)
+                .padding({ left: 8, right: 8 })
+                .backgroundColor('#99000000')
+                .fontColor(Color.White)
+                .onClick(() => {
+                  this.closeVideoOverlay();
+                })
+            }
+            .margin({ top: 6, right: 6 })
+          }
+          .width(264)
+          .height(148)
+          .borderRadius(12)
+          .clip(true)
+          .backgroundColor(Color.Black)
+          .border({ width: 1, color: '#44FFFFFF' })
+          .shadow({ radius: 18, color: '#66000000', offsetX: 0, offsetY: 6 })
+          .margin({ right: 14, bottom: this.safeBottom + 72 })
+          .translate({ x: this.miniOffsetX, y: this.miniOffsetY })
+          .gesture(
+            PanGesture()
+              .onActionStart(() => {
+                this.dragStartX = this.miniOffsetX;
+                this.dragStartY = this.miniOffsetY;
               })
+              .onActionUpdate((event: GestureEvent) => {
+                this.miniOffsetX = this.dragStartX + event.offsetX;
+                this.miniOffsetY = this.dragStartY + event.offsetY;
+              })
+          )
+        } else {
+          Stack({ alignContent: Alignment.TopEnd }) {
+            Column() {
+              if (!this.isPlayerFullscreen) {
+                Row() {
+                  Button('关闭')
+                    .height(30)
+                    .fontSize(12)
+                    .backgroundColor('#33FFFFFF')
+                    .fontColor(Color.White)
+                    .onClick(() => {
+                      this.closeVideoOverlay();
+                    })
 
-            Text(this.inAppVideoTitle)
-              .fontSize(15)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(Color.White)
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .layoutWeight(1)
-              .margin({ left: 12, right: 12 })
+                  Text(this.inAppVideoTitle)
+                    .fontSize(14)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(Color.White)
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .layoutWeight(1)
+                    .margin({ left: 8, right: 8 })
 
-            if (!this.useWebFallback && this.videoStreams.length > 1) {
-              Button('换源')
-                .height(32)
-                .fontSize(13)
-                .backgroundColor('#33FFFFFF')
-                .fontColor(Color.White)
-                .margin({ right: 8 })
-                .onClick(() => {
-                  const nextIdx = (this.activeStreamIndex + 1) % this.videoStreams.length;
-                  this.activeStreamIndex = nextIdx;
-                  this.activeVideoUrl = this.videoStreams[nextIdx].url;
+                  if (!this.useWebFallback && this.videoStreams.length > 1) {
+                    Button('换源')
+                      .height(30)
+                      .fontSize(12)
+                      .backgroundColor('#33FFFFFF')
+                      .fontColor(Color.White)
+                      .margin({ right: 6 })
+                      .onClick(() => {
+                        const nextIdx = (this.activeStreamIndex + 1) % this.videoStreams.length;
+                        this.activeStreamIndex = nextIdx;
+                        this.activeVideoUrl = this.videoStreams[nextIdx].url;
+                      })
+                  }
+
+                  if (!this.useWebFallback) {
+                    Button(this.videoSpeedLabel)
+                      .height(30)
+                      .fontSize(12)
+                      .backgroundColor('#33FFFFFF')
+                      .fontColor(Color.White)
+                      .margin({ right: 6 })
+                      .onClick(() => {
+                        this.cycleVideoSpeed();
+                      })
+                  }
+
+                  if (!this.useWebFallback && this.webFallbackTarget().length > 0) {
+                    Button('网页')
+                      .height(30)
+                      .fontSize(12)
+                      .backgroundColor('#330A84FF')
+                      .fontColor(Color.White)
+                      .margin({ right: 6 })
+                      .onClick(() => {
+                        this.useWebFallback = true;
+                      })
+                  }
+
+                  Button(this.sensorRotation ? '旋屏' : '锁定')
+                    .height(30)
+                    .fontSize(12)
+                    .backgroundColor('#33FFFFFF')
+                    .fontColor(Color.White)
+                    .margin({ right: 6 })
+                    .onClick(() => {
+                      this.sensorRotation = !this.sensorRotation;
+                      this.applyPlayerWindowMode();
+                    })
+
+                  Button('小窗')
+                    .height(30)
+                    .fontSize(12)
+                    .backgroundColor('#3330D158')
+                    .fontColor(Color.White)
+                    .margin({ right: 6 })
+                    .onClick(() => {
+                      this.enterMiniWindow();
+                    })
+
+                  Button('全屏')
+                    .height(30)
+                    .fontSize(12)
+                    .backgroundColor('#44FFFFFF')
+                    .fontColor(Color.White)
+                    .onClick(() => {
+                      this.enterLandscapeFullscreen();
+                    })
+                }
+                .width('100%')
+                .padding({ left: 12, right: 12, top: 44, bottom: 10 })
+                .backgroundColor('#E6000000')
+              }
+
+              if (this.useWebFallback && this.webFallbackTarget().length > 0) {
+                Web({ src: this.webFallbackTarget(), controller: this.webController })
+                  .width('100%')
+                  .layoutWeight(1)
+                  .javaScriptAccess(true)
+                  .domStorageAccess(true)
+                  .mediaPlayGestureAccess(false)
+                  .mixedMode(MixedMode.All)
+                  .onControllerAttached(() => {
+                    if (this.inAppVideoToken.length > 0) {
+                      try {
+                        const hosts = [
+                          'https://classroom.zju.edu.cn',
+                          'https://yjapi.cmc.zju.edu.cn',
+                          'https://tgmedia.cmc.zju.edu.cn'
+                        ];
+                        for (let i = 0; i < hosts.length; i++) {
+                          webview.WebCookieManager.configCookieSync(hosts[i], `_token=${this.inAppVideoToken}; Path=/`);
+                          webview.WebCookieManager.configCookieSync(hosts[i], `token=${this.inAppVideoToken}; Path=/`);
+                          webview.WebCookieManager.configCookieSync(hosts[i], `_token=${this.inAppVideoToken}; Domain=.zju.edu.cn; Path=/`);
+                          webview.WebCookieManager.configCookieSync(hosts[i], `token=${this.inAppVideoToken}; Domain=.zju.edu.cn; Path=/`);
+                        }
+                      } catch (err) {
+                        hilog.warn(DOMAIN, TAG, `configCookieSync failed: ${JSON.stringify(err)}`);
+                      }
+                    }
+                  })
+                  .onPageBegin(() => {
+                    this.injectWebTokenJs();
+                  })
+                  .onPageEnd(() => {
+                    this.injectWebTokenJs();
+                  })
+              } else {
+                Video({
+                  src: this.activeVideoUrl.length > 0 ? this.activeVideoUrl : this.inAppVideoUrl,
+                  currentProgressRate: this.videoSpeed,
+                  controller: this.videoController
                 })
+                  .width('100%')
+                  .layoutWeight(1)
+                  .autoPlay(true)
+                  .controls(true)
+                  .objectFit(ImageFit.Contain)
+                  .backgroundColor(Color.Black)
+                  .onError(() => {
+                    this.switchNextStreamOrWeb();
+                  })
+              }
             }
+            .width('100%')
+            .height('100%')
+            .backgroundColor(Color.Black)
 
-            if (!this.useWebFallback) {
-              Button(`倍速 ${this.videoSpeedLabel}`)
-                .height(32)
-                .fontSize(13)
-                .backgroundColor('#33FFFFFF')
-                .fontColor(Color.White)
-                .margin({ right: this.webFallbackTarget().length > 0 ? 8 : 0 })
-                .onClick(() => {
-                  this.cycleVideoSpeed();
-                })
-            }
-
-            if (!this.useWebFallback && this.webFallbackTarget().length > 0) {
-              Button('网页版')
-                .height(32)
-                .fontSize(13)
-                .backgroundColor('#330A84FF')
-                .fontColor(Color.White)
-                .onClick(() => {
-                  this.useWebFallback = true;
-                })
+            if (this.isPlayerFullscreen) {
+              Row({ space: 8 }) {
+                Button('小窗')
+                  .height(30)
+                  .fontSize(12)
+                  .backgroundColor('#80000000')
+                  .fontColor(Color.White)
+                  .onClick(() => {
+                    this.enterMiniWindow();
+                  })
+                Button('退出全屏')
+                  .height(30)
+                  .fontSize(12)
+                  .backgroundColor('#80000000')
+                  .fontColor(Color.White)
+                  .onClick(() => {
+                    this.exitLandscapeFullscreen();
+                  })
+                Button('关闭')
+                  .height(30)
+                  .fontSize(12)
+                  .backgroundColor('#80000000')
+                  .fontColor(Color.White)
+                  .onClick(() => {
+                    this.closeVideoOverlay();
+                  })
+              }
+              .margin({ top: 14, right: 16 })
             }
           }
           .width('100%')
-          .padding({ left: 16, right: 16, top: 44, bottom: 12 })
-          .backgroundColor('#E6000000')
-
-          if (this.useWebFallback && this.webFallbackTarget().length > 0) {
-            Web({ src: this.webFallbackTarget(), controller: this.webController })
-              .width('100%')
-              .layoutWeight(1)
-              .javaScriptAccess(true)
-              .domStorageAccess(true)
-              .mediaPlayGestureAccess(false)
-              .mixedMode(MixedMode.All)
-              .onControllerAttached(() => {
-                if (this.inAppVideoToken.length > 0) {
-                  try {
-                    const hosts = [
-                      'https://classroom.zju.edu.cn',
-                      'https://yjapi.cmc.zju.edu.cn',
-                      'https://tgmedia.cmc.zju.edu.cn'
-                    ];
-                    for (let i = 0; i < hosts.length; i++) {
-                      webview.WebCookieManager.configCookieSync(hosts[i], `_token=${this.inAppVideoToken}; Path=/`);
-                      webview.WebCookieManager.configCookieSync(hosts[i], `token=${this.inAppVideoToken}; Path=/`);
-                    }
-                  } catch (err) {
-                    hilog.warn(DOMAIN, TAG, `configCookieSync failed: ${JSON.stringify(err)}`);
-                  }
-                }
-              })
-          } else {
-            Video({
-              src: this.activeVideoUrl.length > 0 ? this.activeVideoUrl : this.inAppVideoUrl,
-              currentProgressRate: this.videoSpeed,
-              controller: this.videoController
-            })
-              .width('100%')
-              .layoutWeight(1)
-              .autoPlay(true)
-              .controls(true)
-              .objectFit(ImageFit.Contain)
-              .backgroundColor(Color.Black)
-              .onError(() => {
-                this.switchNextStreamOrWeb();
-              })
-          }
+          .height('100%')
         }
-        .width('100%')
-        .height('100%')
-        .backgroundColor(Color.Black)
       }
     }
     .width('100%')
@@ -521,7 +757,11 @@ struct Index {
 
   onBackPress(): boolean {
     if (this.inAppVideoVisible) {
-      this.inAppVideoVisible = false;
+      if (this.isPlayerFullscreen) {
+        this.exitLandscapeFullscreen();
+      } else {
+        this.closeVideoOverlay();
+      }
       return true;
     }
     this.context.eventHub.emit(EVENT_BACK_PRESS);

@@ -4,15 +4,20 @@ import 'package:celechron/model/grade.dart';
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/services/curriculum_matching_engine.dart'
     as legacy_match;
+import 'package:celechron/services/plan_audit/audit.dart' as compass_audit;
 import 'package:celechron/services/plan_audit/course_state.dart'
     as compass_state;
 import 'package:celechron/services/plan_audit/matching.dart' as compass_match;
+import 'package:celechron/services/plan_pdf_parser.dart';
 
 export 'package:celechron/services/plan_audit/audit.dart'
     show
         AuditEngine,
         ModuleGroupRule,
         foreignCapForLevel,
+        isForeignCourseName,
+        isForeignLangModule,
+        isPracticeModule,
         kForeignLangCaps,
         kForeignLangCaps2026,
         kForeignNewRuleGradeYear;
@@ -331,22 +336,14 @@ class PlanAuditHelper {
           'intensive_practice', '专业核心实践环节', summary.zyhxsjkc, 0.0);
       addSummaryBucket(
           'frontier', '前沿与荣誉课程', summary.qywkc, 0.0);
-      final ptSum = (summary.dektxf ?? 0) +
-          (summary.dektxf3 ?? 0) +
-          (summary.dektxf4 ?? 0);
-      if (ptSum > 0) {
-        modules.add(<String, dynamic>{
-          'module_id': 'practice_points',
-          'module_path': '第二/三/四课堂',
-          'title': '第二/三/四课堂',
-          'level': 1,
-          'category': '第二/三/四课堂',
-          'required_credits': ptSum,
-          'plan_credits_raw': ptSum.toStringAsFixed(1),
-          'plan_credits_unit': '学分',
-          'course_ids': const <String>[],
-          'notes': const <String>[],
-        });
+      if ((summary.dektxf ?? 0) > 0) {
+        addSummaryBucket('practice_kt_2', '第二课堂', const [], summary.dektxf!);
+      }
+      if ((summary.dektxf3 ?? 0) > 0) {
+        addSummaryBucket('practice_kt_3', '第三课堂', const [], summary.dektxf3!);
+      }
+      if ((summary.dektxf4 ?? 0) > 0) {
+        addSummaryBucket('practice_kt_4', '第四课堂', const [], summary.dektxf4!);
       }
     }
 
@@ -365,6 +362,145 @@ class PlanAuditHelper {
       'modules': modules,
       'courses': courses,
     };
+  }
+
+  /// 从选课课号或名称判断是否为微辅修（本专业附带的给外专业选修清单）
+  static bool isMinorSection(PdfModuleSection s) =>
+      s.title.contains('微辅修') || s.parentPath.contains('微辅修');
+
+  /// 是否为外语类板块
+  static bool isForeignSection(PdfModuleSection s) =>
+      s.title.contains('外语') ||
+      s.title.contains('英语') ||
+      s.parentPath.contains('外语');
+
+  /// 解析板块对应的第二/三/四课堂类别（2/3/4；合并节点返回 0；非素拓课堂返回 null）
+  static int? practiceClassroomIndex(String text) {
+    final isCombined =
+        RegExp(r'第[二2][、/／,，及和与\s]*[三3](?:[、/／,，及和与\s]*[四4])?课堂')
+            .hasMatch(text);
+    final has2 = text.contains('第二课堂') || text.contains('第2课堂');
+    final has3 = text.contains('第三课堂') || text.contains('第3课堂');
+    final has4 = text.contains('第四课堂') || text.contains('第4课堂');
+    final count = (has2 ? 1 : 0) + (has3 ? 1 : 0) + (has4 ? 1 : 0);
+    if (isCombined || count > 1) return 0;
+    if (count == 0) return null;
+    if (has2) return 2;
+    if (has3) return 3;
+    return 4;
+  }
+
+  /// 将素拓看板（Scholar.pt2 / pt3 / pt4）实时分数注入 PlanFile 与审计 record，
+  /// 确保第二/三/四课堂的已获分、达标颜色、缺口与毕业总学分进度从底层打通。
+  static void injectPracticeScoresIntoPlanAndRecord({
+    required Map<String, dynamic> planFile,
+    required Map<String, dynamic> record,
+    required Scholar scholar,
+  }) {
+    final modules = planFile['modules'] as List?;
+    if (modules == null || modules.isEmpty) return;
+
+    final planCourses = List<Map<String, dynamic>>.from(
+      (planFile['courses'] as List? ?? const []).cast<Map<String, dynamic>>(),
+    );
+    final recordCourses = List<Map<String, dynamic>>.from(
+      (record['courses'] as List? ?? const []).cast<Map<String, dynamic>>(),
+    );
+
+    final pt2 = scholar.pt2;
+    final pt3 = scholar.pt3;
+    final pt4 = scholar.pt4;
+
+    var added = false;
+    for (final rawMod in modules) {
+      if (rawMod is! Map) continue;
+      final m = Map<String, dynamic>.from(rawMod);
+      if (!compass_audit.isPracticeModule(m)) continue;
+
+      final mid = '${m['module_id'] ?? ''}'.trim();
+      if (mid.isEmpty) continue;
+      final text =
+          '${m['module_path'] ?? ''} ${m['title'] ?? ''} ${m['category'] ?? ''}';
+      final clsIdx = practiceClassroomIndex(text);
+      if (clsIdx == null) continue;
+
+      final req = (m['required_credits'] as num?)?.toDouble() ?? 0.0;
+      double rawPts;
+      String courseId;
+      String courseName;
+      switch (clsIdx) {
+        case 2:
+          rawPts = pt2;
+          courseId = 'SZTZ_KT_2';
+          courseName = '第二课堂素质拓展记点';
+          break;
+        case 3:
+          rawPts = pt3;
+          courseId = 'SZTZ_KT_3';
+          courseName = '第三课堂素质拓展记点';
+          break;
+        case 4:
+          rawPts = pt4;
+          courseId = 'SZTZ_KT_4';
+          courseName = '第四课堂素质拓展记点';
+          break;
+        default:
+          rawPts = pt2 + pt3 + pt4;
+          courseId = 'SZTZ_KT_ALL';
+          courseName = '第二/三/四课堂素拓记点';
+          break;
+      }
+
+      // 写入原始分以便 UI 展示（即便超出req或为0）
+      rawMod['practice_raw_points'] = rawPts;
+
+      final effectivePts = req > 0 ? rawPts.clamp(0.0, req) : rawPts;
+      if (effectivePts <= 0) continue;
+
+      final alreadyInPlan = planCourses.any((c) =>
+          '${c['module_id'] ?? ''}' == mid &&
+          '${c['course_id'] ?? ''}' == courseId);
+      if (!alreadyInPlan) {
+        planCourses.add(<String, dynamic>{
+          'course_id': courseId,
+          'name': courseName,
+          'credits': double.parse(effectivePts.toStringAsFixed(2)),
+          'module_id': mid,
+          'nature': '素质拓展',
+          'offered': null,
+          'grade_cycle': null,
+          'offered_years': null,
+          'prereq': const <String>[],
+          'source': const <String, dynamic>{'page': null},
+        });
+        added = true;
+      }
+
+      final alreadyInRec =
+          recordCourses.any((r) => '${r['course_id'] ?? ''}' == courseId);
+      if (!alreadyInRec) {
+        final rawText = rawPts == rawPts.roundToDouble()
+            ? rawPts.toStringAsFixed(0)
+            : rawPts.toStringAsFixed(1);
+        recordCourses.add(<String, dynamic>{
+          'course_id': courseId,
+          'name': courseName,
+          'credits': double.parse(effectivePts.toStringAsFixed(2)),
+          'grade': 100.0,
+          'original': '$rawText分',
+          'passed': true,
+          'credit_included': true,
+          'category': '素质拓展',
+          'semester': '素拓认定',
+        });
+        added = true;
+      }
+    }
+
+    if (added) {
+      planFile['courses'] = planCourses;
+      record['courses'] = recordCourses;
+    }
   }
 
   /// 将旧版 CourseVariant 匹配桥接到 Compass 统一逻辑

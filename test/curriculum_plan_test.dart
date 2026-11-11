@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:celechron/model/curriculum_plan_models.dart';
+import 'package:celechron/model/scholar.dart';
 import 'package:celechron/services/curriculum_matching_engine.dart';
 import 'package:celechron/services/plan_audit_engine.dart';
 
@@ -287,6 +288,168 @@ CS2003M 计算机组成 4.0 3.0-2.0 64 二(秋冬)
       expect(PlanAuditHelper.extractCourseCode('(2025-2026-1)-MARX1004G-000123-1'),
           'MARX1004G');
       expect(certifiedCategoryOf('劳动教育实践'), '劳育类');
+      expect(isForeignCourseName('大学英语(H)'), isTrue);
+      expect(isForeignCourseName('初级日语'), isTrue);
+      expect(PlanAuditHelper.practiceClassroomIndex('第二课堂'), 2);
+      expect(PlanAuditHelper.practiceClassroomIndex('第三课堂'), 3);
+      expect(PlanAuditHelper.practiceClassroomIndex('第四课堂'), 4);
+      expect(PlanAuditHelper.practiceClassroomIndex('第二/三/四课堂'), 0);
+    });
+
+    test('外语类锚定已修外语课程并随 L1/L2/L3 级别同步更新总毕业学分', () {
+      const pdfWithForeignAndMinor = '''
+一、通识课程 10学分
+1.外语类 4.5学分
+课程号 课程名称 学分 周学时 总学时 建议学年学期
+FL1001 大学英语IV 3.0 3.0-0.0 48 二(春夏)
+2.第二课堂 4学分
+3.第三课堂 2学分
+4.第四课堂 2学分
+二、微辅修 12学分
+1.微辅修专业课程 12学分
+课程号 课程名称 学分 周学时 总学时 建议学年学期
+MIN101 微辅修导论 3.0 3.0-0.0 48 二(秋冬)
+''';
+      final sections = parsePlanPdfText(pdfWithForeignAndMinor);
+      final minorCount =
+          sections.sections.where(PlanAuditHelper.isMinorSection).length;
+      expect(minorCount, greaterThan(0));
+
+      final planL2 = planFileFromPdf(
+        sections,
+        major: '计算机科学与技术',
+        grade: '2026',
+        totalCredits: 150.0,
+      );
+      final planL3 = planFileFromPdf(
+        sections,
+        major: '计算机科学与技术',
+        grade: '2026',
+        totalCredits: 150.0,
+      );
+
+      final rec = <String, dynamic>{
+        'student': {
+          'student_id': '3260100001',
+          'major': '计算机科学与技术',
+          'grade': '2026',
+          'current_semester': '2026-A',
+        },
+        'courses': [
+          {
+            'course_id': 'JAP1001',
+            'name': '初级日语Ⅰ',
+            'credits': 3.0,
+            'grade': 91.0,
+            'original': '91',
+            'passed': true,
+            'credit_included': true,
+          },
+        ],
+        'planned_courses': [
+          {
+            'course_id': '',
+            'name': '大学英语(H)',
+            'credits': 3.0,
+            'semester': '2026-A',
+          },
+        ],
+      };
+
+      final r2 = AuditEngine(const {}).build(
+        rec,
+        planL2,
+        action: {'foreign_lang_level': 'L2'},
+      );
+      final r3 = AuditEngine(const {}).build(
+        rec,
+        planL3,
+        action: {'foreign_lang_level': 'L3'},
+      );
+
+      final modForeign2 = (r2['summary'] as List)
+          .cast<Map<String, dynamic>>()
+          .firstWhere(isForeignLangModule);
+      final modForeign3 = (r3['summary'] as List)
+          .cast<Map<String, dynamic>>()
+          .firstWhere(isForeignLangModule);
+
+      // 已修 日语 应自动锚定进外语类并获得 3.0 学分；在修 大学英语(H) 应在 plan_courses 中展示
+      expect((modForeign2['earned'] as num).toDouble(), 3.0);
+      expect((modForeign2['required'] as num).toDouble(), 4.5);
+      expect((modForeign3['required'] as num).toDouble(), 0.0);
+      expect(
+        (modForeign2['plan_courses'] as List)
+            .any((c) => c['name'] == '大学英语(H)'),
+        isTrue,
+      );
+
+      // L2 (4.5) 与 L3 免修 (0.0) 应同步带动总要求学分下降 4.5 分
+      final req2 = ((r2['totals'] as Map)['required'] as num).toDouble();
+      final req3 = ((r3['totals'] as Map)['required'] as num).toDouble();
+      expect(req2 - req3, closeTo(4.5, 0.01));
+    });
+
+    test('二三四课堂素拓分打通三色审计并按单课堂上限计入已获学分', () {
+      const pdfWithPractice = '''
+一、素质拓展 8学分
+1.第二课堂 4学分
+2.第三课堂 2学分
+3.第四课堂 2学分
+''';
+      final sections = parsePlanPdfText(pdfWithPractice);
+      final plan = planFileFromPdf(
+        sections,
+        major: '计算机科学与技术',
+        grade: '2025',
+        totalCredits: 150.0,
+      );
+      final record = <String, dynamic>{
+        'student': {
+          'student_id': '3250100001',
+          'major': '计算机科学与技术',
+          'grade': '2025',
+          'current_semester': '2026-A',
+        },
+        'courses': <Map<String, dynamic>>[],
+        'planned_courses': <Map<String, dynamic>>[],
+      };
+
+      final s = Scholar()
+        ..username = '3250100001'
+        ..pt2 = 6.5 // 超过要求 4.0，仅有效计 4.0，不溢抵第三课堂缺口
+        ..pt3 = 1.0
+        ..pt4 = 2.0
+        ..isPracticeScoresGet = true;
+
+      PlanAuditHelper.injectPracticeScoresIntoPlanAndRecord(
+        planFile: plan,
+        record: record,
+        scholar: s,
+      );
+
+      final report = AuditEngine(const {}).build(record, plan);
+      final summary =
+          (report['summary'] as List).cast<Map<String, dynamic>>();
+      final m2 = summary.firstWhere((m) => '${m['title']}'.contains('第二课堂'));
+      final m3 = summary.firstWhere((m) => '${m['title']}'.contains('第三课堂'));
+      final m4 = summary.firstWhere((m) => '${m['title']}'.contains('第四课堂'));
+
+      expect((m2['earned'] as num).toDouble(), 4.0);
+      expect((m2['practice_raw_points'] as num).toDouble(), 6.5);
+      expect(m2['color'], 'green');
+
+      expect((m3['earned'] as num).toDouble(), 1.0);
+      expect(m3['color'], 'yellow');
+      expect((m3['gap'] as num).toDouble(), 1.0);
+
+      expect((m4['earned'] as num).toDouble(), 2.0);
+      expect(m4['color'], 'green');
+
+      final totals = report['totals'] as Map<String, dynamic>;
+      expect((totals['required'] as num).toDouble(), 158.0);
+      expect((totals['earned'] as num).toDouble(), 7.0);
+      expect((totals['gap'] as num).toDouble(), 151.0);
     });
   });
 }

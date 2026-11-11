@@ -191,16 +191,31 @@ bool isForeignLangModule(Map<String, dynamic> m) {
   return t.contains('外语') || t.contains('英语');
 }
 
-/// 课程行外语名判据（与板块判据同一组词面：外语/英语；宁缺勿猜不扫 日语 等
-/// 小语种——成绩单小语种课极少且板块名通常含「外语」，会走板块路径）。
+/// 课程行外语名判据（涵盖英语及常用二外/小语种外语课程）
 bool isForeignCourseName(String name) =>
-    name.contains('外语') || name.contains('英语');
+    name.contains('外语') ||
+    name.contains('英语') ||
+    name.contains('英文') ||
+    name.contains('日语') ||
+    name.contains('德语') ||
+    name.contains('法语') ||
+    name.contains('俄语') ||
+    name.contains('西班牙语') ||
+    name.contains('朝鲜语') ||
+    name.contains('韩语') ||
+    name.contains('葡萄牙语') ||
+    name.contains('意大利语') ||
+    name.contains('阿拉伯语');
 
 /// 素质拓展课堂模块判据（第二/三/四课堂）：无课程表、按平台记点认定，
 /// 不能用「排课窗口/重修」口径报延毕风险（用户 #9）。
 bool isPracticeModule(Map<String, dynamic> m) {
   final t = '${m['module_path'] ?? ''} ${m['title'] ?? ''} ${m['category'] ?? ''}';
-  return t.contains('第二课堂') || t.contains('第三课堂') || t.contains('第四课堂');
+  return t.contains('第二课堂') ||
+      t.contains('第三课堂') ||
+      t.contains('第四课堂') ||
+      RegExp(r'第[二2][、/／,，及和与\s]*[三3](?:[、/／,，及和与\s]*[四4])?课堂')
+          .hasMatch(t);
 }
 
 /// 认定类模块（美育/劳育/创新创业/心理健康/军体/思政）：按清单认定，
@@ -229,15 +244,16 @@ Map<String, dynamic> _attachForeignAnchors(
   final planCourses =
       (plan['courses'] as List? ?? const []).cast<Map<String, dynamic>>();
   final foreignMid = '${foreignMods.single['module_id']}';
-  // 板块已列外语课程表 → 锚定由既有匹配（ID/相似度/归一化兜底）负责，绝不重复挂。
-  if (planCourses.any((c) => '${c['module_id'] ?? ''}' == foreignMid &&
-      isForeignCourseName('${c['name'] ?? ''}'.trim()))) {
-    return plan;
-  }
-  final existingIds = {for (final c in planCourses) '${c['course_id'] ?? ''}'};
+  // 将成绩单里未在方案列出的外语课程（含通用英语、学术英语、二外/小语种等）
+  // 锚定进外语类模块参与学分核算，已列明的同课号/同名课程绝不重复挂载。
+  final existingIds = {
+    for (final c in planCourses)
+      if ('${c['course_id'] ?? ''}'.trim().isNotEmpty) '${c['course_id']}'.trim()
+  };
   final existingNames = {
     for (final c in planCourses)
-      normalizeCourseName('${c['name'] ?? ''}'.trim())
+      if ('${c['name'] ?? ''}'.trim().isNotEmpty)
+        normalizeCourseName('${c['name']}'.trim())
   };
   final synth = <Map<String, dynamic>>[];
   final claimed = <String>{}; // 成绩单同名/同id行只合成一次（重修）
@@ -589,6 +605,8 @@ class AuditEngine {
     final summary = <Map<String, dynamic>>[];
     final warnings = <Map<String, dynamic>>[];
     var groupApplied = false; // 是否有模块的组口径折算实际生效（供 caliber_notes）
+    var foreignBaseReqSum = 0.0;
+    var foreignEffectiveReqSum = 0.0;
     // 每模块缺口类警告（graduation_risk / offering_closed）在 warnings 中的
     // 起始下标；并列选项组合成后据此清除落选选项的警告（v1.5）。
     final moduleWarnStart = <String, int>{};
@@ -601,6 +619,7 @@ class AuditEngine {
       final req0 = (m['required_credits'] as num).toDouble();
       var req = effectiveRequiredCredits(m, moduleCourses, rule: groupRule);
       if ((req - req0).abs() > 1e-9) groupApplied = true;
+      final reqBeforeForeign = req;
       // 外语口径：仅外语类模块。自选学分=用户指定的模块要求（可升可降）；
       // level 档位 2026 级起强制新规值（可升可降），此前仍只降不升。
       if (foreignCap != null && isForeignLangModule(m)) {
@@ -611,6 +630,8 @@ class AuditEngine {
         } else if (foreignCap < req) {
           req = foreignCap;
         }
+        foreignBaseReqSum += reqBeforeForeign;
+        foreignEffectiveReqSum += req;
       }
       final got = double.parse(earned[mid]!.toStringAsFixed(2));
       final minCourses = groupRule?.minCourses;
@@ -734,10 +755,10 @@ class AuditEngine {
           final key = pid.isNotEmpty ? pid : pname;
           if (key.isEmpty) continue;
           final already = moduleCourses.any((c) =>
-              '${c['course_id'] ?? ''}'.trim() == pid ||
+              (pid.isNotEmpty && '${c['course_id'] ?? ''}'.trim() == pid) ||
               ('${c['name'] ?? ''}'.trim() == pname && pname.isNotEmpty));
           if (already) continue;
-          if (!(pname.contains('外语') || pname.contains('英语'))) continue;
+          if (!isForeignCourseName(pname)) continue;
           if (!seenPlanCourseIds.add(key)) continue;
           planCoursesOfModule.add(<String, dynamic>{
             'course_id': pid.isEmpty ? null : pid,
@@ -784,6 +805,8 @@ class AuditEngine {
           'certified_category': m['certified_category'],
         if (m.containsKey('sub_requirements'))
           'sub_requirements': m['sub_requirements'],
+        if (m.containsKey('practice_raw_points'))
+          'practice_raw_points': m['practice_raw_points'],
         'required': req,
         'earned': got,
         'selected_no_credit': selectedNoCredit,
@@ -1218,11 +1241,13 @@ class AuditEngine {
         .where(isPracticeModule)
         .fold<num>(0, (s, m) => s + m['required'])
         .toStringAsFixed(2));
+    final foreignDelta = foreignEffectiveReqSum - foreignBaseReqSum;
     final earnedTotal = double.parse(
         displaySummary.fold<num>(0, (s, m) => s + m['earned'])
             .toStringAsFixed(2));
     final requiredTotal = planTotalCredits != null
-        ? double.parse((planTotalCredits + practiceRequired).toStringAsFixed(2))
+        ? double.parse(((planTotalCredits + foreignDelta).clamp(0.0, double.infinity) + practiceRequired)
+            .toStringAsFixed(2))
         : moduleRequired;
     // 已选未获（诉求 #4）：与 earned 分开呈现，绝不并入已取得，也不抵扣 gap。
     final selectedNoCreditTotal = displaySummary.fold<int>(

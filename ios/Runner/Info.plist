@@ -34,6 +34,7 @@
 	<string>Helechron 需要访问相册，以便选择作业附件图片。</string>
 	<key>UIBackgroundModes</key>
 	<array>
+		<string>audio</string>
 		<string>fetch</string>
 		<string>processing</string>
 	</array>

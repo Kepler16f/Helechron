@@ -853,10 +853,13 @@ class ZhiyunService {
 
   /// 获取指定课程的课节回放目录（优先内存缓存，其次本地 Hive 离线缓存，网络失败时优雅降级）
   static Future<List<Map<String, dynamic>>> fetchCourseCatalogue(
-      String courseId) async {
+    String courseId, {
+    bool forceRefresh = false,
+  }) async {
     final cached = _catalogueCache[courseId];
     final cacheTime = _catalogueCacheTime[courseId];
-    if (cached != null &&
+    if (!forceRefresh &&
+        cached != null &&
         cacheTime != null &&
         DateTime.now().difference(cacheTime) < const Duration(minutes: 15)) {
       return cached;
@@ -2460,6 +2463,20 @@ class ZhiyunService {
     return url;
   }
 
+  static int _streamPriority(ZhiyunStreamOption option) {
+    final u = option.url.toLowerCase();
+    var score = 0;
+    if (u.startsWith('https://')) score += 100;
+    if (u.contains('.m3u8')) {
+      score += 50;
+    } else if (u.contains('.mp4')) {
+      score += 40;
+    } else if (u.contains('.flv')) {
+      score += 10;
+    }
+    return score;
+  }
+
   /// 获取智云课堂单节课的直播/回放流媒体地址（MP4 / HLS m3u8）
   ///
   /// 参考开源项目：
@@ -2469,6 +2486,7 @@ class ZhiyunService {
   static Future<List<ZhiyunStreamOption>> fetchLessonStreams({
     required String courseId,
     required String subId,
+    bool preferLive = false,
   }) async {
     final client = createHttpClient();
     final replayStreams = <ZhiyunStreamOption>[];
@@ -2484,6 +2502,31 @@ class ZhiyunService {
         liveStreams.add(option);
       } else {
         replayStreams.add(option);
+      }
+    }
+
+    void extractLiveNode(String label, dynamic node) {
+      if (node is String) {
+        addStream(label, node, isLive: true);
+      } else if (node is Map) {
+        for (final key in [
+          'm3u8',
+          'hls_url',
+          'hls',
+          'stream_m3u8',
+          'stream_url',
+          'pull_url',
+          'url',
+          'play_url',
+          'flv',
+          'stream_flv',
+        ]) {
+          final v = node[key];
+          if (v is String) {
+            final suffix = key.contains('flv') ? ' (FLV)' : ' (HLS)';
+            addStream('$label$suffix', v, isLive: true);
+          }
+        }
       }
     }
 
@@ -2634,19 +2677,23 @@ class ZhiyunService {
           }
 
           final liveUrl = data['live_url'];
-          if (liveUrl is Map) {
-            final output = liveUrl['output'];
-            if (output is Map) {
-              addStream('教师画面直播 (HLS)', output['m3u8']?.toString(),
-                  isLive: true);
-            }
-            final outputStudent = liveUrl['output_student'];
-            if (outputStudent is Map) {
-              addStream('板书/课件直播 (HLS)', outputStudent['m3u8']?.toString(),
-                  isLive: true);
-            }
+          if (liveUrl is String) {
+            addStream('实时直播流', liveUrl, isLive: true);
+          } else if (liveUrl is Map) {
+            extractLiveNode('教师画面直播', liveUrl['output']);
+            extractLiveNode('板书/课件直播', liveUrl['output_student']);
+            extractLiveNode('课件投屏直播', liveUrl['output_ppt']);
+            extractLiveNode('教师直播', liveUrl['teacher']);
+            extractLiveNode('学生端直播', liveUrl['student']);
+            extractLiveNode('直播主线路', liveUrl);
           }
-          if (replayStreams.isNotEmpty || liveStreams.isNotEmpty) break;
+          extractLiveNode('直播流', data['stream_url']);
+          extractLiveNode('HLS 直播流', data['hls_url']);
+          if (preferLive || subIsLive) {
+            if (liveStreams.isNotEmpty) break;
+          } else if (replayStreams.isNotEmpty) {
+            break;
+          }
         } catch (_) {}
       }
 
@@ -2658,6 +2705,7 @@ class ZhiyunService {
         if (itemSubId != subId) continue;
         if (!subIsLive) subIsLive = checkIsLive(item: item);
         extractFromMap(item);
+        extractLiveNode('目录直播流', item['live_url']);
         final rawContent = item['content'];
         Map? contentMap;
         if (rawContent is String && rawContent.trim().startsWith('{')) {
@@ -2668,41 +2716,68 @@ class ZhiyunService {
           contentMap = rawContent;
         }
         extractFromMap(contentMap, prefix: '目录');
+        if (contentMap != null) {
+          extractLiveNode('目录内容直播流', contentMap['live_url']);
+        }
       }
 
-      // 3. 直播流接口 getscreenstream（仅在正在直播，或尚未拿到任何回放流且未明确已结束时拉取）
-      if (subIsLive || (replayStreams.isEmpty && !subIsEndedOrReplay)) {
-        try {
-          final screenUri = Uri.parse(
+      // 3. 直播流接口 getscreenstream（在直播模式、正在直播，或尚无可用流时拉取，支持双域名）
+      if (preferLive ||
+          subIsLive ||
+          (replayStreams.isEmpty && !subIsEndedOrReplay)) {
+        final screenUris = [
+          Uri.parse(
             'https://yjapi.cmc.zju.edu.cn/courseapi/index.php/v2/meta/getscreenstream?sub_id=$subId',
-          );
-          final screenResp = await getWithHeaders(screenUri, token);
-          if (screenResp.statusCode == 200) {
+          ),
+          Uri.parse(
+            '$_kZhiyunBaseUrl/courseapi/index.php/v2/meta/getscreenstream?sub_id=$subId',
+          ),
+        ];
+        for (final screenUri in screenUris) {
+          try {
+            var screenResp = await getWithHeaders(screenUri, token);
+            if (screenResp.statusCode == 401 || screenResp.statusCode == 403) {
+              await syncFromMyCourses();
+              token = getCachedZhiyunToken();
+              screenResp = await getWithHeaders(screenUri, token);
+            }
+            if (screenResp.statusCode != 200) continue;
             final screenBody = await screenResp.transform(utf8.decoder).join();
             final screenJson = jsonDecode(screenBody);
-            if (screenJson is Map && screenJson['result'] is Map) {
-              final dataList = screenJson['result']['data'];
+            if (screenJson is Map) {
+              final dynamic dataList = (screenJson['result'] is Map
+                      ? screenJson['result']['data']
+                      : null) ??
+                  (screenJson['data'] is Map
+                      ? screenJson['data']['data'] ?? screenJson['data']['list']
+                      : screenJson['data']) ??
+                  screenJson['list'];
               if (dataList is List) {
                 for (final item in dataList) {
                   if (item is Map) {
-                    final m3u8 = item['stream_m3u8']?.toString();
                     final type = item['type']?.toString() ?? '';
                     final label = type == '2'
                         ? '课件投屏直播'
                         : type == '3'
                             ? '教师摄像直播'
                             : '课堂实时直播';
-                    addStream(label, m3u8, isLive: true);
+                    extractLiveNode(label, item);
                   }
                 }
               }
             }
-          }
-        } catch (_) {}
+            if (liveStreams.isNotEmpty) break;
+          } catch (_) {}
+        }
       }
 
-      // 根据当前课程状态智能决定流媒体排序：直播中优先推直播流，否则绝对优先回放流
-      if (subIsLive) {
+      liveStreams
+          .sort((a, b) => _streamPriority(b).compareTo(_streamPriority(a)));
+      replayStreams
+          .sort((a, b) => _streamPriority(b).compareTo(_streamPriority(a)));
+
+      // 直播模式/正在直播时优先直播流；回放模式优先回放流
+      if (preferLive || subIsLive) {
         return [...liveStreams, ...replayStreams];
       }
       if (replayStreams.isNotEmpty) {

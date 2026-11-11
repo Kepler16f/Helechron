@@ -490,33 +490,26 @@ class CourseSchedulePage extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: CupertinoDynamicColor.resolve(
-                          CustomCupertinoDynamicColors.sakuraInk, context)
-                      .withValues(alpha: 0.14),
+                      CupertinoColors.secondarySystemFill, context),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: CupertinoDynamicColor.resolve(
-                            CustomCupertinoDynamicColors.sakuraInk, context)
-                        .withValues(alpha: 0.35),
-                    width: 0.8,
-                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      CupertinoIcons.doc_text_search,
+                      CupertinoIcons.doc_text,
                       size: 13,
                       color: CupertinoDynamicColor.resolve(
-                          CustomCupertinoDynamicColors.sakuraInk, context),
+                          CupertinoColors.activeBlue, context),
                     ),
                     const SizedBox(width: 4),
                     Text(
                       '培养方案',
                       style: TextStyle(
                         fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                         color: CupertinoDynamicColor.resolve(
-                            CustomCupertinoDynamicColors.sakuraInk, context),
+                            CupertinoColors.activeBlue, context),
                       ),
                     ),
                   ],

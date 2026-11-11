@@ -12,6 +12,28 @@ import 'package:celechron/services/ohos_native_service.dart';
 import 'package:celechron/services/plan_audit_engine.dart';
 import 'package:celechron/utils/json_utils.dart';
 
+class ForeignCourseEntry {
+  final String name;
+  final String courseId;
+  final double credits;
+  final bool passed;
+  final bool active;
+
+  const ForeignCourseEntry({
+    required this.name,
+    required this.courseId,
+    required this.credits,
+    required this.passed,
+    required this.active,
+  });
+
+  CompassCourseState get state => passed
+      ? CompassCourseState.earned
+      : active
+          ? CompassCourseState.active
+          : CompassCourseState.noCredit;
+}
+
 class CurriculumPlanController extends GetxController {
   final scholar = Get.find<Rx<Scholar>>(tag: 'scholar');
   final _db = Get.find<DatabaseHelper>(tag: 'db');
@@ -70,6 +92,10 @@ class CurriculumPlanController extends GetxController {
       'curriculum_custom_total_credits';
 
   bool _initialAutoSyncAttempted = false;
+  bool _initialPracticeSyncAttempted = false;
+
+  /// 用户已修/在修的所有外语类课程（成绩单 + 本学期课表去重）
+  final foreignCourses = <ForeignCourseEntry>[].obs;
 
   @override
   void onInit() {
@@ -79,6 +105,13 @@ class CurriculumPlanController extends GetxController {
     ever(scholar, (_) {
       _loadProfile();
       _collectEvidence();
+      if (scholar.value.isLogan &&
+          !scholar.value.isGrs &&
+          !scholar.value.isPracticeScoresGet &&
+          !_initialPracticeSyncAttempted) {
+        _initialPracticeSyncAttempted = true;
+        _refreshPracticeSilently();
+      }
       if (catalog.isEmpty &&
           scholar.value.isLogan &&
           !_initialAutoSyncAttempted) {
@@ -90,7 +123,7 @@ class CurriculumPlanController extends GetxController {
     });
   }
 
-  /// 有效最低毕业总学分（优先用户覆盖，其次审计引擎口径，再其次方案声明 zdbyxf）
+  /// 有效最低毕业总学分（优先用户覆盖，其次审计引擎口径（含外语档位与二三四课堂调整），再其次方案声明 zdbyxf）
   double get effectiveGraduationCredits {
     if (customGraduationCredits.value != null &&
         customGraduationCredits.value! > 0) {
@@ -104,19 +137,87 @@ class CurriculumPlanController extends GetxController {
     return selectedPlan.value?.zdbyxf ?? 160.0;
   }
 
-  /// 审计引擎统计已获学分；若尚未产生审计则回落到成绩单总已获学分
-  double get auditEarnedCredits {
+  /// 二/三/四课堂要求学分（优先 PDF/审计模块，回落教务摘要 dektxf/3/4）
+  double _practiceReqFor(int classroom) {
+    final summary = auditReport.value?['summary'];
+    if (summary is List) {
+      for (final raw in summary) {
+        if (raw is! Map) continue;
+        final text =
+            '${raw['module_path'] ?? ''} ${raw['title'] ?? ''} ${raw['category'] ?? ''}';
+        if (PlanAuditHelper.practiceClassroomIndex(text) == classroom) {
+          final r = (raw['required'] as num?)?.toDouble();
+          if (r != null) return r;
+        }
+      }
+    }
+    final plan = selectedPlan.value;
+    if (plan == null) return 0.0;
+    return switch (classroom) {
+      2 => plan.dektxf ?? 0.0,
+      3 => plan.dektxf3 ?? 0.0,
+      4 => plan.dektxf4 ?? 0.0,
+      _ => 0.0,
+    };
+  }
+
+  double get pt2Required => _practiceReqFor(2);
+  double get pt3Required => _practiceReqFor(3);
+  double get pt4Required => _practiceReqFor(4);
+  double get pt2Earned => scholar.value.pt2;
+  double get pt3Earned => scholar.value.pt3;
+  double get pt4Earned => scholar.value.pt4;
+
+  double get practiceRawTotal => pt2Earned + pt3Earned + pt4Earned;
+
+  double get practiceRequiredTotal {
     final totals = auditReport.value?['totals'];
-    if (totals is Map && totals['earned'] is num) {
+    if (totals is Map && totals['extra_practice_credits'] is num) {
+      return (totals['extra_practice_credits'] as num).toDouble();
+    }
+    return pt2Required + pt3Required + pt4Required;
+  }
+
+  /// 计入毕业要求达成的二/三/四课堂有效学分（单课堂不溢出抵扣其他课堂缺口）
+  double get practiceEffectiveEarned {
+    final r2 = pt2Required;
+    final r3 = pt3Required;
+    final r4 = pt4Required;
+    final e2 = r2 > 0 ? pt2Earned.clamp(0.0, r2) : pt2Earned;
+    final e3 = r3 > 0 ? pt3Earned.clamp(0.0, r3) : pt3Earned;
+    final e4 = r4 > 0 ? pt4Earned.clamp(0.0, r4) : pt4Earned;
+    return e2 + e3 + e4;
+  }
+
+  double get firstClassroomRequiredCredits =>
+      (effectiveGraduationCredits - practiceRequiredTotal)
+          .clamp(0.0, double.infinity);
+
+  double get firstClassroomEarnedCredits =>
+      (auditEarnedCredits - practiceEffectiveEarned)
+          .clamp(0.0, double.infinity);
+
+  /// 审计引擎统计已获学分（已打通二/三/四课堂素拓有效分；PDF 尚未解析时回落至成绩单总学分 + 素拓有效分）
+  double get auditEarnedCredits {
+    final ps = pdfSections.value;
+    final totals = auditReport.value?['totals'];
+    if (ps != null &&
+        !ps.isEmpty &&
+        totals is Map &&
+        totals['earned'] is num) {
       return (totals['earned'] as num).toDouble();
     }
-    return earnedCredits.value;
+    return earnedCredits.value + practiceEffectiveEarned;
   }
 
   /// 剩余学分缺口
   double get creditGap {
+    final ps = pdfSections.value;
     final totals = auditReport.value?['totals'];
-    if (totals is Map && totals['gap'] is num) {
+    if (ps != null &&
+        !ps.isEmpty &&
+        totals is Map &&
+        totals['gap'] is num) {
       return (totals['gap'] as num).toDouble();
     }
     final gap = effectiveGraduationCredits - auditEarnedCredits;
@@ -160,11 +261,29 @@ class CurriculumPlanController extends GetxController {
     return list;
   }
 
+  Future<void> _refreshPracticeSilently() async {
+    try {
+      final updated = await scholar.value.refreshPracticeScores();
+      if (updated) {
+        scholar.refresh();
+        await _rebuildPlanAndAudit();
+      }
+    } catch (_) {}
+  }
+
   Future<void> loadProfileAndCatalog({bool silent = false}) async {
     _loadSavedPrefs();
     _loadProfile();
     _collectEvidence();
     _loadCachedCatalog();
+
+    if (scholar.value.isLogan &&
+        !scholar.value.isGrs &&
+        !scholar.value.isPracticeScoresGet &&
+        !_initialPracticeSyncAttempted) {
+      _initialPracticeSyncAttempted = true;
+      _refreshPracticeSilently();
+    }
 
     if (catalog.isEmpty && !silent) {
       _initialAutoSyncAttempted = true;
@@ -241,11 +360,35 @@ class CurriculumPlanController extends GetxController {
 
   void _collectEvidence() {
     var earned = 0.0;
+    final seenForeign = <String>{};
+    final collectedForeign = <ForeignCourseEntry>[];
+
     for (final s in scholar.value.semesters) {
       for (final g in s.grades) {
         if (g.earnedCredit > 0) {
           earned += g.earnedCredit;
         }
+        final name = g.name.trim();
+        if (name.isEmpty || !isForeignCourseName(name)) continue;
+        final code = PlanAuditHelper.extractCourseCode(g.id);
+        final passed = g.creditIncluded &&
+            (g.fivePoint > 0 ||
+                g.hundredPoint >= 60 ||
+                const {'合格', '通过', '免修', '及格', '中等', '良好', '优秀'}
+                    .contains(g.original.trim().toUpperCase()));
+        final key = code.isNotEmpty ? code : name;
+        if (!passed && seenForeign.contains(key)) continue;
+        seenForeign.remove(key);
+        collectedForeign.removeWhere(
+            (e) => (e.courseId.isNotEmpty ? e.courseId : e.name) == key);
+        seenForeign.add(key);
+        collectedForeign.add(ForeignCourseEntry(
+          name: name,
+          courseId: code,
+          credits: g.credit,
+          passed: passed,
+          active: false,
+        ));
       }
     }
     earnedCredits.value = earned;
@@ -255,9 +398,29 @@ class CurriculumPlanController extends GetxController {
         : const Iterable<Course>.empty();
     var active = 0.0;
     for (final c in currentCourses) {
-      active += c.credit;
+      final g = c.grade;
+      final alreadyPassed = g != null &&
+          g.creditIncluded &&
+          (g.fivePoint > 0 || g.hundredPoint >= 60);
+      if (!alreadyPassed) {
+        active += c.credit;
+      }
+      final name = c.name.trim();
+      if (name.isEmpty || !isForeignCourseName(name)) continue;
+      final code = PlanAuditHelper.extractCourseCode(c.id ?? '');
+      final key = code.isNotEmpty ? code : name;
+      if (seenForeign.add(key)) {
+        collectedForeign.add(ForeignCourseEntry(
+          name: name,
+          courseId: code,
+          credits: c.credit,
+          passed: alreadyPassed,
+          active: !alreadyPassed,
+        ));
+      }
     }
     activeCredits.value = active;
+    foreignCourses.value = collectedForeign;
   }
 
   void _loadCachedCatalog() {
@@ -307,6 +470,10 @@ class CurriculumPlanController extends GetxController {
 
       final res =
           await scholar.value.fetchPlanCatalogWithError(refresh: !silent);
+      if (!silent && scholar.value.isLogan && !scholar.value.isGrs) {
+        // 同步培养方案时一并联动刷新素拓二/三/四课堂记点
+        await _refreshPracticeSilently();
+      }
       if (res.item2.isNotEmpty) {
         catalog.value = res.item2;
         syncError.value = null;
@@ -507,6 +674,13 @@ class CurriculumPlanController extends GetxController {
       final meta = Map<String, dynamic>.from(pf['meta'] as Map? ?? const {});
       meta['total_credits'] = customGraduationCredits.value;
       pf['meta'] = meta;
+    }
+    if (pf != null) {
+      PlanAuditHelper.injectPracticeScoresIntoPlanAndRecord(
+        planFile: pf,
+        record: record,
+        scholar: scholar.value,
+      );
     }
     planFile.value = pf;
 

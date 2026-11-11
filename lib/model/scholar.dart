@@ -1051,5 +1051,34 @@ class Scholar {
       studentId: username,
     );
   }
+
+  /// 从素质拓展平台单独刷新第二/三/四课堂记点，并与本地持久化及看板保持同步
+  Future<bool> refreshPracticeScores() async {
+    final ok = await ensureSession();
+    if (!ok || _spider is! UgrsSpider || isGrs) return false;
+    final snapshot = await (_spider as UgrsSpider).refreshPracticeOnly();
+    if (snapshot == null || !snapshot.hasAnyData) return false;
+    if (snapshot.detailsAvailable) {
+      practiceScoreItems = List<PracticeScoreItem>.from(snapshot.items);
+      practiceDataSource = snapshot.source;
+      practiceDetailsUpdatedAt = snapshot.updatedAt;
+      practiceDetailsAvailable = true;
+      practiceDetailsStale = snapshot.stale;
+    }
+    final summary = snapshot.summary;
+    if (summary != null) {
+      isPracticeScoresGet = true;
+      practiceSummarySource = summary.source;
+      practiceUpdatedAt = summary.updatedAt;
+      practiceSummaryStale = summary.stale;
+      practiceMyPassed = summary.myPassed;
+      practiceLyPassed = summary.lyPassed;
+      pt2 = summary.dektJf;
+      pt3 = summary.dsktJf;
+      pt4 = summary.dsiktJf;
+    }
+    await _db?.setScholar(this);
+    return summary != null || snapshot.detailsAvailable;
+  }
 }
 

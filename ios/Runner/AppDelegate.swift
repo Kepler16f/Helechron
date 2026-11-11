@@ -9,10 +9,26 @@ import UserNotifications
 import WidgetKit
 #endif
 
+private final class ZhiyunAVPlayerViewController: AVPlayerViewController {
+  override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+    return [.landscapeLeft, .landscapeRight, .portrait]
+  }
+
+  override var shouldAutorotate: Bool {
+    return true
+  }
+
+  override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation {
+    return .landscapeRight
+  }
+}
+
 @main
-@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, AVPlayerViewControllerDelegate {
   private var pendingRoute: String?
   private var documentInteractionController: UIDocumentInteractionController?
+  private weak var presentingVideoHostController: UIViewController?
+  private var activePipPlayerController: AVPlayerViewController?
 
   override func application(
     _ application: UIApplication,
@@ -109,8 +125,11 @@ import WidgetKit
            !urlStr.isEmpty {
           let token = args["token"] as? String
           let livingroomUrl = args["livingroomUrl"] as? String
+          let rawStreams = args["streams"] as? [[String: Any]] ?? []
+          let streamUrls = rawStreams.compactMap { ($0["url"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
           let ok = self?.openInAppVideoPlayer(
             urlStr: urlStr,
+            streamUrls: streamUrls,
             livingroomUrl: livingroomUrl,
             token: token,
             controller: controller
@@ -151,20 +170,47 @@ import WidgetKit
     return true
   }
 
+  private func isDirectStreamUrl(_ rawUrl: String) -> Bool {
+    let lower = rawUrl.lowercased()
+    if lower.contains("livingroom") {
+      return false
+    }
+    return lower.contains(".mp4") || lower.contains(".m3u8") || lower.contains(".flv") || lower.contains(".ts")
+  }
+
   private func openInAppVideoPlayer(
     urlStr: String,
+    streamUrls: [String] = [],
     livingroomUrl: String? = nil,
     token: String? = nil,
     controller: UIViewController
   ) -> Bool {
-    guard let url = URL(string: urlStr) else {
+    var candidates: [URL] = []
+    var seen = Set<String>()
+    func addCandidate(_ raw: String) {
+      let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !trimmed.isEmpty, isDirectStreamUrl(trimmed), seen.insert(trimmed).inserted,
+            let parsed = URL(string: trimmed) else { return }
+      candidates.append(parsed)
+    }
+    streamUrls.forEach(addCandidate)
+    addCandidate(urlStr)
+
+    let fallbackStr = (livingroomUrl?.isEmpty == false ? livingroomUrl : nil) ?? urlStr
+    guard !candidates.isEmpty || URL(string: fallbackStr) != nil else {
       return false
     }
-    let lower = urlStr.lowercased()
-    let isStream = !lower.contains("livingroom") &&
-      (lower.contains(".mp4") || lower.contains(".m3u8") || lower.contains(".flv"))
-    DispatchQueue.main.async {
-      if isStream {
+
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self else { return }
+      if let streamUrl = candidates.first {
+        do {
+          let session = AVAudioSession.sharedInstance()
+          try session.setCategory(.playback, mode: .moviePlayback, options: [.allowAirPlay])
+          try session.setActive(true)
+        } catch {
+          // ignore audio session warning
+        }
         var headers = [
           "Referer": "https://classroom.zju.edu.cn/",
           "Origin": "https://classroom.zju.edu.cn"
@@ -173,23 +219,56 @@ import WidgetKit
           headers["Cookie"] = "_token=\(tk); token=\(tk)"
           headers["Authorization"] = "Bearer \(tk)"
         }
-        let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
+        let asset = AVURLAsset(url: streamUrl, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
         let item = AVPlayerItem(asset: asset)
         let player = AVPlayer(playerItem: item)
-        let playerVC = AVPlayerViewController()
+        let playerVC = ZhiyunAVPlayerViewController()
         playerVC.player = player
+        playerVC.allowsPictureInPicturePlayback = true
+        if #available(iOS 14.2, *) {
+          playerVC.canStartPictureInPictureAutomaticallyFromInline = true
+        }
+        playerVC.entersFullScreenWhenPlaybackBegins = true
+        playerVC.exitsFullScreenWhenPlaybackEnds = false
+        playerVC.delegate = self
+        self.presentingVideoHostController = controller
+        self.activePipPlayerController = playerVC
         controller.present(playerVC, animated: true) {
           player.play()
         }
-      } else {
-        let fallback = (livingroomUrl?.isEmpty == false ? livingroomUrl : nil) ?? urlStr
-        if let webUrl = URL(string: fallback) {
-          let safariVC = SFSafariViewController(url: webUrl)
-          controller.present(safariVC, animated: true)
-        }
+      } else if let webUrl = URL(string: fallbackStr) {
+        let safariVC = SFSafariViewController(url: webUrl)
+        controller.present(safariVC, animated: true)
       }
     }
     return true
+  }
+
+  func playerViewControllerWillStartPictureInPicture(_ playerViewController: AVPlayerViewController) {
+    activePipPlayerController = playerViewController
+  }
+
+  func playerViewControllerDidStopPictureInPicture(_ playerViewController: AVPlayerViewController) {
+    if activePipPlayerController === playerViewController && playerViewController.presentingViewController == nil {
+      activePipPlayerController = nil
+    }
+  }
+
+  func playerViewController(
+    _ playerViewController: AVPlayerViewController,
+    restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
+  ) {
+    if playerViewController.presentingViewController != nil {
+      completionHandler(true)
+      return
+    }
+    if let host = presentingVideoHostController {
+      host.present(playerViewController, animated: true) {
+        completionHandler(true)
+      }
+    } else {
+      completionHandler(false)
+    }
   }
 
   override func application(

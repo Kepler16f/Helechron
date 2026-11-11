@@ -629,6 +629,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
     required String title,
     String? courseId,
     String? subId,
+    bool preferLive = false,
   }) async {
     await ZhiyunService.saveLastWatchedReplay(
       courseName: widget.course.name,
@@ -642,7 +643,10 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
     }
 
     if (courseId != null && courseId.isNotEmpty) {
-      final rawCat = await ZhiyunService.fetchCourseCatalogue(courseId);
+      final rawCat = await ZhiyunService.fetchCourseCatalogue(
+        courseId,
+        forceRefresh: preferLive,
+      );
       final replayList = <ZhiyunReplayInfo>[];
       for (final item in rawCat) {
         final sid =
@@ -675,6 +679,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
             initialTitle: title,
             livingroomUrl: url,
             replays: replayList,
+            preferLive: preferLive,
           ),
         ),
       );
@@ -827,6 +832,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
     required BuildContext context,
     required IconData icon,
     required Color iconColor,
+    Color iconForeground = CupertinoColors.white,
     required String title,
     required String tag,
     VoidCallback? onTagTap,
@@ -857,7 +863,8 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                         child: Icon(
                           icon,
                           size: 18,
-                          color: CupertinoColors.white,
+                          color: CupertinoDynamicColor.resolve(
+                              iconForeground, context),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -958,13 +965,8 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                                               size: 11,
                                               color:
                                                   CupertinoDynamicColor.resolve(
-                                                      const CupertinoDynamicColor
-                                                          .withBrightness(
-                                                        color:
-                                                            Color(0xFFC2185B),
-                                                        darkColor:
-                                                            Color(0xFFFF79B3),
-                                                      ),
+                                                      CustomCupertinoDynamicColors
+                                                          .sakuraInk,
                                                       context),
                                             ),
                                             const SizedBox(width: 4),
@@ -1039,14 +1041,17 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
     );
   }
 
+  static const _sakuraForeground = CupertinoDynamicColor.withBrightness(
+    color: Color(0xFF7A1C59),
+    darkColor: Color(0xFF28061E),
+  );
+
   Widget _buildLoadingCard(BuildContext context) {
     return _buildCard(
       context: context,
       icon: CupertinoIcons.play_rectangle,
-      iconColor: const CupertinoDynamicColor.withBrightness(
-        color: Color(0xFFC2185B),
-        darkColor: Color(0xFFD81B60),
-      ),
+      iconColor: CustomCupertinoDynamicColors.sakura,
+      iconForeground: _sakuraForeground,
       title: '智云课堂',
       tag: '正在匹配',
       subtitle: '正在从智云课堂动态匹配课程房间与节次回放...',
@@ -1130,6 +1135,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                     title: '实时直播',
                     courseId: info.courseId,
                     subId: info.subId,
+                    preferLive: true,
                   ),
                 ),
               ),
@@ -1163,13 +1169,13 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
 
         // 状态一：本节课录播已就绪 (hasReplay && isLessonSpecific)
         if (info.isLessonSpecific && info.hasReplay) {
+          final sakuraFg =
+              CupertinoDynamicColor.resolve(_sakuraForeground, context);
           return _buildCard(
             context: context,
             icon: CupertinoIcons.play_rectangle_fill,
-            iconColor: const CupertinoDynamicColor.withBrightness(
-              color: Color(0xFFC2185B),
-              darkColor: Color(0xFFD81B60),
-            ),
+            iconColor: CustomCupertinoDynamicColors.sakura,
+            iconForeground: _sakuraForeground,
             title: '本节录播回放',
             tag: info.lessonTitle,
             onTagTap: info.courseId != null
@@ -1182,27 +1188,23 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                   color: CupertinoDynamicColor.resolve(
-                      const CupertinoDynamicColor.withBrightness(
-                        color: Color(0xFFC2185B),
-                        darkColor: Color(0xFFD81B60),
-                      ),
-                      context),
+                      CustomCupertinoDynamicColors.sakura, context),
                   borderRadius: BorderRadius.circular(8),
                   minSize: 36,
-                  child: const FittedBox(
+                  child: FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(CupertinoIcons.play_arrow_solid,
-                            size: 16, color: CupertinoColors.white),
-                        SizedBox(width: 6),
+                            size: 16, color: sakuraFg),
+                        const SizedBox(width: 6),
                         Text(
                           '观看回放',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: CupertinoColors.white,
+                            color: sakuraFg,
                           ),
                         ),
                       ],
@@ -1315,17 +1317,18 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
         // 状态三：整门课程智云房间直达（已绑定 ID）
         if (info.courseId != null) {
           final hasReplay = info.hasReplay;
+          final sakuraFg =
+              CupertinoDynamicColor.resolve(_sakuraForeground, context);
           return _buildCard(
             context: context,
             icon: hasReplay
                 ? CupertinoIcons.play_rectangle_fill
                 : CupertinoIcons.play_rectangle,
             iconColor: hasReplay
-                ? const CupertinoDynamicColor.withBrightness(
-                    color: Color(0xFFC2185B),
-                    darkColor: Color(0xFFD81B60),
-                  )
+                ? CustomCupertinoDynamicColors.sakura
                 : CupertinoColors.secondaryLabel,
+            iconForeground:
+                hasReplay ? _sakuraForeground : CupertinoColors.white,
             title: '智云课堂房间',
             tag: hasReplay ? 'ID: ${info.courseId}' : '未生成回放',
             onTagTap: () => _showBindDialog(context, info.courseId!),
@@ -1339,10 +1342,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                   color: CupertinoDynamicColor.resolve(
                       hasReplay
-                          ? const CupertinoDynamicColor.withBrightness(
-                              color: Color(0xFFC2185B),
-                              darkColor: Color(0xFFD81B60),
-                            )
+                          ? CustomCupertinoDynamicColors.sakura
                           : CupertinoColors.secondarySystemFill,
                       context),
                   borderRadius: BorderRadius.circular(8),
@@ -1356,7 +1356,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                           CupertinoIcons.arrow_up_right_square,
                           size: 16,
                           color: hasReplay
-                              ? CupertinoColors.white
+                              ? sakuraFg
                               : CupertinoDynamicColor.resolve(
                                   CupertinoColors.label, context),
                         ),
@@ -1367,7 +1367,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
                             color: hasReplay
-                                ? CupertinoColors.white
+                                ? sakuraFg
                                 : CupertinoDynamicColor.resolve(
                                     CupertinoColors.label, context),
                           ),
@@ -1410,13 +1410,13 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
 
         // 状态四：未绑定课程 ID（提供检索、我的课程与一键绑定）
         // 采用比例分配按钮宽度，避免在窄屏或大字号下溢出粉色框
+        final searchSakuraFg =
+            CupertinoDynamicColor.resolve(_sakuraForeground, context);
         return _buildCard(
           context: context,
           icon: CupertinoIcons.compass,
-          iconColor: const CupertinoDynamicColor.withBrightness(
-            color: Color(0xFFC2185B),
-            darkColor: Color(0xFFD81B60),
-          ),
+          iconColor: CustomCupertinoDynamicColors.sakura,
+          iconForeground: _sakuraForeground,
           title: '智云课堂',
           tag: '未绑定',
           onTagTap: () => _showBindDialog(context, ''),
@@ -1427,27 +1427,23 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
               child: CupertinoButton(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                 color: CupertinoDynamicColor.resolve(
-                    const CupertinoDynamicColor.withBrightness(
-                      color: Color(0xFFC2185B),
-                      darkColor: Color(0xFFD81B60),
-                    ),
-                    context),
+                    CustomCupertinoDynamicColors.sakura, context),
                 borderRadius: BorderRadius.circular(8),
                 minSize: 36,
-                child: const FittedBox(
+                child: FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(CupertinoIcons.search,
-                          size: 15, color: CupertinoColors.white),
-                      SizedBox(width: 4),
+                          size: 15, color: searchSakuraFg),
+                      const SizedBox(width: 4),
                       Text(
                         '智云搜索',
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: CupertinoColors.white,
+                          color: searchSakuraFg,
                         ),
                       ),
                     ],

@@ -89,33 +89,44 @@ class CelechronHeader extends SliverPersistentHeaderDelegate {
                       ),
                     ),
                   // Title at the center
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Container(
-                        alignment: Alignment.center,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Hero(
-                          tag: subtitle,
-                          child: Column(
-                            children: [
-                              Text(
-                                subtitle,
-                                style: CupertinoTheme.of(context)
-                                    .textTheme
-                                    .navTitleTextStyle
-                                    .copyWith(
-                                      fontSize:
-                                          fontSize - (bottom == null ? 0 : 2),
-                                    ),
-                              ),
-                              if (bottom != null) bottom!,
-                            ],
+                  Positioned.fill(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: right != null
+                            ? 98
+                            : (firstPage ? 16 : 48),
+                      ),
+                      child: Center(
+                        child: Container(
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Hero(
+                            tag: subtitle,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    subtitle,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    style: CupertinoTheme.of(context)
+                                        .textTheme
+                                        .navTitleTextStyle
+                                        .copyWith(
+                                          fontSize: fontSize -
+                                              (bottom == null ? 0 : 2),
+                                        ),
+                                  ),
+                                ),
+                                if (bottom != null) bottom!,
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ],
+                    ),
                   ),
                   // Right button
                   if (right != null)

@@ -237,5 +237,19 @@ void main() {
       expect(ZhiyunService.checkIsLive(item: item), isFalse);
       expect(ZhiyunService.checkHasReplay(item: item), isTrue);
     });
+
+    test('无 playback 且含实时 live_url 的直播课节正确识别为直播而非回放', () {
+      final now = DateTime.now();
+      final item = <String, dynamic>{
+        'sub_id': '1973993',
+        'title': '第8讲 实时授课',
+        'status': '2',
+        'live_url': 'https://live.example.com/live/stream.m3u8',
+        'start_at': (now.subtract(const Duration(minutes: 15)).millisecondsSinceEpoch ~/ 1000).toString(),
+        'end_at': (now.add(const Duration(minutes: 30)).millisecondsSinceEpoch ~/ 1000).toString(),
+      };
+      expect(ZhiyunService.checkIsLive(item: item), isTrue);
+      expect(ZhiyunService.checkHasReplay(item: item), isFalse);
+    });
   });
 }

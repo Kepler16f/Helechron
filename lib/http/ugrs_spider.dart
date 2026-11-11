@@ -239,6 +239,21 @@ class UgrsSpider implements Spider {
   bool get isPracticeScoresGet => _isPracticeScoresGet;
   PracticeScoreSnapshot get practiceSnapshot => _practiceSnapshot;
 
+  /// 仅拉取素质拓展第二/三/四课堂记点与明细（供培养方案与素拓看板联动刷新）
+  Future<PracticeScoreSnapshot?> refreshPracticeOnly() async {
+    try {
+      final snapshot = await _sztz.getPracticeScoreData(
+        _httpClient,
+        reauthenticate: _reauthenticateSztz,
+      );
+      if (snapshot.hasAnyData) {
+        _usePracticeSnapshot(snapshot);
+        return snapshot;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<Cookie?> _reauthenticateSztz() async {
     final pending = _sztzReauthFuture;
     if (pending != null) return pending;

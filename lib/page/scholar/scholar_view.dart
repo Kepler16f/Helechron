@@ -532,8 +532,10 @@ class ScholarPage extends StatelessWidget {
                               ],
                             ),
                             const SizedBox(height: 10),
-                            GestureDetector(
-                              onTap: () => Navigator.of(context,
+                            CupertinoButton(
+                              padding: EdgeInsets.zero,
+                              minSize: 0,
+                              onPressed: () => Navigator.of(context,
                                       rootNavigator: true)
                                   .push(CupertinoPageRoute(
                                       builder: (context) =>
@@ -541,50 +543,36 @@ class ScholarPage extends StatelessWidget {
                                       title: '培养方案查看')),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 8),
+                                    horizontal: 12, vertical: 9),
                                 decoration: BoxDecoration(
                                   color: CupertinoDynamicColor.resolve(
-                                          CustomCupertinoDynamicColors
-                                              .sakuraInk,
-                                          context)
-                                      .withValues(alpha: 0.12),
+                                      CupertinoColors.secondarySystemFill,
+                                      context),
                                   borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: CupertinoDynamicColor.resolve(
-                                            CustomCupertinoDynamicColors
-                                                .sakuraInk,
-                                            context)
-                                        .withValues(alpha: 0.28),
-                                    width: 0.8,
-                                  ),
                                 ),
                                 child: Row(
                                   children: [
                                     Icon(
-                                      CupertinoIcons.doc_text_search,
+                                      CupertinoIcons.doc_text,
                                       size: 16,
                                       color: CupertinoDynamicColor.resolve(
-                                          CustomCupertinoDynamicColors
-                                              .sakuraInk,
-                                          context),
+                                          CupertinoColors.activeBlue, context),
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
                                       '培养方案查看',
                                       style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
                                         color: CupertinoDynamicColor.resolve(
-                                            CustomCupertinoDynamicColors
-                                                .sakuraInk,
-                                            context),
+                                            CupertinoColors.label, context),
                                       ),
                                     ),
                                     const Spacer(),
                                     Text(
-                                      '学分进度 · 核心课 · 选课要求',
+                                      '学分进度 · 修读要求',
                                       style: TextStyle(
-                                        fontSize: 11,
+                                        fontSize: 12,
                                         color: CupertinoDynamicColor.resolve(
                                             CupertinoColors.secondaryLabel,
                                             context),
@@ -592,10 +580,10 @@ class ScholarPage extends StatelessWidget {
                                     ),
                                     const SizedBox(width: 4),
                                     Icon(
-                                      CupertinoIcons.chevron_right,
-                                      size: 12,
+                                      CupertinoIcons.chevron_forward,
+                                      size: 13,
                                       color: CupertinoDynamicColor.resolve(
-                                          CupertinoColors.secondaryLabel,
+                                          CupertinoColors.tertiaryLabel,
                                           context),
                                     ),
                                   ],
