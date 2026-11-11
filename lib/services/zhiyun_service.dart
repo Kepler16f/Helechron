@@ -858,7 +858,7 @@ class ZhiyunService {
     final cacheTime = _catalogueCacheTime[courseId];
     if (cached != null &&
         cacheTime != null &&
-        DateTime.now().difference(cacheTime) < const Duration(hours: 1)) {
+        DateTime.now().difference(cacheTime) < const Duration(minutes: 15)) {
       return cached;
     }
 
@@ -1300,9 +1300,45 @@ class ZhiyunService {
   }) {
     final now = DateTime.now();
 
-    // 1. 绝对权威：智云服务端返回的实时直播信号（直播标记具有最高优先级）
+    // 0. 时间合理性硬防线：防止历史缓存/普通课节(如 status='1')被误判成“正在直播”
+    if (period != null) {
+      if (now.isBefore(period.startTime.subtract(const Duration(minutes: 20))) ||
+          now.isAfter(period.endTime.add(const Duration(minutes: 25)))) {
+        return false;
+      }
+    }
+
+    final sDt = parseZhiyunTimestamp(item?['start_at']);
+    final eDt = parseZhiyunTimestamp(item?['end_at']);
+    if (eDt != null && now.isAfter(eDt.add(const Duration(minutes: 30)))) {
+      return false;
+    }
+    if (sDt != null && now.isBefore(sDt.subtract(const Duration(minutes: 20)))) {
+      return false;
+    }
+    if (period == null && sDt == null && targetDate != null) {
+      // 目标日期若与今天不是同一天，绝不可能是直播
+      if (targetDate.year != now.year ||
+          targetDate.month != now.month ||
+          targetDate.day != now.day) {
+        return false;
+      }
+    }
+
+    // 1. 排除明确已结束/未开始/仅回放状态
+    final statusLabel = item?['status_label']?.toString() ?? '';
+    final status = item?['status']?.toString() ?? '';
+    if (status == '3' ||
+        status == '4' ||
+        statusLabel.contains('回放') ||
+        statusLabel.contains('录播') ||
+        statusLabel.contains('已结束') ||
+        statusLabel == '未开始') {
+      return false;
+    }
+
+    // 2. 服务端明确的实时直播信号（注意：智云 status=='1' 为普通发布态而非直播，仅 '2' 表示直播中）
     if (item != null) {
-      final statusLabel = item['status_label']?.toString() ?? '';
       if (statusLabel == '直播' ||
           statusLabel.contains('直播') ||
           statusLabel.toLowerCase() == 'live') {
@@ -1315,9 +1351,7 @@ class ZhiyunService {
           isLiveField == 'true') {
         return true;
       }
-      final status = item['status']?.toString();
-      // 智云状态码 1 与 2 均可能表示正在进行中/直播
-      if (status == '1' || status == '2') {
+      if (status == '2') {
         return true;
       }
       final liveType = item['live_type']?.toString();
@@ -1326,28 +1360,29 @@ class ZhiyunService {
       }
     }
 
-    // 2. 时间窗口辅助判定：
-    final sDt = parseZhiyunTimestamp(item?['start_at']);
-    final eDt = parseZhiyunTimestamp(item?['end_at']);
+    // 3. 时间窗口辅助判定：若当前确实处于本节课上课时间段内且尚未转为回放/未开始
+    final hasReplayMedia = item != null &&
+        ((item['playback'] != null &&
+                item['playback'] != false &&
+                item['playback'] != 'false' &&
+                item['playback'].toString().isNotEmpty) ||
+            ((item['video_url'] ?? item['play_url'] ?? item['m3u8'])
+                    ?.toString()
+                    .isNotEmpty ==
+                true));
+    if (hasReplayMedia) {
+      return false;
+    }
 
     if (period != null) {
-      // 若处于当前节次时间范围内（前10分钟到后10分钟）
       if (now.isAfter(period.startTime.subtract(const Duration(minutes: 10))) &&
-          now.isBefore(period.endTime.add(const Duration(minutes: 10)))) {
-        final statusLabel = item?['status_label']?.toString() ?? '';
-        final status = item?['status']?.toString();
-        if (statusLabel != '回放' && statusLabel != '已结束' && status != '4') {
-          return true;
-        }
+          now.isBefore(period.endTime.add(const Duration(minutes: 15)))) {
+        return true;
       }
     } else if (sDt != null && eDt != null) {
       if (now.isAfter(sDt.subtract(const Duration(minutes: 10))) &&
           now.isBefore(eDt.add(const Duration(minutes: 15)))) {
-        final statusLabel = item?['status_label']?.toString() ?? '';
-        final status = item?['status']?.toString();
-        if (statusLabel != '回放' && statusLabel != '已结束' && status != '4') {
-          return true;
-        }
+        return true;
       }
     }
 
@@ -1358,10 +1393,11 @@ class ZhiyunService {
   static bool checkHasReplay({
     Map<String, dynamic>? item,
     DateTime? targetDate,
+    Period? period,
   }) {
     if (item == null) return false;
 
-    // 1. 检查 item 中的状态标记
+    // 1. 检查 item 中的明确回放/录播标记
     final statusLabel = item['status_label']?.toString() ?? '';
     if (statusLabel == '回放' ||
         statusLabel.contains('回放') ||
@@ -1391,10 +1427,9 @@ class ZhiyunService {
       return false;
     }
 
-    // 3. 如果状态为未开始或正在直播，无回放
+    // 3. 如果当前未开始或正在实时直播，无回放
     if (statusLabel == '未开始' ||
-        statusLabel.contains('直播') ||
-        item['is_live'] == true) {
+        checkIsLive(item: item, targetDate: targetDate, period: period)) {
       return false;
     }
 
@@ -1699,8 +1734,8 @@ class ZhiyunService {
             sSubId.isNotEmpty) {
           final isLive = checkIsLive(
               item: bestSession, targetDate: targetDate, period: period);
-          final hasReplay =
-              checkHasReplay(item: bestSession, targetDate: targetDate);
+          final hasReplay = checkHasReplay(
+              item: bestSession, targetDate: targetDate, period: period);
           return ZhiyunReplayInfo(
             courseId: sCid,
             subId: sSubId,
@@ -1816,6 +1851,7 @@ class ZhiyunService {
         final hasReplay = checkHasReplay(
           item: matchedItem,
           targetDate: targetDate,
+          period: period,
         );
 
         if (subId != null && subId.isNotEmpty) {
@@ -2413,6 +2449,17 @@ class ZhiyunService {
     await Clipboard.setData(ClipboardData(text: url));
   }
 
+  static String? _normalizeStreamUrl(String? rawUrl) {
+    if (rawUrl == null) return null;
+    var url = rawUrl.trim();
+    if (url.isEmpty) return null;
+    if (url.startsWith('//')) url = 'https:$url';
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      return null;
+    }
+    return url;
+  }
+
   /// 获取智云课堂单节课的直播/回放流媒体地址（MP4 / HLS m3u8）
   ///
   /// 参考开源项目：
@@ -2424,58 +2471,157 @@ class ZhiyunService {
     required String subId,
   }) async {
     final client = createHttpClient();
-    final streams = <ZhiyunStreamOption>[];
+    final replayStreams = <ZhiyunStreamOption>[];
+    final liveStreams = <ZhiyunStreamOption>[];
     final seenUrls = <String>{};
 
     void addStream(String label, String? rawUrl, {bool isLive = false}) {
-      if (rawUrl == null) return;
-      final url = rawUrl.trim();
-      if (url.isEmpty || !url.startsWith('http')) return;
-      if (seenUrls.add(url)) {
-        streams.add(ZhiyunStreamOption(
-          label: label,
-          url: url,
-          isLive: isLive,
-        ));
+      final url = _normalizeStreamUrl(rawUrl);
+      if (url == null) return;
+      if (!seenUrls.add(url)) return;
+      final option = ZhiyunStreamOption(label: label, url: url, isLive: isLive);
+      if (isLive) {
+        liveStreams.add(option);
+      } else {
+        replayStreams.add(option);
+      }
+    }
+
+    void extractFromMap(Map? container, {String prefix = ''}) {
+      if (container == null) return;
+
+      void extractPlayable(String label, dynamic val) {
+        if (val is String) {
+          addStream(label, val);
+        } else if (val is Map) {
+          val.forEach((k, v) {
+            if (v is String) {
+              addStream('$label ($k)', v);
+            } else if (v is Map) {
+              extractPlayable('$label ($k)', v);
+            }
+          });
+        } else if (val is List) {
+          for (var i = 0; i < val.length; i++) {
+            final item = val[i];
+            if (item is String) {
+              addStream('$label ${i + 1}', item);
+            } else if (item is Map) {
+              final title = item['title']?.toString() ??
+                  item['name']?.toString() ??
+                  '$label ${i + 1}';
+              final direct = item['url']?.toString() ??
+                  item['play_url']?.toString() ??
+                  item['video_url']?.toString() ??
+                  item['m3u8']?.toString() ??
+                  item['file_url']?.toString();
+              if (direct != null && _normalizeStreamUrl(direct) != null) {
+                addStream(title, direct);
+              } else {
+                addStream(title, item['file_name']?.toString());
+              }
+            }
+          }
+        }
+      }
+
+      extractPlayable('${prefix}课堂回放', container['playurl']);
+      extractPlayable('${prefix}回放视频', container['play_url']);
+      extractPlayable('${prefix}视频流', container['video_url']);
+      extractPlayable('${prefix}视频列表', container['video_list']);
+      extractPlayable('${prefix}点播列表', container['vod_list']);
+
+      final playback = container['playback'];
+      if (playback is String) {
+        addStream('${prefix}课堂回放主视角', playback);
+      } else if (playback is Map) {
+        addStream(
+          '${prefix}课堂回放主视角',
+          playback['url']?.toString() ??
+              playback['m3u8']?.toString() ??
+              playback['mp4']?.toString() ??
+              playback['play_url']?.toString(),
+        );
+      }
+
+      final fileList = container['file_list'];
+      if (fileList is List) {
+        for (int i = 0; i < fileList.length; i++) {
+          final item = fileList[i];
+          if (item is Map) {
+            final bestUrl = _normalizeStreamUrl(item['url']?.toString()) ??
+                _normalizeStreamUrl(item['play_url']?.toString()) ??
+                _normalizeStreamUrl(item['video_url']?.toString()) ??
+                _normalizeStreamUrl(item['file_url']?.toString()) ??
+                _normalizeStreamUrl(item['file_name']?.toString());
+            addStream(
+              item['title']?.toString() ?? '${prefix}回放视角 ${i + 1}',
+              bestUrl,
+            );
+          }
+        }
       }
     }
 
     try {
-      final token = getCachedZhiyunToken();
-      final subInfoUri = Uri.parse(
-        'https://yjapi.cmc.zju.edu.cn/courseapi/v3/portal-home-setting/get-sub-info?course_id=$courseId&sub_id=$subId',
-      );
-      final req = await client.getUrl(subInfoUri);
-      if (token != null && token.isNotEmpty) {
-        req.headers.set('Authorization', 'Bearer $token');
-        req.headers.set('Cookie', '_token=$token; token=$token');
+      var token = getCachedZhiyunToken();
+      if (token == null || token.isEmpty) {
+        await syncFromMyCourses();
+        token = getCachedZhiyunToken();
       }
-      req.headers.set('Origin', 'https://classroom.zju.edu.cn');
-      req.headers.set('Referer', 'https://classroom.zju.edu.cn/');
-      req.headers.set('User-Agent',
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
 
-      final resp = await req.close().timeout(const Duration(seconds: 8));
-      if (resp.statusCode == 200) {
-        final body = await resp.transform(utf8.decoder).join();
-        final decoded = jsonDecode(body);
-        if (decoded is Map) {
-          final data = decoded['data'];
-          if (data is Map) {
-            // 1. 回放流 playurl
-            final playurl = data['playurl'];
-            if (playurl is String) {
-              addStream('课堂回放视频', playurl);
-            } else if (playurl is Map) {
-              playurl.forEach((k, v) {
-                if (v is String) {
-                  addStream('回放 ($k)', v);
-                }
-              });
-            }
+      Future<HttpClientResponse> getWithHeaders(Uri uri, String? tk) async {
+        final req = await client.getUrl(uri);
+        if (tk != null && tk.isNotEmpty) {
+          req.headers.set('Authorization', 'Bearer $tk');
+          req.headers.set('Cookie', '_token=$tk; token=$tk');
+        }
+        req.headers.set('Origin', 'https://classroom.zju.edu.cn');
+        req.headers.set('Referer', 'https://classroom.zju.edu.cn/');
+        req.headers.set('User-Agent',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+        return req.close().timeout(const Duration(seconds: 8));
+      }
 
-            // 2. content JSON 中的 playback.url / file_list
-            final rawContent = data['content'];
+      bool subIsLive = false;
+      bool subIsEndedOrReplay = false;
+
+      // 1. 查询 get-sub-info（支持 yjapi 与 classroom 双域名）
+      final subInfoUris = [
+        Uri.parse(
+            'https://yjapi.cmc.zju.edu.cn/courseapi/v3/portal-home-setting/get-sub-info?course_id=$courseId&sub_id=$subId'),
+        Uri.parse(
+            '$_kZhiyunBaseUrl/courseapi/v3/portal-home-setting/get-sub-info?course_id=$courseId&sub_id=$subId'),
+      ];
+
+      for (final subInfoUri in subInfoUris) {
+        try {
+          var resp = await getWithHeaders(subInfoUri, token);
+          if (resp.statusCode == 401 || resp.statusCode == 403) {
+            await syncFromMyCourses();
+            token = getCachedZhiyunToken();
+            resp = await getWithHeaders(subInfoUri, token);
+          }
+          if (resp.statusCode != 200) continue;
+          final body = await resp.transform(utf8.decoder).join();
+          final decoded = jsonDecode(body);
+          if (decoded is! Map) continue;
+          final rawData = decoded['data'] ?? decoded['result'];
+          if (rawData is! Map) continue;
+          final data = Map<String, dynamic>.from(rawData);
+
+          subIsLive = checkIsLive(item: data);
+          final statusStr = data['status']?.toString() ?? '';
+          final statusLabel = data['status_label']?.toString() ?? '';
+          subIsEndedOrReplay = statusStr == '3' ||
+              statusStr == '4' ||
+              statusLabel.contains('回放') ||
+              statusLabel.contains('已结束');
+
+          extractFromMap(data);
+
+          for (final contentField in ['content', 'sub_content']) {
+            final rawContent = data[contentField];
             Map? contentMap;
             if (rawContent is String && rawContent.trim().startsWith('{')) {
               try {
@@ -2484,84 +2630,34 @@ class ZhiyunService {
             } else if (rawContent is Map) {
               contentMap = rawContent;
             }
-            if (contentMap != null) {
-              final playback = contentMap['playback'];
-              if (playback is Map) {
-                addStream('课堂回放主视角', playback['url']?.toString());
-              }
-              final fileList = contentMap['file_list'];
-              if (fileList is List) {
-                for (int i = 0; i < fileList.length; i++) {
-                  final item = fileList[i];
-                  if (item is Map) {
-                    addStream(
-                      item['title']?.toString() ?? '回放视角 ${i + 1}',
-                      item['file_name']?.toString() ?? item['url']?.toString(),
-                    );
-                  }
-                }
-              }
-            }
+            extractFromMap(contentMap);
+          }
 
-            // 3. 直播 HLS 流 live_url
-            final liveUrl = data['live_url'];
-            if (liveUrl is Map) {
-              final output = liveUrl['output'];
-              if (output is Map) {
-                addStream('教师画面直播 (HLS)', output['m3u8']?.toString(),
-                    isLive: true);
-              }
-              final outputStudent = liveUrl['output_student'];
-              if (outputStudent is Map) {
-                addStream('板书/课件直播 (HLS)', outputStudent['m3u8']?.toString(),
-                    isLive: true);
-              }
+          final liveUrl = data['live_url'];
+          if (liveUrl is Map) {
+            final output = liveUrl['output'];
+            if (output is Map) {
+              addStream('教师画面直播 (HLS)', output['m3u8']?.toString(),
+                  isLive: true);
+            }
+            final outputStudent = liveUrl['output_student'];
+            if (outputStudent is Map) {
+              addStream('板书/课件直播 (HLS)', outputStudent['m3u8']?.toString(),
+                  isLive: true);
             }
           }
-        }
+          if (replayStreams.isNotEmpty || liveStreams.isNotEmpty) break;
+        } catch (_) {}
       }
 
-      // 4. 直播备用接口 getscreenstream
-      final screenUri = Uri.parse(
-        'https://yjapi.cmc.zju.edu.cn/courseapi/index.php/v2/meta/getscreenstream?sub_id=$subId',
-      );
-      final screenReq = await client.getUrl(screenUri);
-      if (token != null && token.isNotEmpty) {
-        screenReq.headers.set('Authorization', 'Bearer $token');
-        screenReq.headers.set('Cookie', '_token=$token; token=$token');
-      }
-      screenReq.headers.set('Origin', 'https://classroom.zju.edu.cn');
-      screenReq.headers.set('Referer', 'https://classroom.zju.edu.cn/');
-      final screenResp =
-          await screenReq.close().timeout(const Duration(seconds: 6));
-      if (screenResp.statusCode == 200) {
-        final screenBody = await screenResp.transform(utf8.decoder).join();
-        final screenJson = jsonDecode(screenBody);
-        if (screenJson is Map && screenJson['result'] is Map) {
-          final dataList = screenJson['result']['data'];
-          if (dataList is List) {
-            for (final item in dataList) {
-              if (item is Map) {
-                final m3u8 = item['stream_m3u8']?.toString();
-                final type = item['type']?.toString() ?? '';
-                final label = type == '2'
-                    ? '课件投屏直播'
-                    : type == '3'
-                        ? '教师摄像直播'
-                        : '课堂实时直播';
-                addStream(label, m3u8, isLive: true);
-              }
-            }
-          }
-        }
-      }
-
-      // 5. 若 каталог 缓存中含有该 sub_id 的视频直链，一并提取
+      // 2. 从课程目录缓存与 v2 catalogue 补充提取该 sub_id 的视频直链
       final catList = await fetchCourseCatalogue(courseId);
       for (final item in catList) {
         final itemSubId =
             item['sub_id']?.toString() ?? item['id']?.toString() ?? '';
         if (itemSubId != subId) continue;
+        if (!subIsLive) subIsLive = checkIsLive(item: item);
+        extractFromMap(item);
         final rawContent = item['content'];
         Map? contentMap;
         if (rawContent is String && rawContent.trim().startsWith('{')) {
@@ -2571,20 +2667,55 @@ class ZhiyunService {
         } else if (rawContent is Map) {
           contentMap = rawContent;
         }
-        if (contentMap != null) {
-          final playback = contentMap['playback'];
-          if (playback is Map) {
-            addStream('目录回放流', playback['url']?.toString());
-          }
-        }
+        extractFromMap(contentMap, prefix: '目录');
       }
+
+      // 3. 直播流接口 getscreenstream（仅在正在直播，或尚未拿到任何回放流且未明确已结束时拉取）
+      if (subIsLive || (replayStreams.isEmpty && !subIsEndedOrReplay)) {
+        try {
+          final screenUri = Uri.parse(
+            'https://yjapi.cmc.zju.edu.cn/courseapi/index.php/v2/meta/getscreenstream?sub_id=$subId',
+          );
+          final screenResp = await getWithHeaders(screenUri, token);
+          if (screenResp.statusCode == 200) {
+            final screenBody = await screenResp.transform(utf8.decoder).join();
+            final screenJson = jsonDecode(screenBody);
+            if (screenJson is Map && screenJson['result'] is Map) {
+              final dataList = screenJson['result']['data'];
+              if (dataList is List) {
+                for (final item in dataList) {
+                  if (item is Map) {
+                    final m3u8 = item['stream_m3u8']?.toString();
+                    final type = item['type']?.toString() ?? '';
+                    final label = type == '2'
+                        ? '课件投屏直播'
+                        : type == '3'
+                            ? '教师摄像直播'
+                            : '课堂实时直播';
+                    addStream(label, m3u8, isLive: true);
+                  }
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 根据当前课程状态智能决定流媒体排序：直播中优先推直播流，否则绝对优先回放流
+      if (subIsLive) {
+        return [...liveStreams, ...replayStreams];
+      }
+      if (replayStreams.isNotEmpty) {
+        // 如果已明确生成回放或课已结束，不再把失效的直播 URL 放在可选列表里干扰播放
+        return replayStreams;
+      }
+      return liveStreams;
     } catch (e) {
       debugPrint('[ZhiyunService] fetchLessonStreams error: $e');
+      return const [];
     } finally {
       client.close(force: true);
     }
-
-    return streams;
   }
 
   /// 获取智云课堂单节课的 PPT 幻灯片截图列表（按时间轴排序）

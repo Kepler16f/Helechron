@@ -4,6 +4,21 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { deviceInfo } from '@kit.BasicServicesKit';
 import { HdsTabs, HdsTabsController, hdsMaterial } from '@kit.UIDesignKit';
+import { webview } from '@kit.ArkWeb';
+
+interface StreamSource {
+  label: string;
+  url: string;
+}
+
+function isDirectStreamUrl(url: string): boolean {
+  const lower = url.toLowerCase();
+  if (lower.includes('livingroom')) {
+    return false;
+  }
+  return lower.includes('.mp4') || lower.includes('.m3u8') || lower.includes('.flv') ||
+    lower.includes('.ts');
+}
 
 let storage = LocalStorage.getShared()
 const EVENT_BACK_PRESS = 'EVENT_BACK_PRESS'
@@ -77,16 +92,24 @@ struct Index {
   /// 弹出 Flutter 模态窗口时隐藏原生底栏，避免遮挡弹窗
   @StorageLink('bottomBarHidden') bottomBarHidden: boolean = false;
   @StorageLink('bottomBarCurrentTab') @Watch('onCurrentTabChanged') bottomBarCurrentTab: number = 0;
-  @StorageLink('inAppVideoVisible') inAppVideoVisible: boolean = false;
-  @StorageLink('inAppVideoUrl') inAppVideoUrl: string = '';
+  @StorageLink('inAppVideoVisible') @Watch('onVideoOverlayChanged') inAppVideoVisible: boolean = false;
+  @StorageLink('inAppVideoUrl') @Watch('onVideoOverlayChanged') inAppVideoUrl: string = '';
   @StorageLink('inAppVideoTitle') inAppVideoTitle: string = '智云课堂';
+  @StorageLink('inAppVideoLivingroomUrl') inAppVideoLivingroomUrl: string = '';
+  @StorageLink('inAppVideoToken') inAppVideoToken: string = '';
+  @StorageLink('inAppVideoStreamsJson') inAppVideoStreamsJson: string = '[]';
   @State private safeBottom: number = 0;
   @State private apiLevel: number = 12;
   @State private immersiveSupported: boolean = true;
   @State private videoSpeed: PlaybackSpeed = PlaybackSpeed.Speed_Forward_1_00_X;
   @State private videoSpeedLabel: string = '1.0x';
+  @State private activeVideoUrl: string = '';
+  @State private activeStreamIndex: number = 0;
+  @State private videoStreams: StreamSource[] = [];
+  @State private useWebFallback: boolean = false;
   private tabsController: HdsTabsController = new HdsTabsController();
   private videoController: VideoController = new VideoController();
+  private webController: webview.WebviewController = new webview.WebviewController();
 
   aboutToAppear(): void {
     this.loadSafeArea();
@@ -159,6 +182,63 @@ struct Index {
       this.context.eventHub.emit('bottomBarTabChanged', index);
     } catch (e) {
       hilog.warn(DOMAIN, TAG, `emit bottomBarTabChanged failed: ${JSON.stringify(e)}`);
+    }
+  }
+
+  onVideoOverlayChanged(): void {
+    if (!this.inAppVideoVisible) {
+      return;
+    }
+    const parsed: StreamSource[] = [];
+    try {
+      const raw = JSON.parse(this.inAppVideoStreamsJson) as Record<string, Object>[];
+      if (Array.isArray(raw)) {
+        for (let i = 0; i < raw.length; i++) {
+          const item = raw[i];
+          const urlVal = item['url'];
+          const labelVal = item['label'];
+          if (typeof urlVal === 'string' && urlVal.length > 0 && isDirectStreamUrl(urlVal)) {
+            parsed.push({
+              label: typeof labelVal === 'string' && labelVal.length > 0 ? labelVal : `源${i + 1}`,
+              url: urlVal
+            });
+          }
+        }
+      }
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, `parse video streams failed: ${JSON.stringify(e)}`);
+    }
+    this.videoStreams = parsed;
+    this.activeStreamIndex = 0;
+    if (isDirectStreamUrl(this.inAppVideoUrl)) {
+      this.activeVideoUrl = this.inAppVideoUrl;
+      this.useWebFallback = false;
+    } else if (parsed.length > 0) {
+      this.activeVideoUrl = parsed[0].url;
+      this.useWebFallback = false;
+    } else {
+      this.activeVideoUrl = this.webFallbackTarget();
+      this.useWebFallback = true;
+    }
+  }
+
+  private webFallbackTarget(): string {
+    if (this.inAppVideoLivingroomUrl.length > 0) {
+      return this.inAppVideoLivingroomUrl;
+    }
+    return !isDirectStreamUrl(this.inAppVideoUrl) ? this.inAppVideoUrl : '';
+  }
+
+  private switchNextStreamOrWeb(): void {
+    const nextIdx = this.activeStreamIndex + 1;
+    if (nextIdx < this.videoStreams.length) {
+      this.activeStreamIndex = nextIdx;
+      this.activeVideoUrl = this.videoStreams[nextIdx].url;
+      this.useWebFallback = false;
+      return;
+    }
+    if (this.webFallbackTarget().length > 0) {
+      this.useWebFallback = true;
     }
   }
 
@@ -326,7 +406,7 @@ struct Index {
         }
       }
 
-      if (this.inAppVideoVisible && this.inAppVideoUrl.length > 0) {
+      if (this.inAppVideoVisible && (this.inAppVideoUrl.length > 0 || this.inAppVideoLivingroomUrl.length > 0)) {
         Column() {
           Row() {
             Button('关闭')
@@ -347,30 +427,88 @@ struct Index {
               .layoutWeight(1)
               .margin({ left: 12, right: 12 })
 
-            Button(`倍速 ${this.videoSpeedLabel}`)
-              .height(32)
-              .fontSize(13)
-              .backgroundColor('#33FFFFFF')
-              .fontColor(Color.White)
-              .onClick(() => {
-                this.cycleVideoSpeed();
-              })
+            if (!this.useWebFallback && this.videoStreams.length > 1) {
+              Button('换源')
+                .height(32)
+                .fontSize(13)
+                .backgroundColor('#33FFFFFF')
+                .fontColor(Color.White)
+                .margin({ right: 8 })
+                .onClick(() => {
+                  const nextIdx = (this.activeStreamIndex + 1) % this.videoStreams.length;
+                  this.activeStreamIndex = nextIdx;
+                  this.activeVideoUrl = this.videoStreams[nextIdx].url;
+                })
+            }
+
+            if (!this.useWebFallback) {
+              Button(`倍速 ${this.videoSpeedLabel}`)
+                .height(32)
+                .fontSize(13)
+                .backgroundColor('#33FFFFFF')
+                .fontColor(Color.White)
+                .margin({ right: this.webFallbackTarget().length > 0 ? 8 : 0 })
+                .onClick(() => {
+                  this.cycleVideoSpeed();
+                })
+            }
+
+            if (!this.useWebFallback && this.webFallbackTarget().length > 0) {
+              Button('网页版')
+                .height(32)
+                .fontSize(13)
+                .backgroundColor('#330A84FF')
+                .fontColor(Color.White)
+                .onClick(() => {
+                  this.useWebFallback = true;
+                })
+            }
           }
           .width('100%')
           .padding({ left: 16, right: 16, top: 44, bottom: 12 })
           .backgroundColor('#E6000000')
 
-          Video({
-            src: this.inAppVideoUrl,
-            currentProgressRate: this.videoSpeed,
-            controller: this.videoController
-          })
-            .width('100%')
-            .layoutWeight(1)
-            .autoPlay(true)
-            .controls(true)
-            .objectFit(ImageFit.Contain)
-            .backgroundColor(Color.Black)
+          if (this.useWebFallback && this.webFallbackTarget().length > 0) {
+            Web({ src: this.webFallbackTarget(), controller: this.webController })
+              .width('100%')
+              .layoutWeight(1)
+              .javaScriptAccess(true)
+              .domStorageAccess(true)
+              .mediaPlayGestureAccess(false)
+              .mixedMode(MixedMode.All)
+              .onControllerAttached(() => {
+                if (this.inAppVideoToken.length > 0) {
+                  try {
+                    const hosts = [
+                      'https://classroom.zju.edu.cn',
+                      'https://yjapi.cmc.zju.edu.cn',
+                      'https://tgmedia.cmc.zju.edu.cn'
+                    ];
+                    for (let i = 0; i < hosts.length; i++) {
+                      webview.WebCookieManager.configCookieSync(hosts[i], `_token=${this.inAppVideoToken}; Path=/`);
+                      webview.WebCookieManager.configCookieSync(hosts[i], `token=${this.inAppVideoToken}; Path=/`);
+                    }
+                  } catch (err) {
+                    hilog.warn(DOMAIN, TAG, `configCookieSync failed: ${JSON.stringify(err)}`);
+                  }
+                }
+              })
+          } else {
+            Video({
+              src: this.activeVideoUrl.length > 0 ? this.activeVideoUrl : this.inAppVideoUrl,
+              currentProgressRate: this.videoSpeed,
+              controller: this.videoController
+            })
+              .width('100%')
+              .layoutWeight(1)
+              .autoPlay(true)
+              .controls(true)
+              .objectFit(ImageFit.Contain)
+              .backgroundColor(Color.Black)
+              .onError(() => {
+                this.switchNextStreamOrWeb();
+              })
+          }
         }
         .width('100%')
         .height('100%')

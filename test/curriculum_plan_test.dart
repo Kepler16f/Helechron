@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:celechron/model/curriculum_plan_models.dart';
 import 'package:celechron/services/curriculum_matching_engine.dart';
+import 'package:celechron/services/plan_audit_engine.dart';
 
 void main() {
   group('CurriculumPlan 行政班与年级解析测试', () {
@@ -181,6 +182,111 @@ void main() {
         nSelect: null,
       );
       expect(effective, 8.0);
+    });
+  });
+
+  group('Compass PDF 培养方案解析与三色学业审计引擎测试', () {
+    const samplePdfText = '''
+一、通识课程 14学分
+1.通识必修课程 14学分
+(1)思政类 14学分
+1)必修课程 12学分
+课程号 课程名称 学分 周学时 总学时 建议学年学期
+MARX1004G 大学生思想文化素养 2.0 2.0-0.0 32 一(秋冬)
+MARX2001G 马克思主义基本原理 3.0 3.0-0.0 48 二(春夏)
+2)选修课程 2学分
+在思政类“选择性必修课程”中至少修读2学分。
+二、专业课程 10学分
+1.专业核心课程 10学分
+课程号 课程名称 学分 周学时 总学时 建议学年学期
+CS1001M 数据结构基础 4.0 3.0-2.0 64 一(春夏)
+CS2002M 操作系统 4.0 3.0-2.0 64 二(秋冬)
+CS2003M 计算机组成 4.0 3.0-2.0 64 二(秋冬)
+''';
+
+    test('parsePlanPdfText + planFileFromPdf 正确构建四级树与叶子优先学分', () {
+      final sections = parsePlanPdfText(samplePdfText);
+      expect(sections.isEmpty, isFalse);
+      expect(sections.topCount, 2);
+      expect(sections.courseCount, 5);
+
+      final plan = planFileFromPdf(
+        sections,
+        major: '计算机科学与技术',
+        grade: '2026',
+        totalCredits: 24.0,
+      );
+      final modules = plan['modules'] as List;
+      final courses = plan['courses'] as List;
+      expect(modules, isNotEmpty);
+      expect(courses.length, 5);
+    });
+
+    test('AuditEngine.build 产出精准三色模块统计与 totals', () {
+      final sections = parsePlanPdfText(samplePdfText);
+      final plan = planFileFromPdf(
+        sections,
+        major: '计算机科学与技术',
+        grade: '2026',
+        totalCredits: 24.0,
+      );
+      final record = <String, dynamic>{
+        'student': {
+          'student_id': '3260100001',
+          'major': '计算机科学与技术',
+          'grade': '2026',
+          'current_semester': '2026-A',
+        },
+        'courses': [
+          {
+            'course_id': 'MARX1004G',
+            'name': '大学生思想文化素养',
+            'credits': 2.0,
+            'grade': 92.0,
+            'original': '92',
+            'passed': true,
+            'credit_included': true,
+          },
+          {
+            'course_id': 'CS1001M',
+            'name': '数据结构基础',
+            'credits': 4.0,
+            'grade': 88.0,
+            'original': '88',
+            'passed': true,
+            'credit_included': true,
+          },
+        ],
+        'planned_courses': [
+          {
+            'course_id': 'CS2002M',
+            'name': '操作系统',
+            'credits': 4.0,
+            'semester': '2026-A',
+          },
+        ],
+      };
+
+      final report = AuditEngine(const {}).build(
+        record,
+        plan,
+        action: {'foreign_lang_level': 'L3'},
+        uiActiveNames: {'操作系统'},
+      );
+      final totals = report['totals'] as Map<String, dynamic>;
+      expect((totals['required'] as num).toDouble(), 24.0);
+      expect((totals['earned'] as num).toDouble(), 6.0);
+      expect((totals['gap'] as num).toDouble(), 18.0);
+      final summary = report['summary'] as List;
+      expect(summary, isNotEmpty);
+    });
+
+    test('PlanAuditHelper 学期格式化与认定类关键词分类', () {
+      expect(PlanAuditHelper.prettySemester('一(秋冬)'), '大一秋冬');
+      expect(PlanAuditHelper.prettySemester('二（春夏）'), '大二春夏');
+      expect(PlanAuditHelper.extractCourseCode('(2025-2026-1)-MARX1004G-000123-1'),
+          'MARX1004G');
+      expect(certifiedCategoryOf('劳动教育实践'), '劳育类');
     });
   });
 }

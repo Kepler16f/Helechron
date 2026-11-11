@@ -44,6 +44,8 @@ class MobileNativeService {
     required String url,
     required String title,
     List<Map<String, String>> streams = const [],
+    String? livingroomUrl,
+    String? token,
   }) async =>
       false;
   Future<bool> installApk(String filePath) async => false;

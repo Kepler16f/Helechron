@@ -537,17 +537,26 @@ class ScholarPage extends StatelessWidget {
                                       rootNavigator: true)
                                   .push(CupertinoPageRoute(
                                       builder: (context) =>
-                                          CurriculumPlanPage(),
+                                          const CurriculumPlanPage(),
                                       title: '培养方案查看')),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 12, vertical: 8),
                                 decoration: BoxDecoration(
                                   color: CupertinoDynamicColor.resolve(
-                                      CustomCupertinoDynamicColors.sakura
-                                          .withValues(alpha: 0.1),
-                                      context),
+                                          CustomCupertinoDynamicColors
+                                              .sakuraInk,
+                                          context)
+                                      .withValues(alpha: 0.12),
                                   borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: CupertinoDynamicColor.resolve(
+                                            CustomCupertinoDynamicColors
+                                                .sakuraInk,
+                                            context)
+                                        .withValues(alpha: 0.28),
+                                    width: 0.8,
+                                  ),
                                 ),
                                 child: Row(
                                   children: [
@@ -555,7 +564,8 @@ class ScholarPage extends StatelessWidget {
                                       CupertinoIcons.doc_text_search,
                                       size: 16,
                                       color: CupertinoDynamicColor.resolve(
-                                          CustomCupertinoDynamicColors.sakura,
+                                          CustomCupertinoDynamicColors
+                                              .sakuraInk,
                                           context),
                                     ),
                                     const SizedBox(width: 8),
@@ -565,7 +575,8 @@ class ScholarPage extends StatelessWidget {
                                         fontSize: 13,
                                         fontWeight: FontWeight.w600,
                                         color: CupertinoDynamicColor.resolve(
-                                            CustomCupertinoDynamicColors.sakura,
+                                            CustomCupertinoDynamicColors
+                                                .sakuraInk,
                                             context),
                                       ),
                                     ),

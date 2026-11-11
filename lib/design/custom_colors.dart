@@ -121,4 +121,29 @@ class CustomCupertinoDynamicColors {
     color: Color.fromRGBO(230, 255, 226, 1.0),
     darkColor: Color.fromRGBO(63, 222, 23, 1.0),
   );
+
+  // High-contrast semantic foreground colors for light & dark surfaces
+  static const CupertinoDynamicColor sakuraInk =
+      CupertinoDynamicColor.withBrightness(
+    color: Color(0xFFB01E68),
+    darkColor: Color(0xFFF48FB1),
+  );
+
+  static const CupertinoDynamicColor springInk =
+      CupertinoDynamicColor.withBrightness(
+    color: Color(0xFF2E7D32),
+    darkColor: Color(0xFF66BB6A),
+  );
+
+  static const CupertinoDynamicColor cyanInk =
+      CupertinoDynamicColor.withBrightness(
+    color: Color(0xFF1565C0),
+    darkColor: Color(0xFF64B5F6),
+  );
+
+  static const CupertinoDynamicColor peachInk =
+      CupertinoDynamicColor.withBrightness(
+    color: Color(0xFFC65102),
+    darkColor: Color(0xFFFFB74D),
+  );
 }

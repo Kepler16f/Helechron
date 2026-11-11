@@ -182,4 +182,60 @@ void main() {
       );
     });
   });
+
+  group('ZhiyunService 直播与回放状态精准区分测试', () {
+    test('status=1 普通已发布课节绝不误判为正在直播', () {
+      final now = DateTime.now();
+      final pastStart = now.subtract(const Duration(days: 3, hours: 2));
+      final pastEnd = now.subtract(const Duration(days: 3));
+      final item = <String, dynamic>{
+        'sub_id': '1973989',
+        'title': '第1讲 绪论',
+        'status': '1',
+        'start_at': (pastStart.millisecondsSinceEpoch ~/ 1000).toString(),
+        'end_at': (pastEnd.millisecondsSinceEpoch ~/ 1000).toString(),
+        'playback': 'https://cdn.example.com/replay.m3u8',
+      };
+      expect(ZhiyunService.checkIsLive(item: item), isFalse);
+      expect(ZhiyunService.checkHasReplay(item: item), isTrue);
+    });
+
+    test('没有时间窗且仅 status=1 且非直播标签时不误判为直播', () {
+      final item = <String, dynamic>{
+        'sub_id': '1973990',
+        'title': '普通课节',
+        'status': '1',
+      };
+      expect(ZhiyunService.checkIsLive(item: item), isFalse);
+    });
+
+    test('服务端 status=2 或 status_label=直播 且未过时间窗时正确识别为直播', () {
+      final now = DateTime.now();
+      final item = <String, dynamic>{
+        'sub_id': '1973991',
+        'title': '正在上课',
+        'status': '2',
+        'status_label': '直播',
+        'start_at': (now.subtract(const Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000).toString(),
+        'end_at': (now.add(const Duration(minutes: 40)).millisecondsSinceEpoch ~/ 1000).toString(),
+      };
+      expect(ZhiyunService.checkIsLive(item: item), isTrue);
+      expect(ZhiyunService.checkHasReplay(item: item), isFalse);
+    });
+
+    test('status=3/4 或含回放/已结束标识绝不判定为直播', () {
+      final now = DateTime.now();
+      final item = <String, dynamic>{
+        'sub_id': '1973992',
+        'title': '已转回放',
+        'status': '3',
+        'status_label': '回放',
+        'start_at': (now.subtract(const Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000).toString(),
+        'end_at': (now.add(const Duration(minutes: 40)).millisecondsSinceEpoch ~/ 1000).toString(),
+        'playback': {'m3u8': 'https://cdn.example.com/live_end.m3u8'},
+      };
+      expect(ZhiyunService.checkIsLive(item: item), isFalse);
+      expect(ZhiyunService.checkHasReplay(item: item), isTrue);
+    });
+  });
 }

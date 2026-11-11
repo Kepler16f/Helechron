@@ -1,5 +1,6 @@
 package top.celechron.celechron
 
+import android.app.AlertDialog
 import android.app.Dialog
 import android.content.Context
 import android.content.Intent
@@ -8,17 +9,29 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.StrictMode
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
+import android.webkit.CookieManager
 import android.webkit.MimeTypeMap
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.MediaController
 import android.widget.TextView
-import android.widget.VideoView
+import android.widget.Toast
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.ui.PlayerView
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -103,7 +116,17 @@ class MainActivity : FlutterActivity() {
                 "openInAppVideoPlayer" -> {
                     val url = call.argument<String>("url") ?: ""
                     val title = call.argument<String>("title") ?: "智云课堂"
-                    result.success(showInAppVideoDialog(url, title))
+                    val rawStreams = call.argument<List<Map<String, Any?>>>("streams") ?: emptyList()
+                    val streams = rawStreams.mapNotNull { item ->
+                        val sUrl = item["url"]?.toString()?.trim() ?: ""
+                        if (sUrl.isEmpty()) null else Pair(
+                            item["label"]?.toString()?.trim()?.ifEmpty { "视频源" } ?: "视频源",
+                            sUrl
+                        )
+                    }
+                    val livingroomUrl = call.argument<String>("livingroomUrl") ?: ""
+                    val token = call.argument<String>("token") ?: ""
+                    result.success(showInAppVideoDialog(url, title, streams, livingroomUrl, token))
                 }
                 "installApk" -> {
                     val filePath = call.argument<String>("filePath") ?: ""
@@ -170,10 +193,46 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun showInAppVideoDialog(url: String, title: String): Boolean {
-        if (url.isEmpty()) return false
+    private fun isDirectStreamUrl(targetUrl: String): Boolean {
+        val lower = targetUrl.lowercase()
+        if (lower.contains("livingroom")) return false
+        return lower.contains(".mp4") ||
+            lower.contains(".m3u8") ||
+            lower.contains(".flv") ||
+            lower.contains(".ts")
+    }
+
+    @OptIn(UnstableApi::class)
+    private fun showInAppVideoDialog(
+        url: String,
+        title: String,
+        streams: List<Pair<String, String>> = emptyList(),
+        livingroomUrl: String = "",
+        token: String = ""
+    ): Boolean {
+        if (url.isEmpty() && livingroomUrl.isEmpty() && streams.isEmpty()) return false
         return try {
             runOnUiThread {
+                val streamCandidates = mutableListOf<Pair<String, String>>()
+                val seenUrls = mutableSetOf<String>()
+                fun addCandidate(label: String, candidateUrl: String) {
+                    val trimmed = candidateUrl.trim()
+                    if (trimmed.isEmpty() || !seenUrls.add(trimmed)) return
+                    if (isDirectStreamUrl(trimmed) || trimmed.contains("cmc.zju.edu.cn")) {
+                        streamCandidates.add(Pair(label, trimmed))
+                    }
+                }
+                streams.forEach { addCandidate(it.first, it.second) }
+                if (url.isNotEmpty() && isDirectStreamUrl(url)) {
+                    addCandidate("默认源", url)
+                }
+
+                val webFallbackUrl = when {
+                    livingroomUrl.isNotBlank() -> livingroomUrl.trim()
+                    url.isNotBlank() && !isDirectStreamUrl(url) -> url.trim()
+                    else -> ""
+                }
+
                 val dialog = Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
                 val root = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
@@ -188,14 +247,14 @@ class MainActivity : FlutterActivity() {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
                     setBackgroundColor(Color.parseColor("#E61C1C1E"))
-                    setPadding(36, 48, 36, 28)
+                    setPadding(24, 42, 24, 22)
                 }
 
                 val closeBtn = TextView(this).apply {
                     text = "关闭"
                     textSize = 15f
                     setTextColor(Color.parseColor("#0A84FF"))
-                    setPadding(16, 8, 24, 8)
+                    setPadding(12, 8, 20, 8)
                     setOnClickListener { dialog.dismiss() }
                 }
 
@@ -207,10 +266,6 @@ class MainActivity : FlutterActivity() {
                     layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                 }
 
-                topBar.addView(closeBtn)
-                topBar.addView(titleView)
-                root.addView(topBar)
-
                 val container = FrameLayout(this).apply {
                     layoutParams = LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
@@ -219,24 +274,130 @@ class MainActivity : FlutterActivity() {
                     )
                 }
 
-                val lower = url.lowercase()
-                val isDirectStream = lower.contains(".mp4") || lower.contains(".m3u8")
+                var activePlayer: ExoPlayer? = null
                 var activeWebView: WebView? = null
+                var currentStreamIndex = 0
+                val speeds = floatArrayOf(1.0f, 1.25f, 1.5f, 2.0f, 0.75f)
+                var speedIndex = 0
+
+                val sourceBtn = TextView(this).apply {
+                    text = "换源"
+                    textSize = 14f
+                    setTextColor(Color.WHITE)
+                    setPadding(14, 8, 14, 8)
+                    visibility = if (streamCandidates.size > 1) View.VISIBLE else View.GONE
+                }
+
+                val speedBtn = TextView(this).apply {
+                    text = "1.0x"
+                    textSize = 14f
+                    setTextColor(Color.WHITE)
+                    setPadding(14, 8, 14, 8)
+                    visibility = if (streamCandidates.isNotEmpty()) View.VISIBLE else View.GONE
+                }
+
+                val webBtn = TextView(this).apply {
+                    text = "网页版"
+                    textSize = 14f
+                    setTextColor(Color.parseColor("#0A84FF"))
+                    setPadding(14, 8, 8, 8)
+                    visibility = if (webFallbackUrl.isNotEmpty()) View.VISIBLE else View.GONE
+                }
+
+                topBar.addView(closeBtn)
+                topBar.addView(titleView)
+                topBar.addView(sourceBtn)
+                topBar.addView(speedBtn)
+                topBar.addView(webBtn)
+                root.addView(topBar)
+                root.addView(container)
+
+                fun releasePlayer() {
+                    try {
+                        activePlayer?.stop()
+                        activePlayer?.release()
+                    } catch (_: Exception) {
+                    }
+                    activePlayer = null
+                }
 
                 fun attachWebView(targetUrl: String) {
+                    if (targetUrl.isBlank()) return
+                    releasePlayer()
+                    activeWebView?.destroy()
                     container.removeAllViews()
+                    speedBtn.visibility = View.GONE
+                    sourceBtn.visibility = View.GONE
+
+                    val customViewHolder = FrameLayout(this).apply {
+                        visibility = View.GONE
+                        layoutParams = FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+                    }
+
+                    var fullscreenView: View? = null
+                    var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
+
+                    val cookieManager = CookieManager.getInstance()
+                    cookieManager.setAcceptCookie(true)
+                    if (token.isNotBlank()) {
+                        val hosts = listOf(
+                            "https://classroom.zju.edu.cn",
+                            "https://yjapi.cmc.zju.edu.cn",
+                            "https://tgmedia.cmc.zju.edu.cn"
+                        )
+                        for (h in hosts) {
+                            cookieManager.setCookie(h, "_token=$token; Path=/")
+                            cookieManager.setCookie(h, "token=$token; Path=/")
+                        }
+                        cookieManager.flush()
+                    }
+
                     val wv = WebView(this).apply {
+                        setBackgroundColor(Color.BLACK)
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
                         settings.mediaPlaybackRequiresUserGesture = false
+                        settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                         settings.loadWithOverviewMode = true
                         settings.useWideViewPort = true
-                        webChromeClient = WebChromeClient()
+                        settings.userAgentString =
+                            "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+                        cookieManager.setAcceptThirdPartyCookies(this, true)
+                        webChromeClient = object : WebChromeClient() {
+                            override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
+                                if (view == null) return
+                                fullscreenView?.let { customViewHolder.removeView(it) }
+                                fullscreenView = view
+                                fullscreenCallback = callback
+                                customViewHolder.addView(
+                                    view,
+                                    FrameLayout.LayoutParams(
+                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                        ViewGroup.LayoutParams.MATCH_PARENT
+                                    )
+                                )
+                                customViewHolder.visibility = View.VISIBLE
+                            }
+
+                            override fun onHideCustomView() {
+                                fullscreenView?.let { customViewHolder.removeView(it) }
+                                fullscreenView = null
+                                fullscreenCallback?.onCustomViewHidden()
+                                fullscreenCallback = null
+                                customViewHolder.visibility = View.GONE
+                            }
+                        }
                         webViewClient = object : WebViewClient() {
                             override fun shouldOverrideUrlLoading(
                                 view: WebView?,
                                 request: WebResourceRequest?
-                            ): Boolean = false
+                            ): Boolean {
+                                val nextUrl = request?.url?.toString() ?: return false
+                                return !(nextUrl.startsWith("http://") || nextUrl.startsWith("https://"))
+                            }
                         }
                         loadUrl(
                             targetUrl,
@@ -254,44 +415,128 @@ class MainActivity : FlutterActivity() {
                             ViewGroup.LayoutParams.MATCH_PARENT
                         )
                     )
+                    container.addView(customViewHolder)
                 }
 
-                if (isDirectStream) {
-                    val videoView = VideoView(this)
-                    val mediaController = MediaController(this)
-                    mediaController.setAnchorView(videoView)
-                    videoView.setMediaController(mediaController)
-                    videoView.setVideoURI(
-                        Uri.parse(url),
-                        mapOf(
-                            "Referer" to "https://classroom.zju.edu.cn/",
-                            "Origin" to "https://classroom.zju.edu.cn"
-                        )
-                    )
-                    videoView.setOnPreparedListener { mp ->
-                        mp.isLooping = false
-                        videoView.start()
+                fun playStreamAt(index: Int) {
+                    if (index < 0 || index >= streamCandidates.size) {
+                        if (webFallbackUrl.isNotEmpty()) {
+                            Toast.makeText(this, "视频流加载失败，正在切换网页播放", Toast.LENGTH_SHORT).show()
+                            attachWebView(webFallbackUrl)
+                        }
+                        return
                     }
-                    videoView.setOnErrorListener { _, _, _ ->
-                        attachWebView(url)
-                        true
-                    }
-                    container.addView(
-                        videoView,
-                        FrameLayout.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            Gravity.CENTER
-                        )
+                    currentStreamIndex = index
+                    val streamUrl = streamCandidates[index].second
+                    activeWebView?.destroy()
+                    activeWebView = null
+                    releasePlayer()
+                    container.removeAllViews()
+                    speedBtn.visibility = View.VISIBLE
+                    sourceBtn.visibility = if (streamCandidates.size > 1) View.VISIBLE else View.GONE
+
+                    val headers = mutableMapOf(
+                        "Referer" to "https://classroom.zju.edu.cn/",
+                        "Origin" to "https://classroom.zju.edu.cn",
+                        "User-Agent" to "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
                     )
+                    if (token.isNotBlank()) {
+                        headers["Cookie"] = "_token=$token; token=$token"
+                        headers["Authorization"] = "Bearer $token"
+                    }
+
+                    val dataSourceFactory = DefaultHttpDataSource.Factory()
+                        .setAllowCrossProtocolRedirects(true)
+                        .setConnectTimeoutMs(15000)
+                        .setReadTimeoutMs(20000)
+                        .setDefaultRequestProperties(headers)
+
+                    val player = ExoPlayer.Builder(this)
+                        .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+                        .build()
+
+                    val mediaBuilder = MediaItem.Builder().setUri(streamUrl)
+                    if (streamUrl.lowercase().contains(".m3u8")) {
+                        mediaBuilder.setMimeType(MimeTypes.APPLICATION_M3U8)
+                    }
+
+                    player.addListener(object : Player.Listener {
+                        override fun onPlayerError(error: PlaybackException) {
+                            val nextIdx = currentStreamIndex + 1
+                            if (nextIdx < streamCandidates.size) {
+                                playStreamAt(nextIdx)
+                            } else if (webFallbackUrl.isNotEmpty()) {
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    "直接流播放失败，切换网页播放器",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                attachWebView(webFallbackUrl)
+                            } else {
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    "播放失败: ${error.errorCodeName}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    })
+
+                    val playerView = PlayerView(this).apply {
+                        this.player = player
+                        useController = true
+                        setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                        layoutParams = FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+                    }
+
+                    container.addView(playerView)
+                    activePlayer = player
+                    player.setPlaybackParameters(PlaybackParameters(speeds[speedIndex]))
+                    player.setMediaItem(mediaBuilder.build())
+                    player.prepare()
+                    player.playWhenReady = true
+                }
+
+                speedBtn.setOnClickListener {
+                    speedIndex = (speedIndex + 1) % speeds.size
+                    val spd = speeds[speedIndex]
+                    speedBtn.text = "${spd}x"
+                    activePlayer?.setPlaybackParameters(PlaybackParameters(spd))
+                }
+
+                sourceBtn.setOnClickListener {
+                    if (streamCandidates.isEmpty()) return@setOnClickListener
+                    val labels = streamCandidates.map { it.first }.toTypedArray()
+                    AlertDialog.Builder(this)
+                        .setTitle("选择视频源")
+                        .setSingleChoiceItems(labels, currentStreamIndex) { dlg, which ->
+                            dlg.dismiss()
+                            playStreamAt(which)
+                        }
+                        .setNegativeButton("取消", null)
+                        .show()
+                }
+
+                webBtn.setOnClickListener {
+                    if (webFallbackUrl.isNotEmpty()) {
+                        attachWebView(webFallbackUrl)
+                    }
+                }
+
+                if (streamCandidates.isNotEmpty()) {
+                    playStreamAt(0)
                 } else {
-                    attachWebView(url)
+                    attachWebView(webFallbackUrl.ifEmpty { url })
                 }
 
-                root.addView(container)
                 dialog.setContentView(root)
                 dialog.setOnDismissListener {
+                    releasePlayer()
                     activeWebView?.destroy()
+                    activeWebView = null
                 }
                 dialog.show()
             }

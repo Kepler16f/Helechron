@@ -43,6 +43,84 @@ enum PlanMatchLevel {
   const PlanMatchLevel(this.weight);
 }
 
+/// 学籍画像（从正方课表接口 xskbcx_cxXsKb 响应顶层或 xsxx 提取，参考 D:\compass）
+class StudentProfile {
+  final String majorName; // zy / zymc
+  final String college; // xy / jgmc
+  final String adminClass; // xzb / bjmc
+  final String studentId; // xh
+  final String name; // xm
+  final String gradeOverride; // njdm_id / njmc
+
+  const StudentProfile({
+    this.majorName = '',
+    this.college = '',
+    this.adminClass = '',
+    this.studentId = '',
+    this.name = '',
+    String grade = '',
+  }) : gradeOverride = grade;
+
+  bool get isEmpty =>
+      majorName.isEmpty && adminClass.isEmpty && studentId.isEmpty;
+
+  String? get grade {
+    final fromClass = gradeFromClassName(adminClass);
+    if (fromClass != null && fromClass.isNotEmpty) return fromClass;
+    if (RegExp(r'^20\d{2}$').hasMatch(gradeOverride.trim())) {
+      return gradeOverride.trim();
+    }
+    if (studentId.startsWith('3') && studentId.length >= 3) {
+      final yy = int.tryParse(studentId.substring(1, 3));
+      if (yy != null && yy >= 10 && yy <= 50) {
+        return '${2000 + yy}';
+      }
+    }
+    return null;
+  }
+
+  int? get gradeYear {
+    final g = grade;
+    return g == null ? null : int.tryParse(g);
+  }
+
+  factory StudentProfile.fromJson(Map<String, dynamic> m) {
+    String clean(List<String> keys) {
+      for (final k in keys) {
+        final raw = (m[k] ?? '').toString().trim();
+        if (raw.isNotEmpty &&
+            raw != '未知' &&
+            raw != '无' &&
+            raw != '-' &&
+            raw != '--' &&
+            raw != '/' &&
+            !raw.contains('&nbsp;')) {
+          return raw;
+        }
+      }
+      return '';
+    }
+
+    return StudentProfile(
+      majorName: clean(const ['zy', 'zymc', 'majorName', '专业名称', '专业']),
+      college: clean(const ['xy', 'jgmc', 'college', '学院', '所属学院']),
+      adminClass: clean(const ['xzb', 'bjmc', 'bj', 'adminClass', '行政班']),
+      studentId: clean(const ['xh', 'xh_id', 'studentId', '学号']),
+      name: clean(const ['xm', 'name', '姓名']),
+      grade: clean(const ['njdm_id', 'njmc', 'nj', 'grade']),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'zy': majorName,
+        'xy': college,
+        'xzb': adminClass,
+        'xh': studentId,
+        'xm': name,
+        if (gradeOverride.isNotEmpty) 'njdm_id': gradeOverride,
+      };
+}
+
 /// 培养方案摘要数据模型（映射正方教务网 pyfaxxcx_cxPyfaxscxIndex.html 扁平字段）
 class PlanSummary {
   final String id; // pyfaxx_id 或 pyfa_id

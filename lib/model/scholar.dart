@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'package:get/get.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:celechron/http/zjuServices/exceptions.dart';
+import 'package:celechron/utils/tuple.dart';
 import 'package:celechron/page/option/option_controller.dart';
 import 'package:celechron/services/diagnostic_log_service.dart';
 import 'package:celechron/services/refresh_coordinator.dart';
@@ -900,25 +902,154 @@ class Scholar {
     return null;
   }
 
-  /// 全量拉取教务系统培养方案目录（~3000 条），支持客户端多层级语义打分匹配
-  Future<List<PlanSummary>> fetchPlanCatalog() async {
-    final ok = await ensureSession();
-    if (!ok) return const [];
-    if (_spider is UgrsSpider) {
-      final spider = _spider as UgrsSpider;
-      try {
-        final res = await spider.zdbk.getTrainingPlans(spider.httpClient);
-        final rawList = res.item2;
-        if (rawList.isNotEmpty) {
-          return rawList.map((m) => PlanSummary.fromJson(m)).toList();
-        }
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint('fetchPlanCatalog failed: $e');
+  /// 获取学生学籍画像（优先缓存；refresh=true 或缓存缺失时从教务网拉取并推导年级/行政班/学院）
+  Future<StudentProfile?> fetchStudentProfile({bool refresh = false}) async {
+    if (!refresh) {
+      final cached = _db?.getCachedWebPage('zdbk_student_info');
+      if (cached != null && cached.trim().startsWith('{')) {
+        try {
+          final parsed =
+              StudentProfile.fromJson(jsonDecode(cached) as Map<String, dynamic>);
+          if (!parsed.isEmpty) return parsed;
+        } catch (_) {}
+      }
+    }
+    if (refresh || _spider == null) {
+      final ok = await ensureSession();
+      if (ok && _spider is UgrsSpider) {
+        final spider = _spider as UgrsSpider;
+        try {
+          final res = await spider.zdbk.fetchStudentProfileMap(
+            spider.httpClient,
+            studentId: username,
+          );
+          if (res.item2.isNotEmpty) {
+            final p = StudentProfile.fromJson(res.item2);
+            if (!p.isEmpty) return p;
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('fetchStudentProfile failed: $e');
+          }
         }
       }
     }
-    return const [];
+    final majorCached = _db?.getCachedWebPage('zdbk_user_major')?.trim() ?? '';
+    final idGrade = Zdbk.inferGradeFromStudentId(username) ?? '';
+    if (majorCached.isNotEmpty || (username?.isNotEmpty ?? false)) {
+      return StudentProfile(
+        studentId: username ?? '',
+        majorName: majorCached,
+        grade: idGrade,
+      );
+    }
+    return null;
+  }
+
+  /// 全量拉取教务系统培养方案目录（携带详细错误文本与本地缓存兜底）
+  Future<Tuple<String?, List<PlanSummary>>> fetchPlanCatalogWithError({
+    bool refresh = false,
+  }) async {
+    List<PlanSummary> parseCachedCatalog() {
+      final cached = _db?.getCachedWebPage('zdbk_training_plans');
+      if (cached == null || cached.trim().isEmpty) return const [];
+      try {
+        final decoded = jsonDecode(cached);
+        final raw = decoded is Map ? decoded['items'] : decoded;
+        if (raw is! List) return const [];
+        return raw
+            .whereType<Map>()
+            .map((e) {
+              final map = <String, dynamic>{};
+              e.forEach((k, v) => map[k.toString()] = v);
+              return PlanSummary.fromJson(map);
+            })
+            .where((p) => p.zymc.isNotEmpty || p.id.isNotEmpty)
+            .toList();
+      } catch (_) {
+        return const [];
+      }
+    }
+
+    if (!refresh) {
+      final cached = parseCachedCatalog();
+      if (cached.isNotEmpty) return Tuple(null, cached);
+    }
+
+    final ok = await ensureSession();
+    if (!ok) {
+      final cached = parseCachedCatalog();
+      return Tuple('教务网尚未登录或会话已失效，请检查网络或重新登录学号', cached);
+    }
+    if (_spider is UgrsSpider) {
+      final spider = _spider as UgrsSpider;
+      try {
+        final res = await spider.zdbk.getTrainingPlans(
+          spider.httpClient,
+          studentId: username,
+        );
+        final rawList = res.item2;
+        if (rawList.isNotEmpty) {
+          return Tuple(null, rawList.map((m) => PlanSummary.fromJson(m)).toList());
+        }
+        final cached = parseCachedCatalog();
+        final errText = res.item1 != null
+            ? shortErrorText(res.item1!)
+            : '教务网返回的培养方案列表为空';
+        return Tuple(errText, cached);
+      } catch (e) {
+        final cached = parseCachedCatalog();
+        return Tuple('同步培养方案失败: $e', cached);
+      }
+    }
+    return Tuple('当前账号非本科生教务会话，暂不支持培养方案同步', const []);
+  }
+
+  /// 全量拉取教务系统培养方案目录（~3000 条），支持客户端多层级语义打分匹配
+  Future<List<PlanSummary>> fetchPlanCatalog() async {
+    final res = await fetchPlanCatalogWithError();
+    return res.item2;
+  }
+
+  /// 下载培养方案官方 PDF 字节（对应 Compass pyfayl_cxPyfaylPdf.html）
+  Future<Tuple<String?, Uint8List?>> fetchPlanPdf(PlanSummary plan) async {
+    final ok = await ensureSession();
+    if (!ok) {
+      return Tuple('教务网尚未登录或会话已失效', null);
+    }
+    if (_spider is! UgrsSpider) {
+      return Tuple('当前账号非本科生教务会话', null);
+    }
+    final spider = _spider as UgrsSpider;
+    String? lastErr;
+    for (final candidateId in [plan.jxjhh.trim(), plan.id.trim()]) {
+      if (candidateId.isEmpty) continue;
+      final res = await spider.zdbk.fetchPlanPdf(
+        spider.httpClient,
+        candidateId,
+        studentId: username,
+      );
+      if (res.item2 != null && res.item2!.isNotEmpty) {
+        return Tuple(null, res.item2);
+      }
+      if (res.item1 != null) {
+        lastErr = shortErrorText(res.item1!);
+      }
+    }
+    return Tuple(lastErr ?? '教务网未返回该方案 PDF 文件', null);
+  }
+
+  /// 获取培养方案课程明细（best-effort）
+  Future<List<Map<String, dynamic>>> fetchPlanCourseTable(PlanSummary plan) async {
+    final ok = await ensureSession();
+    if (!ok || _spider is! UgrsSpider) return const [];
+    final spider = _spider as UgrsSpider;
+    return spider.zdbk.fetchPlanCourseTable(
+      spider.httpClient,
+      jxjhh: plan.jxjhh,
+      pyfaxxId: plan.id,
+      studentId: username,
+    );
   }
 }
 

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -551,12 +552,16 @@ class OhosNativeService {
     required String url,
     required String title,
     List<Map<String, String>> streams = const [],
+    String? livingroomUrl,
+    String? token,
   }) async {
     if (PlatformFeatures.usesFlutterPlugins) {
       return MobileNativeService.instance.openInAppVideoPlayer(
         url: url,
         title: title,
         streams: streams,
+        livingroomUrl: livingroomUrl,
+        token: token,
       );
     }
     try {
@@ -565,6 +570,10 @@ class OhosNativeService {
         'url': url,
         'title': title,
         'streams': streams,
+        'streamsJson': jsonEncode(streams),
+        if (livingroomUrl != null && livingroomUrl.isNotEmpty)
+          'livingroomUrl': livingroomUrl,
+        if (token != null && token.isNotEmpty) 'token': token,
       });
       return result ?? false;
     } on PlatformException catch (e) {

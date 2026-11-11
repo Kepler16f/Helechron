@@ -499,17 +499,23 @@ export default class EntryAbility extends FlutterAbility {
     return '*/*';
   }
 
-  /// 在应用内唤起原生 ArkUI Video 播放器浮层观看智云课堂直播或回放
+  /// 在应用内唤起原生 ArkUI Video / ArkWeb 播放器浮层观看智云课堂直播或回放
   private openInAppVideoPlayer(call: MethodCall, result: MethodResult): void {
     try {
       const url = (call.argument('url') as string) || '';
       const title = (call.argument('title') as string) || '智云课堂';
-      if (url.length === 0) {
+      const livingroomUrl = (call.argument('livingroomUrl') as string) || '';
+      const token = (call.argument('token') as string) || '';
+      const streamsJsonArg = (call.argument('streamsJson') as string) || '[]';
+      if (url.length === 0 && livingroomUrl.length === 0) {
         result.success(false);
         return;
       }
-      AppStorage.setOrCreate('inAppVideoUrl', url);
+      AppStorage.setOrCreate('inAppVideoUrl', url.length > 0 ? url : livingroomUrl);
       AppStorage.setOrCreate('inAppVideoTitle', title);
+      AppStorage.setOrCreate('inAppVideoLivingroomUrl', livingroomUrl);
+      AppStorage.setOrCreate('inAppVideoToken', token);
+      AppStorage.setOrCreate('inAppVideoStreamsJson', streamsJsonArg);
       AppStorage.setOrCreate('inAppVideoVisible', true);
       result.success(true);
     } catch (err) {

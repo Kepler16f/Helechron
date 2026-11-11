@@ -118,13 +118,39 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
   }
 
   Future<void> _launchInAppPlayer(String url) async {
-    await OhosNativeService.instance.openInAppVideoPlayer(
+    final token = ZhiyunService.getCachedZhiyunToken();
+    final ok = await OhosNativeService.instance.openInAppVideoPlayer(
       url: url,
       title: '${widget.courseName} · $_currentTitle',
       streams: _streams
           .map((s) => {'label': s.label, 'url': s.url})
           .toList(),
+      livingroomUrl: _currentLivingroomUrl,
+      token: token,
     );
+    if (!ok && mounted) {
+      showCupertinoDialog(
+        context: context,
+        builder: (ctx) => CupertinoAlertDialog(
+          title: const Text('未能启动内置播放器'),
+          content: const Text('可尝试改用系统浏览器打开智云课堂页面播放。'),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('取消'),
+            ),
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                ZhiyunService.openUrl(_currentLivingroomUrl);
+              },
+              child: const Text('浏览器打开'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Future<void> _saveAndOpenSlide(ZhiyunPptSlide slide, int index) async {

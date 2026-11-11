@@ -68,23 +68,28 @@ class CourseListPage extends StatelessWidget {
           CelechronSliverTextHeader(
             subtitle: '课程',
             right: CupertinoButton(
-              padding: EdgeInsets.zero,
+              padding: const EdgeInsets.only(right: 12),
               minSize: 32,
               onPressed: () => Navigator.of(context, rootNavigator: true).push(
                 CupertinoPageRoute(
-                  builder: (context) => CurriculumPlanPage(),
+                  builder: (context) => const CurriculumPlanPage(),
                   title: '培养方案查看',
                 ),
               ),
               child: Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: CupertinoDynamicColor.resolve(
-                      CustomCupertinoDynamicColors.sakura
-                          .withValues(alpha: 0.15),
-                      context),
+                          CustomCupertinoDynamicColors.sakuraInk, context)
+                      .withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: CupertinoDynamicColor.resolve(
+                            CustomCupertinoDynamicColors.sakuraInk, context)
+                        .withValues(alpha: 0.35),
+                    width: 0.8,
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -93,7 +98,7 @@ class CourseListPage extends StatelessWidget {
                       CupertinoIcons.doc_text_search,
                       size: 13,
                       color: CupertinoDynamicColor.resolve(
-                          CustomCupertinoDynamicColors.sakura, context),
+                          CustomCupertinoDynamicColors.sakuraInk, context),
                     ),
                     const SizedBox(width: 4),
                     Text(
@@ -102,7 +107,7 @@ class CourseListPage extends StatelessWidget {
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: CupertinoDynamicColor.resolve(
-                            CustomCupertinoDynamicColors.sakura, context),
+                            CustomCupertinoDynamicColors.sakuraInk, context),
                       ),
                     ),
                   ],

@@ -172,6 +172,22 @@ class Zdbk {
     }
 
     _sessionGeneration++;
+    // 会话初始化：正方部分业务端点要求先访问一次菜单页（否则被判"未登录"或返回 HTML 重定向）
+    try {
+      final menuReq = await httpClient
+          .getUrl(Uri.parse("https://zdbk.zju.edu.cn/jwglxt/xtgl/index_initMenu.html"))
+          .timeout(const Duration(seconds: 6));
+      menuReq.headers
+        ..add("Referer", "https://zdbk.zju.edu.cn/jwglxt/xtgl/login_ssologin.html")
+        ..add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        ..set("Connection", "close");
+      menuReq.cookies.add(_jSessionId!);
+      menuReq.cookies.add(_route!);
+      final menuResp = await menuReq.close().timeout(const Duration(seconds: 6));
+      await menuResp.drain<void>();
+    } catch (_) {
+      // 初始化失败不阻断——具体业务查询仍可按需触发重登
+    }
     return true;
   }
 
@@ -805,9 +821,35 @@ class Zdbk {
           _writeCache('zdbk_Timetable$year$semester', jsonEncode(items));
 
           final xsxx = asStringMap(payload['xsxx']);
+          final mergedProfile = <String, dynamic>{};
+          for (final key in const [
+            'xh',
+            'xm',
+            'zy',
+            'zymc',
+            'zyh',
+            'zydm',
+            'xy',
+            'jgmc',
+            'jg_id',
+            'xzb',
+            'bj',
+            'bjmc',
+            'njdm_id',
+            'njmc',
+            'nj',
+            'xjzt',
+          ]) {
+            if (payload[key] != null && '${payload[key]}'.trim().isNotEmpty) {
+              mergedProfile[key] = payload[key];
+            }
+          }
           if (xsxx != null) {
-            _writeCache('zdbk_student_info', jsonEncode(xsxx));
-            final major = extractMajorFromKeyValues(xsxx);
+            mergedProfile.addAll(xsxx);
+          }
+          if (mergedProfile.isNotEmpty) {
+            _writeCache('zdbk_student_info', jsonEncode(mergedProfile));
+            final major = extractMajorFromKeyValues(mergedProfile);
             if (major != null && major.trim().isNotEmpty) {
               _writeCache('zdbk_user_major', normalizeMajorName(major.trim()));
             }
@@ -1339,7 +1381,7 @@ class Zdbk {
 
       try {
         request = await httpClient.postUrl(uri).timeout(
-            const Duration(seconds: 10),
+            const Duration(seconds: 25),
             onTimeout: () => throw requestTimeout());
         request.headers
           ..add("Referer",
@@ -1358,12 +1400,10 @@ class Zdbk {
         final queryParams = <String, String>{
           'queryModel.showCount': '5000',
           'queryModel.currentPage': '1',
-          'queryModel.sortName': 'njdm_id',
-          'queryModel.sortOrder': 'desc',
           '_search': 'false',
         };
-        // 注意（参考课舟报告2.1）：正方教务系统培养方案查询接口不支持按 zymc 或 njdm_id 参数过滤，
-        // 若携带会导致服务端抛出 HTML 异常崩溃；必须全量拉取 ~3000 条并在客户端执行纯函数多层级打分匹配。
+        // 正方培养方案列表端点不可传 queryModel.sortName=njdm_id 或按专业模糊筛选，
+        // 否则服务端会直接抛出 SQL/HTML 500 异常；全量拉取后在客户端完成打分与检索。
 
         final encodedBody = queryParams.entries
             .map((e) =>
@@ -1371,7 +1411,7 @@ class Zdbk {
             .join('&');
         request.add(utf8.encode(encodedBody));
 
-        response = await request.close().timeout(const Duration(seconds: 10),
+        response = await request.close().timeout(const Duration(seconds: 25),
             onTimeout: () => throw requestTimeout());
 
         var responseText =
@@ -1393,7 +1433,10 @@ class Zdbk {
             if (m != null) items.add(m);
           }
         }
-        _writeCache('zdbk_training_plans', responseText);
+        await (_db?.setCachedWebPage('zdbk_training_plans', responseText) ??
+            Future<void>.value());
+        _writeCache('zdbk_training_plans_timestamp',
+            DateTime.now().toUtc().toIso8601String());
         return Tuple(null, items);
       } on Object catch (e) {
         if (e is AuthenticationExpiredException) rethrow;
@@ -1717,6 +1760,237 @@ class Zdbk {
     return Tuple(null, planInfo);
   }
 
+
+  /// 获取学生学籍画像（参考 compass_app: 从课表接口顶层及 xsxx 提取 zy/xy/xzb/xh/xm）
+  Future<Tuple<Exception?, Map<String, dynamic>>> fetchStudentProfileMap(
+    HttpClient httpClient, {
+    String? studentId,
+  }) async {
+    return await _withAutoRelogin(httpClient, (relogged, retried) async {
+      final suParam =
+          studentId != null && studentId.isNotEmpty ? '&su=$studentId' : '';
+      final now = DateTime.now();
+      final isAutumn = now.month >= 8;
+      final y0 = isAutumn ? now.year : now.year - 1;
+      final candidates = <List<String>>[
+        ['$y0-${y0 + 1}', isAutumn ? '3' : '12'],
+        ['$y0-${y0 + 1}', isAutumn ? '12' : '3'],
+        ['${y0 - 1}-$y0', '12'],
+        ['${y0 - 1}-$y0', '3'],
+      ];
+
+      final uri = Uri.parse(
+          'https://zdbk.zju.edu.cn/jwglxt/kbcx/xskbcx_cxXsKb.html?gnmkdm=N2151$suParam');
+      for (final c in candidates) {
+        try {
+          final request = await httpClient.postUrl(uri).timeout(
+              const Duration(seconds: 12),
+              onTimeout: () => throw requestTimeout());
+          request.headers
+            ..add('Referer',
+                'https://zdbk.zju.edu.cn/jwglxt/xtgl/index_initMenu.html')
+            ..add('Accept', 'application/json, text/javascript, */*; q=0.01')
+            ..add('X-Requested-With', 'XMLHttpRequest')
+            ..set(HttpHeaders.contentTypeHeader,
+                'application/x-www-form-urlencoded;charset=UTF-8')
+            ..set('Connection', 'close');
+          request.cookies.add(_jSessionId!);
+          request.cookies.add(_route!);
+          request.followRedirects = false;
+          request.add(utf8.encode(
+              'xnm=${Uri.encodeQueryComponent(c[0])}&xqm=${Uri.encodeQueryComponent(c[1])}'));
+
+          final response = await request.close().timeout(
+              const Duration(seconds: 12),
+              onTimeout: () => throw requestTimeout());
+          final responseText =
+              await readResponseBody(response, context: '教务网学籍画像接口');
+          _validateResponse(response, responseText,
+              context: '教务网学籍画像接口',
+              requestUri: uri,
+              relogged: relogged,
+              retried: retried,
+              expectJson: true);
+
+          final payload = decodeJsonMap(responseText, context: '教务网学籍画像接口');
+          final merged = <String, dynamic>{};
+          for (final key in const [
+            'xh',
+            'xm',
+            'zy',
+            'zymc',
+            'zyh',
+            'zydm',
+            'xy',
+            'jgmc',
+            'jg_id',
+            'xzb',
+            'bj',
+            'bjmc',
+            'njdm_id',
+            'njmc',
+            'nj',
+            'xjzt',
+          ]) {
+            if (payload[key] != null && '${payload[key]}'.trim().isNotEmpty) {
+              merged[key] = payload[key];
+            }
+          }
+          final xsxx = asStringMap(payload['xsxx']);
+          if (xsxx != null) merged.addAll(xsxx);
+
+          final hasCore = '${merged['zy'] ?? merged['zymc'] ?? ''}'.isNotEmpty ||
+              '${merged['xy'] ?? merged['jgmc'] ?? ''}'.isNotEmpty ||
+              '${merged['xzb'] ?? ''}'.isNotEmpty;
+          if (!hasCore) continue;
+
+          await (_db?.setCachedWebPage('zdbk_student_info', jsonEncode(merged)) ??
+              Future<void>.value());
+          final major = extractMajorFromKeyValues(merged);
+          if (major != null && major.trim().isNotEmpty) {
+            _writeCache('zdbk_user_major', normalizeMajorName(major.trim()));
+          }
+          return Tuple(null, merged);
+        } on AuthenticationExpiredException {
+          rethrow;
+        } catch (_) {
+          // 尝试下一个候选学期
+        }
+      }
+      return Tuple(null, <String, dynamic>{});
+    });
+  }
+
+  /// 下载官方培养方案 PDF（与教务"预览"按钮同款端点 pyfayl_cxPyfaylPdf.html）
+  Future<Tuple<Exception?, Uint8List?>> fetchPlanPdf(
+    HttpClient httpClient,
+    String id, {
+    String? studentId,
+  }) async {
+    if (id.trim().isEmpty) {
+      return Tuple(ExceptionWithMessage('培养方案 ID 为空'), null);
+    }
+    return await _withAutoRelogin(httpClient, (relogged, retried) async {
+      final suParam =
+          studentId != null && studentId.isNotEmpty ? '&su=$studentId' : '';
+      final uri = Uri.parse(
+          'https://zdbk.zju.edu.cn/jwglxt/pyfagl/pyfayl_cxPyfaylPdf.html'
+          '?id=${Uri.encodeQueryComponent(id.trim())}&doType=query&gnmkdm=N153020$suParam');
+      try {
+        final request = await httpClient.getUrl(uri).timeout(
+            const Duration(seconds: 25),
+            onTimeout: () => throw requestTimeout());
+        request.headers
+          ..add('Referer',
+              'https://zdbk.zju.edu.cn/jwglxt/pyfagl/pyfaxxcx_cxPyfaxscxIndex.html?gnmkdm=N153020&layout=default$suParam')
+          ..add('Accept', 'application/pdf,*/*')
+          ..add('User-Agent',
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
+          ..set('Connection', 'close');
+        request.cookies.add(_jSessionId!);
+        request.cookies.add(_route!);
+        request.followRedirects = false;
+
+        final response = await request.close().timeout(
+            const Duration(seconds: 30),
+            onTimeout: () => throw requestTimeout());
+        final bytes = await consolidateHttpClientResponseBytes(response);
+        if (response.statusCode == 401 ||
+            response.statusCode == 403 ||
+            response.statusCode == 910 ||
+            (response.statusCode >= 300 && response.statusCode < 400)) {
+          throw SessionExpiredException(
+              '教务网 PDF 接口会话已失效（HTTP ${response.statusCode}）');
+        }
+        if (bytes.length >= 4 &&
+            bytes[0] == 0x25 &&
+            bytes[1] == 0x50 &&
+            bytes[2] == 0x44 &&
+            bytes[3] == 0x46) {
+          return Tuple(null, bytes);
+        }
+        final preview = utf8.decode(bytes.take(180).toList(), allowMalformed: true);
+        if (preview.contains('统一身份认证') ||
+            preview.contains('zjuam') ||
+            preview.contains('login')) {
+          throw SessionExpiredException('教务网 PDF 接口触发重新登录');
+        }
+        return Tuple(
+            ExceptionWithMessage(
+                '教务网未返回 PDF（HTTP ${response.statusCode}，长度 ${bytes.length}）'),
+            null);
+      } on Object catch (e) {
+        if (e is AuthenticationExpiredException) rethrow;
+        return Tuple(ExceptionWithMessage('下载培养方案 PDF 失败: $e'), null);
+      }
+    });
+  }
+
+  /// 获取方案课程明细（best-effort 多端点，与 compass_app 同步策略一致）
+  Future<List<Map<String, dynamic>>> fetchPlanCourseTable(
+    HttpClient httpClient, {
+    required String jxjhh,
+    required String pyfaxxId,
+    String? studentId,
+  }) async {
+    final suParam =
+        studentId != null && studentId.isNotEmpty ? '&su=$studentId' : '';
+    final referer =
+        'https://zdbk.zju.edu.cn/jwglxt/pyfagl/pyfaxxcx_cxPyfaxscxIndex.html?gnmkdm=N153020&layout=default$suParam';
+
+    Future<List<Map<String, dynamic>>> tryKcList(String key, String value) async {
+      if (value.trim().isEmpty) return const [];
+      return await _withAutoRelogin(httpClient, (relogged, retried) async {
+        final uri = Uri.parse(
+            'https://zdbk.zju.edu.cn/jwglxt/pyfagl/pyfaxxcx_cxPyfaxsKcList.html?doType=query&gnmkdm=N153020$suParam');
+        final request = await httpClient.postUrl(uri).timeout(
+            const Duration(seconds: 15),
+            onTimeout: () => throw requestTimeout());
+        request.headers
+          ..add('Referer', referer)
+          ..add('Accept', 'application/json, text/javascript, */*; q=0.01')
+          ..add('X-Requested-With', 'XMLHttpRequest')
+          ..set(HttpHeaders.contentTypeHeader,
+              'application/x-www-form-urlencoded;charset=UTF-8')
+          ..set('Connection', 'close');
+        request.cookies.add(_jSessionId!);
+        request.cookies.add(_route!);
+        request.followRedirects = false;
+        request.add(utf8.encode(
+            '${Uri.encodeQueryComponent(key)}=${Uri.encodeQueryComponent(value.trim())}'
+            '&queryModel.showCount=1000&queryModel.currentPage=1&_search=false'));
+        final response = await request.close().timeout(
+            const Duration(seconds: 15),
+            onTimeout: () => throw requestTimeout());
+        final text = await readResponseBody(response, context: '培养方案课程列表接口');
+        final trimmed = text.trim();
+        if (!(trimmed.startsWith('{') || trimmed.startsWith('[')) ||
+            trimmed.contains('"usable":false') ||
+            trimmed.contains('"status":0')) {
+          return const [];
+        }
+        final decoded = jsonDecode(trimmed);
+        final raw = decoded is Map ? decoded['items'] : decoded;
+        if (raw is! List) return const [];
+        return raw.whereType<Map>().map((e) {
+          final out = <String, dynamic>{};
+          e.forEach((k, v) => out[k.toString()] = v);
+          return out;
+        }).toList();
+      });
+    }
+
+    for (final attempt in [
+      ['jxjhh', jxjhh],
+      ['pyfaxx_id', pyfaxxId],
+    ]) {
+      try {
+        final rows = await tryKcList(attempt[0], attempt[1]);
+        if (rows.isNotEmpty) return rows;
+      } catch (_) {}
+    }
+    return const [];
+  }
 
   Future<String> solveCaptcha(HttpClient httpClient) async {
     throw UnimplementedError("验证码识别功能未开发");

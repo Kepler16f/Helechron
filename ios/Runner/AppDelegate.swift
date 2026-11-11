@@ -107,7 +107,14 @@ import WidgetKit
         if let args = call.arguments as? [String: Any],
            let urlStr = args["url"] as? String,
            !urlStr.isEmpty {
-          let ok = self?.openInAppVideoPlayer(urlStr: urlStr, controller: controller) ?? false
+          let token = args["token"] as? String
+          let livingroomUrl = args["livingroomUrl"] as? String
+          let ok = self?.openInAppVideoPlayer(
+            urlStr: urlStr,
+            livingroomUrl: livingroomUrl,
+            token: token,
+            controller: controller
+          ) ?? false
           result(ok)
         } else {
           result(false)
@@ -144,17 +151,28 @@ import WidgetKit
     return true
   }
 
-  private func openInAppVideoPlayer(urlStr: String, controller: UIViewController) -> Bool {
+  private func openInAppVideoPlayer(
+    urlStr: String,
+    livingroomUrl: String? = nil,
+    token: String? = nil,
+    controller: UIViewController
+  ) -> Bool {
     guard let url = URL(string: urlStr) else {
       return false
     }
     let lower = urlStr.lowercased()
+    let isStream = !lower.contains("livingroom") &&
+      (lower.contains(".mp4") || lower.contains(".m3u8") || lower.contains(".flv"))
     DispatchQueue.main.async {
-      if lower.contains(".mp4") || lower.contains(".m3u8") {
-        let headers = [
+      if isStream {
+        var headers = [
           "Referer": "https://classroom.zju.edu.cn/",
           "Origin": "https://classroom.zju.edu.cn"
         ]
+        if let tk = token, !tk.isEmpty {
+          headers["Cookie"] = "_token=\(tk); token=\(tk)"
+          headers["Authorization"] = "Bearer \(tk)"
+        }
         let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
         let item = AVPlayerItem(asset: asset)
         let player = AVPlayer(playerItem: item)
@@ -164,8 +182,11 @@ import WidgetKit
           player.play()
         }
       } else {
-        let safariVC = SFSafariViewController(url: url)
-        controller.present(safariVC, animated: true)
+        let fallback = (livingroomUrl?.isEmpty == false ? livingroomUrl : nil) ?? urlStr
+        if let webUrl = URL(string: fallback) {
+          let safariVC = SFSafariViewController(url: webUrl)
+          controller.present(safariVC, animated: true)
+        }
       }
     }
     return true
