@@ -40,6 +40,32 @@ class HomeworkSubmissionPage extends StatefulWidget {
     this.submitUrl,
   });
 
+  /// 计算多附件上传阶段的归一化按钮进度值（0.04 ~ 0.90 留给上传，0.94+ 留给最终提交）
+  @visibleForTesting
+  static double computeUploadProgress({
+    required int uploadedBytesBefore,
+    required int currentFileSentBytes,
+    required int currentFileTotalBytes,
+    required int totalBytes,
+    required int fileIndex,
+    required int fileCount,
+  }) {
+    if (fileCount <= 0) return 0.9;
+    final clampedSent = currentFileTotalBytes > 0
+        ? currentFileSentBytes.clamp(0, currentFileTotalBytes)
+        : 0;
+    double fraction;
+    if (totalBytes > 0) {
+      fraction = ((uploadedBytesBefore + clampedSent) / totalBytes).clamp(0.0, 1.0);
+    } else {
+      final filePart = currentFileTotalBytes > 0
+          ? (clampedSent / currentFileTotalBytes).clamp(0.0, 1.0)
+          : 1.0;
+      fraction = ((fileIndex + filePart) / fileCount).clamp(0.0, 1.0);
+    }
+    return (0.04 + fraction * 0.86).clamp(0.04, 0.90);
+  }
+
   @override
   State<HomeworkSubmissionPage> createState() => _HomeworkSubmissionPageState();
 }
@@ -91,6 +117,7 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
   final List<Map<String, dynamic>> _selectedAttachments = [];
   final TextEditingController _commentController = TextEditingController();
   bool _isSubmitting = false;
+  double _submitProgress = 0.0;
   String? _submittingStatusText;
 
   @override
@@ -550,9 +577,16 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
 
     if (confirmed != true) return;
 
+    final hasAttachments = _selectedAttachments.isNotEmpty;
+    final totalBytes = _selectedAttachments.fold<int>(0, (sum, f) {
+      final b = f['bytes'] as Uint8List;
+      return sum + b.length;
+    });
+
     setState(() {
       _isSubmitting = true;
-      _submittingStatusText = '准备提交...';
+      _submitProgress = hasAttachments ? 0.03 : 0.45;
+      _submittingStatusText = hasAttachments ? '准备上传附件...' : '正在向学在浙大提交作业...';
     });
 
     final client = HttpClient()
@@ -562,6 +596,7 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
 
     try {
       final uploadIds = <int>[];
+      var uploadedBytesBefore = 0;
 
       // 逐一上传所有选择的本地附件
       for (int i = 0; i < _selectedAttachments.length; i++) {
@@ -571,6 +606,14 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
 
         if (mounted) {
           setState(() {
+            _submitProgress = HomeworkSubmissionPage.computeUploadProgress(
+              uploadedBytesBefore: uploadedBytesBefore,
+              currentFileSentBytes: 0,
+              currentFileTotalBytes: bytes.length,
+              totalBytes: totalBytes,
+              fileIndex: i,
+              fileCount: _selectedAttachments.length,
+            );
             _submittingStatusText =
                 '正在上传 (${i + 1}/${_selectedAttachments.length}): $name';
           });
@@ -582,9 +625,34 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
           fileBytes: bytes,
           activityId: _resolvedActivityId,
           courseId: _resolvedCourseId,
+          onProgress: (sentBytes, fileTotal) {
+            if (!mounted) return;
+            final nextProgress = HomeworkSubmissionPage.computeUploadProgress(
+              uploadedBytesBefore: uploadedBytesBefore,
+              currentFileSentBytes: sentBytes,
+              currentFileTotalBytes: fileTotal,
+              totalBytes: totalBytes,
+              fileIndex: i,
+              fileCount: _selectedAttachments.length,
+            );
+            final filePct = fileTotal > 0
+                ? ((sentBytes / fileTotal).clamp(0.0, 1.0) * 100).round()
+                : 100;
+            final nextStatus =
+                '正在上传 (${i + 1}/${_selectedAttachments.length}) $filePct% · $name';
+            if ((nextProgress - _submitProgress).abs() >= 0.01 ||
+                sentBytes >= fileTotal ||
+                _submittingStatusText != nextStatus) {
+              setState(() {
+                _submitProgress = nextProgress;
+                _submittingStatusText = nextStatus;
+              });
+            }
+          },
         );
         if (uploadId != null) {
           uploadIds.add(uploadId);
+          uploadedBytesBefore += bytes.length;
         } else {
           throw Exception('附件 "$name" 上传至学在浙大失败，请检查网络或在网页端提交');
         }
@@ -592,6 +660,7 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
 
       if (mounted) {
         setState(() {
+          _submitProgress = 0.94;
           _submittingStatusText = '正在向学在浙大提交作业...';
         });
       }
@@ -609,11 +678,19 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
 
       if (success) {
         setState(() {
-          _isSubmitting = false;
-          _submittingStatusText = null;
-          _selectedAttachments.clear();
-          _commentController.clear();
+          _submitProgress = 1.0;
+          _submittingStatusText = '提交成功';
         });
+        await Future<void>.delayed(const Duration(milliseconds: 220));
+        if (mounted) {
+          setState(() {
+            _isSubmitting = false;
+            _submitProgress = 0.0;
+            _submittingStatusText = null;
+            _selectedAttachments.clear();
+            _commentController.clear();
+          });
+        }
 
         _syncTaskStatusLocally(true, null);
 
@@ -645,6 +722,7 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
       if (mounted) {
         setState(() {
           _isSubmitting = false;
+          _submitProgress = 0.0;
           _submittingStatusText = null;
         });
         showCupertinoDialog<void>(
@@ -2008,50 +2086,158 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
             ),
             const SizedBox(height: 12),
 
-            CupertinoButton.filled(
-              padding: const EdgeInsets.symmetric(vertical: 11),
-              borderRadius: BorderRadius.circular(8),
-              onPressed: _isSubmitting ? null : _submitHomework,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (_isSubmitting) ...[
-                    const CupertinoActivityIndicator(
-                        radius: 8, color: CupertinoColors.white),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        _submittingStatusText ?? '正在提交作业...',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: CupertinoColors.white,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ] else ...[
-                    const Icon(CupertinoIcons.cloud_upload_fill,
-                        size: 17, color: CupertinoColors.white),
-                    const SizedBox(width: 6),
-                    Text(
-                      _selectedAttachments.isNotEmpty
-                          ? '提交作业 (${_selectedAttachments.length} 个附件)'
-                          : '提交作业',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: CupertinoColors.white,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
+            _buildSubmitButton(context),
           ],
         ],
       ),
     );
+  }
+
+  Widget _buildSubmitButton(BuildContext context) {
+    if (!_isSubmitting) {
+      return SizedBox(
+        width: double.infinity,
+        child: CupertinoButton.filled(
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          borderRadius: BorderRadius.circular(8),
+          onPressed: _submitHomework,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(CupertinoIcons.cloud_upload_fill,
+                  size: 17, color: CupertinoColors.white),
+              const SizedBox(width: 6),
+              Text(
+                _selectedAttachments.isNotEmpty
+                    ? '提交作业 (${_selectedAttachments.length} 个附件)'
+                    : '提交作业',
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: CupertinoColors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final activeBlue =
+        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+    final activeGreen =
+        CupertinoDynamicColor.resolve(CupertinoColors.systemGreen, context);
+    final statusLabel = _submittingStatusText ?? '正在提交作业...';
+
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      tween: Tween<double>(end: _submitProgress.clamp(0.0, 1.0)),
+      builder: (context, progress, _) {
+        final pctText = '${(progress * 100).round()}%';
+        final isCompletedStage = progress >= 0.999;
+
+        Widget buildContent(Color foreground, {bool animateSpinner = true}) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (isCompletedStage)
+                  Icon(CupertinoIcons.checkmark_circle_fill,
+                      size: 16, color: foreground)
+                else
+                  CupertinoActivityIndicator(
+                    radius: 7.5,
+                    color: foreground,
+                    animating: animateSpinner,
+                  ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    statusLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: foreground,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  pctText,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: foreground,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: activeBlue.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: activeBlue.withValues(alpha: 0.35),
+                      width: 0.8,
+                    ),
+                  ),
+                  alignment: Alignment.center,
+                  child: buildContent(activeBlue, animateSpinner: true),
+                ),
+                ClipRect(
+                  clipper: _HorizontalFractionClipper(progress),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: isCompletedStage
+                            ? [activeGreen, activeGreen]
+                            : [activeBlue, const Color(0xFF34AADC)],
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: buildContent(CupertinoColors.white,
+                        animateSpinner: true),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _HorizontalFractionClipper extends CustomClipper<Rect> {
+  final double fraction;
+
+  _HorizontalFractionClipper(this.fraction);
+
+  @override
+  Rect getClip(Size size) {
+    final width = (size.width * fraction.clamp(0.0, 1.0));
+    return Rect.fromLTWH(0, 0, width, size.height);
+  }
+
+  @override
+  bool shouldReclip(covariant _HorizontalFractionClipper oldClipper) {
+    return oldClipper.fraction != fraction;
   }
 }
 

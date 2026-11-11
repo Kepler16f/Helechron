@@ -37,7 +37,8 @@ class TaskPage extends StatelessWidget {
     return '学在浙大';
   }
 
-  Widget _buildHomeworkStatusBadge(BuildContext context, Task deadline) {
+  ({bool isSubmitted, bool isGraded, double? score, bool isQuiz})
+      _resolveTaskHomeworkState(Task deadline) {
     String? aid;
     if (deadline.fromUid != null &&
         deadline.fromUid!.startsWith('courses-todo:')) {
@@ -47,76 +48,17 @@ class TaskPage extends StatelessWidget {
     final score = (recorded?['score'] as num?)?.toDouble();
     final completeness = recorded?['completeness']?.toString();
     final isQuiz = deadline.isQuiz || (recorded?['is_quiz'] == true);
-    final isSubmitted = completeness == 'full' ||
-        score != null ||
-        deadline.status == TaskStatus.completed;
-    final isGraded = score != null;
-    final isOverdue = !isSubmitted && deadline.endTime.isBefore(DateTime.now());
-
-    Color bg;
-    Color fg;
-    IconData icon;
-    String text;
-
-    if (isGraded) {
-      bg = CupertinoColors.systemOrange.withValues(alpha: 0.15);
-      fg = CupertinoColors.systemOrange;
-      icon = CupertinoIcons.star_fill;
-      final scoreText = score == score.roundToDouble()
-          ? score.toInt().toString()
-          : score.toStringAsFixed(1);
-      text = '已批改 · $scoreText分';
-    } else if (isSubmitted) {
-      bg = CupertinoColors.systemGreen.withValues(alpha: 0.15);
-      fg = CupertinoColors.systemGreen;
-      icon = CupertinoIcons.checkmark_circle_fill;
-      text = isQuiz ? '已作答' : '已提交';
-    } else if (isOverdue) {
-      bg = CupertinoColors.systemRed.withValues(alpha: 0.12);
-      fg = CupertinoColors.systemRed;
-      icon = CupertinoIcons.exclamationmark_circle_fill;
-      text = '逾期';
-    } else {
-      if (isQuiz) {
-        bg = CupertinoColors.systemPurple.withValues(alpha: 0.15);
-        fg = CupertinoColors.systemPurple;
-        icon = CupertinoIcons.pencil_ellipsis_rectangle;
-        text = '待作答';
-      } else {
-        bg = CupertinoColors.activeBlue.withValues(alpha: 0.12);
-        fg = CupertinoColors.activeBlue;
-        icon = CupertinoIcons.clock;
-        text = '待提交';
-      }
-    }
-
-    return CupertinoButton(
-      minSize: 0,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-      color: bg,
-      borderRadius: BorderRadius.circular(8),
-      onPressed: () {
-        Navigator.of(context, rootNavigator: true).push(
-          CupertinoPageRoute(
-            builder: (context) => HomeworkSubmissionPage(task: deadline),
-          ),
-        );
-      },
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 11, color: fg),
-          const SizedBox(width: 3),
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: fg,
-            ),
-          ),
-        ],
-      ),
+    final isExplicitlyIncomplete =
+        completeness != null && completeness != 'full' && score == null;
+    final isSubmitted = !isExplicitlyIncomplete &&
+        (completeness == 'full' ||
+            score != null ||
+            deadline.status == TaskStatus.completed);
+    return (
+      isSubmitted: isSubmitted,
+      isGraded: score != null,
+      score: score,
+      isQuiz: isQuiz,
     );
   }
 
@@ -557,7 +499,33 @@ class TaskPage extends StatelessWidget {
             },
             child: Padding(
               padding: const EdgeInsets.only(left: 8, right: 8),
-              child: Column(
+              child: deadline.type == TaskType.homework
+                  ? Builder(builder: (context) {
+                      final state = _resolveTaskHomeworkState(deadline);
+                      final hasUrl =
+                          extractCoursesUrl(deadline.description) != null;
+                      return HomeworkTaskItemContent(
+                        indicatorColor: color,
+                        title: deadline.summary,
+                        courseName: _getHomeworkCourseName(deadline),
+                        endTime: deadline.endTime,
+                        isQuiz: state.isQuiz,
+                        isSubmitted: state.isSubmitted,
+                        isGraded: state.isGraded,
+                        score: state.score,
+                        onOpenSubmission: hasUrl
+                            ? () {
+                                Navigator.of(context, rootNavigator: true).push(
+                                  CupertinoPageRoute(
+                                    builder: (context) =>
+                                        HomeworkSubmissionPage(task: deadline),
+                                  ),
+                                );
+                              }
+                            : null,
+                      );
+                    })
+                  : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
@@ -585,134 +553,29 @@ class TaskPage extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 8.0),
-                      if (deadline.type == TaskType.homework)
-                        _buildHomeworkStatusBadge(context, deadline)
-                      else
-                        // 固定日程的状态随时间翻转；taskList 不再每秒通知，改由 timeNow 驱动
-                        Obx(() {
-                          final now = _flowController.timeNow.value;
-                          return Text(
-                              deadline.type == TaskType.deadline
-                                  ? deadlineStatusName[deadline.status]!
-                                  : (now.isBefore(deadline.startTime)
-                                      ? '未开始'
-                                      : (!now.isBefore(deadline.endTime)
-                                          ? '已结束'
-                                          : '进行中')),
-                              style: CupertinoTheme.of(context)
-                                  .textTheme
-                                  .textStyle
-                                  .copyWith(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    overflow: TextOverflow.ellipsis,
-                                  ));
-                        }),
+                      // 固定日程的状态随时间翻转；taskList 不再每秒通知，改由 timeNow 驱动
+                      Obx(() {
+                        final now = _flowController.timeNow.value;
+                        return Text(
+                            deadline.type == TaskType.deadline
+                                ? deadlineStatusName[deadline.status]!
+                                : (now.isBefore(deadline.startTime)
+                                    ? '未开始'
+                                    : (!now.isBefore(deadline.endTime)
+                                        ? '已结束'
+                                        : '进行中')),
+                            style: CupertinoTheme.of(context)
+                                .textTheme
+                                .textStyle
+                                .copyWith(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  overflow: TextOverflow.ellipsis,
+                                ));
+                      }),
                     ],
                   ),
                   const SizedBox(height: 8.0),
-                  if (deadline.type == TaskType.homework) ...[
-                    Row(
-                      children: [
-                        Icon(
-                          CupertinoIcons.book,
-                          size: 14,
-                          color: CupertinoTheme.of(context)
-                              .textTheme
-                              .textStyle
-                              .color!
-                              .withValues(alpha: 0.5),
-                        ),
-                        const SizedBox(width: 4.0),
-                        Expanded(
-                          child: Text(
-                            _getHomeworkCourseName(deadline),
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.normal,
-                              color: CupertinoTheme.of(context)
-                                  .textTheme
-                                  .textStyle
-                                  .color!
-                                  .withValues(alpha: 0.75),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                        if (extractCoursesUrl(deadline.description) !=
-                            null) ...[
-                          const SizedBox(width: 6.0),
-                          Builder(builder: (context) {
-                            String? aid;
-                            if (deadline.fromUid != null &&
-                                deadline.fromUid!.startsWith('courses-todo:')) {
-                              aid = deadline.fromUid!
-                                  .substring('courses-todo:'.length);
-                            }
-                            final recorded = aid != null
-                                ? TodoTaskSync.getHomeworkStatus(aid)
-                                : null;
-                            final completeness =
-                                recorded?['completeness']?.toString();
-                            final score =
-                                (recorded?['score'] as num?)?.toDouble();
-                            final isExplicitlyIncomplete =
-                                completeness != null &&
-                                    completeness != 'full' &&
-                                    score == null;
-                            final isDone = !isExplicitlyIncomplete &&
-                                (deadline.status == TaskStatus.completed ||
-                                    completeness == 'full' ||
-                                    score != null);
-
-                            return CupertinoButton(
-                              minSize: 0,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2.5),
-                              color: isDone
-                                  ? CupertinoColors.activeGreen
-                                      .withValues(alpha: 0.12)
-                                  : CupertinoColors.activeBlue
-                                      .withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(8),
-                              onPressed: () {
-                                Navigator.of(context, rootNavigator: true).push(
-                                  CupertinoPageRoute(
-                                    builder: (context) =>
-                                        HomeworkSubmissionPage(task: deadline),
-                                  ),
-                                );
-                              },
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    CupertinoIcons.arrow_up_right_square,
-                                    size: 12,
-                                    color: isDone
-                                        ? CupertinoColors.activeGreen
-                                        : CupertinoColors.activeBlue,
-                                  ),
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    isDone ? '查看提交' : '去提交',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: isDone
-                                          ? CupertinoColors.activeGreen
-                                          : CupertinoColors.activeBlue,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 4.0),
-                  ],
                   Row(
                     children: [
                       Icon(

@@ -11,6 +11,10 @@
     {
       "name": "EntryAbility_label",
       "value": "Helechron"
+    },
+    {
+      "name": "accelerometer_permission_reason",
+      "value": "Used by the in-app video player to auto-rotate between portrait and landscape by gravity"
     }
   ]
 }

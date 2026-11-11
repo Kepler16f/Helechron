@@ -11,6 +11,10 @@
     {
       "name": "EntryAbility_label",
       "value": "Helechron"
+    },
+    {
+      "name": "accelerometer_permission_reason",
+      "value": "用于在智云课堂播放器中根据手机重力方向自动切换横竖屏"
     }
   ]
 }

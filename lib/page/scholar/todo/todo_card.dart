@@ -1,3 +1,5 @@
+import 'package:celechron/design/custom_decoration.dart';
+import 'package:celechron/model/period.dart';
 import 'package:celechron/model/todo.dart';
 import 'package:celechron/page/task/homework_submission_page.dart';
 import 'package:celechron/services/todo_task_sync.dart';
@@ -5,6 +7,286 @@ import 'package:celechron/utils/utils.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher_string.dart';
+
+class HomeworkBadgeStyle {
+  final Color background;
+  final Color foreground;
+  final IconData icon;
+  final String text;
+
+  const HomeworkBadgeStyle({
+    required this.background,
+    required this.foreground,
+    required this.icon,
+    required this.text,
+  });
+}
+
+/// 统一计算作业/小测状态标签的配色、图标与文案，供任务页、课程详情页与待办卡片共用。
+HomeworkBadgeStyle resolveHomeworkBadgeStyle({
+  required bool isQuiz,
+  required bool isSubmitted,
+  required bool isGraded,
+  double? score,
+  DateTime? endTime,
+  String? customOverdueText,
+}) {
+  final isOverdue =
+      !isSubmitted && !isGraded && endTime != null && endTime.isBefore(DateTime.now());
+
+  if (isGraded && score != null) {
+    final scoreText = score == score.roundToDouble()
+        ? score.toInt().toString()
+        : score.toStringAsFixed(1);
+    return HomeworkBadgeStyle(
+      background: CupertinoColors.systemOrange.withValues(alpha: 0.15),
+      foreground: CupertinoColors.systemOrange,
+      icon: CupertinoIcons.star_fill,
+      text: '已批改 · $scoreText分',
+    );
+  }
+  if (isGraded || isSubmitted) {
+    return HomeworkBadgeStyle(
+      background: CupertinoColors.systemGreen.withValues(alpha: 0.15),
+      foreground: CupertinoColors.systemGreen,
+      icon: CupertinoIcons.checkmark_circle_fill,
+      text: isGraded ? '已批改' : (isQuiz ? '已作答' : '已提交'),
+    );
+  }
+  if (isOverdue) {
+    return HomeworkBadgeStyle(
+      background: CupertinoColors.systemRed.withValues(alpha: 0.12),
+      foreground: CupertinoColors.systemRed,
+      icon: CupertinoIcons.exclamationmark_circle_fill,
+      text: customOverdueText ?? '逾期',
+    );
+  }
+  if (isQuiz) {
+    return HomeworkBadgeStyle(
+      background: CupertinoColors.systemPurple.withValues(alpha: 0.15),
+      foreground: CupertinoColors.systemPurple,
+      icon: CupertinoIcons.pencil_ellipsis_rectangle,
+      text: '待作答',
+    );
+  }
+  return HomeworkBadgeStyle(
+    background: CupertinoColors.activeBlue.withValues(alpha: 0.12),
+    foreground: CupertinoColors.activeBlue,
+    icon: CupertinoIcons.clock,
+    text: '待提交',
+  );
+}
+
+class HomeworkStatusPill extends StatelessWidget {
+  final HomeworkBadgeStyle style;
+  final VoidCallback? onPressed;
+  final double borderRadius;
+  final EdgeInsets padding;
+
+  const HomeworkStatusPill({
+    super.key,
+    required this.style,
+    this.onPressed,
+    this.borderRadius = 8,
+    this.padding = const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final badgeBody = Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: style.background,
+        borderRadius: BorderRadius.circular(borderRadius),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(style.icon, size: 11, color: style.foreground),
+          const SizedBox(width: 3),
+          Text(
+            style.text,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: style.foreground,
+            ),
+          ),
+        ],
+      ),
+    );
+    if (onPressed == null) return badgeBody;
+    return CupertinoButton(
+      minSize: 0,
+      padding: EdgeInsets.zero,
+      onPressed: onPressed,
+      child: badgeBody,
+    );
+  }
+}
+
+/// 作业条目共享正文视图（含圆点、标题+状态标签、课程名+去提交/查看提交按钮、截止时间），
+/// 供任务页面与课程详情“作业”卡片统一复用。
+class HomeworkTaskItemContent extends StatelessWidget {
+  final Color indicatorColor;
+  final String title;
+  final String courseName;
+  final DateTime? endTime;
+  final bool isQuiz;
+  final bool isSubmitted;
+  final bool isGraded;
+  final double? score;
+  final double titleFontSize;
+  final VoidCallback? onOpenSubmission;
+
+  const HomeworkTaskItemContent({
+    super.key,
+    required this.indicatorColor,
+    required this.title,
+    required this.courseName,
+    required this.endTime,
+    required this.isQuiz,
+    required this.isSubmitted,
+    required this.isGraded,
+    this.score,
+    this.titleFontSize = 18,
+    this.onOpenSubmission,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final textStyle = CupertinoTheme.of(context).textTheme.textStyle;
+    final baseTextColor = textStyle.color ?? CupertinoColors.label;
+    final isDone = isSubmitted || isGraded;
+    final badgeStyle = resolveHomeworkBadgeStyle(
+      isQuiz: isQuiz,
+      isSubmitted: isSubmitted,
+      isGraded: isGraded,
+      score: score,
+      endTime: endTime,
+    );
+    final overdueSuffix =
+        !isDone && endTime != null && endTime!.isBefore(DateTime.now())
+            ? ' - 已过期'
+            : '';
+    final deadlineLabel = endTime != null
+        ? ' 截止于：${toStringHumanReadable(endTime!)}$overdueSuffix'
+        : ' 截止于：无截止时间';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 12.0,
+              height: 12.0,
+              decoration: customDecoration(
+                color: indicatorColor,
+                shape: periodTypeShape[PeriodType.user]!,
+              ),
+            ),
+            const SizedBox(width: 8.0),
+            Expanded(
+              child: Text(
+                title,
+                style: textStyle.copyWith(
+                  fontSize: titleFontSize,
+                  fontWeight: FontWeight.bold,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8.0),
+            HomeworkStatusPill(
+              style: badgeStyle,
+              onPressed: onOpenSubmission,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8.0),
+        Row(
+          children: [
+            Icon(
+              CupertinoIcons.book,
+              size: 14,
+              color: baseTextColor.withValues(alpha: 0.5),
+            ),
+            const SizedBox(width: 4.0),
+            Expanded(
+              child: Text(
+                courseName,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.normal,
+                  color: baseTextColor.withValues(alpha: 0.75),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            if (onOpenSubmission != null) ...[
+              const SizedBox(width: 6.0),
+              CupertinoButton(
+                minSize: 0,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                color: isDone
+                    ? CupertinoColors.activeGreen.withValues(alpha: 0.12)
+                    : CupertinoColors.activeBlue.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                onPressed: onOpenSubmission,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      CupertinoIcons.arrow_up_right_square,
+                      size: 12,
+                      color: isDone
+                          ? CupertinoColors.activeGreen
+                          : CupertinoColors.activeBlue,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      isDone ? '查看提交' : (isQuiz ? '去作答' : '去提交'),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: isDone
+                            ? CupertinoColors.activeGreen
+                            : CupertinoColors.activeBlue,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 4.0),
+        Row(
+          children: [
+            Icon(
+              CupertinoIcons.time_solid,
+              size: 14,
+              color: baseTextColor.withValues(alpha: 0.5),
+            ),
+            Expanded(
+              child: Text(
+                deadlineLabel,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.normal,
+                  color: baseTextColor.withValues(alpha: 0.75),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
 
 /// 学在浙大作业提交链接操作面板（打开 / 复制 / 探测提交状态），供作业卡片与任务详情复用。
 void showTodoSubmitSheet(BuildContext context, String url,
@@ -123,62 +405,18 @@ class TodoCard extends StatelessWidget {
   }
 
   Widget _buildStatusBadge(BuildContext context, Todo todo) {
-    final status = todo.effectiveStatus;
-    Color bg;
-    Color fg;
-    IconData icon;
-    String text = todo.statusText;
-
-    switch (status) {
-      case HomeworkSubmissionStatus.graded:
-        bg = CupertinoColors.systemOrange.withValues(alpha: 0.15);
-        fg = CupertinoColors.systemOrange;
-        icon = CupertinoIcons.star_fill;
-        break;
-      case HomeworkSubmissionStatus.submitted:
-        bg = CupertinoColors.systemGreen.withValues(alpha: 0.15);
-        fg = CupertinoColors.systemGreen;
-        icon = CupertinoIcons.checkmark_circle_fill;
-        break;
-      case HomeworkSubmissionStatus.overdue:
-        bg = CupertinoColors.systemRed.withValues(alpha: 0.12);
-        fg = CupertinoColors.systemRed;
-        icon = CupertinoIcons.exclamationmark_circle_fill;
-        break;
-      case HomeworkSubmissionStatus.unsubmitted:
-        if (todo.isQuiz) {
-          bg = CupertinoColors.systemPurple.withValues(alpha: 0.15);
-          fg = CupertinoColors.systemPurple;
-          icon = CupertinoIcons.pencil_ellipsis_rectangle;
-        } else {
-          bg = CupertinoColors.activeBlue.withValues(alpha: 0.12);
-          fg = CupertinoColors.activeBlue;
-          icon = CupertinoIcons.clock;
-        }
-        break;
-    }
-
-    return Container(
+    final style = resolveHomeworkBadgeStyle(
+      isQuiz: todo.isQuiz,
+      isSubmitted: todo.isSubmitted,
+      isGraded: todo.isGraded,
+      score: todo.score,
+      endTime: todo.endTime,
+      customOverdueText: todo.statusText,
+    );
+    return HomeworkStatusPill(
+      style: style,
+      borderRadius: 10,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 11, color: fg),
-          const SizedBox(width: 3),
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: fg,
-            ),
-          ),
-        ],
-      ),
     );
   }
 

@@ -22,6 +22,10 @@ import 'package:celechron/model/period.dart';
 import 'package:celechron/model/exam.dart';
 import 'package:celechron/model/session.dart';
 import 'package:celechron/model/scholar.dart';
+import 'package:celechron/model/task.dart';
+import 'package:celechron/model/todo.dart';
+import 'package:celechron/page/scholar/todo/todo_card.dart';
+import 'package:celechron/page/task/homework_submission_page.dart';
 import 'package:celechron/services/zhiyun_service.dart';
 import 'zhiyun_player_page.dart';
 
@@ -547,6 +551,9 @@ class CourseDetailPage extends StatelessWidget {
             ),
           SliverToBoxAdapter(
             child: CoursewareDownloadCard(course: c),
+          ),
+          SliverToBoxAdapter(
+            child: CourseHomeworkCard(course: c),
           ),
           if (c.sessions.isNotEmpty)
             SliverToBoxAdapter(
@@ -1971,6 +1978,457 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
                           ),
                         );
                       }),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class CourseHomeworkCard extends StatefulWidget {
+  final Course course;
+
+  const CourseHomeworkCard({super.key, required this.course});
+
+  @override
+  State<CourseHomeworkCard> createState() => _CourseHomeworkCardState();
+}
+
+class _CourseHomeworkCardState extends State<CourseHomeworkCard> {
+  bool _expanded = true;
+  bool _loading = false;
+  bool _fetchedOnce = false;
+  String? _error;
+  List<Todo> _items = [];
+  Map<String, Task> _taskByActivityId = {};
+
+  String? get _effectiveCourseCode {
+    if (widget.course.id != null && widget.course.id!.trim().isNotEmpty) {
+      return widget.course.id!.trim();
+    }
+    if (widget.course.grade?.id != null &&
+        widget.course.grade!.id.trim().isNotEmpty) {
+      return widget.course.grade!.id.trim();
+    }
+    for (final s in widget.course.sessions) {
+      if (s.id != null && s.id!.trim().isNotEmpty) {
+        return s.id!.trim();
+      }
+    }
+    return null;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final local = _collectLocalHomeworks();
+    _items = Courses.mergeAndSortCourseHomeworks(local);
+    _fetchHomeworks();
+  }
+
+  bool _matchesThisCourse(String candidateCourseName, {String? candidateCid}) {
+    final code = _effectiveCourseCode;
+    if (code != null &&
+        candidateCid != null &&
+        candidateCid.isNotEmpty &&
+        code == candidateCid) {
+      return true;
+    }
+    if (candidateCourseName.trim().isEmpty ||
+        widget.course.name.trim().isEmpty) {
+      return false;
+    }
+    return ZhiyunService.matchesCourseName(
+        widget.course.name, candidateCourseName);
+  }
+
+  List<Todo> _collectLocalHomeworks() {
+    final localItems = <Todo>[];
+    final taskMap = <String, Task>{};
+
+    if (Get.isRegistered<RxList<Task>>(tag: 'taskList')) {
+      final taskList = Get.find<RxList<Task>>(tag: 'taskList');
+      for (final t in taskList) {
+        if (t.type != TaskType.homework || t.status == TaskStatus.deleted) {
+          continue;
+        }
+        var taskCourse = '';
+        for (final line in t.description.split('\n')) {
+          if (line.startsWith('课程：')) {
+            taskCourse = line.substring(3).trim();
+            break;
+          }
+        }
+        String? cidFromUrl;
+        final urlMatch =
+            RegExp(r'/course[s]?/(\d+)/').firstMatch(t.description);
+        if (urlMatch != null) {
+          cidFromUrl = urlMatch.group(1);
+        }
+        if (!_matchesThisCourse(taskCourse, candidateCid: cidFromUrl)) {
+          continue;
+        }
+
+        final aid = (t.fromUid != null && t.fromUid!.startsWith('courses-todo:'))
+            ? t.fromUid!.substring('courses-todo:'.length)
+            : 'task:${t.uid}';
+        taskMap[aid] = t;
+
+        final cleanTitle =
+            t.summary.replaceFirst(RegExp(r'^(作业|小测)：'), '').trim();
+        localItems.add(Todo.fromJson({
+          'id': aid,
+          'title': cleanTitle.isNotEmpty ? cleanTitle : t.summary,
+          'course_name':
+              taskCourse.isNotEmpty ? taskCourse : widget.course.name,
+          'course_id': cidFromUrl ?? '',
+          'end_time': t.endTime.toIso8601String(),
+          'type': t.isQuiz ? 'quiz' : 'homework',
+          'completeness':
+              t.status == TaskStatus.completed ? 'full' : 'incomplete',
+        }));
+      }
+    }
+
+    if (Get.isRegistered<Rx<Scholar>>(tag: 'scholar')) {
+      final scholarTodos = Get.find<Rx<Scholar>>(tag: 'scholar').value.todos;
+      for (final todo in scholarTodos) {
+        if (!_matchesThisCourse(todo.course,
+            candidateCid: todo.resolvedCourseId)) {
+          continue;
+        }
+        localItems.add(Todo.fromJson(todo.toJson()));
+      }
+    }
+
+    _taskByActivityId = taskMap;
+    return localItems;
+  }
+
+  void _syncLocalStatusesAndRebuild() {
+    final local = _collectLocalHomeworks();
+    if (!mounted) return;
+    setState(() {
+      _items = Courses.mergeAndSortCourseHomeworks([..._items, ...local]);
+    });
+  }
+
+  Future<void> _fetchHomeworks() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+    applyZjuNetworkDefense(client,
+        connectionTimeout: const Duration(seconds: 10));
+    try {
+      final remote = await Courses.fetchCourseHomeworks(
+        client,
+        courseName: widget.course.name,
+        courseCode: _effectiveCourseCode,
+      );
+      final local = _collectLocalHomeworks();
+      final merged = Courses.mergeAndSortCourseHomeworks([...remote, ...local]);
+      if (!mounted) return;
+      setState(() {
+        _items = merged;
+        _loading = false;
+        _fetchedOnce = true;
+      });
+    } catch (e) {
+      final local = _collectLocalHomeworks();
+      final merged = Courses.mergeAndSortCourseHomeworks([..._items, ...local]);
+      if (!mounted) return;
+      setState(() {
+        _items = merged;
+        _loading = false;
+        _fetchedOnce = true;
+        if (_items.isEmpty) {
+          _error = '$e';
+        }
+      });
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Future<void> _openSubmissionPage(BuildContext context, Todo todo) async {
+    final matchingTask = _taskByActivityId[todo.id];
+    await Navigator.of(context, rootNavigator: true).push(
+      CupertinoPageRoute(
+        builder: (context) => HomeworkSubmissionPage(
+          todo: todo.id.startsWith('task:') ? null : todo,
+          task: matchingTask,
+        ),
+      ),
+    );
+    _syncLocalStatusesAndRebuild();
+  }
+
+  String _summarySubtitle() {
+    if (_loading && _items.isEmpty) {
+      return '正在从学在浙大同步全部作业与小测...';
+    }
+    if (_items.isEmpty) {
+      return _fetchedOnce ? '暂未检索到该课程的作业记录' : '点击同步该课程全部作业与提交状态';
+    }
+    final pendingCount = _items
+        .where((e) => !e.isSubmitted && !e.isGraded)
+        .length;
+    if (pendingCount > 0) {
+      return '共 ${_items.length} 项作业 · 待完成 $pendingCount 项';
+    }
+    return '共 ${_items.length} 项作业 · 已全部完成';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final badgeAccent = CupertinoDynamicColor.resolve(
+        CustomCupertinoDynamicColors.magenta, context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+      child: Column(
+        children: [
+          SubSubtitleRow(subtitle: '作业'),
+          RoundRectangleCard(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: badgeAccent,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          CupertinoIcons.checkmark_alt_circle_fill,
+                          size: 18,
+                          color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.label, context),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            setState(() {
+                              _expanded = !_expanded;
+                            });
+                          },
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '课程作业',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: CupertinoDynamicColor.resolve(
+                                      CupertinoColors.label, context),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _summarySubtitle(),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: CupertinoDynamicColor.resolve(
+                                      CupertinoColors.secondaryLabel, context),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CupertinoButton(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 6),
+                            minSize: 32,
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.secondarySystemFill, context),
+                            borderRadius: BorderRadius.circular(8),
+                            onPressed: _loading ? null : _fetchHomeworks,
+                            child: _loading
+                                ? const CupertinoActivityIndicator(radius: 7)
+                                : const Icon(CupertinoIcons.arrow_clockwise,
+                                    size: 14),
+                          ),
+                          if (_items.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            CupertinoButton(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              minSize: 32,
+                              color: _expanded
+                                  ? CupertinoDynamicColor.resolve(
+                                      CupertinoColors.secondarySystemFill,
+                                      context)
+                                  : CupertinoColors.activeBlue,
+                              borderRadius: BorderRadius.circular(8),
+                              onPressed: () {
+                                setState(() {
+                                  _expanded = !_expanded;
+                                });
+                              },
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _expanded
+                                        ? CupertinoIcons.chevron_up
+                                        : CupertinoIcons.chevron_down,
+                                    size: 13,
+                                    color: _expanded
+                                        ? CupertinoDynamicColor.resolve(
+                                            CupertinoColors.label, context)
+                                        : CupertinoColors.white,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _expanded ? '收起' : '展开',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: _expanded
+                                          ? CupertinoDynamicColor.resolve(
+                                              CupertinoColors.label, context)
+                                          : CupertinoColors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                  if (_expanded) ...[
+                    if (_loading && _items.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        child: Center(
+                          child: Column(
+                            children: [
+                              CupertinoActivityIndicator(),
+                              SizedBox(height: 6),
+                              Text(
+                                '正在同步该课程的全部作业与成绩状态...',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else if (_error != null && _items.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12, bottom: 4),
+                        child: Text(
+                          '获取作业失败：$_error\n请先确保已登录学在浙大后点击刷新。',
+                          style: const TextStyle(
+                              fontSize: 12, color: CupertinoColors.systemRed),
+                        ),
+                      )
+                    else if (_items.isEmpty && _fetchedOnce)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12, bottom: 4),
+                        child: Text(
+                          '学在浙大暂无该课程的已发布作业或测验。',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.secondaryLabel, context),
+                          ),
+                        ),
+                      )
+                    else if (_items.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.systemFill, context),
+                      ),
+                      for (int i = 0; i < _items.length; i++) ...[
+                        if (i > 0)
+                          Divider(
+                            height: 16,
+                            thickness: 1,
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.systemFill, context),
+                          ),
+                        Builder(builder: (context) {
+                          final todo = _items[i];
+                          final matchingTask = _taskByActivityId[todo.id];
+                          final uidKey = matchingTask?.uid ??
+                              'courses-todo:${todo.id}';
+                          final indicatorColor = UidColors.colorFromUid(uidKey);
+                          final cleanTitle = todo.name
+                              .replaceFirst(RegExp(r'^(作业|小测)：'), '')
+                              .trim();
+                          final displayTitle = todo.isQuiz
+                              ? '小测：${cleanTitle.isEmpty ? todo.name : cleanTitle}'
+                              : '作业：${cleanTitle.isEmpty ? todo.name : cleanTitle}';
+                          final displayCourse = todo.course.trim().isNotEmpty
+                              ? todo.course.trim()
+                              : widget.course.name;
+                          final canSubmitInApp = !todo.id.startsWith('task:') ||
+                              (matchingTask != null &&
+                                  extractCoursesUrl(matchingTask.description) !=
+                                      null);
+
+                          return GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: canSubmitInApp
+                                ? () => _openSubmissionPage(context, todo)
+                                : null,
+                            onLongPress: !todo.id.startsWith('task:')
+                                ? () => showTodoSubmitSheet(
+                                      context,
+                                      todo.submitUrl,
+                                      title: '$displayCourse · $cleanTitle',
+                                      courseId: todo.resolvedCourseId,
+                                      activityId: todo.id,
+                                    )
+                                : null,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 4, vertical: 8),
+                              child: HomeworkTaskItemContent(
+                                indicatorColor: indicatorColor,
+                                title: displayTitle,
+                                courseName: displayCourse,
+                                endTime: todo.endTime,
+                                isQuiz: todo.isQuiz,
+                                isSubmitted: todo.isSubmitted,
+                                isGraded: todo.isGraded,
+                                score: todo.score,
+                                titleFontSize: 16,
+                                onOpenSubmission: canSubmitInApp
+                                    ? () => _openSubmissionPage(context, todo)
+                                    : null,
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
+                    ],
                   ],
                 ],
               ),

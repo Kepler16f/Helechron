@@ -9,6 +9,7 @@ import 'package:celechron/http/data_source_status.dart';
 import 'package:celechron/http/zjuServices/exceptions.dart';
 import 'package:celechron/services/diagnostic_log_service.dart';
 import 'package:celechron/services/todo_task_sync.dart';
+import 'package:celechron/services/zhiyun_service.dart';
 import 'package:celechron/utils/tuple.dart';
 import 'package:celechron/model/todo.dart';
 import 'package:flutter/foundation.dart';
@@ -389,24 +390,72 @@ class Courses {
     return 'application/octet-stream';
   }
 
-  static List<int> _buildMultipartPayload({
+  static ({List<int> prefix, List<int> suffix}) _buildMultipartEnvelope({
     required String boundary,
     required String fileName,
-    required List<int> fileBytes,
     String parentType = 'submission_upload',
     int parentId = 0,
+    bool includeParentFields = true,
   }) {
-    final bytes = <int>[];
-    bytes.addAll(utf8.encode(
-        '--$boundary\r\nContent-Disposition: form-data; name="parent_type"\r\n\r\n$parentType\r\n'));
-    bytes.addAll(utf8.encode(
-        '--$boundary\r\nContent-Disposition: form-data; name="parent_id"\r\n\r\n$parentId\r\n'));
+    final safeName = fileName.replaceAll('"', '_');
+    final prefixBuffer = StringBuffer();
+    if (includeParentFields) {
+      prefixBuffer.write(
+          '--$boundary\r\nContent-Disposition: form-data; name="parent_type"\r\n\r\n$parentType\r\n');
+      prefixBuffer.write(
+          '--$boundary\r\nContent-Disposition: form-data; name="parent_id"\r\n\r\n$parentId\r\n');
+    }
     final mimeType = _lookupMimeType(fileName);
-    bytes.addAll(utf8.encode(
-        '--$boundary\r\nContent-Disposition: form-data; name="file"; filename="$fileName"\r\nContent-Type: $mimeType\r\n\r\n'));
-    bytes.addAll(fileBytes);
-    bytes.addAll(utf8.encode('\r\n--$boundary--\r\n'));
-    return bytes;
+    prefixBuffer.write(
+        '--$boundary\r\nContent-Disposition: form-data; name="file"; filename="$safeName"\r\nContent-Type: $mimeType\r\n\r\n');
+    return (
+      prefix: utf8.encode(prefixBuffer.toString()),
+      suffix: utf8.encode('\r\n--$boundary--\r\n'),
+    );
+  }
+
+  /// 分块写入请求体并实时回调已发送字节数
+  static Future<void> _writeRequestBytesWithProgress(
+    HttpClientRequest req, {
+    required List<int> fileBytes,
+    List<int>? prefixBytes,
+    List<int>? suffixBytes,
+    void Function(int sentBytes, int totalBytes)? onProgress,
+  }) async {
+    final totalPayloadLength = (prefixBytes?.length ?? 0) +
+        fileBytes.length +
+        (suffixBytes?.length ?? 0);
+    req.contentLength = totalPayloadLength;
+    req.bufferOutput = false;
+
+    if (prefixBytes != null && prefixBytes.isNotEmpty) {
+      req.add(prefixBytes);
+    }
+
+    final total = fileBytes.length;
+    if (total == 0) {
+      onProgress?.call(0, 0);
+    } else {
+      const chunkSize = 32 * 1024;
+      final typed = fileBytes is Uint8List ? fileBytes : null;
+      var offset = 0;
+      onProgress?.call(0, total);
+      while (offset < total) {
+        final end = offset + chunkSize < total ? offset + chunkSize : total;
+        final chunk = typed != null
+            ? Uint8List.sublistView(typed, offset, end)
+            : fileBytes.sublist(offset, end);
+        req.add(chunk);
+        await req.flush();
+        offset = end;
+        onProgress?.call(offset, total);
+      }
+    }
+
+    if (suffixBytes != null && suffixBytes.isNotEmpty) {
+      req.add(suffixBytes);
+    }
+    await req.flush();
   }
 
   static Future<void> _notifyUploadFinish(
@@ -442,6 +491,7 @@ class Courses {
     required String fileName,
     required List<int> fileBytes,
     required int uploadId,
+    void Function(int sentBytes, int totalBytes)? onProgress,
   }) async {
     try {
       final uploadUri = uploadUrlStr.startsWith('http')
@@ -453,47 +503,47 @@ class Courses {
           uploadUri.queryParameters.containsKey('OSSAccessKeyId') ||
           uploadUri.queryParameters.containsKey('Signature');
 
-      if (isExternalOss) {
+      Future<bool> sendRawPut({required bool attachSessionCookie}) async {
         final putReq = await httpClient.putUrl(uploadUri).timeout(
               const Duration(seconds: 40),
               onTimeout: () => throw requestTimeout(),
             );
-        final mime = _lookupMimeType(fileName);
-        putReq.headers.set(HttpHeaders.contentTypeHeader, mime);
-        putReq.contentLength = fileBytes.length;
-        putReq.add(fileBytes);
-        final putResp = await putReq.close();
-        if (putResp.statusCode == HttpStatus.ok ||
-            putResp.statusCode == HttpStatus.created ||
-            putResp.statusCode == HttpStatus.noContent) {
-          await _notifyUploadFinish(httpClient, session, uploadId);
-          return true;
+        if (attachSessionCookie) {
+          putReq.cookies.add(session);
         }
-      } else {
-        final putReq = await httpClient.putUrl(uploadUri).timeout(
-              const Duration(seconds: 40),
-              onTimeout: () => throw requestTimeout(),
-            );
-        putReq.cookies.add(session);
         putReq.headers
             .set(HttpHeaders.contentTypeHeader, _lookupMimeType(fileName));
-        putReq.contentLength = fileBytes.length;
-        putReq.add(fileBytes);
-        final putResp = await putReq.close();
+        await _writeRequestBytesWithProgress(
+          putReq,
+          fileBytes: fileBytes,
+          onProgress: onProgress,
+        );
+        final putResp = await putReq.close().timeout(
+              const Duration(seconds: 120),
+              onTimeout: () => throw requestTimeout(),
+            );
         if (putResp.statusCode == HttpStatus.ok ||
             putResp.statusCode == HttpStatus.created ||
             putResp.statusCode == HttpStatus.noContent) {
           await _notifyUploadFinish(httpClient, session, uploadId);
           return true;
         }
+        return false;
+      }
 
+      if (isExternalOss) {
+        if (await sendRawPut(attachSessionCookie: false)) return true;
+      } else {
+        if (await sendRawPut(attachSessionCookie: true)) return true;
+
+        onProgress?.call(0, fileBytes.length);
         final boundary =
             '----TronStreamBoundary${DateTime.now().millisecondsSinceEpoch}';
-        final header = utf8.encode(
-            '--$boundary\r\nContent-Disposition: form-data; name="file"; filename="$fileName"\r\nContent-Type: ${_lookupMimeType(fileName)}\r\n\r\n');
-        final footer = utf8.encode('\r\n--$boundary--\r\n');
-        final totalLength = header.length + fileBytes.length + footer.length;
-
+        final env = _buildMultipartEnvelope(
+          boundary: boundary,
+          fileName: fileName,
+          includeParentFields: false,
+        );
         final postReq = await httpClient.postUrl(uploadUri).timeout(
               const Duration(seconds: 40),
               onTimeout: () => throw requestTimeout(),
@@ -501,11 +551,17 @@ class Courses {
         postReq.cookies.add(session);
         postReq.headers.set(HttpHeaders.contentTypeHeader,
             'multipart/form-data; boundary=$boundary');
-        postReq.contentLength = totalLength;
-        postReq.add(header);
-        postReq.add(fileBytes);
-        postReq.add(footer);
-        final postResp = await postReq.close();
+        await _writeRequestBytesWithProgress(
+          postReq,
+          fileBytes: fileBytes,
+          prefixBytes: env.prefix,
+          suffixBytes: env.suffix,
+          onProgress: onProgress,
+        );
+        final postResp = await postReq.close().timeout(
+              const Duration(seconds: 120),
+              onTimeout: () => throw requestTimeout(),
+            );
         if (postResp.statusCode == HttpStatus.ok ||
             postResp.statusCode == HttpStatus.created ||
             postResp.statusCode == HttpStatus.noContent) {
@@ -527,6 +583,7 @@ class Courses {
     String? activityId,
     String? courseId,
     Cookie? sessionCookie,
+    void Function(int sentBytes, int totalBytes)? onProgress,
   }) async {
     var currentSession = sessionCookie ?? cachedSession;
     if (currentSession == null) {
@@ -539,10 +596,9 @@ class Courses {
     try {
       final boundary =
           '----TronClassBoundary${DateTime.now().millisecondsSinceEpoch}';
-      final payload = _buildMultipartPayload(
+      final env = _buildMultipartEnvelope(
         boundary: boundary,
         fileName: fileName,
-        fileBytes: fileBytes,
       );
 
       final uploadUri = Uri.parse('https://courses.zju.edu.cn/api/uploads');
@@ -555,11 +611,16 @@ class Courses {
       req.headers.set(HttpHeaders.contentTypeHeader,
           'multipart/form-data; boundary=$boundary');
       req.headers.set(HttpHeaders.acceptHeader, 'application/json');
-      req.contentLength = payload.length;
-      req.add(payload);
+      await _writeRequestBytesWithProgress(
+        req,
+        fileBytes: fileBytes,
+        prefixBytes: env.prefix,
+        suffixBytes: env.suffix,
+        onProgress: onProgress,
+      );
 
       final resp = await req.close().timeout(
-            const Duration(seconds: 35),
+            const Duration(seconds: 120),
             onTimeout: () => throw requestTimeout(),
           );
 
@@ -572,8 +633,10 @@ class Courses {
 
         if (uploadId != null) {
           if (uploadUrlStr == null || uploadUrlStr.isEmpty) {
+            onProgress?.call(fileBytes.length, fileBytes.length);
             return uploadId;
           }
+          onProgress?.call(0, fileBytes.length);
           final streamed = await _streamBytesToUploadUrl(
             httpClient: httpClient,
             session: activeSession,
@@ -581,6 +644,7 @@ class Courses {
             fileName: fileName,
             fileBytes: fileBytes,
             uploadId: uploadId,
+            onProgress: onProgress,
           );
           if (streamed) return uploadId;
         }
@@ -595,6 +659,7 @@ class Courses {
     }
 
     // 策略 2：两阶段凭据上传（POST /api/uploads 申请凭据 JSON -> 写入目标地址）
+    onProgress?.call(0, fileBytes.length);
     try {
       final ticketUri = Uri.parse('https://courses.zju.edu.cn/api/uploads');
       final ticketReq = await httpClient.postUrl(ticketUri).timeout(
@@ -626,6 +691,7 @@ class Courses {
 
         if (uploadId != null) {
           if (uploadUrlStr == null || uploadUrlStr.isEmpty) {
+            onProgress?.call(fileBytes.length, fileBytes.length);
             return uploadId;
           }
           final streamed = await _streamBytesToUploadUrl(
@@ -635,6 +701,7 @@ class Courses {
             fileName: fileName,
             fileBytes: fileBytes,
             uploadId: uploadId,
+            onProgress: onProgress,
           );
           if (streamed) return uploadId;
         }
@@ -645,13 +712,13 @@ class Courses {
 
     // 策略 3：课程级接口回退（POST /api/courses/$courseId/uploads）
     if (courseId != null && courseId.isNotEmpty) {
+      onProgress?.call(0, fileBytes.length);
       try {
         final boundary =
             '----TronClassBoundary${DateTime.now().millisecondsSinceEpoch}';
-        final payload = _buildMultipartPayload(
+        final env = _buildMultipartEnvelope(
           boundary: boundary,
           fileName: fileName,
-          fileBytes: fileBytes,
           parentType: 'submission',
         );
 
@@ -665,16 +732,27 @@ class Courses {
         req.headers.set(HttpHeaders.contentTypeHeader,
             'multipart/form-data; boundary=$boundary');
         req.headers.set(HttpHeaders.acceptHeader, 'application/json');
-        req.contentLength = payload.length;
-        req.add(payload);
+        await _writeRequestBytesWithProgress(
+          req,
+          fileBytes: fileBytes,
+          prefixBytes: env.prefix,
+          suffixBytes: env.suffix,
+          onProgress: onProgress,
+        );
 
-        final resp = await req.close();
+        final resp = await req.close().timeout(
+              const Duration(seconds: 120),
+              onTimeout: () => throw requestTimeout(),
+            );
         if (resp.statusCode == HttpStatus.ok ||
             resp.statusCode == HttpStatus.created) {
           final body = await readResponseBody(resp, context: '课程级上传响应');
           final json = decodeJsonMap(body, context: '课程级上传响应');
           final uploadId = (json['id'] as num?)?.toInt();
-          if (uploadId != null) return uploadId;
+          if (uploadId != null) {
+            onProgress?.call(fileBytes.length, fileBytes.length);
+            return uploadId;
+          }
         }
       } catch (e) {
         debugPrint(
@@ -1454,8 +1532,8 @@ class Courses {
     required String courseName,
     String? courseCode,
   }) async {
-    final uri = Uri.parse('https://courses.zju.edu.cn/api/my-courses');
-    try {
+    Future<List<int>> queryCoursesWithKeyword(String keyword) async {
+      final uri = Uri.parse('https://courses.zju.edu.cn/api/my-courses');
       final req = await httpClient.postUrl(uri).timeout(
             const Duration(seconds: 10),
             onTimeout: () => throw requestTimeout(),
@@ -1470,7 +1548,7 @@ class Courses {
         'page_size': 100,
         'conditions': {
           'status': ['ongoing', 'notStarted', 'closed'],
-          'keyword': '',
+          'keyword': keyword,
           'classify_type': 'recently_started',
           'display_studio_list': false,
         },
@@ -1489,44 +1567,377 @@ class Courses {
       final json = decodeJsonMap(body, context: '学在浙大我的课程');
       final courses = asDynamicList(json['courses']) ?? const [];
 
-      final cleanTarget = courseName
-          .replaceAll('（', '(')
-          .replaceAll('）', ')')
-          .replaceAll(RegExp(r'\s+'), '')
-          .toLowerCase();
-      final matchedIds = <int>[];
+      final codeMatches = <int>[];
+      final nameMatches = <int>[];
+      final normalizedTargetCode =
+          (courseCode ?? '').replaceAll(RegExp(r'\s+'), '').toLowerCase();
 
       for (final raw in courses) {
         final c = asStringMap(raw);
         if (c == null) continue;
         final id = (asDouble(c['id']) ?? 0).toInt();
         if (id <= 0) continue;
-        final cCode = asString(c['course_code']) ?? '';
-        final cName = (asString(c['name']) ?? asString(c['display_name']) ?? '')
-            .replaceAll('（', '(')
-            .replaceAll('）', ')')
-            .replaceAll(RegExp(r'\s+'), '')
-            .toLowerCase();
-        if (courseCode != null &&
-            courseCode.isNotEmpty &&
+        final cCode =
+            (asString(c['course_code']) ?? '').replaceAll(RegExp(r'\s+'), '').toLowerCase();
+        final cName = asString(c['name']) ?? asString(c['display_name']) ?? '';
+
+        if (normalizedTargetCode.isNotEmpty &&
             cCode.isNotEmpty &&
-            (cCode.contains(courseCode) || courseCode.contains(cCode))) {
-          matchedIds.add(id);
+            (cCode == normalizedTargetCode ||
+                cCode.contains(normalizedTargetCode) ||
+                normalizedTargetCode.contains(cCode))) {
+          codeMatches.add(id);
           continue;
         }
-        if (cName.isNotEmpty &&
-            cleanTarget.isNotEmpty &&
-            (cName == cleanTarget ||
-                cName.contains(cleanTarget) ||
-                cleanTarget.contains(cName))) {
-          matchedIds.add(id);
+        if (courseName.trim().isNotEmpty &&
+            cName.trim().isNotEmpty &&
+            ZhiyunService.matchesCourseName(courseName, cName)) {
+          nameMatches.add(id);
         }
+      }
+      return codeMatches.isNotEmpty ? codeMatches : nameMatches;
+    }
+
+    try {
+      var matchedIds = await queryCoursesWithKeyword('');
+      if (matchedIds.isEmpty && courseName.trim().isNotEmpty) {
+        matchedIds = await queryCoursesWithKeyword(courseName.trim());
       }
       return matchedIds;
     } catch (e) {
       debugPrint('_resolveTronClassCourseIds error: $e');
       return const [];
     }
+  }
+
+  static const Set<String> _homeworkOrQuizTypes = {
+    'homework',
+    'homework_activity',
+    'quiz',
+    'exam',
+    'assessment',
+    'test',
+  };
+
+  /// 从单页课程活动 / 作业列表 JSON 解析标准化 [Todo] 列表
+  @visibleForTesting
+  static List<Todo> parseCourseHomeworkActivities(
+    Map<String, dynamic> json, {
+    required String tcCourseId,
+    required String courseName,
+  }) {
+    final result = <Todo>[];
+    final seenIds = <String>{};
+
+    void absorbList(List<dynamic> rawList, {required bool fromHomeworkApi}) {
+      for (final raw in rawList) {
+        final act = asStringMap(raw);
+        if (act == null) continue;
+        final aid = (act['id']?.toString() ?? '').trim();
+        if (aid.isEmpty || !seenIds.add(aid)) continue;
+
+        final rawType =
+            (asString(act['type']) ?? asString(act['activity_type']) ?? '')
+                .toLowerCase();
+        final resolvedType =
+            rawType.isEmpty && fromHomeworkApi ? 'homework' : rawType;
+        if (!fromHomeworkApi && !_homeworkOrQuizTypes.contains(resolvedType)) {
+          continue;
+        }
+
+        final title = asString(act['title'])?.trim();
+        if (title == null || title.isEmpty) continue;
+
+        final rawData = asStringMap(act['data']);
+        final endTime = asString(act['end_time']) ??
+            asString(act['deadline']) ??
+            asString(rawData?['end_time']);
+        final completeness =
+            asString(act['completeness']) ?? asString(rawData?['completeness']);
+        final scoreNum = (act['score'] as num?) ?? (rawData?['score'] as num?);
+        final submittedAtStr = asString(act['submitted_at']) ??
+            asString(rawData?['submitted_at']);
+        final isSubmittedFlag = asBool(act['submitted']) == true ||
+            asBool(act['is_submitted']) == true ||
+            ((asDouble(act['submission_count']) ?? 0) > 0);
+
+        result.add(Todo.fromJson({
+          'id': aid,
+          'title': title,
+          'course_name': asString(act['course_name']) ?? courseName,
+          'course_id': asString(act['course_id']) ?? tcCourseId,
+          'end_time': endTime,
+          'type': resolvedType.isEmpty ? 'homework' : resolvedType,
+          'score': scoreNum,
+          'completeness':
+              completeness ?? (isSubmittedFlag ? 'full' : null),
+          'submitted_at': submittedAtStr,
+        }));
+      }
+    }
+
+    absorbList(
+      asDynamicList(json['homework_activities']) ?? const [],
+      fromHomeworkApi: true,
+    );
+    absorbList(
+      asDynamicList(json['activities']) ?? const [],
+      fromHomeworkApi: false,
+    );
+    return result;
+  }
+
+  /// 合并多来源作业状态与阅读完成度，并按待完成置顶（DDL 升序）→ 逾期 → 已完成置底（DDL 降序）排序
+  static List<Todo> mergeAndSortCourseHomeworks(
+    Iterable<Todo> items, {
+    Map<String, dynamic>? activityReadsJson,
+    bool readLocalStatus = true,
+  }) {
+    final byId = <String, Todo>{};
+
+    void absorbTodo(Todo source) {
+      if (source.id.isEmpty) return;
+      final existing = byId[source.id];
+      if (existing == null) {
+        byId[source.id] = source;
+        return;
+      }
+      if ((existing.name.isEmpty || existing.name == '未命名作业') &&
+          source.name.isNotEmpty) {
+        existing.name = source.name;
+      }
+      existing.endTime ??= source.endTime;
+      if (existing.courseId.isEmpty && source.courseId.isNotEmpty) {
+        existing.courseId = source.courseId;
+      }
+      if ((existing.type == null || existing.type!.isEmpty) &&
+          source.type != null &&
+          source.type!.isNotEmpty) {
+        existing.type = source.type;
+      }
+      existing.score ??= source.score;
+      existing.submittedAt ??= source.submittedAt;
+      if (source.completeness == 'full' || !existing.isSubmitted) {
+        if (source.completeness != null && source.completeness!.isNotEmpty) {
+          existing.completeness = source.completeness;
+        }
+        if (source.isSubmitted) {
+          existing.submissionStatus = source.submissionStatus;
+        }
+      }
+    }
+
+    for (final item in items) {
+      absorbTodo(item);
+    }
+
+    // 应用 activity-reads-for-user 中的真实提交/评分数据
+    final rawReads = asDynamicList(activityReadsJson?['activity_reads']);
+    if (rawReads != null) {
+      for (final item in rawReads) {
+        final m = asStringMap(item);
+        if (m == null) continue;
+        final aid = (m['activity_id']?.toString() ?? '').trim();
+        final target = byId[aid];
+        if (target == null) continue;
+
+        final completeness = asString(m['completeness']) ?? '';
+        final subData = asStringMap(m['data']);
+        final score = (subData?['score'] as num?)?.toDouble();
+        final submittedAt =
+            DateTime.tryParse(asString(subData?['submitted_at']) ?? '');
+        final isDraft = asBool(subData?['is_draft']) ?? false;
+        final isSubmitted =
+            (score != null) || (completeness == 'full' && !isDraft);
+
+        target.completeness = isSubmitted
+            ? 'full'
+            : (completeness == 'full' ? 'incomplete' : completeness);
+        if (score != null) target.score = score;
+        if (submittedAt != null && isSubmitted) {
+          target.submittedAt = submittedAt;
+        }
+        if (score != null) {
+          target.submissionStatus = HomeworkSubmissionStatus.graded;
+        } else if (isSubmitted) {
+          target.submissionStatus = HomeworkSubmissionStatus.submitted;
+        } else {
+          target.submissionStatus = HomeworkSubmissionStatus.unsubmitted;
+        }
+
+        if (readLocalStatus) {
+          TodoTaskSync.recordHomeworkStatus(
+            aid,
+            completeness: target.completeness,
+            score: score,
+            submittedAt: isSubmitted ? submittedAt : null,
+            clearIfIncomplete: !isSubmitted,
+            isQuiz: target.isQuiz ? true : null,
+          );
+        }
+      }
+    }
+
+    // 与本地实时提交记录合并
+    if (readLocalStatus) {
+      for (final target in byId.values) {
+        final recorded = TodoTaskSync.getHomeworkStatus(target.id);
+        if (recorded == null) continue;
+        final recScore = (recorded['score'] as num?)?.toDouble();
+        final recComp = recorded['completeness']?.toString();
+        final recTime =
+            DateTime.tryParse(recorded['submitted_at']?.toString() ?? '');
+        if (recScore != null) {
+          target.score = recScore;
+          target.submissionStatus = HomeworkSubmissionStatus.graded;
+        } else if (recComp == 'full') {
+          target.completeness = 'full';
+          target.submissionStatus = HomeworkSubmissionStatus.submitted;
+          if (recTime != null) target.submittedAt ??= recTime;
+        } else if (recComp != null && recComp.isNotEmpty) {
+          target.completeness = recComp;
+          if (!target.isGraded) {
+            target.submissionStatus = HomeworkSubmissionStatus.unsubmitted;
+          }
+        }
+      }
+    }
+
+    final sorted = byId.values.toList();
+    sorted.sort((a, b) {
+      int bucket(Todo t) {
+        switch (t.effectiveStatus) {
+          case HomeworkSubmissionStatus.unsubmitted:
+            return 0; // 待提交且未截止优先
+          case HomeworkSubmissionStatus.overdue:
+            return 1; // 逾期未提交次之
+          case HomeworkSubmissionStatus.submitted:
+          case HomeworkSubmissionStatus.graded:
+            return 2; // 已提交/已批改置后
+        }
+      }
+
+      final ba = bucket(a);
+      final bb = bucket(b);
+      if (ba != bb) return ba.compareTo(bb);
+
+      final ea = a.endTime;
+      final eb = b.endTime;
+      if (ea != null && eb != null) {
+        // 未提交的按截止时间升序（最紧迫在最前）；已提交/逾期按时间倒序（最近在最前）
+        return ba == 0 ? ea.compareTo(eb) : eb.compareTo(ea);
+      }
+      if (ea != null) return -1;
+      if (eb != null) return 1;
+      return b.id.compareTo(a.id);
+    });
+
+    return sorted;
+  }
+
+  /// 查询指定课程在“学在浙大”中的**全部作业与测验**（涵盖待提交、已提交、已批改与历史已截止活动）
+  static Future<List<Todo>> fetchCourseHomeworks(
+    HttpClient httpClient, {
+    required String courseName,
+    String? courseCode,
+  }) async {
+    final session = await ensureSession(httpClient);
+    if (session == null) {
+      return const [];
+    }
+
+    final tcCourseIds = await _resolveTronClassCourseIds(
+      httpClient,
+      session,
+      courseName: courseName,
+      courseCode: courseCode,
+    );
+    if (tcCourseIds.isEmpty) {
+      return const [];
+    }
+
+    final collected = <Todo>[];
+    final combinedReads = <dynamic>[];
+
+    for (final tcId in tcCourseIds) {
+      final cidStr = tcId.toString();
+
+      // 1. 分页抓取 /homework-activities（包含历史及已完成作业）
+      for (int page = 1; page <= 5; page++) {
+        try {
+          final uri = Uri.parse(
+              'https://courses.zju.edu.cn/api/courses/$tcId/homework-activities?page=$page&page_size=100&reloadPage=false');
+          final req = await httpClient.getUrl(uri).timeout(
+                const Duration(seconds: 10),
+                onTimeout: () => throw requestTimeout(),
+              );
+          req.cookies.add(session);
+          req.headers.set(HttpHeaders.acceptHeader, 'application/json');
+          final resp = await req.close().timeout(
+                const Duration(seconds: 10),
+                onTimeout: () => throw requestTimeout(),
+              );
+          if (resp.statusCode != HttpStatus.ok) break;
+          final body = await readResponseBody(resp, context: '课程作业列表接口');
+          final json = decodeJsonMap(body, context: '课程作业列表');
+          final parsed = parseCourseHomeworkActivities(
+            json,
+            tcCourseId: cidStr,
+            courseName: courseName,
+          );
+          collected.addAll(parsed);
+          final totalPages = (asDouble(json['pages']) ?? 1).toInt();
+          if (page >= totalPages || parsed.isEmpty) break;
+        } catch (e) {
+          debugPrint('fetchCourseHomeworks homework-activities page=$page error: $e');
+          break;
+        }
+      }
+
+      // 2. 补充抓取 /activities（涵盖在线小测、测验等活动）
+      try {
+        final actUri = Uri.parse(
+            'https://courses.zju.edu.cn/api/courses/$tcId/activities');
+        final req = await httpClient.getUrl(actUri).timeout(
+              const Duration(seconds: 10),
+              onTimeout: () => throw requestTimeout(),
+            );
+        req.cookies.add(session);
+        req.headers.set(HttpHeaders.acceptHeader, 'application/json');
+        final resp = await req.close().timeout(
+              const Duration(seconds: 10),
+              onTimeout: () => throw requestTimeout(),
+            );
+        if (resp.statusCode == HttpStatus.ok) {
+          final body = await readResponseBody(resp, context: '课程活动列表接口');
+          final json = decodeJsonMap(body, context: '课程活动列表');
+          collected.addAll(parseCourseHomeworkActivities(
+            json,
+            tcCourseId: cidStr,
+            courseName: courseName,
+          ));
+        }
+      } catch (e) {
+        debugPrint('fetchCourseHomeworks activities error: $e');
+      }
+
+      // 3. 拉取完成度与打分详情
+      final reads = await fetchActivityReadsForCourse(
+        httpClient,
+        cidStr,
+        sessionCookie: session,
+      );
+      final readList = asDynamicList(reads?['activity_reads']);
+      if (readList != null) {
+        combinedReads.addAll(readList);
+      }
+    }
+
+    return mergeAndSortCourseHomeworks(
+      collected,
+      activityReadsJson: {'activity_reads': combinedReads},
+      readLocalStatus: true,
+    );
   }
 
   /// 下载课件或附件到本地指定目录（包含 4 级回退下载链，支持仅预览 PDF 课件提取直链下载）
