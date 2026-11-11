@@ -13,6 +13,7 @@ import 'package:celechron/model/calendar_to_system.dart';
 import 'package:celechron/model/calendar_to_ical.dart';
 import 'package:celechron/services/backup_service.dart';
 import 'package:celechron/services/ohos_native_service.dart';
+import 'package:celechron/services/update_service.dart';
 import 'package:celechron/services/zhiyun_service.dart';
 import 'package:celechron/utils/platform_features.dart';
 
@@ -228,6 +229,17 @@ class OptionController extends GetxController {
   }
 
   String get celechronVersion => _fuse.value.displayVersion;
+
+  final autoCheckUpdate = UpdateService.instance.autoCheckUpdate.obs;
+
+  void toggleAutoCheckUpdate(bool val) {
+    autoCheckUpdate.value = val;
+    UpdateService.instance.autoCheckUpdate = val;
+  }
+
+  Future<void> manualCheckUpdate(BuildContext context) async {
+    await UpdateService.instance.performCheckUpdateFlow(context, showLoading: true);
+  }
 
   bool get hasNewVersion => _fuse.value.hasNewVersion;
 

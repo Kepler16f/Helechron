@@ -432,4 +432,19 @@ class MobileNativeService {
       return null;
     }
   }
+
+  Future<bool> installApk(String filePath) async {
+    if (!Platform.isAndroid) return false;
+    try {
+      final res = await _widgetChannel.invokeMethod<bool>('installApk', {
+        'filePath': filePath,
+      });
+      return res ?? false;
+    } on PlatformException catch (e) {
+      debugPrint('MobileNativeService installApk failed: $e');
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
 }

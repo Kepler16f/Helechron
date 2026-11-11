@@ -46,6 +46,7 @@ class MobileNativeService {
     List<Map<String, String>> streams = const [],
   }) async =>
       false;
+  Future<bool> installApk(String filePath) async => false;
 
   void ensureWidgetHandler(void Function(String target) handler) {}
   Future<void> updateCourseWidget({

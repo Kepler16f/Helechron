@@ -19,6 +19,7 @@ import 'package:celechron/http/grs_spider.dart';
 import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/services/zhiyun_service.dart';
 import 'package:celechron/http/zjuServices/zdbk.dart';
+import 'package:celechron/model/curriculum_plan_models.dart';
 
 class Scholar {
   Scholar();
@@ -897,6 +898,27 @@ class Scholar {
       }
     }
     return null;
+  }
+
+  /// 全量拉取教务系统培养方案目录（~3000 条），支持客户端多层级语义打分匹配
+  Future<List<PlanSummary>> fetchPlanCatalog() async {
+    final ok = await ensureSession();
+    if (!ok) return const [];
+    if (_spider is UgrsSpider) {
+      final spider = _spider as UgrsSpider;
+      try {
+        final res = await spider.zdbk.getTrainingPlans(spider.httpClient);
+        final rawList = res.item2;
+        if (rawList.isNotEmpty) {
+          return rawList.map((m) => PlanSummary.fromJson(m)).toList();
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('fetchPlanCatalog failed: $e');
+        }
+      }
+    }
+    return const [];
   }
 }
 

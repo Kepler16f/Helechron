@@ -20,6 +20,7 @@ import 'package:celechron/design/rolling_shimmer_text.dart';
 import 'package:celechron/page/search/search_view.dart';
 import 'course_list/course_list_view.dart';
 import 'course_schedule/course_schedule_view.dart';
+import 'curriculum_plan/curriculum_plan_page.dart';
 import 'exam_list/exam_list_view.dart';
 import 'grade_detail/grade_detail_view.dart';
 import 'practice_score/practice_score_page.dart';
@@ -455,7 +456,11 @@ class ScholarPage extends StatelessWidget {
                                                 _scholarController
                                                     .selectedSemester.name),
                                         title: '课程')),
-                                null,
+                                () => Navigator.of(context, rootNavigator: true)
+                                    .push(CupertinoPageRoute(
+                                        builder: (context) =>
+                                            CurriculumPlanPage(),
+                                        title: '培养方案查看')),
                                 () => Navigator.of(context, rootNavigator: true)
                                     .push(CupertinoPageRoute(
                                         builder: (context) => ExamListPage(
@@ -525,6 +530,66 @@ class ScholarPage extends StatelessWidget {
                                       withColoredFont: true),
                                 ),
                               ],
+                            ),
+                            const SizedBox(height: 10),
+                            GestureDetector(
+                              onTap: () => Navigator.of(context,
+                                      rootNavigator: true)
+                                  .push(CupertinoPageRoute(
+                                      builder: (context) =>
+                                          CurriculumPlanPage(),
+                                      title: '培养方案查看')),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: CupertinoDynamicColor.resolve(
+                                      CustomCupertinoDynamicColors.sakura
+                                          .withValues(alpha: 0.1),
+                                      context),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      CupertinoIcons.doc_text_search,
+                                      size: 16,
+                                      color: CupertinoDynamicColor.resolve(
+                                          CustomCupertinoDynamicColors.sakura,
+                                          context),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      '培养方案查看',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: CupertinoDynamicColor.resolve(
+                                            CustomCupertinoDynamicColors.sakura,
+                                            context),
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    Text(
+                                      '学分进度 · 核心课 · 选课要求',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: CupertinoDynamicColor.resolve(
+                                            CupertinoColors.secondaryLabel,
+                                            context),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      CupertinoIcons.chevron_right,
+                                      size: 12,
+                                      color: CupertinoDynamicColor.resolve(
+                                          CupertinoColors.secondaryLabel,
+                                          context),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ],
                         ))),

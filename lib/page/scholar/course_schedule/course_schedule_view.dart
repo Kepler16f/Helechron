@@ -12,6 +12,7 @@ import 'package:celechron/design/two_line_card.dart';
 import 'course_card.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:celechron/design/native_bar_spacer.dart';
+import 'package:celechron/page/scholar/curriculum_plan/curriculum_plan_page.dart';
 
 class CourseSchedulePage extends StatelessWidget {
   late final CourseScheduleController _courseScheduleController;
@@ -473,7 +474,51 @@ class CourseSchedulePage extends StatelessWidget {
           CupertinoColors.systemGroupedBackground, context),
       child: CustomScrollView(
         slivers: [
-          const CelechronSliverTextHeader(subtitle: '课表'),
+          CelechronSliverTextHeader(
+            subtitle: '课表',
+            right: CupertinoButton(
+              padding: EdgeInsets.zero,
+              minSize: 32,
+              onPressed: () => Navigator.of(context, rootNavigator: true).push(
+                CupertinoPageRoute(
+                  builder: (context) => CurriculumPlanPage(),
+                  title: '培养方案查看',
+                ),
+              ),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: CupertinoDynamicColor.resolve(
+                      CustomCupertinoDynamicColors.sakura
+                          .withValues(alpha: 0.15),
+                      context),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      CupertinoIcons.doc_text_search,
+                      size: 13,
+                      color: CupertinoDynamicColor.resolve(
+                          CustomCupertinoDynamicColors.sakura, context),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '培养方案',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: CupertinoDynamicColor.resolve(
+                            CustomCupertinoDynamicColors.sakura, context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),

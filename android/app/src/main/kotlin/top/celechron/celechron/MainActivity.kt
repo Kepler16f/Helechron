@@ -105,6 +105,10 @@ class MainActivity : FlutterActivity() {
                     val title = call.argument<String>("title") ?: "智云课堂"
                     result.success(showInAppVideoDialog(url, title))
                 }
+                "installApk" -> {
+                    val filePath = call.argument<String>("filePath") ?: ""
+                    result.success(installApk(filePath))
+                }
                 else -> result.notImplemented()
             }
         }
@@ -112,6 +116,27 @@ class MainActivity : FlutterActivity() {
         // Deliver pending route if opened from widget before engine ready
         pendingRoute?.let { target ->
             channel.invokeMethod("onWidgetRoute", mapOf("target" to target))
+        }
+    }
+
+    private fun installApk(filePath: String): Boolean {
+        if (filePath.isEmpty()) return false
+        return try {
+            val file = File(filePath)
+            if (!file.exists()) return false
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+            true
+        } catch (e: Exception) {
+            openFileWithSystem(filePath, "application/vnd.android.package-archive", "安装更新")
         }
     }
 

@@ -6,7 +6,6 @@ import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:get/get.dart';
-import 'package:url_launcher/url_launcher_string.dart';
 
 import 'package:celechron/model/option.dart';
 import 'package:celechron/page/scholar/scholar_view.dart';
@@ -17,8 +16,7 @@ import 'package:celechron/page/option/option_view.dart';
 
 import 'package:celechron/services/ohos_native_service.dart';
 import 'package:celechron/utils/platform_features.dart';
-import 'package:celechron/worker/fuse.dart';
-import 'package:celechron/utils/legal_links.dart';
+import 'package:celechron/services/update_service.dart';
 
 class _BarItemDef {
   final IconData icon;
@@ -360,36 +358,13 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> initFuse() async {
     await Future.delayed(const Duration(seconds: 1));
-    var fuse = Get.find<Rx<Fuse>>(tag: 'fuse');
-    var response =
-        await fuse.value.checkUpdate().whenComplete(() => fuse.refresh());
-    if (response != null) {
-      if (!mounted) return;
-      showCupertinoDialog(
-          context: context,
-          builder: (context) {
-            return CupertinoAlertDialog(
-              title: const Text('更新可用'),
-              content: Text(response),
-              actions: [
-                CupertinoDialogAction(
-                  child: const Text('忽略'),
-                  onPressed: () async {
-                    Navigator.of(context).pop();
-                  },
-                ),
-                CupertinoDialogAction(
-                  child: const Text('查看 Helechron 发布'),
-                  onPressed: () async {
-                    await launchUrlString(
-                      releasesUrl,
-                      mode: LaunchMode.externalApplication,
-                    );
-                  },
-                ),
-              ],
-            );
-          });
+    if (!mounted) return;
+    if (UpdateService.instance.autoCheckUpdate) {
+      await UpdateService.instance.performCheckUpdateFlow(
+        context,
+        showLoading: false,
+        silentIfNoUpdate: true,
+      );
     }
   }
 }

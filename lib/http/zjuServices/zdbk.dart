@@ -1362,12 +1362,8 @@ class Zdbk {
           'queryModel.sortOrder': 'desc',
           '_search': 'false',
         };
-        if (majorName != null && majorName.trim().isNotEmpty) {
-          queryParams['zymc'] = majorName.trim();
-        }
-        if (grade != null && grade.trim().isNotEmpty) {
-          queryParams['njdm_id'] = grade.trim();
-        }
+        // 注意（参考课舟报告2.1）：正方教务系统培养方案查询接口不支持按 zymc 或 njdm_id 参数过滤，
+        // 若携带会导致服务端抛出 HTML 异常崩溃；必须全量拉取 ~3000 条并在客户端执行纯函数多层级打分匹配。
 
         final encodedBody = queryParams.entries
             .map((e) =>

@@ -663,6 +663,28 @@ class OptionPage extends StatelessWidget {
                           child: Text('关于', style: headerFooterTextStyle)),
                       children: <CupertinoListTile>[
                         CupertinoListTile(
+                          title: const Text('检查更新'),
+                          subtitle: const Text('支持应用内下载并自动调起安装'),
+                          trailing: BackChervonRow(
+                            child: Text(
+                              'v${_optionController.celechronVersion}',
+                              style: trailingTextStyle,
+                            ),
+                          ),
+                          onTap: () =>
+                              _optionController.manualCheckUpdate(context),
+                        ),
+                        CupertinoListTile(
+                          title: const Text('启动时自动检查更新'),
+                          trailing: Obx(
+                            () => CupertinoSwitch(
+                              value: _optionController.autoCheckUpdate.value,
+                              onChanged: (value) => _optionController
+                                  .toggleAutoCheckUpdate(value),
+                            ),
+                          ),
+                        ),
+                        CupertinoListTile(
                           title: const Text('关于 Helechron'),
                           trailing: BackChervonRow(
                             child: Text(_optionController.celechronVersion,

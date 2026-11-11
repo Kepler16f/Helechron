@@ -12,7 +12,6 @@ import 'grade_detail_controller.dart';
 import 'package:celechron/utils/gpa_helper.dart';
 import 'weighted_gpa_view.dart';
 import 'gpa_simulator_view.dart';
-import 'credit_progress_view.dart';
 import 'semester_gpa_trend_card.dart';
 import 'package:celechron/design/native_bar_spacer.dart';
 
@@ -364,22 +363,6 @@ class GradeDetailPage extends StatelessWidget {
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(CupertinoIcons.chart_pie_fill, size: 20),
-                SizedBox(width: 8),
-                Text('学分看板（培养方案）'),
-              ],
-            ),
-            onPressed: () {
-              Navigator.of(sheetCtx).pop();
-              Navigator.of(context).push(
-                CupertinoPageRoute(builder: (_) => CreditProgressPage()),
-              );
-            },
-          ),
-          CupertinoActionSheetAction(
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
                 Icon(CupertinoIcons.chart_bar_alt_fill, size: 20),
                 SizedBox(width: 8),
                 Text('加权成绩分析'),
@@ -418,7 +401,7 @@ class GradeDetailPage extends StatelessWidget {
                       : CupertinoIcons.graph_circle,
                   size: 20,
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Text(_gradeDetailController.showTrendChart.value
                     ? '隐藏学期走势折线图'
                     : '展示学期走势折线图'),
@@ -448,20 +431,6 @@ class GradeDetailPage extends StatelessWidget {
           Expanded(
             child: _buildQuickActionButton(
               context: context,
-              icon: CupertinoIcons.chart_pie_fill,
-              label: '学分看板',
-              color: CustomCupertinoDynamicColors.sakura,
-              onTap: () {
-                Navigator.of(context).push(
-                  CupertinoPageRoute(builder: (_) => CreditProgressPage()),
-                );
-              },
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _buildQuickActionButton(
-              context: context,
               icon: CupertinoIcons.chart_bar_alt_fill,
               label: '加权成绩',
               color: CustomCupertinoDynamicColors.cyan,
@@ -484,6 +453,23 @@ class GradeDetailPage extends StatelessWidget {
                   CupertinoPageRoute(builder: (_) => GpaSimulatorPage()),
                 );
               },
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Obx(
+              () => _buildQuickActionButton(
+                context: context,
+                icon: _gradeDetailController.showTrendChart.value
+                    ? CupertinoIcons.graph_circle_fill
+                    : CupertinoIcons.graph_circle,
+                label: '学期走势',
+                color: CustomCupertinoDynamicColors.sakura,
+                onTap: () {
+                  _gradeDetailController.showTrendChart.value =
+                      !_gradeDetailController.showTrendChart.value;
+                },
+              ),
             ),
           ),
         ],
