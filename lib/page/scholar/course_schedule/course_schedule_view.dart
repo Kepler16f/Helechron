@@ -246,6 +246,12 @@ class CourseSchedulePage extends StatelessWidget {
               () {
                 var sessionsByDayOfWeek =
                     _courseScheduleController.sessionsByDayOfWeek;
+                final semName = _courseScheduleController.semester.name;
+                final isFirstHalf =
+                    _courseScheduleController.firstOrSecondSemester.value;
+                final preferredHalfTag = isFirstHalf
+                    ? (semName.contains('春夏') ? 'spring' : 'autumn')
+                    : (semName.contains('春夏') ? 'summer' : 'winter');
                 return Row(
                   children: [
                     Expanded(
@@ -337,7 +343,8 @@ class CourseSchedulePage extends StatelessWidget {
                                 ],
                               ),
                               ..._buildCourseScheduleByDayOfWeek(
-                                  sessionsByDayOfWeek, i, constraints)
+                                  sessionsByDayOfWeek, i, constraints,
+                                  preferredHalfTag: preferredHalfTag)
                             ],
                           ),
                         ),
@@ -368,7 +375,8 @@ class CourseSchedulePage extends StatelessWidget {
                               ],
                             ),
                             ..._buildCourseScheduleByDayOfWeek(
-                                sessionsByDayOfWeek, 7, constraints)
+                                sessionsByDayOfWeek, 7, constraints,
+                                preferredHalfTag: preferredHalfTag)
                           ],
                         ),
                       ),
@@ -386,7 +394,8 @@ class CourseSchedulePage extends StatelessWidget {
   List<Widget> _buildCourseScheduleByDayOfWeek(
       List<List<Session>> sessionsByDayOfWeek,
       int day,
-      BoxConstraints constraints) {
+      BoxConstraints constraints,
+      {String? preferredHalfTag}) {
     List<Tuple<int, int>> period = [];
     for (var i = 1; i <= 13; i++) {
       period.add(Tuple(i, i));
@@ -445,6 +454,7 @@ class CourseSchedulePage extends StatelessWidget {
                 sessionList: sessionList[i],
                 hideInfomation:
                     _courseScheduleController.hideCourseInfomation.value,
+                preferredHalfTag: preferredHalfTag,
               ),
             ),
           ),

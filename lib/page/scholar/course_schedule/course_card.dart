@@ -7,11 +7,13 @@ class SessionCard extends StatefulWidget {
   final List<Session> sessionList;
   final CupertinoDynamicColor backgroundColor;
   final bool hideInfomation;
+  final String? preferredHalfTag;
 
   const SessionCard({
     super.key,
     required this.sessionList,
     this.hideInfomation = false,
+    this.preferredHalfTag,
     this.backgroundColor = const CupertinoDynamicColor.withBrightness(
       color: Color.fromRGBO(0, 141, 236, 1.0),
       darkColor: Color.fromRGBO(0, 108, 180, 1.0),
@@ -90,8 +92,10 @@ class _SessionCardState extends State<SessionCard>
         if (widget.sessionList.length == 1) {
           Navigator.of(context).push(
             CupertinoPageRoute(
-              builder: (context) =>
-                  CourseDetailPage(courseId: widget.sessionList[0].id),
+              builder: (context) => CourseDetailPage(
+                courseId: widget.sessionList[0].id,
+                preferredHalfTag: widget.preferredHalfTag,
+              ),
               title: widget.sessionList[0].name,
             ),
           );
@@ -120,8 +124,10 @@ class _SessionCardState extends State<SessionCard>
                         onPressed: () {
                           Navigator.of(context).push(
                             CupertinoPageRoute(
-                              builder: (context) =>
-                                  CourseDetailPage(courseId: s.id),
+                              builder: (context) => CourseDetailPage(
+                                courseId: s.id,
+                                preferredHalfTag: widget.preferredHalfTag,
+                              ),
                               title: s.name,
                             ),
                           );

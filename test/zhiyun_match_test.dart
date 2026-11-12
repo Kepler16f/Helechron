@@ -1,5 +1,11 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:celechron/model/course.dart';
+import 'package:celechron/model/session.dart';
 import 'package:celechron/services/zhiyun_service.dart';
+import 'package:hive/hive.dart';
 
 void main() {
   group('ZhiyunService 课程名称与回放匹配逻辑测试', () {
@@ -313,6 +319,486 @@ void main() {
         isLive: true,
       );
       expect(Uri.parse(signed).queryParameters['clientUUID'], isNotEmpty);
+    });
+  });
+
+  group('ZhiyunService 秋/冬学期同门课程分流与下架链接防护测试', () {
+    Course makeCourse({
+      required String id,
+      required String name,
+      String teacher = '张老师',
+      required bool firstHalf,
+      required bool secondHalf,
+    }) {
+      final session = Session.fromJson({
+        'id': '$id-1',
+        'name': name,
+        'teacher': teacher,
+        'confirmed': true,
+        'firstHalf': firstHalf,
+        'secondHalf': secondHalf,
+        'oddWeek': true,
+        'evenWeek': true,
+        'day': 1,
+        'time': [1, 2],
+        'location': '紫金港',
+      });
+      return Course.fromGrsSession(session)..id = id;
+    }
+
+    test('无 sub_id 时 buildCourseLivingroomUrl 必须跳转 /coursedetail 避免 /livingroom 报课程已下架', () {
+      expect(
+        ZhiyunService.buildCourseLivingroomUrl('85940'),
+        equals('https://classroom.zju.edu.cn/coursedetail?course_id=85940&tenant_code=112'),
+      );
+      expect(
+        ZhiyunService.buildCourseLivingroomUrl('85940', subId: ''),
+        equals('https://classroom.zju.edu.cn/coursedetail?course_id=85940&tenant_code=112'),
+      );
+      expect(
+        ZhiyunService.buildCourseLivingroomUrl('85940', subId: '1973989'),
+        equals('https://classroom.zju.edu.cn/livingroom?course_id=85940&sub_id=1973989&tenant_code=112'),
+      );
+    });
+
+    test('inferSemesterHint 与 scoreSemesterMatch 精准区分纯秋、纯冬及秋冬分期课程', () {
+      final autumnCourse = makeCourse(
+        id: '(2026-2027-1)-061B0010-001',
+        name: '程序设计基础',
+        firstHalf: true,
+        secondHalf: false,
+      );
+      final winterCourse = makeCourse(
+        id: '(2026-2027-1)-061B0010-002',
+        name: '程序设计基础',
+        firstHalf: false,
+        secondHalf: true,
+      );
+      final fullCourse = makeCourse(
+        id: '(2026-2027-1)-061B0010-003',
+        name: '微积分(甲)Ⅰ',
+        firstHalf: true,
+        secondHalf: true,
+      );
+
+      final autumnHint = ZhiyunService.inferSemesterHint(course: autumnCourse);
+      expect(autumnHint.academicYearStart, equals(2026));
+      expect(autumnHint.halfTag, equals('autumn'));
+      expect(autumnHint.preferredYearMonths, containsAll(['2026-09', '2026-10']));
+      expect(autumnHint.preferredYearMonths, isNot(contains('2026-11')));
+
+      final winterHint = ZhiyunService.inferSemesterHint(course: winterCourse);
+      expect(winterHint.halfTag, equals('winter'));
+      expect(winterHint.preferredYearMonths, containsAll(['2026-11', '2026-12', '2027-01']));
+
+      final septHint = ZhiyunService.inferSemesterHint(
+        course: fullCourse,
+        targetDate: DateTime(2026, 9, 20),
+      );
+      expect(septHint.halfTag, equals('autumn'));
+      expect(septHint.exactYearMonth, equals('2026-09'));
+
+      // 即使处于 11 月（冬学期），查询纯秋课程也必须秋分高于冬且冬/旧课/已下架课为负分
+      final scoreAutumnForAutumn = ZhiyunService.scoreSemesterMatch(
+        autumnHint,
+        title: '程序设计基础(秋)',
+        termName: '2026-2027学年秋学期',
+        activeMonths: ['2026-9', '2026-10'],
+        nowForTiebreak: DateTime(2026, 11, 12),
+      );
+      final scoreWinterForAutumn = ZhiyunService.scoreSemesterMatch(
+        autumnHint,
+        title: '程序设计基础(冬)',
+        termName: '2026-2027学年冬学期',
+        activeMonths: ['2026-11', '2026-12'],
+        nowForTiebreak: DateTime(2026, 11, 12),
+      );
+      final score2023ForAutumn = ZhiyunService.scoreSemesterMatch(
+        autumnHint,
+        title: '程序设计基础',
+        termName: '2023-2024学年秋学期',
+      );
+      final scoreOffShelf = ZhiyunService.scoreSemesterMatch(
+        autumnHint,
+        title: '程序设计基础(秋)',
+        termName: '2026-2027学年秋学期',
+        meta: {'publish': 2, 'show': 'no'},
+      );
+
+      expect(scoreAutumnForAutumn, greaterThan(0));
+      expect(scoreWinterForAutumn, lessThan(0));
+      expect(score2023ForAutumn, lessThan(0));
+      expect(scoreOffShelf, lessThan(0));
+    });
+
+    test('isCatalogueMismatchedWithHint 不以超过45天误杀9月秋学期课程，但拦截下架与错学期目录', () {
+      final autumnCourse = makeCourse(
+        id: '(2026-2027-1)-061B0010-001',
+        name: '大学计算机基础',
+        firstHalf: true,
+        secondHalf: false,
+      );
+      final autumnHint = ZhiyunService.inferSemesterHint(course: autumnCourse);
+
+      final septLessons = [
+        {
+          'sub_id': '101',
+          'start_at':
+              (DateTime(2026, 9, 15, 8, 0).millisecondsSinceEpoch ~/ 1000)
+                  .toString(),
+        },
+        {
+          'sub_id': '102',
+          'start_at':
+              (DateTime(2026, 9, 22, 8, 0).millisecondsSinceEpoch ~/ 1000)
+                  .toString(),
+        },
+      ];
+      // 9月课程虽距11月12日超过45天，但完全匹配2026秋，不应判定为失效
+      expect(
+        ZhiyunService.isCatalogueMismatchedWithHint(
+          septLessons,
+          autumnHint,
+          meta: {'publish': '1', 'show': 'yes', 'term_name': '2026-2027学年秋学期'},
+        ),
+        isFalse,
+      );
+
+      // 已下架课程必须拦截
+      expect(
+        ZhiyunService.isCatalogueMismatchedWithHint(
+          septLessons,
+          autumnHint,
+          meta: {'publish': '2', 'show': 'no'},
+        ),
+        isTrue,
+      );
+
+      // 历史学年课程目录（2023秋）与2026秋冲突，必须拦截
+      final old2023Lessons = [
+        {
+          'sub_id': '99',
+          'start_at':
+              (DateTime(2023, 9, 15, 8, 0).millisecondsSinceEpoch ~/ 1000)
+                  .toString(),
+        },
+      ];
+      expect(
+        ZhiyunService.isCatalogueMismatchedWithHint(old2023Lessons, autumnHint),
+        isTrue,
+      );
+    });
+
+    test('extractSubItemsFromResponse 从 get-my-course-day 保留各自的 course_id 防混课', () {
+      final decoded = {
+        'code': 0,
+        'list': [
+          {
+            'id': '85001',
+            'sub_id': '1900001',
+            'title': '第1讲 面向对象',
+            'start_at': '1789440000',
+          },
+          {
+            'id': '85002',
+            'sub_id': '1900002',
+            'title': '其他同时段课程',
+            'start_at': '1789440000',
+          },
+        ],
+      };
+      final extracted = ZhiyunService.extractSubItemsFromResponse(decoded);
+      expect(extracted, hasLength(2));
+      expect(extracted[0]['course_id'], equals('85001'));
+      expect(extracted[0]['sub_id'], equals('1900001'));
+      expect(extracted[1]['course_id'], equals('85002'));
+      expect(extracted[1]['sub_id'], equals('1900002'));
+    });
+
+    test('Hive 实测：秋冬同名同老师课程同时在列时按学期/日期精确分流且最近观看互不覆盖', () async {
+      final tmpDir = Directory.systemTemp.createTempSync('zhiyun_match_test_');
+      Hive.init(tmpDir.path);
+      final box = await Hive.openBox('dbOptions');
+      addTearDown(() async {
+        ZhiyunService.clearCacheSync();
+        await box.close();
+        await Hive.deleteFromDisk();
+        if (tmpDir.existsSync()) {
+          tmpDir.deleteSync(recursive: true);
+        }
+      });
+
+      await box.put('zhiyun_cache_schema_v', 2);
+      await box.put(
+        'zhiyun_my_courses',
+        jsonEncode([
+          {
+            'course_id': '85001',
+            'course_title': '程序设计专题(秋)',
+            'teacher': '李老师',
+            'term_name': '2026-2027学年秋学期',
+            'active_months': ['2026-09', '2026-10'],
+          },
+          {
+            'course_id': '85002',
+            'course_title': '程序设计专题(冬)',
+            'teacher': '李老师',
+            'term_name': '2026-2027学年冬学期',
+            'active_months': ['2026-11', '2026-12'],
+          },
+        ]),
+      );
+
+      final autumnCourse = makeCourse(
+        id: '(2026-2027-1)-CS101-A',
+        name: '程序设计专题',
+        teacher: '李老师',
+        firstHalf: true,
+        secondHalf: false,
+      );
+      final winterCourse = makeCourse(
+        id: '(2026-2027-1)-CS101-W',
+        name: '程序设计专题',
+        teacher: '李老师',
+        firstHalf: false,
+        secondHalf: true,
+      );
+
+      expect(
+        ZhiyunService.getKnownCourseId(
+          autumnCourse.name,
+          courseCode: autumnCourse.id,
+          teacher: autumnCourse.teacher,
+          course: autumnCourse,
+        ),
+        equals('85001'),
+      );
+      expect(
+        ZhiyunService.getKnownCourseId(
+          winterCourse.name,
+          courseCode: winterCourse.id,
+          teacher: winterCourse.teacher,
+          course: winterCourse,
+        ),
+        equals('85002'),
+      );
+
+      // 无名后缀的分段课程，按 targetDate 月份也能切分
+      await box.put(
+        'zhiyun_my_courses',
+        jsonEncode([
+          {
+            'course_id': '86001',
+            'course_title': '高等数学',
+            'teacher': '王老师',
+            'active_months': ['2026-09', '2026-10'],
+          },
+          {
+            'course_id': '86002',
+            'course_title': '高等数学',
+            'teacher': '王老师',
+            'active_months': ['2026-11', '2026-12'],
+          },
+        ]),
+      );
+      ZhiyunService.clearCacheSync();
+
+      final sharedCourse = makeCourse(
+        id: '(2026-2027-1)-MATH101-01',
+        name: '高等数学',
+        teacher: '王老师',
+        firstHalf: true,
+        secondHalf: true,
+      );
+      expect(
+        ZhiyunService.getKnownCourseId(
+          sharedCourse.name,
+          courseCode: sharedCourse.id,
+          teacher: sharedCourse.teacher,
+          course: sharedCourse,
+          targetDate: DateTime(2026, 9, 18),
+        ),
+        equals('86001'),
+      );
+      expect(
+        ZhiyunService.getKnownCourseId(
+          sharedCourse.name,
+          courseCode: sharedCourse.id,
+          teacher: sharedCourse.teacher,
+          course: sharedCourse,
+          targetDate: DateTime(2026, 11, 12),
+        ),
+        equals('86002'),
+      );
+
+      // 验证断点播放记录按 courseCode/scopeKey 隔离不串档
+      await ZhiyunService.saveLastWatchedReplay(
+        courseName: '程序设计专题',
+        lessonTitle: '第1讲（秋）',
+        livingroomUrl:
+            'https://classroom.zju.edu.cn/livingroom?course_id=85001&sub_id=1001&tenant_code=112',
+        courseId: '85001',
+        subId: '1001',
+        courseCode: autumnCourse.id,
+        scopeKey: '2026_autumn',
+      );
+      await ZhiyunService.saveLastWatchedReplay(
+        courseName: '程序设计专题',
+        lessonTitle: '第8讲（冬）',
+        livingroomUrl:
+            'https://classroom.zju.edu.cn/livingroom?course_id=85002&sub_id=2001&tenant_code=112',
+        courseId: '85002',
+        subId: '2001',
+        courseCode: winterCourse.id,
+        scopeKey: '2026_winter',
+      );
+
+      final lastAutumn = ZhiyunService.getLastWatchedReplay(
+        courseName: '程序设计专题',
+        courseCode: autumnCourse.id,
+        scopeKey: '2026_autumn',
+      );
+      final lastWinter = ZhiyunService.getLastWatchedReplay(
+        courseName: '程序设计专题',
+        courseCode: winterCourse.id,
+        scopeKey: '2026_winter',
+      );
+      expect(lastAutumn?['courseId'], equals('85001'));
+      expect(lastAutumn?['lessonTitle'], equals('第1讲（秋）'));
+      expect(lastWinter?['courseId'], equals('85002'));
+      expect(lastWinter?['lessonTitle'], equals('第8讲（冬）'));
+    });
+
+    test('ZDBK 无选课课号课程(id/session.id 为 null)支持春夏秋冬短学期精准区分', () async {
+      Course makeNullIdCourse({
+        required String name,
+        required bool firstHalf,
+        required bool secondHalf,
+      }) {
+        final session = Session.fromJson({
+          'id': null,
+          'name': name,
+          'teacher': '陈老师',
+          'confirmed': true,
+          'firstHalf': firstHalf,
+          'secondHalf': secondHalf,
+          'oddWeek': true,
+          'evenWeek': true,
+          'day': 2,
+          'time': [3, 4],
+          'location': '玉泉',
+        });
+        return Course.fromGrsSession(session)..id = null;
+      }
+
+      final springNull = makeNullIdCourse(
+        name: '数值分析',
+        firstHalf: true,
+        secondHalf: false,
+      );
+      final summerNull = makeNullIdCourse(
+        name: '数值分析',
+        firstHalf: false,
+        secondHalf: true,
+      );
+
+      final springHint = ZhiyunService.inferSemesterHint(
+        course: springNull,
+        semesterName: '2025-2026春夏',
+        preferredHalfTag: 'spring',
+      );
+      final summerHint = ZhiyunService.inferSemesterHint(
+        course: summerNull,
+        semesterName: '2025-2026春夏',
+        preferredHalfTag: 'summer',
+      );
+
+      expect(springHint.academicYearStart, equals(2025));
+      expect(springHint.halfTag, equals('spring'));
+      expect(springHint.scopeKey, equals('2025_spring'));
+      expect(summerHint.academicYearStart, equals(2025));
+      expect(summerHint.halfTag, equals('summer'));
+      expect(summerHint.scopeKey, equals('2025_summer'));
+
+      await ZhiyunService.saveCourseId(
+        '数值分析',
+        '96001',
+        course: springNull,
+        semesterName: '2025-2026春夏',
+        preferredHalfTag: 'spring',
+      );
+      await ZhiyunService.saveCourseId(
+        '数值分析',
+        '96002',
+        course: summerNull,
+        semesterName: '2025-2026春夏',
+        preferredHalfTag: 'summer',
+      );
+
+      expect(
+        ZhiyunService.getKnownCourseId(
+          '数值分析',
+          course: springNull,
+          semesterName: '2025-2026春夏',
+          preferredHalfTag: 'spring',
+        ),
+        equals('96001'),
+      );
+      expect(
+        ZhiyunService.getKnownCourseId(
+          '数值分析',
+          course: summerNull,
+          semesterName: '2025-2026春夏',
+          preferredHalfTag: 'summer',
+        ),
+        equals('96002'),
+      );
+    });
+
+    test('跨半学期/短学期边界日期防护：单半学期标记不被11月/2月/8月课表溢出日期覆盖', () {
+      final pureAutumn = makeCourse(
+        id: '(2026-2027-1)-PHY101-01',
+        name: '大学物理',
+        firstHalf: true,
+        secondHalf: false,
+      );
+      final autumnSpillHint = ZhiyunService.inferSemesterHint(
+        course: pureAutumn,
+        semesterName: '2026-2027秋冬',
+        targetDate: DateTime(2026, 11, 2),
+      );
+      expect(autumnSpillHint.halfTag, equals('autumn'));
+      expect(autumnSpillHint.scopeKey, equals('2026_autumn'));
+
+      final pureSpring = makeCourse(
+        id: '(2025-2026-2)-PHY102-01',
+        name: '大学物理Ⅱ',
+        firstHalf: true,
+        secondHalf: false,
+      );
+      final springFebHint = ZhiyunService.inferSemesterHint(
+        course: pureSpring,
+        semesterName: '2025-2026春夏',
+        targetDate: DateTime(2026, 2, 20),
+      );
+      expect(springFebHint.academicYearStart, equals(2025));
+      expect(springFebHint.halfTag, equals('spring'));
+      expect(springFebHint.scopeKey, equals('2025_spring'));
+
+      final summerShortTerm = makeCourse(
+        id: '(2025-2026-2)-PRACT101-01',
+        name: '工程实践',
+        firstHalf: false,
+        secondHalf: true,
+      );
+      final summerAugHint = ZhiyunService.inferSemesterHint(
+        course: summerShortTerm,
+        semesterName: '2025-2026春夏',
+        targetDate: DateTime(2026, 8, 5),
+      );
+      expect(summerAugHint.academicYearStart, equals(2025));
+      expect(summerAugHint.halfTag, equals('summer'));
+      expect(summerAugHint.scopeKey, equals('2025_summer'));
     });
   });
 }

@@ -33,42 +33,65 @@ class CourseDetailPage extends StatelessWidget {
   final Course? course;
   final Period? period;
   final bool showZhiyun;
+  final String? semesterName;
+  final String? preferredHalfTag;
 
-  CourseDetailPage({
+  factory CourseDetailPage({
     required String? courseId,
-    this.period,
-    this.showZhiyun = true,
-    super.key,
-  }) : course = _findCourse(courseId);
+    Period? period,
+    bool showZhiyun = true,
+    String? semesterName,
+    String? preferredHalfTag,
+    Key? key,
+  }) {
+    final resolved = _findCourseWithSemester(courseId);
+    return CourseDetailPage._(
+      course: resolved.$1,
+      period: period,
+      showZhiyun: showZhiyun,
+      semesterName: semesterName ?? resolved.$2,
+      preferredHalfTag: preferredHalfTag,
+      key: key,
+    );
+  }
 
-  /// 依据不同来源的标识定位课程。
+  const CourseDetailPage._({
+    required this.course,
+    this.period,
+    required this.showZhiyun,
+    this.semesterName,
+    this.preferredHalfTag,
+    super.key,
+  });
+
+  /// 依据不同来源的标识定位课程及其所属学期名称。
   ///
   /// 本科课程由 ZDBK 课表创建时没有课号（[Course.id] 为 null），只有成绩
   /// 补全后才会带上选课课号，因此不能只用 [Course.id] 匹配：
   /// - 课程表 / 日历：传入 [Session.id]（可能为 null）
   /// - 成绩卡片：传入 [Grade.id]（选课课号，对应 [Course.grade])
   /// - 课程列表：传入 [Course.id]
-  static Course? _findCourse(String? courseId) {
+  static (Course?, String?) _findCourseWithSemester(String? courseId) {
     if (courseId == null || courseId.isEmpty) {
-      return null;
+      return (null, null);
     }
     try {
       final scholar = Get.find<Rx<Scholar>>(tag: 'scholar');
       for (final semester in scholar.value.semesters) {
         final byKey = semester.courses[courseId];
         if (byKey != null) {
-          return byKey;
+          return (byKey, semester.name);
         }
         for (final candidate in semester.courses.values) {
           if (candidate.id == courseId) {
-            return candidate;
+            return (candidate, semester.name);
           }
           if (candidate.grade?.id == courseId) {
-            return candidate;
+            return (candidate, semester.name);
           }
           for (final session in candidate.sessions) {
             if (session.id != null && session.id == courseId) {
-              return candidate;
+              return (candidate, semester.name);
             }
           }
         }
@@ -83,7 +106,7 @@ class CourseDetailPage extends StatelessWidget {
         stackTrace: stackTrace,
       );
     }
-    return null;
+    return (null, null);
   }
 
   Widget createSessionCard(context, List<Session> sessions) {
@@ -498,7 +521,12 @@ class CourseDetailPage extends StatelessWidget {
   }
 
   Widget createZhiyunCard(BuildContext context, Course c) {
-    return ZhiyunCard(course: c, period: period);
+    return ZhiyunCard(
+      course: c,
+      period: period,
+      semesterName: semesterName,
+      preferredHalfTag: preferredHalfTag,
+    );
   }
 
   @override
@@ -550,7 +578,11 @@ class CourseDetailPage extends StatelessWidget {
               child: createZhiyunCard(context, c),
             ),
           SliverToBoxAdapter(
-            child: CoursewareDownloadCard(course: c),
+            child: CoursewareDownloadCard(
+              course: c,
+              semesterName: semesterName,
+              preferredHalfTag: preferredHalfTag,
+            ),
           ),
           SliverToBoxAdapter(
             child: CourseHomeworkCard(course: c),
@@ -583,8 +615,16 @@ class CourseDetailPage extends StatelessWidget {
 class ZhiyunCard extends StatefulWidget {
   final Course course;
   final Period? period;
+  final String? semesterName;
+  final String? preferredHalfTag;
 
-  const ZhiyunCard({super.key, required this.course, this.period});
+  const ZhiyunCard({
+    super.key,
+    required this.course,
+    this.period,
+    this.semesterName,
+    this.preferredHalfTag,
+  });
 
   @override
   State<ZhiyunCard> createState() => _ZhiyunCardState();
@@ -603,15 +643,26 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
   void didUpdateWidget(covariant ZhiyunCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.course.name != widget.course.name ||
-        oldWidget.period?.startTime != widget.period?.startTime) {
+        oldWidget.period?.startTime != widget.period?.startTime ||
+        oldWidget.semesterName != widget.semesterName ||
+        oldWidget.preferredHalfTag != widget.preferredHalfTag) {
       _load();
     }
   }
+
+  String? get _semesterScopeKey => ZhiyunService.inferSemesterHint(
+        course: widget.course,
+        semesterName: widget.semesterName,
+        preferredHalfTag: widget.preferredHalfTag,
+        targetDate: widget.period?.startTime,
+      ).scopeKey;
 
   void _load() {
     _future = ZhiyunService.getLessonReplay(
       course: widget.course,
       period: widget.period,
+      semesterName: widget.semesterName,
+      preferredHalfTag: widget.preferredHalfTag,
     );
   }
 
@@ -623,6 +674,8 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
       livingroomUrl: url,
       courseId: courseId,
       subId: subId,
+      courseCode: widget.course.id,
+      scopeKey: _semesterScopeKey,
     );
     ZhiyunService.openUrl(url);
     if (mounted) {
@@ -644,6 +697,8 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
       livingroomUrl: url,
       courseId: courseId,
       subId: subId,
+      courseCode: widget.course.id,
+      scopeKey: _semesterScopeKey,
     );
     if (mounted) {
       setState(() {});
@@ -804,6 +859,10 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                   widget.course.name,
                   courseCode: widget.course.id,
                   courseId: currentId,
+                  course: widget.course,
+                  semesterName: widget.semesterName,
+                  preferredHalfTag: widget.preferredHalfTag,
+                  targetDate: widget.period?.startTime,
                 );
                 setState(() {
                   _load();
@@ -828,6 +887,10 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                 widget.course.name,
                 cid,
                 courseCode: widget.course.id,
+                course: widget.course,
+                semesterName: widget.semesterName,
+                preferredHalfTag: widget.preferredHalfTag,
+                targetDate: widget.period?.startTime,
               );
               setState(() {
                 _load();
@@ -934,7 +997,8 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                                 final lastWatched =
                                     ZhiyunService.getLastWatchedReplay(
                                   courseName: widget.course.name,
-                                  courseId: widget.course.id,
+                                  courseCode: widget.course.id,
+                                  scopeKey: _semesterScopeKey,
                                 );
                                 if (lastWatched != null &&
                                     lastWatched['lessonTitle'] != null) {
@@ -1523,8 +1587,15 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
 
 class CoursewareDownloadCard extends StatefulWidget {
   final Course course;
+  final String? semesterName;
+  final String? preferredHalfTag;
 
-  const CoursewareDownloadCard({super.key, required this.course});
+  const CoursewareDownloadCard({
+    super.key,
+    required this.course,
+    this.semesterName,
+    this.preferredHalfTag,
+  });
 
   @override
   State<CoursewareDownloadCard> createState() => _CoursewareDownloadCardState();
@@ -1570,6 +1641,10 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
       final zhiyunCid = ZhiyunService.getKnownCourseId(
         widget.course.name,
         courseCode: widget.course.id,
+        teacher: widget.course.teacher,
+        course: widget.course,
+        semesterName: widget.semesterName,
+        preferredHalfTag: widget.preferredHalfTag,
       );
       if (zhiyunCid != null && zhiyunCid.isNotEmpty) {
         final zyFiles = await ZhiyunService.fetchZhiyunCourseware(zhiyunCid);

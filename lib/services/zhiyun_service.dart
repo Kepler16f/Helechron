@@ -40,6 +40,34 @@ class ZhiyunReplayInfo {
   });
 }
 
+/// 课程所处的学年/学期/半学期（秋/冬/春/夏）提示，用于多学期同名课程精准分流
+class ZhiyunSemesterHint {
+  final int? academicYearStart;
+  final int? semesterTerm;
+  final String? halfTag;
+  final String? exactYearMonth;
+  final Set<String> preferredYearMonths;
+
+  const ZhiyunSemesterHint({
+    this.academicYearStart,
+    this.semesterTerm,
+    this.halfTag,
+    this.exactYearMonth,
+    this.preferredYearMonths = const {},
+  });
+
+  String? get scopeKey {
+    if (academicYearStart != null && halfTag != null) {
+      return '${academicYearStart}_$halfTag';
+    }
+    if (academicYearStart != null && semesterTerm != null) {
+      return '${academicYearStart}_t$semesterTerm';
+    }
+    if (halfTag != null) return halfTag;
+    return exactYearMonth;
+  }
+}
+
 /// 浙大智云课堂（Zhiyun Classroom）全自动动态同步与回放直达服务
 /// 遵循“千人千面、全动态在线发现、绝不死板硬编码”设计原则
 class ZhiyunService {
@@ -57,6 +85,11 @@ class ZhiyunService {
   /// 智云课程目录缓存 (course_id -> 课节列表)
   static final Map<String, List<Map<String, dynamic>>> _catalogueCache = {};
   static final Map<String, DateTime> _catalogueCacheTime = {};
+
+  /// 智云课程元数据缓存 (course_id -> publish/show/term_name/is_off_shelf 等)
+  static final Map<String, Map<String, dynamic>> _courseDetailMetaCache = {};
+
+  static const int _kCacheSchemaVersion = 2;
 
   /// 智云认证 Token 与用户信息内存缓存
   static String? _cachedZhiyunToken;
@@ -614,7 +647,7 @@ class ZhiyunService {
   }
 
   /// 判断用户是否对该课程执行过显式解绑
-  static bool isExplicitlyUnbound(String courseName) {
+  static bool isExplicitlyUnbound(String courseName, {String? courseCode}) {
     final box = _getHiveBox();
     if (box == null) return false;
     final cleaned = cleanCourseName(courseName);
@@ -626,21 +659,578 @@ class ZhiyunService {
         box.get('zhiyun_unbind_$normalized') == true ||
         (core.isNotEmpty && box.get('zhiyun_unbind_$core') == true) ||
         (coreNormalized.isNotEmpty &&
-            box.get('zhiyun_unbind_$coreNormalized') == true);
+            box.get('zhiyun_unbind_$coreNormalized') == true) ||
+        (courseCode != null &&
+            courseCode.isNotEmpty &&
+            box.get('zhiyun_unbind_$courseCode') == true);
+  }
+
+  static String _normalizeYearMonth(String raw) {
+    final trimmed = raw.trim();
+    final m = RegExp(r'^(\d{4})-(\d{1,2})$').firstMatch(trimmed);
+    if (m != null) {
+      return '${m.group(1)}-${m.group(2)!.padLeft(2, '0')}';
+    }
+    return trimmed;
+  }
+
+  static String? _extractHalfTagFromText(String text, {int? defaultTerm}) {
+    if (text.isEmpty) return null;
+    final sanitized = text
+        .replaceAll('秋冬', ' ')
+        .replaceAll('春夏', ' ')
+        .replaceAll('冬春', ' ')
+        .replaceAll('夏秋', ' ')
+        .replaceAll('春秋', ' ');
+    if (RegExp(r'(秋学期|[（(\[【\s]秋[）)\]】\s]?|秋$)')
+        .hasMatch(sanitized)) {
+      return 'autumn';
+    }
+    if (RegExp(r'(冬学期|[（(\[【\s]冬[）)\]】\s]?|冬$)')
+        .hasMatch(sanitized)) {
+      return 'winter';
+    }
+    if (RegExp(r'(春学期|[（(\[【\s]春[）)\]】\s]?|春$)').hasMatch(sanitized)) {
+      return 'spring';
+    }
+    if (RegExp(r'(夏学期|[（(\[【\s]夏[）)\]】\s]?|夏$)').hasMatch(sanitized)) {
+      return 'summer';
+    }
+    if (RegExp(r'(前半学期|[（(\[【]前半[）)\]】]|^前半$)').hasMatch(sanitized)) {
+      return defaultTerm == 2 ? 'spring' : 'autumn';
+    }
+    if (RegExp(r'(后半学期|[（(\[【]后半[）)\]】]|^后半$)').hasMatch(sanitized)) {
+      return defaultTerm == 2 ? 'summer' : 'winter';
+    }
+    return null;
+  }
+
+  static ({int? yearStart, int? term}) _parseYearAndTerm(String text) {
+    if (text.isEmpty) return (yearStart: null, term: null);
+    final codeMatch = RegExp(r'(\d{4})-(\d{4})-([12])').firstMatch(text);
+    if (codeMatch != null) {
+      return (
+        yearStart: int.tryParse(codeMatch.group(1)!),
+        term: int.tryParse(codeMatch.group(3)!),
+      );
+    }
+    final nameMatch =
+        RegExp(r'(\d{4})[-~](\d{4})\s*(?:学年)?\s*(秋冬|春夏|秋|冬|春|夏)?')
+            .firstMatch(text);
+    if (nameMatch != null) {
+      final tag = nameMatch.group(3) ?? '';
+      int? term;
+      if (tag.contains('秋') || tag.contains('冬')) {
+        term = 1;
+      } else if (tag.contains('春') || tag.contains('夏')) {
+        term = 2;
+      }
+      return (
+        yearStart: int.tryParse(nameMatch.group(1)!),
+        term: term,
+      );
+    }
+    return (yearStart: null, term: null);
+  }
+
+  static String? _inferHalfFromMonths(
+    Iterable<String> months, {
+    int? defaultTerm,
+    String termText = '',
+  }) {
+    final monthNums = <int>[];
+    for (final ym in months) {
+      final norm = _normalizeYearMonth(ym);
+      final m = int.tryParse(norm.split('-').last);
+      if (m != null) monthNums.add(m);
+    }
+    if (monthNums.isEmpty) return null;
+
+    final hasSpringOrSummerHint =
+        termText.contains('春') || termText.contains('夏') || defaultTerm == 2;
+    final hasAutumnOrWinterHint =
+        termText.contains('秋') || termText.contains('冬') || defaultTerm == 1;
+
+    if (monthNums.every((m) => m == 8 || m == 9 || m == 10)) {
+      if (monthNums.every((m) => m == 8) && hasSpringOrSummerHint) {
+        return 'summer';
+      }
+      return 'autumn';
+    }
+    if (monthNums.every((m) => m == 11 || m == 12 || m == 1 || m == 2)) {
+      if (monthNums.every((m) => m == 2) && hasSpringOrSummerHint) {
+        return 'spring';
+      }
+      return 'winter';
+    }
+    if (monthNums.every((m) => m == 2 || m == 3 || m == 4)) {
+      if (monthNums.every((m) => m == 2) && hasAutumnOrWinterHint) {
+        return 'winter';
+      }
+      return 'spring';
+    }
+    if (monthNums.every((m) => m == 5 || m == 6 || m == 7)) {
+      return 'summer';
+    }
+    return null;
+  }
+
+  /// 根据课程对象、选课代码、所在学期与目标上课日期推断所属学年/学期/半学期（秋/冬/春/夏）
+  static ZhiyunSemesterHint inferSemesterHint({
+    Course? course,
+    String? courseCode,
+    String? courseName,
+    String? semesterName,
+    String? preferredHalfTag,
+    DateTime? targetDate,
+  }) {
+    int? yearStart;
+    int? term;
+    final codeSources = <String>[
+      if (courseCode != null && courseCode.isNotEmpty) courseCode,
+      if (course?.id != null && course!.id!.isNotEmpty) course.id!,
+      if (course != null)
+        for (final s in course.sessions)
+          if (s.id != null && s.id!.isNotEmpty) s.id!,
+      if (semesterName != null && semesterName.isNotEmpty) semesterName,
+    ];
+    for (final src in codeSources) {
+      final parsed = _parseYearAndTerm(src);
+      yearStart ??= parsed.yearStart;
+      term ??= parsed.term;
+      if (yearStart != null && term != null) break;
+    }
+
+    final rawName = courseName ?? course?.name ?? '';
+    if ((yearStart == null || term == null) && rawName.isNotEmpty) {
+      final parsed = _parseYearAndTerm(rawName);
+      yearStart ??= parsed.yearStart;
+      term ??= parsed.term;
+    }
+
+    String? halfTag;
+    if (course != null && course.sessions.isNotEmpty) {
+      final hasFirst = course.sessions.any((s) => s.firstHalf);
+      final hasSecond = course.sessions.any((s) => s.secondHalf);
+      if (hasFirst && !hasSecond) {
+        halfTag = (term == 2) ? 'spring' : 'autumn';
+      } else if (hasSecond && !hasFirst) {
+        halfTag = (term == 2) ? 'summer' : 'winter';
+      }
+    }
+
+    String? exactYearMonth;
+    if (targetDate != null) {
+      final y = targetDate.year;
+      final m = targetDate.month;
+      exactYearMonth = '$y-${m.toString().padLeft(2, '0')}';
+      if (m == 8) {
+        if (term == 2) {
+          halfTag ??= 'summer';
+          yearStart ??= y - 1;
+        } else {
+          halfTag ??= 'autumn';
+          yearStart ??= y;
+          term ??= 1;
+        }
+      } else if (m == 9 || m == 10) {
+        halfTag ??= 'autumn';
+        yearStart ??= y;
+        term ??= 1;
+      } else if (m == 11 || m == 12) {
+        halfTag ??= 'winter';
+        yearStart ??= y;
+        term ??= 1;
+      } else if (m == 1) {
+        halfTag ??= 'winter';
+        yearStart ??= y - 1;
+        term ??= 1;
+      } else if (m == 2) {
+        yearStart ??= y - 1;
+        if (term == 2 || (term == null && targetDate.day >= 20)) {
+          halfTag ??= 'spring';
+          term ??= 2;
+        } else {
+          halfTag ??= 'winter';
+          term ??= 1;
+        }
+      } else if (m == 3 || m == 4) {
+        halfTag ??= 'spring';
+        yearStart ??= y - 1;
+        term ??= 2;
+      } else {
+        halfTag ??= 'summer';
+        yearStart ??= y - 1;
+        term ??= 2;
+      }
+    } else {
+      if (preferredHalfTag != null && preferredHalfTag.isNotEmpty) {
+        halfTag ??= preferredHalfTag;
+      }
+      halfTag ??= _extractHalfTagFromText(rawName, defaultTerm: term);
+      if (halfTag == 'autumn' || halfTag == 'winter') {
+        term ??= 1;
+      } else if (halfTag == 'spring' || halfTag == 'summer') {
+        term ??= 2;
+      }
+    }
+
+    final preferred = <String>{};
+    if (yearStart != null) {
+      if (halfTag == 'autumn') {
+        preferred.addAll([
+          '$yearStart-08',
+          '$yearStart-09',
+          '$yearStart-10',
+        ]);
+      } else if (halfTag == 'winter') {
+        preferred.addAll([
+          '$yearStart-11',
+          '$yearStart-12',
+          '${yearStart + 1}-01',
+          '${yearStart + 1}-02',
+        ]);
+      } else if (halfTag == 'spring') {
+        preferred.addAll([
+          '${yearStart + 1}-02',
+          '${yearStart + 1}-03',
+          '${yearStart + 1}-04',
+        ]);
+      } else if (halfTag == 'summer') {
+        preferred.addAll([
+          '${yearStart + 1}-05',
+          '${yearStart + 1}-06',
+          '${yearStart + 1}-07',
+        ]);
+      } else if (term == 1) {
+        preferred.addAll([
+          '$yearStart-08',
+          '$yearStart-09',
+          '$yearStart-10',
+          '$yearStart-11',
+          '$yearStart-12',
+          '${yearStart + 1}-01',
+          '${yearStart + 1}-02',
+        ]);
+      } else if (term == 2) {
+        preferred.addAll([
+          '${yearStart + 1}-02',
+          '${yearStart + 1}-03',
+          '${yearStart + 1}-04',
+          '${yearStart + 1}-05',
+          '${yearStart + 1}-06',
+          '${yearStart + 1}-07',
+        ]);
+      }
+    }
+    if (exactYearMonth != null) {
+      preferred.add(exactYearMonth);
+    }
+
+    return ZhiyunSemesterHint(
+      academicYearStart: yearStart,
+      semesterTerm: term,
+      halfTag: halfTag,
+      exactYearMonth: exactYearMonth,
+      preferredYearMonths: preferred,
+    );
+  }
+
+  static bool isCourseOffShelfMeta(Map? data) {
+    if (data == null) return false;
+    if (data['is_off_shelf'] == true) return true;
+    final publish = data['publish']?.toString().trim();
+    final show = data['show']?.toString().trim().toLowerCase();
+    return publish == '2' || show == 'no';
+  }
+
+  static int scoreSemesterMatch(
+    ZhiyunSemesterHint hint, {
+    String title = '',
+    String? termName,
+    Iterable<dynamic>? activeMonths,
+    List<DateTime>? lessonDates,
+    Map? meta,
+    DateTime? nowForTiebreak,
+  }) {
+    if (isCourseOffShelfMeta(meta)) return -1000;
+
+    int score = 0;
+    final combined = '${termName ?? ''} $title'.trim();
+
+    final ymMatch = RegExp(r'(\d{4})[-~](\d{4})').firstMatch(combined);
+    if (ymMatch != null && hint.academicYearStart != null) {
+      final candStart = int.tryParse(ymMatch.group(1)!);
+      if (candStart == hint.academicYearStart) {
+        score += 100;
+      } else if (candStart != null) {
+        score -= 150;
+      }
+    }
+
+    final candHalf =
+        _extractHalfTagFromText(combined, defaultTerm: hint.semesterTerm);
+    final isFullAutumnWinter = combined.contains('秋冬');
+    final isFullSpringSummer = combined.contains('春夏');
+    if (hint.halfTag != null) {
+      if (candHalf == hint.halfTag) {
+        score += 60;
+      } else if (candHalf != null) {
+        score -= 120;
+      } else if ((hint.halfTag == 'autumn' || hint.halfTag == 'winter') &&
+          isFullAutumnWinter) {
+        score += 20;
+      } else if ((hint.halfTag == 'spring' || hint.halfTag == 'summer') &&
+          isFullSpringSummer) {
+        score += 20;
+      }
+    }
+
+    final normMonths = <String>{};
+    if (activeMonths != null) {
+      for (final m in activeMonths) {
+        final s = _normalizeYearMonth(m.toString());
+        if (s.isNotEmpty) normMonths.add(s);
+      }
+    }
+    if (normMonths.isNotEmpty) {
+      if (hint.exactYearMonth != null &&
+          normMonths.contains(hint.exactYearMonth)) {
+        score += 90;
+      } else if (hint.preferredYearMonths.isNotEmpty) {
+        final overlap = normMonths.intersection(hint.preferredYearMonths).length;
+        if (overlap > 0) {
+          score += 50;
+        } else {
+          score -= 80;
+        }
+      }
+    }
+
+    if (lessonDates != null && lessonDates.isNotEmpty) {
+      int exactCount = 0;
+      int prefCount = 0;
+      int yearCount = 0;
+      for (final dt in lessonDates) {
+        final ym = '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
+        if (hint.exactYearMonth != null && ym == hint.exactYearMonth) {
+          exactCount++;
+        }
+        if (hint.preferredYearMonths.contains(ym)) {
+          prefCount++;
+        }
+        if (hint.academicYearStart != null) {
+          final start = DateTime(hint.academicYearStart!, 8, 1);
+          final end = DateTime(hint.academicYearStart! + 1, 8, 1);
+          if (!dt.isBefore(start) && dt.isBefore(end)) {
+            yearCount++;
+          }
+        }
+      }
+      if (exactCount > 0) score += 90;
+      if (hint.preferredYearMonths.isNotEmpty) {
+        if (prefCount > 0) {
+          score += 20 + (prefCount * 60) ~/ lessonDates.length;
+        } else if (hint.academicYearStart != null) {
+          if (yearCount == 0) {
+            score -= 150;
+          } else {
+            score -= 80;
+          }
+        }
+      }
+    }
+
+    if (hint.halfTag == null && hint.exactYearMonth == null) {
+      final ref = nowForTiebreak ?? DateTime.now();
+      final curYm = '${ref.year}-${ref.month.toString().padLeft(2, '0')}';
+      if (normMonths.contains(curYm)) {
+        score += 15;
+      }
+    }
+    return score;
+  }
+
+  static bool isCatalogueMismatchedWithHint(
+    List<Map<String, dynamic>> catalogue,
+    ZhiyunSemesterHint hint, {
+    Map<String, dynamic>? meta,
+  }) {
+    if (isCourseOffShelfMeta(meta)) return true;
+    if (hint.halfTag == null && hint.academicYearStart == null) return false;
+    final lessonDates = <DateTime>[];
+    for (final item in catalogue) {
+      final dt = parseZhiyunTimestamp(_rawStartAt(item));
+      if (dt != null) lessonDates.add(dt);
+    }
+    final title = meta?['title']?.toString() ?? '';
+    final termName = meta?['term_name']?.toString();
+    if (lessonDates.isEmpty && (termName == null || termName.isEmpty)) {
+      return false;
+    }
+    return scoreSemesterMatch(
+          hint,
+          title: title,
+          termName: termName,
+          lessonDates: lessonDates,
+          meta: meta,
+        ) <
+        0;
+  }
+
+  static List<String> _buildScopedCidKeys({
+    required String cleaned,
+    required String courseName,
+    required String normalized,
+    required String core,
+    required String coreNormalized,
+    String? courseCode,
+    String? scopeKey,
+  }) {
+    final keys = <String>[];
+    if (courseCode != null && courseCode.isNotEmpty) {
+      if (scopeKey != null && scopeKey.isNotEmpty) {
+        keys.add('${courseCode}__$scopeKey');
+      }
+      keys.add(courseCode);
+    }
+    if (scopeKey != null && scopeKey.isNotEmpty) {
+      keys.add('${cleaned}__$scopeKey');
+      if (core.isNotEmpty && core != cleaned) {
+        keys.add('${core}__$scopeKey');
+      }
+    }
+    keys.addAll([
+      cleaned,
+      courseName,
+      normalized,
+      if (core.isNotEmpty) core,
+      if (coreNormalized.isNotEmpty) coreNormalized,
+    ]);
+    return keys;
+  }
+
+  static void _cacheResolvedCourseId(
+    String courseId, {
+    required String cleaned,
+    required String courseName,
+    required String normalized,
+    required String core,
+    required String coreNormalized,
+    String? courseCode,
+    String? scopeKey,
+    bool persistToBox = false,
+  }) {
+    final box = persistToBox ? _getHiveBox() : null;
+    if (courseCode != null && courseCode.isNotEmpty) {
+      if (scopeKey != null && scopeKey.isNotEmpty) {
+        final k = '${courseCode}__$scopeKey';
+        _userCourseIds[k] = courseId;
+        box?.put('zhiyun_cid_$k', courseId);
+      }
+      _userCourseIds[courseCode] = courseId;
+      box?.put('zhiyun_cid_$courseCode', courseId);
+    }
+    if (scopeKey != null && scopeKey.isNotEmpty) {
+      final scKey = '${cleaned}__$scopeKey';
+      _userCourseIds[scKey] = courseId;
+      box?.put('zhiyun_cid_$scKey', courseId);
+      if (core.isNotEmpty && core != cleaned) {
+        final coreKey = '${core}__$scopeKey';
+        _userCourseIds[coreKey] = courseId;
+        box?.put('zhiyun_cid_$coreKey', courseId);
+      }
+    } else {
+      _userCourseIds[cleaned] = courseId;
+      _userCourseIds[courseName] = courseId;
+      _userCourseIds[normalized] = courseId;
+      if (core.isNotEmpty) _userCourseIds[core] = courseId;
+      if (coreNormalized.isNotEmpty) _userCourseIds[coreNormalized] = courseId;
+      box?.put('zhiyun_cid_$cleaned', courseId);
+      box?.put('zhiyun_cid_$courseName', courseId);
+      box?.put('zhiyun_cid_$normalized', courseId);
+      if (core.isNotEmpty) box?.put('zhiyun_cid_$core', courseId);
+    }
+  }
+
+  static bool _isManuallyPinned(
+    String courseName, {
+    String? courseCode,
+    ZhiyunSemesterHint? hint,
+  }) {
+    final box = _getHiveBox();
+    if (box == null) return false;
+    final cleaned = cleanCourseName(courseName);
+    final normalized = normalizeCourseName(courseName);
+    final core = extractCoreCourseName(courseName);
+    final keys = _buildScopedCidKeys(
+      cleaned: cleaned,
+      courseName: courseName,
+      normalized: normalized,
+      core: core,
+      coreNormalized: normalizeCourseName(core),
+      courseCode: courseCode,
+      scopeKey: hint?.scopeKey,
+    );
+    return keys.any((k) {
+      final v = box.get('zhiyun_manual_cid_$k');
+      return v != null && v.toString().isNotEmpty;
+    });
+  }
+
+  static void _ensureCacheSchemaUpgraded() {
+    final box = _getHiveBox();
+    if (box == null) return;
+    if (box.get('zhiyun_cache_schema_v') == _kCacheSchemaVersion) return;
+
+    final hasLegacySync = box.containsKey('zhiyun_my_courses_time') ||
+        box.keys.any((k) => k is String && k.startsWith('zhiyun_cid_'));
+    if (hasLegacySync) {
+      final staleKeys = <dynamic>[];
+      for (final key in box.keys) {
+        if (key is String &&
+            (key.startsWith('zhiyun_cid_') ||
+                key.startsWith('zhiyun_last_played_') ||
+                key == 'zhiyun_my_courses' ||
+                key == 'zhiyun_my_courses_time' ||
+                key == 'zhiyun_my_sessions')) {
+          staleKeys.add(key);
+        }
+      }
+      for (final key in staleKeys) {
+        box.delete(key);
+      }
+      _userCourseIds.clear();
+      _knownSubIds.clear();
+    }
+    box.put('zhiyun_cache_schema_v', _kCacheSchemaVersion);
   }
 
   /// 查询指定课程的智云 course_id
-  /// 优先级：1. 用户显式手动绑定 > 2. 动态匹配用户“我的课程”（按当前学期/月份高优排序） > 3. 内存运行时缓存 > 4. 历史缓存
+  /// 优先级：1. 用户显式手动绑定 > 2. 动态匹配用户“我的课程”（按目标学期/半学期智能分流） > 3. 内存运行时缓存 > 4. 历史缓存
   static String? getKnownCourseId(
     String courseName, {
     String? courseCode,
     String? teacher,
     List<String>? candidateTeachers,
+    Course? course,
+    String? semesterName,
+    String? preferredHalfTag,
+    DateTime? targetDate,
   }) {
     final cleaned = cleanCourseName(courseName);
     final normalized = normalizeCourseName(courseName);
     final core = extractCoreCourseName(courseName);
     final coreNormalized = normalizeCourseName(core);
+    final effectiveCode = courseCode ?? course?.id;
+    final hint = inferSemesterHint(
+      course: course,
+      courseCode: effectiveCode,
+      courseName: courseName,
+      semesterName: semesterName,
+      preferredHalfTag: preferredHalfTag,
+      targetDate: targetDate,
+    );
 
     // 0. 特殊历史脏数据清洗：如果是思想文化素养/素质类课程，清除错误绑定的 86975
     if (cleaned.contains('思想文化素养') || cleaned.contains('思想素质')) {
@@ -669,23 +1259,28 @@ class ZhiyunService {
     }
 
     // 1. 若用户主动解绑过该课程，且未显式重新绑定，坚决返回 null
-    if (isExplicitlyUnbound(courseName)) {
+    if (isExplicitlyUnbound(courseName, courseCode: effectiveCode)) {
       return null;
     }
 
     final box = _getHiveBox();
+    final scopedKeys = _buildScopedCidKeys(
+      cleaned: cleaned,
+      courseName: courseName,
+      normalized: normalized,
+      core: core,
+      coreNormalized: coreNormalized,
+      courseCode: effectiveCode,
+      scopeKey: hint.scopeKey,
+    );
 
     // 2. 检查用户显式手动绑定 (例如在弹窗中手动输入的 ID)
     if (box != null) {
-      final manualCid = box.get('zhiyun_manual_cid_$cleaned') ??
-          box.get('zhiyun_manual_cid_$courseName') ??
-          box.get('zhiyun_manual_cid_$normalized') ??
-          (core.isNotEmpty ? box.get('zhiyun_manual_cid_$core') : null) ??
-          (courseCode != null
-              ? box.get('zhiyun_manual_cid_$courseCode')
-              : null);
-      if (manualCid != null && manualCid.toString().isNotEmpty) {
-        return manualCid.toString();
+      for (final k in scopedKeys) {
+        final manualCid = box.get('zhiyun_manual_cid_$k');
+        if (manualCid != null && manualCid.toString().isNotEmpty) {
+          return manualCid.toString();
+        }
       }
     }
 
@@ -700,40 +1295,40 @@ class ZhiyunService {
       }
     }
 
-    // 3. 核心：从用户专属“我的课程”列表中动态智能匹配（按当前学期/月份高优排序，杜绝跨学期错绑旧课程）
+    // 3. 核心：从用户专属“我的课程”列表中按目标学年与秋/冬/春/夏半学期动态智能匹配
     final myCourses = getMySyncedCourses();
-    if (myCourses.isNotEmpty) {
-      final now = DateTime.now();
-      final curMonth = now.month;
-      // 浙大学期判定：11-2月为冬学期，9-10月为秋学期，3-4月为春学期，5-7月为夏学期
-      final isWinter =
-          curMonth == 11 || curMonth == 12 || curMonth == 1 || curMonth == 2;
-      final isAutumn = curMonth == 9 || curMonth == 10;
-      final isSpring = curMonth == 3 || curMonth == 4;
-      final isSummer =
-          curMonth == 5 || curMonth == 6 || curMonth == 7;
+    final myCourseById = <String, Map<String, dynamic>>{};
+    for (final item in myCourses) {
+      final cid = item['course_id']?.toString() ?? '';
+      if (cid.isNotEmpty) myCourseById[cid] = item;
+    }
 
-      // 筛选所有课程名称匹配的候选智云课程
+    if (myCourses.isNotEmpty) {
       final matchingCourses = <Map<String, dynamic>>[];
       for (final item in myCourses) {
         final tTitle = item['course_title']?.toString() ?? '';
         final tCid = item['course_id']?.toString() ?? '';
         if (tCid.isNotEmpty && matchesCourseName(courseName, tTitle)) {
+          if (isCourseOffShelfMeta(item) ||
+              isCourseOffShelfMeta(_courseDetailMetaCache[tCid])) {
+            continue;
+          }
           matchingCourses.add(item);
         }
       }
 
       if (matchingCourses.isNotEmpty) {
-        // 对候选课程计算匹配得分
         Map<String, dynamic>? bestItem;
         int bestScore = -1;
 
         for (final item in matchingCourses) {
           int score = 10;
+          final tCid = item['course_id']?.toString() ?? '';
           final tTitle = item['course_title']?.toString() ?? '';
           final tTeacher = item['teacher']?.toString() ?? '';
+          final tTerm = item['term_name']?.toString() ??
+              _courseDetailMetaCache[tCid]?['term_name']?.toString();
 
-          // 教师匹配得分（+50）
           if (allTeachers.isNotEmpty && tTeacher.isNotEmpty) {
             for (final t in allTeachers) {
               if (tTeacher.contains(t) || t.contains(tTeacher)) {
@@ -743,28 +1338,13 @@ class ZhiyunService {
             }
           }
 
-          // 当前学期匹配得分（+40）
-          if (isWinter &&
-              (tTitle.contains('冬') || tTitle.contains('后半'))) {
-            score += 40;
-          } else if (isAutumn &&
-              (tTitle.contains('秋') || tTitle.contains('前半'))) {
-            score += 40;
-          } else if (isSpring &&
-              (tTitle.contains('春') || tTitle.contains('前半'))) {
-            score += 40;
-          } else if (isSummer &&
-              (tTitle.contains('夏') || tTitle.contains('后半'))) {
-            score += 40;
-          }
-
-          // 如果该课程在当月有排课节次记录（+30）
-          final curMonthKey =
-              '${now.year}-${curMonth.toString().padLeft(2, '0')}';
-          if (item['active_months'] is List &&
-              (item['active_months'] as List).contains(curMonthKey)) {
-            score += 30;
-          }
+          score += scoreSemesterMatch(
+            hint,
+            title: tTitle,
+            termName: tTerm,
+            activeMonths: item['active_months'] as List?,
+            meta: _courseDetailMetaCache[tCid] ?? item,
+          );
 
           if (score > bestScore) {
             bestScore = score;
@@ -772,75 +1352,107 @@ class ZhiyunService {
           }
         }
 
-        if (bestItem != null) {
+        if (bestItem != null && bestScore >= 0) {
           final bestCid = bestItem['course_id']?.toString() ?? '';
           if (bestCid.isNotEmpty) {
-            _userCourseIds[cleaned] = bestCid;
-            _userCourseIds[courseName] = bestCid;
-            _userCourseIds[normalized] = bestCid;
+            _cacheResolvedCourseId(
+              bestCid,
+              cleaned: cleaned,
+              courseName: courseName,
+              normalized: normalized,
+              core: core,
+              coreNormalized: coreNormalized,
+              courseCode: effectiveCode,
+              scopeKey: hint.scopeKey,
+            );
             return bestCid;
           }
         }
       }
     }
 
-    // 4. 检查内存缓存
-    if (_userCourseIds.containsKey(cleaned)) return _userCourseIds[cleaned];
-    if (_userCourseIds.containsKey(courseName)) {
-      return _userCourseIds[courseName];
+    bool isCompatibleCachedCid(String cidStr, {required bool isScoped}) {
+      if (isCourseOffShelfMeta(_courseDetailMetaCache[cidStr])) return false;
+      if (isScoped) return true;
+      final item = myCourseById[cidStr];
+      if (item == null) return true;
+      if (isCourseOffShelfMeta(item)) return false;
+      final s = scoreSemesterMatch(
+        hint,
+        title: item['course_title']?.toString() ?? '',
+        termName: item['term_name']?.toString(),
+        activeMonths: item['active_months'] as List?,
+        meta: item,
+      );
+      return s >= 0;
     }
-    if (_userCourseIds.containsKey(normalized)) {
-      return _userCourseIds[normalized];
-    }
-    if (core.isNotEmpty && _userCourseIds.containsKey(core)) {
-      return _userCourseIds[core];
-    }
-    if (coreNormalized.isNotEmpty &&
-        _userCourseIds.containsKey(coreNormalized)) {
-      return _userCourseIds[coreNormalized];
-    }
-    if (courseCode != null && _userCourseIds.containsKey(courseCode)) {
-      return _userCourseIds[courseCode];
+
+    // 4. 检查内存缓存（优先精确作用域 Key，兼容旧裸 Key 时校验学期不冲突）
+    for (final k in scopedKeys) {
+      final cachedCid = _userCourseIds[k];
+      if (cachedCid != null && cachedCid.isNotEmpty) {
+        final isScoped = k.contains('__') ||
+            (effectiveCode != null && k == effectiveCode);
+        if (isCompatibleCachedCid(cachedCid, isScoped: isScoped)) {
+          return cachedCid;
+        }
+      }
     }
 
     // 5. 兜底检查持久化存储
     if (box != null) {
-      final savedCid = box.get('zhiyun_cid_$cleaned') ??
-          box.get('zhiyun_cid_$courseName') ??
-          box.get('zhiyun_cid_$normalized') ??
-          (core.isNotEmpty ? box.get('zhiyun_cid_$core') : null) ??
-          (coreNormalized.isNotEmpty
-              ? box.get('zhiyun_cid_$coreNormalized')
-              : null) ??
-          (courseCode != null ? box.get('zhiyun_cid_$courseCode') : null);
-      if (savedCid != null && savedCid.toString().isNotEmpty) {
-        final cidStr = savedCid.toString();
-        _userCourseIds[cleaned] = cidStr;
-        return cidStr;
+      for (final k in scopedKeys) {
+        final savedCid = box.get('zhiyun_cid_$k');
+        if (savedCid != null && savedCid.toString().isNotEmpty) {
+          final cidStr = savedCid.toString();
+          final isScoped = k.contains('__') ||
+              (effectiveCode != null && k == effectiveCode);
+          if (isCompatibleCachedCid(cidStr, isScoped: isScoped)) {
+            _userCourseIds[k] = cidStr;
+            return cidStr;
+          }
+        }
       }
     }
 
     return null;
   }
 
-  /// 通过智云课堂检索接口在线精准搜索匹配课程 ID（针对未在月排课表中出现的半学期/考查课程等）
+  /// 通过智云课堂检索接口在线精准搜索匹配课程 ID，并校验课程下架状态与学年/半学期
   static Future<String?> searchCourseOnline({
     required String courseName,
     String? teacher,
     HttpClient? httpClient,
+    Course? course,
+    String? courseCode,
+    String? semesterName,
+    String? preferredHalfTag,
+    DateTime? targetDate,
   }) async {
+    final effectiveCode = courseCode ?? course?.id;
     // 若已被显式解绑，跳过在线检索
-    if (isExplicitlyUnbound(courseName)) return null;
+    if (isExplicitlyUnbound(courseName, courseCode: effectiveCode)) return null;
 
     final token = getCachedZhiyunToken();
     if (token == null || token.isEmpty) return null;
+
+    final cleaned = cleanCourseName(courseName);
+    final normalized = normalizeCourseName(courseName);
+    final coreName = extractCoreCourseName(courseName);
+    final coreNormalized = normalizeCourseName(coreName);
+    final hint = inferSemesterHint(
+      course: course,
+      courseCode: effectiveCode,
+      courseName: courseName,
+      semesterName: semesterName,
+      preferredHalfTag: preferredHalfTag,
+      targetDate: targetDate,
+    );
 
     final client = httpClient ?? createHttpClient();
     try {
       final account = _getCachedAccount();
       final userId = _getCachedUserId();
-      final cleaned = cleanCourseName(courseName);
-      final coreName = extractCoreCourseName(courseName);
 
       // 候选标题：先查 cleanCourseName，若不同再查 extractCoreCourseName（例如 军事理论(网络) -> 军事理论）
       final titleCandidates = <String>[cleaned];
@@ -861,8 +1473,10 @@ class ZhiyunService {
         }
       }
 
+      final seenCids = <String>{};
+      final rawCandidates = <Map<String, dynamic>>[];
+
       for (final titleKeyword in titleCandidates) {
-        // 如果有教师，先尝试带 realname 检索；若无结果或未提供教师，尝试无教师过滤检索
         final teacherCandidates = <String?>[];
         if (singleTeacher != null && singleTeacher.isNotEmpty) {
           teacherCandidates.add(singleTeacher);
@@ -874,7 +1488,7 @@ class ZhiyunService {
             '$_kZhiyunBaseUrl/pptnote/v1/searchlist?tenant_id=$_kTenantCode'
             '&user_id=${userId ?? ''}'
             '&user_name=${account ?? ''}'
-            '&page=1&per_page=16'
+            '&page=1&per_page=30'
             '&title=${Uri.encodeComponent(titleKeyword)}'
             '${t != null && t.isNotEmpty ? '&realname=${Uri.encodeComponent(t)}' : ''}'
             '&trans=&tenant_code=$_kTenantCode'
@@ -898,68 +1512,112 @@ class ZhiyunService {
               final total = json['total'];
               final list = total is Map ? total['list'] : null;
               if (list is List && list.isNotEmpty) {
-                // 优先：课程名称严格/规范匹配，且教师一致
                 for (final item in list) {
-                  if (item is Map) {
-                    final cid =
-                        item['course_id']?.toString() ?? item['id']?.toString();
-                    final title = item['title']?.toString() ?? '';
-                    final itemTeacher = item['realname']?.toString() ?? '';
-
-                    if (cid != null && cid.isNotEmpty) {
-                      if (matchesCourseName(courseName, title)) {
-                        if (teacher != null &&
-                            teacher.trim().isNotEmpty &&
-                            itemTeacher.isNotEmpty &&
-                            (itemTeacher.contains(teacher.trim()) ||
-                                teacher.trim().contains(itemTeacher) ||
-                                (singleTeacher != null &&
-                                    itemTeacher.contains(singleTeacher)))) {
-                          _userCourseIds[cleaned] = cid;
-                          _userCourseIds[courseName] = cid;
-                          if (coreName.isNotEmpty) {
-                            _userCourseIds[coreName] = cid;
-                          }
-                          _getHiveBox()?.put('zhiyun_cid_$cleaned', cid);
-                          _getHiveBox()?.put('zhiyun_cid_$courseName', cid);
-                          if (coreName.isNotEmpty) {
-                            _getHiveBox()?.put('zhiyun_cid_$coreName', cid);
-                          }
-                          return cid;
-                        }
-                      }
-                    }
+                  if (item is! Map) continue;
+                  final cid =
+                      item['course_id']?.toString() ?? item['id']?.toString();
+                  final title = item['title']?.toString() ?? '';
+                  if (cid == null || cid.isEmpty || !seenCids.add(cid)) {
+                    continue;
                   }
-                }
+                  if (!matchesCourseName(courseName, title)) continue;
+                  if (isCourseOffShelfMeta(item)) continue;
 
-                // 次优：课程名称智能匹配（不盲目依赖第一项，杜绝误绑无关课程）
-                for (final item in list) {
-                  if (item is Map) {
-                    final cid =
-                        item['course_id']?.toString() ?? item['id']?.toString();
-                    final title = item['title']?.toString() ?? '';
-
-                    if (cid != null &&
-                        cid.isNotEmpty &&
-                        matchesCourseName(courseName, title)) {
-                      _userCourseIds[cleaned] = cid;
-                      _userCourseIds[courseName] = cid;
-                      if (coreName.isNotEmpty) {
-                        _userCourseIds[coreName] = cid;
-                      }
-                      _getHiveBox()?.put('zhiyun_cid_$cleaned', cid);
-                      _getHiveBox()?.put('zhiyun_cid_$courseName', cid);
-                      if (coreName.isNotEmpty) {
-                        _getHiveBox()?.put('zhiyun_cid_$coreName', cid);
-                      }
-                      return cid;
-                    }
+                  int preScore = 10;
+                  final itemTeacher = item['realname']?.toString() ?? '';
+                  if (teacher != null &&
+                      teacher.trim().isNotEmpty &&
+                      itemTeacher.isNotEmpty &&
+                      (itemTeacher.contains(teacher.trim()) ||
+                          teacher.trim().contains(itemTeacher) ||
+                          (singleTeacher != null &&
+                              itemTeacher.contains(singleTeacher)))) {
+                    preScore += 50;
                   }
+                  preScore += scoreSemesterMatch(
+                    hint,
+                    title: title,
+                    termName: item['term_name']?.toString(),
+                    meta: item,
+                  );
+                  rawCandidates.add({
+                    'cid': cid,
+                    'title': title,
+                    'teacher': itemTeacher,
+                    'term_name': item['term_name']?.toString(),
+                    'preScore': preScore,
+                  });
                 }
               }
             }
           }
         }
+      }
+
+      if (rawCandidates.isEmpty) return null;
+
+      rawCandidates.sort((a, b) {
+        final sCmp = (b['preScore'] as int).compareTo(a['preScore'] as int);
+        if (sCmp != 0) return sCmp;
+        final idA = int.tryParse(a['cid'] as String) ?? 0;
+        final idB = int.tryParse(b['cid'] as String) ?? 0;
+        return idB.compareTo(idA);
+      });
+
+      String? bestCid;
+      int bestScore = -1;
+      for (final cand in rawCandidates.take(8)) {
+        final cid = cand['cid'] as String;
+        final catalogue = await fetchCourseCatalogue(cid);
+        final meta = _courseDetailMetaCache[cid];
+        if (isCourseOffShelfMeta(meta)) continue;
+
+        final lessonDates = <DateTime>[];
+        for (final item in catalogue) {
+          final dt = parseZhiyunTimestamp(_rawStartAt(item));
+          if (dt != null) lessonDates.add(dt);
+        }
+
+        final teacherHit = cand['teacher']?.toString().isNotEmpty == true &&
+            teacher != null &&
+            teacher.trim().isNotEmpty &&
+            ((cand['teacher'] as String).contains(teacher.trim()) ||
+                teacher.trim().contains(cand['teacher'] as String) ||
+                (singleTeacher != null &&
+                    (cand['teacher'] as String).contains(singleTeacher)));
+        int finalScore = 10 +
+            (teacherHit ? 50 : 0) +
+            scoreSemesterMatch(
+              hint,
+              title: meta?['title']?.toString().isNotEmpty == true
+                  ? meta!['title'].toString()
+                  : cand['title'].toString(),
+              termName: meta?['term_name']?.toString() ??
+                  cand['term_name']?.toString(),
+              lessonDates: lessonDates,
+              meta: meta,
+            );
+        if (catalogue.isNotEmpty) finalScore += 5;
+
+        if (finalScore > bestScore) {
+          bestScore = finalScore;
+          bestCid = cid;
+        }
+      }
+
+      if (bestCid != null && bestScore >= 0) {
+        _cacheResolvedCourseId(
+          bestCid,
+          cleaned: cleaned,
+          courseName: courseName,
+          normalized: normalized,
+          core: coreName,
+          coreNormalized: coreNormalized,
+          courseCode: effectiveCode,
+          scopeKey: hint.scopeKey,
+          persistToBox: true,
+        );
+        return bestCid;
       }
     } catch (e) {
       debugPrint('[ZhiyunService] 在线检索课程失败 ($courseName): $e');
@@ -971,13 +1629,15 @@ class ZhiyunService {
     return null;
   }
 
-  /// 保存课程的最近观看/播放记录（断点记忆）
+  /// 保存课程的最近观看/播放记录（断点记忆，支持按 courseCode/scopeKey 隔离秋冬同门课程）
   static Future<void> saveLastWatchedReplay({
     required String courseName,
     required String lessonTitle,
     required String livingroomUrl,
     String? courseId,
     String? subId,
+    String? courseCode,
+    String? scopeKey,
   }) async {
     try {
       final box = _getHiveBox();
@@ -987,12 +1647,20 @@ class ZhiyunService {
         'livingroomUrl': livingroomUrl,
         'courseId': courseId,
         'subId': subId,
+        'courseCode': courseCode,
         'timestamp': DateTime.now().toIso8601String(),
       };
       final cleaned = cleanCourseName(courseName);
       final jsonStr = jsonEncode(record);
-      await box?.put('zhiyun_last_played_$cleaned', jsonStr);
-      if (courseId != null) {
+      if (courseCode != null && courseCode.isNotEmpty) {
+        await box?.put('zhiyun_last_played_code_$courseCode', jsonStr);
+      }
+      if (scopeKey != null && scopeKey.isNotEmpty) {
+        await box?.put('zhiyun_last_played_${cleaned}__$scopeKey', jsonStr);
+      } else {
+        await box?.put('zhiyun_last_played_$cleaned', jsonStr);
+      }
+      if (courseId != null && courseId.isNotEmpty) {
         await box?.put('zhiyun_last_played_cid_$courseId', jsonStr);
       }
     } catch (e) {
@@ -1004,18 +1672,40 @@ class ZhiyunService {
   static Map<String, dynamic>? getLastWatchedReplay({
     required String courseName,
     String? courseId,
+    String? courseCode,
+    String? scopeKey,
   }) {
     try {
       final box = _getHiveBox();
       final cleaned = cleanCourseName(courseName);
-      var raw = box?.get('zhiyun_last_played_$cleaned')?.toString();
-      if (raw == null && courseId != null) {
-        raw = box?.get('zhiyun_last_played_cid_$courseId')?.toString();
+      String? raw;
+      if (courseId != null && courseId.isNotEmpty) {
+        raw ??= box?.get('zhiyun_last_played_cid_$courseId')?.toString();
       }
+      if (courseCode != null && courseCode.isNotEmpty) {
+        raw ??= box?.get('zhiyun_last_played_code_$courseCode')?.toString();
+      }
+      if (scopeKey != null && scopeKey.isNotEmpty) {
+        raw ??=
+            box?.get('zhiyun_last_played_${cleaned}__$scopeKey')?.toString();
+      }
+      raw ??= box?.get('zhiyun_last_played_$cleaned')?.toString();
       if (raw != null && raw.isNotEmpty) {
         final decoded = jsonDecode(raw);
-        if (decoded is Map<String, dynamic>) return decoded;
-        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+        final map = decoded is Map<String, dynamic>
+            ? decoded
+            : (decoded is Map ? Map<String, dynamic>.from(decoded) : null);
+        if (map != null) {
+          final recCid = map['courseId']?.toString();
+          if (courseId != null &&
+              courseId.isNotEmpty &&
+              recCid != null &&
+              recCid.isNotEmpty &&
+              recCid != courseId) {
+            return null;
+          }
+          return map;
+        }
       }
     } catch (e) {
       debugPrint('[ZhiyunService] 读取播放进度异常: $e');
@@ -1041,6 +1731,16 @@ class ZhiyunService {
     final box = _getHiveBox();
     List<Map<String, dynamic>>? hiveCached;
     if (box != null) {
+      final rawMeta = box.get('zhiyun_meta_$courseId')?.toString();
+      if (rawMeta != null && rawMeta.isNotEmpty) {
+        try {
+          final decodedMeta = jsonDecode(rawMeta);
+          if (decodedMeta is Map) {
+            _courseDetailMetaCache[courseId] =
+                Map<String, dynamic>.from(decodedMeta);
+          }
+        } catch (_) {}
+      }
       final raw = box.get('zhiyun_cat_$courseId')?.toString();
       if (raw != null && raw.isNotEmpty) {
         try {
@@ -1080,7 +1780,10 @@ class ZhiyunService {
           req.headers.set('Referer', 'https://classroom.zju.edu.cn/');
           if (token != null && token.isNotEmpty) {
             req.headers.set('Authorization', 'Bearer $token');
-            req.headers.set('Cookie', '_token=$token; token=$token');
+            req.headers.set(
+              'Cookie',
+              '_token=${buildPhpSerializedTokenCookie(token)}; token=$token',
+            );
           }
           final resp = await req.close().timeout(const Duration(seconds: 8));
           if (resp.statusCode == 200) {
@@ -1091,6 +1794,30 @@ class ZhiyunService {
                     json['code'] == '0' ||
                     json['success'] == true)) {
               final data = json['data'] ?? json['result'];
+              if (data is Map) {
+                final publishVal = data['publish']?.toString().trim();
+                final showVal = data['show']?.toString().trim();
+                final isOffShelf = publishVal == '2' ||
+                    showVal?.toLowerCase() == 'no';
+                final metaMap = <String, dynamic>{
+                  'course_id': courseId,
+                  'title':
+                      (data['title'] ?? data['course_name'] ?? '').toString(),
+                  'teacher': (data['realname'] ??
+                          data['teacher_name'] ??
+                          data['teacher'] ??
+                          '')
+                      .toString(),
+                  'term_name':
+                      (data['term_name'] ?? data['semester_name'] ?? '')
+                          .toString(),
+                  if (publishVal != null) 'publish': publishVal,
+                  if (showVal != null) 'show': showVal,
+                  'is_off_shelf': isOffShelf,
+                };
+                _courseDetailMetaCache[courseId] = metaMap;
+                box?.put('zhiyun_meta_$courseId', jsonEncode(metaMap));
+              }
               final subListMap = data is Map ? data['sub_list'] : null;
               final list = <Map<String, dynamic>>[];
 
@@ -1128,7 +1855,10 @@ class ZhiyunService {
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36');
       if (token != null && token.isNotEmpty) {
         req2.headers.set('Authorization', 'Bearer $token');
-        req2.headers.set('Cookie', '_token=$token; token=$token');
+        req2.headers.set(
+          'Cookie',
+          '_token=${buildPhpSerializedTokenCookie(token)}; token=$token',
+        );
       }
       final resp2 = await req2.close().timeout(const Duration(seconds: 8));
       if (resp2.statusCode == 200) {
@@ -1190,6 +1920,11 @@ class ZhiyunService {
 
   /// 从任意接口响应（嵌套 sub_list 字典、course/sub_list 或扁平列表）提取并归一化课节列表
   static List<Map<String, dynamic>> _extractSubItemsFromResponse(
+          dynamic decoded) =>
+      extractSubItemsFromResponse(decoded);
+
+  /// 公开测试/调用入口：从任意接口响应提取并归一化课节列表
+  static List<Map<String, dynamic>> extractSubItemsFromResponse(
       dynamic decoded) {
     final items = <Map<String, dynamic>>[];
 
@@ -1211,16 +1946,22 @@ class ZhiyunService {
       }
       if (node is! Map) return;
 
+      // get-my-course-day 根级条目以 id 表示 course_id、sub_id 表示课节 id（两者不同且无父 course_id）
+      final hasDistinctCourseAndSubId = node['sub_id'] != null &&
+          node['id'] != null &&
+          node['id'].toString().isNotEmpty &&
+          node['id'].toString() != node['sub_id'].toString();
       final nodeCid = (node['course_id'] ??
-                  (node['sub_id'] == null &&
-                          node['save_playback'] == null &&
-                          node['mpc'] == null &&
-                          node['pgc'] == null
+                  ((inheritedCid.isEmpty && hasDistinctCourseAndSubId) ||
+                          (node['sub_id'] == null &&
+                              node['save_playback'] == null &&
+                              node['mpc'] == null &&
+                              node['pgc'] == null)
                       ? node['id']
                       : null))
               ?.toString() ??
           '';
-      final nextCid = nodeCid.isNotEmpty ? nodeCid : inheritedCid;
+      final nextCid = inheritedCid.isNotEmpty ? inheritedCid : nodeCid;
 
       final looksLikeLesson = node['sub_id'] != null ||
           node['save_playback'] != null ||
@@ -1295,12 +2036,17 @@ class ZhiyunService {
     return '$_kZhiyunBaseUrl/livingroom?course_id=$courseId&sub_id=$subId&tenant_code=$_kTenantCode';
   }
 
-  /// 构建智云课堂整门课程专属房间直达 URL
+  /// 构建智云课堂整门课程详情页直达 URL（无 sub_id 时必须使用 /coursedetail，避免 /livingroom 缺参提示“课程已下架”）
+  static String buildCourseDetailUrl(String courseId) {
+    return '$_kZhiyunBaseUrl/coursedetail?course_id=$courseId&tenant_code=$_kTenantCode';
+  }
+
+  /// 构建智云课堂整门课程专属房间直达 URL（传入 subId 时进入直播/回放间，否则进入课程详情页）
   static String buildCourseLivingroomUrl(String courseId, {String? subId}) {
     if (subId != null && subId.isNotEmpty) {
       return buildLivingroomUrl(courseId, subId);
     }
-    return '$_kZhiyunBaseUrl/livingroom?course_id=$courseId&tenant_code=$_kTenantCode';
+    return buildCourseDetailUrl(courseId);
   }
 
   /// 构建智云课堂“我的课程”主页 URL
@@ -1370,18 +2116,43 @@ class ZhiyunService {
     String courseName,
     String courseId, {
     String? courseCode,
+    Course? course,
+    String? semesterName,
+    String? preferredHalfTag,
+    DateTime? targetDate,
   }) async {
     final cleaned = cleanCourseName(courseName);
     final normalized = normalizeCourseName(courseName);
     final core = extractCoreCourseName(courseName);
     final coreNormalized = normalizeCourseName(core);
-    _userCourseIds[cleaned] = courseId;
-    _userCourseIds[courseName] = courseId;
-    _userCourseIds[normalized] = courseId;
-    if (core.isNotEmpty) _userCourseIds[core] = courseId;
-    if (coreNormalized.isNotEmpty) _userCourseIds[coreNormalized] = courseId;
-    if (courseCode != null && courseCode.isNotEmpty) {
-      _userCourseIds[courseCode] = courseId;
+    final effectiveCode = courseCode ?? course?.id;
+    final hint = inferSemesterHint(
+      course: course,
+      courseCode: effectiveCode,
+      courseName: courseName,
+      semesterName: semesterName,
+      preferredHalfTag: preferredHalfTag,
+      targetDate: targetDate,
+    );
+    final scopeKey = hint.scopeKey;
+
+    if (effectiveCode != null && effectiveCode.isNotEmpty) {
+      if (scopeKey != null && scopeKey.isNotEmpty) {
+        _userCourseIds['${effectiveCode}__$scopeKey'] = courseId;
+      }
+      _userCourseIds[effectiveCode] = courseId;
+    }
+    if (scopeKey != null && scopeKey.isNotEmpty) {
+      _userCourseIds['${cleaned}__$scopeKey'] = courseId;
+      if (core.isNotEmpty && core != cleaned) {
+        _userCourseIds['${core}__$scopeKey'] = courseId;
+      }
+    } else {
+      _userCourseIds[cleaned] = courseId;
+      _userCourseIds[courseName] = courseId;
+      _userCourseIds[normalized] = courseId;
+      if (core.isNotEmpty) _userCourseIds[core] = courseId;
+      if (coreNormalized.isNotEmpty) _userCourseIds[coreNormalized] = courseId;
     }
 
     final box = _getHiveBox();
@@ -1394,29 +2165,41 @@ class ZhiyunService {
       if (coreNormalized.isNotEmpty) {
         await box.delete('zhiyun_unbind_$coreNormalized');
       }
-      if (courseCode != null && courseCode.isNotEmpty) {
-        await box.delete('zhiyun_unbind_$courseCode');
+      if (effectiveCode != null && effectiveCode.isNotEmpty) {
+        await box.delete('zhiyun_unbind_$effectiveCode');
       }
 
-      await box.put('zhiyun_manual_cid_$cleaned', courseId);
-      await box.put('zhiyun_manual_cid_$courseName', courseId);
-      await box.put('zhiyun_manual_cid_$normalized', courseId);
-      if (core.isNotEmpty) {
-        await box.put('zhiyun_manual_cid_$core', courseId);
+      if (effectiveCode != null && effectiveCode.isNotEmpty) {
+        if (scopeKey != null && scopeKey.isNotEmpty) {
+          await box.put(
+              'zhiyun_manual_cid_${effectiveCode}__$scopeKey', courseId);
+          await box.put('zhiyun_cid_${effectiveCode}__$scopeKey', courseId);
+        }
+        await box.put('zhiyun_manual_cid_$effectiveCode', courseId);
+        await box.put('zhiyun_cid_$effectiveCode', courseId);
       }
-      if (courseCode != null && courseCode.isNotEmpty) {
-        await box.put('zhiyun_manual_cid_$courseCode', courseId);
-      }
+      if (scopeKey != null && scopeKey.isNotEmpty) {
+        await box.put('zhiyun_manual_cid_${cleaned}__$scopeKey', courseId);
+        await box.put('zhiyun_cid_${cleaned}__$scopeKey', courseId);
+        if (core.isNotEmpty && core != cleaned) {
+          await box.put('zhiyun_manual_cid_${core}__$scopeKey', courseId);
+          await box.put('zhiyun_cid_${core}__$scopeKey', courseId);
+        }
+      } else {
+        await box.put('zhiyun_manual_cid_$cleaned', courseId);
+        await box.put('zhiyun_manual_cid_$courseName', courseId);
+        await box.put('zhiyun_manual_cid_$normalized', courseId);
+        if (core.isNotEmpty) {
+          await box.put('zhiyun_manual_cid_$core', courseId);
+        }
 
-      await box.put('zhiyun_cid_$cleaned', courseId);
-      await box.put('zhiyun_cid_$courseName', courseId);
-      await box.put('zhiyun_cid_$normalized', courseId);
-      if (core.isNotEmpty) await box.put('zhiyun_cid_$core', courseId);
-      if (coreNormalized.isNotEmpty) {
-        await box.put('zhiyun_cid_$coreNormalized', courseId);
-      }
-      if (courseCode != null && courseCode.isNotEmpty) {
-        await box.put('zhiyun_cid_$courseCode', courseId);
+        await box.put('zhiyun_cid_$cleaned', courseId);
+        await box.put('zhiyun_cid_$courseName', courseId);
+        await box.put('zhiyun_cid_$normalized', courseId);
+        if (core.isNotEmpty) await box.put('zhiyun_cid_$core', courseId);
+        if (coreNormalized.isNotEmpty) {
+          await box.put('zhiyun_cid_$coreNormalized', courseId);
+        }
       }
     }
   }
@@ -1426,12 +2209,27 @@ class ZhiyunService {
     String courseName, {
     String? courseCode,
     String? courseId,
+    Course? course,
+    String? semesterName,
+    String? preferredHalfTag,
+    DateTime? targetDate,
   }) async {
     final cleaned = cleanCourseName(courseName);
     final normalized = normalizeCourseName(courseName);
     final core = extractCoreCourseName(courseName);
     final coreNormalized = normalizeCourseName(core);
+    final effectiveCode = courseCode ?? course?.id;
+    final hint = inferSemesterHint(
+      course: course,
+      courseCode: effectiveCode,
+      courseName: courseName,
+      semesterName: semesterName,
+      preferredHalfTag: preferredHalfTag,
+      targetDate: targetDate,
+    );
+    final scopeKey = hint.scopeKey;
     final cid = courseId ??
+        (effectiveCode != null ? _userCourseIds[effectiveCode] : null) ??
         _userCourseIds[cleaned] ??
         _userCourseIds[courseName] ??
         _userCourseIds[normalized] ??
@@ -1440,41 +2238,40 @@ class ZhiyunService {
     if (cid != null) {
       _catalogueCache.remove(cid);
       _catalogueCacheTime.remove(cid);
+      _courseDetailMetaCache.remove(cid);
     }
-    _userCourseIds.remove(cleaned);
-    _userCourseIds.remove(courseName);
-    _userCourseIds.remove(normalized);
-    _userCourseIds.remove(core);
-    _userCourseIds.remove(coreNormalized);
-    if (courseCode != null) {
-      _userCourseIds.remove(courseCode);
+
+    final keysToRemove = _buildScopedCidKeys(
+      cleaned: cleaned,
+      courseName: courseName,
+      normalized: normalized,
+      core: core,
+      coreNormalized: coreNormalized,
+      courseCode: effectiveCode,
+      scopeKey: scopeKey,
+    );
+    for (final k in keysToRemove) {
+      _userCourseIds.remove(k);
     }
 
     final box = _getHiveBox();
     if (box != null) {
-      await box.delete('zhiyun_manual_cid_$cleaned');
-      await box.delete('zhiyun_manual_cid_$courseName');
-      await box.delete('zhiyun_manual_cid_$normalized');
-      if (core.isNotEmpty) await box.delete('zhiyun_manual_cid_$core');
-      if (courseCode != null) await box.delete('zhiyun_manual_cid_$courseCode');
-
-      await box.delete('zhiyun_cid_$cleaned');
-      await box.delete('zhiyun_cid_$courseName');
-      await box.delete('zhiyun_cid_$normalized');
-      await box.delete('zhiyun_cid_$core');
-      await box.delete('zhiyun_cid_$coreNormalized');
-      if (courseCode != null) {
-        await box.delete('zhiyun_cid_$courseCode');
+      for (final k in keysToRemove) {
+        await box.delete('zhiyun_manual_cid_$k');
+        await box.delete('zhiyun_cid_$k');
       }
 
       // 持久化记录用户显式解绑标记，防止后续自动搜索或后台同步再次错误关联
-      await box.put('zhiyun_unbind_$cleaned', true);
-      await box.put('zhiyun_unbind_$courseName', true);
-      await box.put('zhiyun_unbind_$normalized', true);
-      await box.put('zhiyun_unbind_$core', true);
-      await box.put('zhiyun_unbind_$coreNormalized', true);
-      if (courseCode != null) {
-        await box.put('zhiyun_unbind_$courseCode', true);
+      if (effectiveCode != null && effectiveCode.isNotEmpty) {
+        await box.put('zhiyun_unbind_$effectiveCode', true);
+      } else {
+        await box.put('zhiyun_unbind_$cleaned', true);
+        await box.put('zhiyun_unbind_$courseName', true);
+        await box.put('zhiyun_unbind_$normalized', true);
+        if (core.isNotEmpty) await box.put('zhiyun_unbind_$core', true);
+        if (coreNormalized.isNotEmpty) {
+          await box.put('zhiyun_unbind_$coreNormalized', true);
+        }
       }
     }
   }
@@ -1485,6 +2282,7 @@ class ZhiyunService {
     _knownSubIds.clear();
     _catalogueCache.clear();
     _catalogueCacheTime.clear();
+    _courseDetailMetaCache.clear();
     _cachedZhiyunToken = null;
     _cachedZhiyunAccount = null;
     _cachedZhiyunUserId = null;
@@ -1511,6 +2309,7 @@ class ZhiyunService {
     _knownSubIds.clear();
     _catalogueCache.clear();
     _catalogueCacheTime.clear();
+    _courseDetailMetaCache.clear();
     _cachedZhiyunToken = null;
     _cachedZhiyunAccount = null;
     _cachedZhiyunUserId = null;
@@ -1917,6 +2716,8 @@ class ZhiyunService {
     required Course course,
     Period? period,
     DateTime? lessonDate,
+    String? semesterName,
+    String? preferredHalfTag,
   }) async {
     // 1. 若为体育、身体素质、实践等非录播课程，坚决不展示回放入口（自动隐藏）
     if (!isRecordableCourse(course.name, courseCode: course.id)) {
@@ -1926,8 +2727,19 @@ class ZhiyunService {
     // 确定目标节次日期
     final targetDate = period?.startTime ?? lessonDate;
 
+    // 自动升级/清理跨版本的旧版智云污染缓存（仅执行一次，保留手动绑定与解绑记录）
+    _ensureCacheSchemaUpgraded();
+    final hint = inferSemesterHint(
+      course: course,
+      courseCode: course.id,
+      courseName: course.name,
+      semesterName: semesterName,
+      preferredHalfTag: preferredHalfTag,
+      targetDate: targetDate,
+    );
+
     // 若用户显式解绑过该课程，不进行静默自动同步或在线匹配，保持未绑定状态
-    if (isExplicitlyUnbound(course.name)) {
+    if (isExplicitlyUnbound(course.name, courseCode: course.id)) {
       return ZhiyunReplayInfo(
         courseId: null,
         subId: null,
@@ -2009,7 +2821,8 @@ class ZhiyunService {
         if (sCid != null &&
             sCid.isNotEmpty &&
             sSubId != null &&
-            sSubId.isNotEmpty) {
+            sSubId.isNotEmpty &&
+            !isCourseOffShelfMeta(_courseDetailMetaCache[sCid])) {
           final isLive = checkIsLive(
               item: bestSession, targetDate: targetDate, period: period);
           final hasReplay = checkHasReplay(
@@ -2030,12 +2843,16 @@ class ZhiyunService {
       }
     }
 
-    // 3. 解析 course_id（从用户排课、动态同步的课程智能排序匹配）
+    // 3. 解析 course_id（结合课程学年、所在学期与秋/冬/春/夏半学期智能分流）
     var courseId = getKnownCourseId(
       course.name,
       courseCode: course.id,
       teacher: course.teacher,
       candidateTeachers: candidateTeachers.toList(),
+      course: course,
+      semesterName: semesterName,
+      preferredHalfTag: preferredHalfTag,
+      targetDate: targetDate,
     );
 
     // 如果未找到，尝试强制同步
@@ -2047,51 +2864,93 @@ class ZhiyunService {
           courseCode: course.id,
           teacher: course.teacher,
           candidateTeachers: candidateTeachers.toList(),
+          course: course,
+          semesterName: semesterName,
+          preferredHalfTag: preferredHalfTag,
+          targetDate: targetDate,
         );
       }
     }
 
-    // 若依然未找到，尝试直接通过智云搜索接口在线精准检索
+    // 若依然未找到，尝试直接通过智云搜索接口在线精准检索（校验下架状态与学年半学期）
     courseId ??= await searchCourseOnline(
       courseName: course.name,
       teacher: course.teacher,
+      course: course,
+      courseCode: course.id,
+      semesterName: semesterName,
+      preferredHalfTag: preferredHalfTag,
+      targetDate: targetDate,
     );
 
     // 4. 如果成功匹配到 course_id
     if (courseId != null) {
       // 尝试拉取智云课程目录
       var catalogue = await fetchCourseCatalogue(courseId);
+      var detailMeta = _courseDetailMetaCache[courseId];
 
-      // 跨学期残留检测：如果目录全部为 45 天前的历史旧课节，且当前已进入新学期（冬/夏学期）
-      final now = DateTime.now();
-      final hasRecentLessons = catalogue.any((item) {
-        final dt = parseZhiyunTimestamp(item['start_at']);
-        if (dt != null) {
-          return (dt.difference(now)).abs().inDays < 45;
-        }
-        return false;
-      });
+      // 校验是否属于已下架课程或与目标学年/半学期（秋/冬/春/夏）冲突
+      // 绝不使用“>45天”一刀切判定失效，确保跨学期仍可正常观看上一学期/前半学期回放
+      final isPinnedManually = _isManuallyPinned(
+        course.name,
+        courseCode: course.id,
+        hint: hint,
+      );
+      final isInvalidOrMismatched = !isPinnedManually &&
+          (isCourseOffShelfMeta(detailMeta) ||
+              isCatalogueMismatchedWithHint(
+                catalogue,
+                hint,
+                meta: detailMeta,
+              ));
 
-      if (!hasRecentLessons && catalogue.isNotEmpty) {
-        // 当前绑定的课程 ID 仅包含历史旧课节，属于跨学期（如秋学期->冬学期）残留数据
+      if (isInvalidOrMismatched) {
         final cleaned = cleanCourseName(course.name);
-        _userCourseIds.remove(cleaned);
-        _userCourseIds.remove(course.name);
-        box?.delete('zhiyun_cid_$cleaned');
-        box?.delete('zhiyun_cid_${course.name}');
+        final staleKeys = _buildScopedCidKeys(
+          cleaned: cleaned,
+          courseName: course.name,
+          normalized: normalizeCourseName(course.name),
+          core: extractCoreCourseName(course.name),
+          coreNormalized:
+              normalizeCourseName(extractCoreCourseName(course.name)),
+          courseCode: course.id,
+          scopeKey: hint.scopeKey,
+        );
+        for (final k in staleKeys) {
+          _userCourseIds.remove(k);
+          box?.delete('zhiyun_cid_$k');
+        }
 
         await syncFromMyCourses();
-        final refreshedId = getKnownCourseId(
+        var refreshedId = getKnownCourseId(
           course.name,
           courseCode: course.id,
           teacher: course.teacher,
           candidateTeachers: candidateTeachers.toList(),
+          course: course,
+          semesterName: semesterName,
+          preferredHalfTag: preferredHalfTag,
+          targetDate: targetDate,
+        );
+        refreshedId ??= await searchCourseOnline(
+          courseName: course.name,
+          teacher: course.teacher,
+          course: course,
+          courseCode: course.id,
+          semesterName: semesterName,
+          preferredHalfTag: preferredHalfTag,
+          targetDate: targetDate,
         );
         if (refreshedId != null && refreshedId != courseId) {
           courseId = refreshedId;
           catalogue = await fetchCourseCatalogue(courseId);
+          detailMeta = _courseDetailMetaCache[courseId];
+        } else if (isCourseOffShelfMeta(detailMeta)) {
+          courseId = null;
         }
       }
+
+      if (courseId != null) {
 
       if (targetDate != null) {
         final dateKey =
@@ -2222,6 +3081,7 @@ class ZhiyunService {
             ? buildLivingroomUrl(courseId, liveSubId)
             : buildCourseLivingroomUrl(courseId),
       );
+      }
     }
 
     // 5. 未找到智云课程：返回智云搜索与手动绑定入口
@@ -2262,10 +3122,16 @@ class ZhiyunService {
       final token = await ensureValidToken();
       final candidateItems = <Map<String, dynamic>>[];
 
+      final dateUnpadded =
+          '${targetDate.year}-${targetDate.month}-${targetDate.day}';
       final uris = <Uri>[
         Uri.parse(
           '$_kZhiyunBaseUrl/courseapi/v2/course-live/get-my-course-day?day=$dateKey&tenant_code=$_kTenantCode',
         ),
+        if (dateUnpadded != dateKey)
+          Uri.parse(
+            '$_kZhiyunBaseUrl/courseapi/v2/course-live/get-my-course-day?day=$dateUnpadded&tenant_code=$_kTenantCode',
+          ),
         Uri.parse(
           '$_kZhiyunBaseUrl/courseapi/v2/course-live/search-live-course-list?all=1&course_id=$courseId&with_sub_data=1&with_room_data=1&show_all=1&show_delete=2',
         ),
@@ -2393,28 +3259,41 @@ class ZhiyunService {
         debugPrint('[ZhiyunService] 暂无有效智云 Token，跳过课程自动同步');
         return 0;
       }
+      final authToken = token;
+
+      _ensureCacheSchemaUpgraded();
 
       final now = DateTime.now();
-      // 动态生成本学年涉及的所有月份，当前月份优先（解决跨学期课程版本覆盖）
+      // 动态生成覆盖“当月 + 上一学期 + 当前完整学年（含春夏/秋冬/短学期）”的滑窗月份列表
       final curMonthStr = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+      final prevMonthDt = DateTime(now.year, now.month - 1, 1);
+      final nextMonthDt = DateTime(now.year, now.month + 1, 1);
       final prevMonthStr =
-          '${now.year}-${(now.month == 1 ? 12 : now.month - 1).toString().padLeft(2, '0')}';
+          '${prevMonthDt.year}-${prevMonthDt.month.toString().padLeft(2, '0')}';
       final nextMonthStr =
-          '${now.year}-${(now.month == 12 ? 1 : now.month + 1).toString().padLeft(2, '0')}';
+          '${nextMonthDt.year}-${nextMonthDt.month.toString().padLeft(2, '0')}';
 
       final orderedMonths = <String>[curMonthStr, prevMonthStr, nextMonthStr];
+      // 滑窗：覆盖过去 9 个月至未来 6 个月（无论处在春夏或秋冬，都能兼顾上一学期与本学期全阶段）
+      for (int offset = 0; offset >= -9; offset--) {
+        final d = DateTime(now.year, now.month + offset, 1);
+        final s = '${d.year}-${d.month.toString().padLeft(2, '0')}';
+        if (!orderedMonths.contains(s)) orderedMonths.add(s);
+      }
+      for (int offset = 2; offset <= 6; offset++) {
+        final d = DateTime(now.year, now.month + offset, 1);
+        final s = '${d.year}-${d.month.toString().padLeft(2, '0')}';
+        if (!orderedMonths.contains(s)) orderedMonths.add(s);
+      }
       final academicStartYear = now.month >= 8 ? now.year : now.year - 1;
       final academicEndYear = academicStartYear + 1;
-      // 8月（夏学期末/新生军训与军事理论课集中开展月份）
       if (!orderedMonths.contains('$academicStartYear-08')) {
         orderedMonths.add('$academicStartYear-08');
       }
-      // 秋学期 9-12月
       for (int m = 9; m <= 12; m++) {
         final s = '$academicStartYear-${m.toString().padLeft(2, '0')}';
         if (!orderedMonths.contains(s)) orderedMonths.add(s);
       }
-      // 冬/春/夏学期 1-7月
       for (int m = 1; m <= 7; m++) {
         final s = '$academicEndYear-${m.toString().padLeft(2, '0')}';
         if (!orderedMonths.contains(s)) orderedMonths.add(s);
@@ -2423,145 +3302,174 @@ class ZhiyunService {
       final foundCoursesMap = <String, Map<String, dynamic>>{};
       final foundSessions = <Map<String, dynamic>>[];
 
-      for (final m in orderedMonths) {
-        try {
-          final uri = Uri.parse(
-              '$_kZhiyunBaseUrl/courseapi/v2/course-live/get-my-course-month?month=$m&tenant_code=$_kTenantCode');
-          final req = await client.getUrl(uri);
-          req.headers.set('Authorization', 'Bearer $token');
-          req.headers.set(
-            'Cookie',
-            '_token=${buildPhpSerializedTokenCookie(token)}; token=$token',
-          );
-          req.headers.set('User-Agent',
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
-          final resp = await req.close().timeout(const Duration(seconds: 8));
-          if (resp.statusCode == 200) {
+      Future<void> fetchOneMonth(String m) async {
+        final unpadded = m.replaceFirstMapped(
+          RegExp(r'^(\d{4})-0(\d)$'),
+          (match) => '${match.group(1)}-${match.group(2)}',
+        );
+        final queryCandidates = unpadded != m ? [unpadded, m] : [m];
+
+        for (final qMonth in queryCandidates) {
+          try {
+            final uri = Uri.parse(
+                '$_kZhiyunBaseUrl/courseapi/v2/course-live/get-my-course-month?month=$qMonth&tenant_code=$_kTenantCode');
+            final req = await client.getUrl(uri);
+            req.headers.set('Authorization', 'Bearer $authToken');
+            req.headers.set(
+              'Cookie',
+              '_token=${buildPhpSerializedTokenCookie(authToken)}; token=$authToken',
+            );
+            req.headers.set('User-Agent',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+            final resp = await req.close().timeout(const Duration(seconds: 8));
+            if (resp.statusCode != 200) {
+              await resp.drain();
+              continue;
+            }
             final body = await resp.transform(utf8.decoder).join();
             final json = jsonDecode(body);
-            if (json is Map) {
-              // 兼容根级 list 与 data.list，并兼容 PHP 关联数组序列化为 Map 的情况
-              final rawList = json['list'] ??
-                  (json['data'] is Map ? json['data']['list'] : null);
-              Iterable? dayItems;
-              if (rawList is List) {
-                dayItems = rawList;
-              } else if (rawList is Map) {
-                dayItems = rawList.values;
+            if (json is! Map) continue;
+
+            final rawList = json['list'] ??
+                (json['data'] is Map ? json['data']['list'] : null);
+            Iterable? dayItems;
+            if (rawList is List) {
+              dayItems = rawList;
+            } else if (rawList is Map) {
+              dayItems = rawList.values;
+            }
+            if (dayItems == null) continue;
+
+            final normMonth = _normalizeYearMonth(m);
+            for (final dayItem in dayItems) {
+              if (dayItem is! Map) continue;
+              final rawCourses = dayItem['course'] ?? dayItem['courses'];
+              Iterable? coursesList;
+              if (rawCourses is List) {
+                coursesList = rawCourses;
+              } else if (rawCourses is Map) {
+                coursesList = rawCourses.values;
               }
-              if (dayItems != null) {
-                for (final dayItem in dayItems) {
-                  if (dayItem is Map) {
-                    final rawCourses = dayItem['course'] ?? dayItem['courses'];
-                    Iterable? coursesList;
-                    if (rawCourses is List) {
-                      coursesList = rawCourses;
-                    } else if (rawCourses is Map) {
-                      coursesList = rawCourses.values;
-                    }
-                    if (coursesList != null) {
-                      for (final c in coursesList) {
-                        if (c is Map) {
-                          final cid =
-                              c['course_id']?.toString() ?? c['id']?.toString();
-                          final title = c['title']?.toString() ??
-                              c['course_title']?.toString();
-                          final subId =
-                              (c['sub_id'] ?? c['id'])?.toString();
-                          final startAt =
-                              int.tryParse(_rawStartAt(c)?.toString() ?? '');
-                          final endAt =
-                              int.tryParse(_rawEndAt(c)?.toString() ?? '');
-                          final teacher = c['realname']?.toString() ??
-                              c['teacher']?.toString() ??
-                              c['lecturer_name']?.toString();
+              if (coursesList == null) continue;
 
-                          if (cid != null &&
-                              cid.isNotEmpty &&
-                              title != null &&
-                              title.isNotEmpty) {
-                            foundCoursesMap.putIfAbsent(
-                              cid,
-                              () => {
-                                'course_id': cid,
-                                'course_title': title,
-                                if (teacher != null && teacher.isNotEmpty)
-                                  'teacher': teacher,
-                                'active_months': <String>[],
-                              },
-                            );
-                            final activeMonths =
-                                foundCoursesMap[cid]!['active_months'] as List;
-                            if (!activeMonths.contains(m)) {
-                              activeMonths.add(m);
-                            }
+              for (final c in coursesList) {
+                if (c is! Map) continue;
+                if (isCourseOffShelfMeta(c)) continue;
 
-                            final dt = parseZhiyunTimestamp(startAt);
-                            if (dt != null && subId != null && subId.isNotEmpty) {
-                              final dKey =
-                                  '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
-                              _knownSubIds['${cid}_$dKey'] = subId;
-                              _knownSubIds['${cid}_${dKey}_${dt.hour}'] = subId;
-                              _knownSubIds[
-                                      '${cid}_${dKey}_${dt.hour}_${dt.minute}'] =
-                                  subId;
+                final cid = c['course_id']?.toString() ?? c['id']?.toString();
+                final title =
+                    c['title']?.toString() ?? c['course_title']?.toString();
+                final subId = (c['sub_id'] ?? c['id'])?.toString();
+                final startAt = int.tryParse(_rawStartAt(c)?.toString() ?? '');
+                final endAt = int.tryParse(_rawEndAt(c)?.toString() ?? '');
+                final teacher = c['realname']?.toString() ??
+                    c['teacher']?.toString() ??
+                    c['lecturer_name']?.toString();
+                final termName =
+                    (c['term_name'] ?? c['semester_name'] ?? '').toString();
 
-                              foundSessions.add({
-                                'course_id': cid,
-                                'course_title': title,
-                                'sub_id': subId,
-                                if (teacher != null && teacher.isNotEmpty)
-                                  'teacher': teacher,
-                                'start_at': startAt,
-                                'end_at': endAt,
-                                'date': dKey,
-                                'status': (c['sub_status'] ?? c['status'])
-                                    ?.toString(),
-                                'is_live': checkIsLive(
-                                    item: _normalizeCatalogueItem(c)),
-                                'status_label':
-                                    c['status_label']?.toString() ?? '',
-                                'month': m,
-                              });
-                            }
-                          }
-                        }
-                      }
-                    }
+                if (cid != null &&
+                    cid.isNotEmpty &&
+                    title != null &&
+                    title.isNotEmpty) {
+                  final existing = foundCoursesMap.putIfAbsent(
+                    cid,
+                    () => {
+                      'course_id': cid,
+                      'course_title': title,
+                      if (teacher != null && teacher.isNotEmpty)
+                        'teacher': teacher,
+                      if (termName.isNotEmpty) 'term_name': termName,
+                      'active_months': <String>[],
+                    },
+                  );
+                  if (termName.isNotEmpty &&
+                      (existing['term_name']?.toString().isEmpty ?? true)) {
+                    existing['term_name'] = termName;
+                  }
+                  final activeMonths = existing['active_months'] as List;
+                  if (!activeMonths.contains(normMonth)) {
+                    activeMonths.add(normMonth);
+                  }
+
+                  final dt = parseZhiyunTimestamp(startAt);
+                  if (dt != null && subId != null && subId.isNotEmpty) {
+                    final dKey =
+                        '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+                    _knownSubIds['${cid}_$dKey'] = subId;
+                    _knownSubIds['${cid}_${dKey}_${dt.hour}'] = subId;
+                    _knownSubIds['${cid}_${dKey}_${dt.hour}_${dt.minute}'] =
+                        subId;
+
+                    foundSessions.add({
+                      'course_id': cid,
+                      'course_title': title,
+                      'sub_id': subId,
+                      if (teacher != null && teacher.isNotEmpty)
+                        'teacher': teacher,
+                      'start_at': startAt,
+                      'end_at': endAt,
+                      'date': dKey,
+                      'status': (c['sub_status'] ?? c['status'])?.toString(),
+                      'is_live':
+                          checkIsLive(item: _normalizeCatalogueItem(c)),
+                      'status_label': c['status_label']?.toString() ?? '',
+                      'month': normMonth,
+                    });
                   }
                 }
               }
             }
+            // 成功解析出 list 结构，无需再用补零月份重复请求
+            break;
+          } catch (e) {
+            debugPrint('[ZhiyunService] 查询月份课程失败 ($qMonth): $e');
           }
-        } catch (e) {
-          debugPrint('[ZhiyunService] 查询月份课程失败 ($m): $e');
         }
       }
 
-      // 额外尝试调用用户主页选课接口 (vlabpassportapi)
+      // 并发分批拉取全部月份（确保 9 月秋学期课程不会被串行超时丢弃）
+      for (int i = 0; i < orderedMonths.length; i += 4) {
+        final batch = orderedMonths.sublist(
+          i,
+          i + 4 > orderedMonths.length ? orderedMonths.length : i + 4,
+        );
+        await Future.wait(batch.map(fetchOneMonth));
+      }
+
+      // 额外尝试调用用户主页选课接口 (vlabpassportapi，需携带 PHP 序列化 _token Cookie 并兼容 code=1000/params)
       try {
         final profileUri = Uri.parse(
             '$_kZhiyunBaseUrl/courseapi/vlabpassportapi/v1/account-profile/course?tenant_code=$_kTenantCode');
         final pReq = await client.getUrl(profileUri);
         pReq.headers.set('Authorization', 'Bearer $token');
-        pReq.headers.set('Cookie', '_token=$token; token=$token');
+        pReq.headers.set(
+          'Cookie',
+          '_token=${buildPhpSerializedTokenCookie(token)}; token=$token',
+        );
         pReq.headers.set('User-Agent',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36');
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
         final pResp = await pReq.close().timeout(const Duration(seconds: 8));
         if (pResp.statusCode == 200) {
           final pBody = await pResp.transform(utf8.decoder).join();
           final pJson = jsonDecode(pBody);
+          final pCode = pJson is Map ? pJson['code']?.toString() : null;
           if (pJson is Map &&
-              (pJson['code'] == 200 ||
-                  pJson['code'] == 0 ||
+              (pCode == '1000' ||
+                  pCode == '200' ||
+                  pCode == '0' ||
                   pJson['success'] == true)) {
-            final pData = pJson['data'] ?? pJson['result'];
+            final pData =
+                pJson['params'] ?? pJson['data'] ?? pJson['result'];
             final pList = pData is List
                 ? pData
-                : (pData is Map ? (pData['list'] ?? pData['models']) : null);
+                : (pData is Map
+                    ? (pData['list'] ?? pData['models'] ?? pData['rows'])
+                    : null);
             if (pList is List) {
               for (final item in pList) {
                 if (item is Map) {
+                  if (isCourseOffShelfMeta(item)) continue;
                   final cid =
                       item['course_id']?.toString() ?? item['id']?.toString();
                   final title = item['course_name']?.toString() ??
@@ -2569,20 +3477,33 @@ class ZhiyunService {
                       item['title']?.toString();
                   final teacher = item['teacher']?.toString() ??
                       item['realname']?.toString();
+                  final termName =
+                      (item['term_name'] ?? item['semester_name'] ?? '')
+                          .toString();
                   if (cid != null &&
                       cid.isNotEmpty &&
                       title != null &&
                       title.isNotEmpty) {
-                    foundCoursesMap.putIfAbsent(
+                    final existing = foundCoursesMap.putIfAbsent(
                       cid,
                       () => {
                         'course_id': cid,
                         'course_title': title,
                         if (teacher != null && teacher.isNotEmpty)
                           'teacher': teacher,
+                        if (termName.isNotEmpty) 'term_name': termName,
                         'active_months': <String>[],
                       },
                     );
+                    if (termName.isNotEmpty &&
+                        (existing['term_name']?.toString().isEmpty ?? true)) {
+                      existing['term_name'] = termName;
+                    }
+                    if (teacher != null &&
+                        teacher.isNotEmpty &&
+                        (existing['teacher']?.toString().isEmpty ?? true)) {
+                      existing['teacher'] = teacher;
+                    }
                   }
                 }
               }
@@ -2597,11 +3518,17 @@ class ZhiyunService {
       int count = 0;
       final assignedCleaned = <String>{};
 
-      // 排序：当前学期/当月课程高优写入，防止跨学期旧课程冲掉当季课程绑定
+      // 排序：当前学期/当月课程高优写入裸 Key，同时按半学期作用域分别缓存，防止秋/冬同名课程相互覆盖
       final sortedCourses = foundCoursesMap.values.toList()
         ..sort((a, b) {
-          final aActive = (a['active_months'] as List?)?.contains(curMonthStr) == true ? 1 : 0;
-          final bActive = (b['active_months'] as List?)?.contains(curMonthStr) == true ? 1 : 0;
+          final aActive =
+              (a['active_months'] as List?)?.contains(curMonthStr) == true
+                  ? 1
+                  : 0;
+          final bActive =
+              (b['active_months'] as List?)?.contains(curMonthStr) == true
+                  ? 1
+                  : 0;
           return bActive.compareTo(aActive);
         });
 
@@ -2622,7 +3549,38 @@ class ZhiyunService {
           continue;
         }
 
-        // 高优当季课程优先记录，已绑定的当季课程不被后续旧课覆盖
+        // 推导该课程所属的学年半学期作用域并持久化，避免春/夏/秋/冬同名课程相互覆盖
+        final termStr = entry['term_name']?.toString() ?? '';
+        final parsedTerm = _parseYearAndTerm(termStr);
+        final months = (entry['active_months'] as List?)
+                ?.map((e) => _normalizeYearMonth(e.toString()))
+                .toList() ??
+            const <String>[];
+        final entryHalf = _extractHalfTagFromText('$title $termStr',
+                defaultTerm: parsedTerm.term) ??
+            _inferHalfFromMonths(
+              months,
+              defaultTerm: parsedTerm.term,
+              termText: termStr,
+            );
+        int entryYearStart = parsedTerm.yearStart ?? academicStartYear;
+        if (parsedTerm.yearStart == null && months.isNotEmpty) {
+          final ymParts = months.first.split('-');
+          final y = int.tryParse(ymParts.first);
+          final m = ymParts.length > 1 ? int.tryParse(ymParts[1]) : null;
+          if (y != null && m != null) {
+            entryYearStart = m >= 8 ? y : y - 1;
+          }
+        }
+        if (entryHalf != null) {
+          final scopedKey = '${cleaned}__${entryYearStart}_$entryHalf';
+          _userCourseIds[scopedKey] = cid;
+          if (box != null) {
+            await box.put('zhiyun_cid_$scopedKey', cid);
+          }
+        }
+
+        // 高优当季课程优先写入默认裸 Key，已绑定的当季课程不被后续旧课覆盖
         if (assignedCleaned.add(cleaned)) {
           _userCourseIds[cleaned] = cid;
           _userCourseIds[title] = cid;

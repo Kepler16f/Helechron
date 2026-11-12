@@ -254,21 +254,28 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
     final token = await ZhiyunService.ensureValidToken() ??
         ZhiyunService.getCachedZhiyunToken();
     var effectiveLivingroom = _currentLivingroomUrl;
-    if (widget.courseId.isNotEmpty &&
-        _currentSubId != null &&
-        _currentSubId!.isNotEmpty) {
-      effectiveLivingroom = ZhiyunService.buildLivingroomUrl(
+    if (widget.courseId.isNotEmpty) {
+      effectiveLivingroom = ZhiyunService.buildCourseLivingroomUrl(
         widget.courseId,
-        _currentSubId!,
+        subId: _currentSubId,
       );
     }
     effectiveLivingroom = ZhiyunService.appendTokenToUrl(
       effectiveLivingroom,
       token,
     );
-    final effectiveUrl = url.contains('classroom.zju.edu.cn')
-        ? ZhiyunService.appendTokenToUrl(url, token)
-        : url;
+    var rawTargetUrl = url;
+    if (rawTargetUrl.contains('classroom.zju.edu.cn/livingroom') &&
+        !rawTargetUrl.contains('sub_id=') &&
+        widget.courseId.isNotEmpty) {
+      rawTargetUrl = ZhiyunService.buildCourseLivingroomUrl(
+        widget.courseId,
+        subId: _currentSubId,
+      );
+    }
+    final effectiveUrl = rawTargetUrl.contains('classroom.zju.edu.cn')
+        ? ZhiyunService.appendTokenToUrl(rawTargetUrl, token)
+        : rawTargetUrl;
 
     final ok = await OhosNativeService.instance.openInAppVideoPlayer(
       url: effectiveUrl,

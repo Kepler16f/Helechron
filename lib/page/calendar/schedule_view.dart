@@ -140,6 +140,9 @@ class ScheduleView extends StatelessWidget {
                 }
 
                 final isFirstHalf = controller.isFirstHalfSemester(semester);
+                final preferredHalfTag = isFirstHalf
+                    ? (semester.name.contains('春夏') ? 'spring' : 'autumn')
+                    : (semester.name.contains('春夏') ? 'summer' : 'winter');
                 final sessionsByDayOfWeek = isFirstHalf
                     ? semester.firstHalfTimetable
                     : semester.secondHalfTimetable;
@@ -205,7 +208,8 @@ class ScheduleView extends StatelessWidget {
                                 ],
                               ),
                               ..._buildCourseScheduleByDayOfWeek(
-                                  sessionsByDayOfWeek, i, constraints)
+                                  sessionsByDayOfWeek, i, constraints,
+                                  preferredHalfTag: preferredHalfTag)
                             ],
                           ),
                         ),
@@ -225,7 +229,8 @@ class ScheduleView extends StatelessWidget {
                               ],
                             ),
                             ..._buildCourseScheduleByDayOfWeek(
-                                sessionsByDayOfWeek, 7, constraints)
+                                sessionsByDayOfWeek, 7, constraints,
+                                preferredHalfTag: preferredHalfTag)
                           ],
                         ),
                       ),
@@ -243,7 +248,8 @@ class ScheduleView extends StatelessWidget {
   List<Widget> _buildCourseScheduleByDayOfWeek(
       List<List<Session>> sessionsByDayOfWeek,
       int day,
-      BoxConstraints constraints) {
+      BoxConstraints constraints,
+      {String? preferredHalfTag}) {
     List<Tuple<int, int>> period = [];
     for (var i = 1; i <= 13; i++) {
       period.add(Tuple(i, i));
@@ -300,6 +306,7 @@ class ScheduleView extends StatelessWidget {
             child: SessionCard(
               sessionList: sessionList[i],
               hideInfomation: false,
+              preferredHalfTag: preferredHalfTag,
             ),
           ),
         );
