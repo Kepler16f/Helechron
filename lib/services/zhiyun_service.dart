@@ -3498,9 +3498,20 @@ class ZhiyunService {
                       'start_at': startAt,
                       'end_at': endAt,
                       'date': dKey,
-                      'status': (c['sub_status'] ?? c['status'])?.toString(),
-                      'is_live':
-                          checkIsLive(item: _normalizeCatalogueItem(c)),
+                      if (c['status'] != null) 'status': c['status'].toString(),
+                      if (c['sub_status'] != null)
+                        'sub_status': c['sub_status'].toString(),
+                      if (c['is_live'] != null) 'is_live': c['is_live'],
+                      if (c['playback'] != null) 'playback': c['playback'],
+                      if (c['video_url'] != null) 'video_url': c['video_url'],
+                      if (c['play_url'] != null) 'play_url': c['play_url'],
+                      if (c['m3u8'] != null) 'm3u8': c['m3u8'],
+                      if (c['replay_url'] != null)
+                        'replay_url': c['replay_url'],
+                      if (c['live_url'] != null) 'live_url': c['live_url'],
+                      if (c['has_replay'] != null)
+                        'has_replay': c['has_replay'],
+                      if (c['is_replay'] != null) 'is_replay': c['is_replay'],
                       'status_label': c['status_label']?.toString() ?? '',
                       'month': normMonth,
                     });

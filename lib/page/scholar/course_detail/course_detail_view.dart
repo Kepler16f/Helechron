@@ -1094,54 +1094,10 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
     );
   }
 
-  Widget _buildMyCoursesButton(BuildContext context) {
-    return CupertinoButton(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      color: CupertinoDynamicColor.resolve(
-          CupertinoColors.secondarySystemFill, context),
-      borderRadius: BorderRadius.circular(8),
-      minSize: 36,
-      child: const FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(CupertinoIcons.person_crop_square, size: 16),
-            SizedBox(width: 4),
-            Text('我的课程', style: TextStyle(fontSize: 13)),
-          ],
-        ),
-      ),
-      onPressed: () => ZhiyunService.openUrl(ZhiyunService.buildMyCoursesUrl()),
-    );
-  }
-
   static const _sakuraForeground = CupertinoDynamicColor.withBrightness(
     color: Color(0xFF7A1C59),
     darkColor: Color(0xFF28061E),
   );
-
-  Widget _buildLoadingCard(BuildContext context) {
-    return _buildCard(
-      context: context,
-      icon: CupertinoIcons.play_rectangle,
-      iconColor: CustomCupertinoDynamicColors.sakura,
-      iconForeground: _sakuraForeground,
-      title: '智云课堂',
-      tag: '正在匹配',
-      subtitle: '正在从智云课堂动态匹配课程房间与节次回放...',
-      buttons: [
-        const Expanded(
-          child: SizedBox(
-            height: 36,
-            child: Center(
-              child: CupertinoActivityIndicator(),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1159,11 +1115,11 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
         }
 
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildLoadingCard(context);
+          return const SizedBox.shrink();
         }
 
         final info = snapshot.data;
-        if (info == null) {
+        if (info == null || (!info.isLive && !info.hasReplay)) {
           return const SizedBox.shrink();
         }
 
@@ -1323,103 +1279,26 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
           );
         }
 
-        // 状态二：本节课未生成录播（未上课、转码中或无需录播）
-        if (info.isLessonSpecific && !info.hasReplay) {
-          return _buildCard(
-            context: context,
-            icon: CupertinoIcons.play_rectangle,
-            iconColor: CupertinoColors.secondaryLabel,
-            title: '本节录播回放',
-            tag: '未生成回放',
-            onTagTap: info.courseId != null
-                ? () => _showBindDialog(context, info.courseId!)
-                : null,
-            subtitle: '该节课录播尚未转码生成，或未到录播时间',
-            buttons: [
-              Expanded(
-                child: CupertinoButton(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-                  color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.secondarySystemFill, context),
-                  borderRadius: BorderRadius.circular(8),
-                  minSize: 36,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(CupertinoIcons.tv,
-                            size: 16,
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.label, context)),
-                        const SizedBox(width: 6),
-                        Text(
-                          '进入课程房间',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.label, context),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  onPressed: () => _openAndRecord(info.livingroomUrl, '课程房间',
-                      courseId: info.courseId),
-                ),
-              ),
-              const SizedBox(width: 8),
-              _buildMyCoursesButton(context),
-              if (info.courseId != null) ...[
-                const SizedBox(width: 8),
-                CupertinoButton(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                  color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.secondarySystemFill, context),
-                  borderRadius: BorderRadius.circular(8),
-                  minSize: 36,
-                  child: const Icon(CupertinoIcons.pencil, size: 16),
-                  onPressed: () => _showBindDialog(context, info.courseId!),
-                ),
-              ],
-            ],
-          );
-        }
-
-        // 状态三：整门课程智云房间直达（已绑定 ID）
-        if (info.courseId != null) {
-          final hasReplay = info.hasReplay;
+        // 状态二：整门课程智云房间直达（已确认有回放，且非单节模式）
+        if (info.courseId != null && info.hasReplay) {
           final sakuraFg =
               CupertinoDynamicColor.resolve(_sakuraForeground, context);
           return _buildCard(
             context: context,
-            icon: hasReplay
-                ? CupertinoIcons.play_rectangle_fill
-                : CupertinoIcons.play_rectangle,
-            iconColor: hasReplay
-                ? CustomCupertinoDynamicColors.sakura
-                : CupertinoColors.secondaryLabel,
-            iconForeground:
-                hasReplay ? _sakuraForeground : CupertinoColors.white,
+            icon: CupertinoIcons.play_rectangle_fill,
+            iconColor: CustomCupertinoDynamicColors.sakura,
+            iconForeground: _sakuraForeground,
             title: '智云课堂房间',
-            tag: hasReplay ? 'ID: ${info.courseId}' : '未生成回放',
+            tag: 'ID: ${info.courseId}',
             onTagTap: () => _showBindDialog(context, info.courseId!),
-            subtitle: hasReplay
-                ? '点击进入该课程专属房间，查看所有课节与回放'
-                : '该课程未在智云课堂生成录播回放或无需录播，点击仍可进入房间',
+            subtitle: '点击进入该课程专属房间，查看所有课节与回放',
             buttons: [
               Expanded(
                 child: CupertinoButton(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                   color: CupertinoDynamicColor.resolve(
-                      hasReplay
-                          ? CustomCupertinoDynamicColors.sakura
-                          : CupertinoColors.secondarySystemFill,
-                      context),
+                      CustomCupertinoDynamicColors.sakura, context),
                   borderRadius: BorderRadius.circular(8),
                   minSize: 36,
                   child: FittedBox(
@@ -1430,10 +1309,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                         Icon(
                           CupertinoIcons.arrow_up_right_square,
                           size: 16,
-                          color: hasReplay
-                              ? sakuraFg
-                              : CupertinoDynamicColor.resolve(
-                                  CupertinoColors.label, context),
+                          color: sakuraFg,
                         ),
                         const SizedBox(width: 6),
                         Text(
@@ -1441,10 +1317,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: hasReplay
-                                ? sakuraFg
-                                : CupertinoDynamicColor.resolve(
-                                    CupertinoColors.label, context),
+                            color: sakuraFg,
                           ),
                         ),
                       ],
@@ -1483,103 +1356,8 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
           );
         }
 
-        // 状态四：未绑定课程 ID（提供检索、我的课程与一键绑定）
-        // 采用比例分配按钮宽度，避免在窄屏或大字号下溢出粉色框
-        final searchSakuraFg =
-            CupertinoDynamicColor.resolve(_sakuraForeground, context);
-        return _buildCard(
-          context: context,
-          icon: CupertinoIcons.compass,
-          iconColor: CustomCupertinoDynamicColors.sakura,
-          iconForeground: _sakuraForeground,
-          title: '智云课堂',
-          tag: '未绑定',
-          onTagTap: () => _showBindDialog(context, ''),
-          subtitle: '点击前往智云课堂检索或进入我的课程，亦可一键绑定课程ID',
-          buttons: [
-            Expanded(
-              flex: 5,
-              child: CupertinoButton(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                color: CupertinoDynamicColor.resolve(
-                    CustomCupertinoDynamicColors.sakura, context),
-                borderRadius: BorderRadius.circular(8),
-                minSize: 36,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(CupertinoIcons.search,
-                          size: 15, color: searchSakuraFg),
-                      const SizedBox(width: 4),
-                      Text(
-                        '智云搜索',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: searchSakuraFg,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                onPressed: () => ZhiyunService.openUrl(
-                    ZhiyunService.buildSearchContentUrl(c.name)),
-              ),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              flex: 5,
-              child: CupertinoButton(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.secondarySystemFill, context),
-                borderRadius: BorderRadius.circular(8),
-                minSize: 36,
-                child: const FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(CupertinoIcons.person_crop_square, size: 15),
-                      SizedBox(width: 4),
-                      Text(
-                        '我的课程',
-                        style: TextStyle(fontSize: 13),
-                      ),
-                    ],
-                  ),
-                ),
-                onPressed: () =>
-                    ZhiyunService.openUrl(ZhiyunService.buildMyCoursesUrl()),
-              ),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              flex: 4,
-              child: CupertinoButton(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.secondarySystemFill, context),
-                borderRadius: BorderRadius.circular(8),
-                minSize: 36,
-                child: const FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(CupertinoIcons.link, size: 15),
-                      SizedBox(width: 3),
-                      Text('绑定ID', style: TextStyle(fontSize: 13)),
-                    ],
-                  ),
-                ),
-                onPressed: () => _showBindDialog(context, ''),
-              ),
-            ),
-          ],
-        );
+        // 无直播且无回放时彻底隐藏智云课堂卡片
+        return const SizedBox.shrink();
       },
     );
   }
