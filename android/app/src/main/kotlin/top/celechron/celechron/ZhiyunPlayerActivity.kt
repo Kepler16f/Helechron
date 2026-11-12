@@ -113,7 +113,7 @@ class ZhiyunPlayerActivity : Activity() {
             if (b.width() <= 0 || b.height() <= 0) return
             val sx = b.width() / 24f
             val sy = b.height() / 24f
-            strokePaint.strokeWidth = 2.1f * minOf(sx, sy)
+            strokePaint.strokeWidth = 2.2f * minOf(sx, sy)
             canvas.save()
             canvas.translate(b.left.toFloat(), b.top.toFloat())
             canvas.scale(sx, sy)
@@ -121,66 +121,76 @@ class ZhiyunPlayerActivity : Activity() {
             when (kind) {
                 IconKind.BACK -> {
                     val p = Path().apply {
-                        moveTo(15f, 5f)
-                        lineTo(8f, 12f)
-                        lineTo(15f, 19f)
+                        moveTo(15f, 4.5f)
+                        lineTo(7.5f, 12f)
+                        lineTo(15f, 19.5f)
                     }
                     canvas.drawPath(p, strokePaint)
                 }
 
                 IconKind.PLAY -> {
                     val p = Path().apply {
-                        moveTo(7f, 4.5f)
-                        lineTo(19.5f, 12f)
-                        lineTo(7f, 19.5f)
+                        moveTo(6.5f, 4f)
+                        lineTo(20f, 12f)
+                        lineTo(6.5f, 20f)
                         close()
                     }
                     canvas.drawPath(p, fillPaint)
                 }
 
                 IconKind.PAUSE -> {
-                    canvas.drawRoundRect(RectF(6.5f, 5f, 10.2f, 19f), 1.2f, 1.2f, fillPaint)
-                    canvas.drawRoundRect(RectF(13.8f, 5f, 17.5f, 19f), 1.2f, 1.2f, fillPaint)
+                    canvas.drawRoundRect(RectF(6f, 4.5f, 10f, 19.5f), 1.3f, 1.3f, fillPaint)
+                    canvas.drawRoundRect(RectF(14f, 4.5f, 18f, 19.5f), 1.3f, 1.3f, fillPaint)
                 }
 
                 IconKind.FULLSCREEN -> {
                     val p = Path().apply {
-                        moveTo(4f, 9f); lineTo(4f, 4f); lineTo(9f, 4f)
-                        moveTo(15f, 4f); lineTo(20f, 4f); lineTo(20f, 9f)
-                        moveTo(20f, 15f); lineTo(20f, 20f); lineTo(15f, 20f)
-                        moveTo(9f, 20f); lineTo(4f, 20f); lineTo(4f, 15f)
+                        moveTo(3.5f, 9f); lineTo(3.5f, 3.5f); lineTo(9f, 3.5f)
+                        moveTo(15f, 3.5f); lineTo(20.5f, 3.5f); lineTo(20.5f, 9f)
+                        moveTo(20.5f, 15f); lineTo(20.5f, 20.5f); lineTo(15f, 20.5f)
+                        moveTo(9f, 20.5f); lineTo(3.5f, 20.5f); lineTo(3.5f, 15f)
                     }
                     canvas.drawPath(p, strokePaint)
                 }
 
                 IconKind.FULLSCREEN_EXIT -> {
                     val p = Path().apply {
-                        moveTo(9f, 4f); lineTo(9f, 9f); lineTo(4f, 9f)
-                        moveTo(15f, 4f); lineTo(15f, 9f); lineTo(20f, 9f)
-                        moveTo(15f, 20f); lineTo(15f, 15f); lineTo(20f, 15f)
-                        moveTo(9f, 20f); lineTo(9f, 15f); lineTo(4f, 15f)
+                        moveTo(9f, 3.5f); lineTo(9f, 9f); lineTo(3.5f, 9f)
+                        moveTo(15f, 3.5f); lineTo(15f, 9f); lineTo(20.5f, 9f)
+                        moveTo(15f, 20.5f); lineTo(15f, 15f); lineTo(20.5f, 15f)
+                        moveTo(9f, 20.5f); lineTo(9f, 15f); lineTo(3.5f, 15f)
                     }
                     canvas.drawPath(p, strokePaint)
                 }
 
                 IconKind.PIP -> {
-                    canvas.drawRoundRect(RectF(3f, 5f, 21f, 19f), 2.2f, 2.2f, strokePaint)
-                    canvas.drawRoundRect(RectF(11.5f, 11.5f, 18.8f, 16.8f), 1.2f, 1.2f, fillPaint)
+                    val outer = Path().apply {
+                        moveTo(20.5f, 10f)
+                        lineTo(20.5f, 5f)
+                        lineTo(3f, 5f)
+                        lineTo(3f, 18f)
+                        lineTo(9.5f, 18f)
+                    }
+                    canvas.drawPath(outer, strokePaint)
+                    canvas.drawRoundRect(RectF(12f, 12f, 21.5f, 19.2f), 1.5f, 1.5f, fillPaint)
                 }
 
                 IconKind.ROTATE -> {
-                    canvas.drawRoundRect(RectF(6.5f, 4.5f, 17.5f, 19.5f), 2.0f, 2.0f, strokePaint)
-                    val arr = Path().apply {
-                        moveTo(3.5f, 9.5f); lineTo(3.5f, 6f); lineTo(6.8f, 6f)
-                        moveTo(20.5f, 14.5f); lineTo(20.5f, 18f); lineTo(17.2f, 18f)
+                    val arcRect = RectF(4.2f, 4.2f, 19.8f, 19.8f)
+                    val arrows = Path().apply {
+                        arcTo(arcRect, 205f, 115f, true)
+                        moveTo(18.2f, 3.4f); lineTo(18.2f, 7.2f); lineTo(14.4f, 7.0f)
+                        arcTo(arcRect, 25f, 115f, true)
+                        moveTo(5.8f, 20.6f); lineTo(5.8f, 16.8f); lineTo(9.6f, 17.0f)
                     }
-                    canvas.drawPath(arr, strokePaint)
+                    canvas.drawPath(arrows, strokePaint)
+                    canvas.drawRoundRect(RectF(9.5f, 7.5f, 14.5f, 16.5f), 1.0f, 1.0f, strokePaint)
                 }
 
                 IconKind.MORE -> {
-                    canvas.drawCircle(6f, 12f, 1.8f, fillPaint)
-                    canvas.drawCircle(12f, 12f, 1.8f, fillPaint)
-                    canvas.drawCircle(18f, 12f, 1.8f, fillPaint)
+                    canvas.drawCircle(5.5f, 12f, 2.1f, fillPaint)
+                    canvas.drawCircle(12f, 12f, 2.1f, fillPaint)
+                    canvas.drawCircle(18.5f, 12f, 2.1f, fillPaint)
                 }
             }
             canvas.restore()
@@ -392,7 +402,7 @@ class ZhiyunPlayerActivity : Activity() {
             )
         }
 
-        val backBtn = makeIconBtn(IconKind.BACK, sizeDp = 40, padDp = 9) {
+        val backBtn = makeIconBtn(IconKind.BACK, sizeDp = 44, padDp = 8) {
             if (isFullscreen) {
                 toggleLandscapeFullscreen()
             } else {
@@ -410,7 +420,7 @@ class ZhiyunPlayerActivity : Activity() {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
 
-        rotateBtn = makeIconBtn(IconKind.ROTATE, sizeDp = 38, padDp = 9, color = SAKURA_ACCENT) {
+        rotateBtn = makeIconBtn(IconKind.ROTATE, sizeDp = 44, padDp = 9, color = SAKURA_ACCENT) {
             sensorAutoRotate = !sensorAutoRotate
             updateRotateIcon()
             if (!sensorAutoRotate && !isFullscreenLocked) {
@@ -422,14 +432,14 @@ class ZhiyunPlayerActivity : Activity() {
             }
         }
 
-        pipBtn = makeIconBtn(IconKind.PIP, sizeDp = 38, padDp = 9) {
+        pipBtn = makeIconBtn(IconKind.PIP, sizeDp = 44, padDp = 9) {
             enterPipMode()
         }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             pipBtn.visibility = View.GONE
         }
 
-        moreBtn = makeIconBtn(IconKind.MORE, sizeDp = 38, padDp = 9) {
+        moreBtn = makeIconBtn(IconKind.MORE, sizeDp = 44, padDp = 9) {
             showMoreMenuDialog()
         }
 
@@ -443,13 +453,13 @@ class ZhiyunPlayerActivity : Activity() {
         centerPlayBtn = ImageView(this).apply {
             setImageDrawable(VectorIconDrawable(IconKind.PLAY, Color.WHITE))
             scaleType = ImageView.ScaleType.FIT_CENTER
-            val p = dp(14)
+            val p = dp(15)
             setPadding(p, p, p, p)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(Color.parseColor("#88000000"))
             }
-            layoutParams = FrameLayout.LayoutParams(dp(56), dp(56), Gravity.CENTER)
+            layoutParams = FrameLayout.LayoutParams(dp(64), dp(64), Gravity.CENTER)
             setOnClickListener { togglePlayPause(showBanner = false) }
         }
 
@@ -468,7 +478,7 @@ class ZhiyunPlayerActivity : Activity() {
             )
         }
 
-        bottomPlayBtn = makeIconBtn(IconKind.PLAY, sizeDp = 36, padDp = 8) {
+        bottomPlayBtn = makeIconBtn(IconKind.PLAY, sizeDp = 42, padDp = 8) {
             togglePlayPause(showBanner = false)
         }
 
@@ -520,11 +530,11 @@ class ZhiyunPlayerActivity : Activity() {
 
         speedPill = TextView(this).apply {
             text = "1.0x"
-            textSize = 11.5f
+            textSize = 12.5f
             setTextColor(Color.WHITE)
-            setPadding(dp(8), dp(4), dp(8), dp(4))
+            setPadding(dp(10), dp(5), dp(10), dp(5))
             background = GradientDrawable().apply {
-                cornerRadius = dp(12).toFloat()
+                cornerRadius = dp(13).toFloat()
                 setColor(Color.parseColor("#44FFFFFF"))
             }
             setOnClickListener {
@@ -533,7 +543,7 @@ class ZhiyunPlayerActivity : Activity() {
             }
         }
 
-        fullscreenBtn = makeIconBtn(IconKind.FULLSCREEN, sizeDp = 38, padDp = 9) {
+        fullscreenBtn = makeIconBtn(IconKind.FULLSCREEN, sizeDp = 42, padDp = 8) {
             toggleLandscapeFullscreen()
         }
 
@@ -557,14 +567,14 @@ class ZhiyunPlayerActivity : Activity() {
         webBarToggleBtn = ImageView(this).apply {
             setImageDrawable(VectorIconDrawable(IconKind.MORE, Color.WHITE))
             scaleType = ImageView.ScaleType.FIT_CENTER
-            val p = dp(7)
+            val p = dp(8)
             setPadding(p, p, p, p)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(Color.parseColor("#88000000"))
             }
             visibility = View.GONE
-            layoutParams = FrameLayout.LayoutParams(dp(34), dp(34), Gravity.TOP or Gravity.END)
+            layoutParams = FrameLayout.LayoutParams(dp(42), dp(42), Gravity.TOP or Gravity.END)
             setOnClickListener {
                 setControlsVisible(!controlsVisible)
             }
@@ -626,7 +636,7 @@ class ZhiyunPlayerActivity : Activity() {
         }
         webBarToggleBtn.requestLayout()
 
-        (hudPill.layoutParams as FrameLayout.LayoutParams).topMargin = topExtra + dp(52)
+        (hudPill.layoutParams as FrameLayout.LayoutParams).topMargin = topExtra + dp(60)
         hudPill.requestLayout()
     }
 

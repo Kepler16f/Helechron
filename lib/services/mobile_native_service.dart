@@ -310,16 +310,66 @@ class MobileNativeService {
   }
 
   Future<String?> pickDirectory() async {
+    lastFilePickError = null;
     try {
-      lastFilePickError = null;
-      final dir = await FilePicker.getDirectoryPath();
+      final dir = await _widgetChannel.invokeMethod<String>('pickDirectory');
       if (dir != null && dir.trim().isNotEmpty) {
         return dir.trim();
       }
       return null;
+    } on MissingPluginException {
+      try {
+        final dir = await FilePicker.getDirectoryPath();
+        if (dir != null && dir.trim().isNotEmpty) {
+          return dir.trim();
+        }
+        return null;
+      } catch (e) {
+        lastFilePickError = '$e';
+        debugPrint('pickDirectory fallback failed: $e');
+        return null;
+      }
+    } on PlatformException catch (e) {
+      lastFilePickError = e.message ?? e.code;
+      debugPrint('pickDirectory failed: $e');
+      return null;
     } catch (e) {
       lastFilePickError = '$e';
       debugPrint('pickDirectory failed: $e');
+      return null;
+    }
+  }
+
+  /// 将已下载的临时文件写入用户通过原生选择器授权的目录（适配 Android SAF / iOS 安全作用域）
+  Future<String?> copyFileToDirectory(
+    String sourcePath,
+    String targetDir,
+    String fileName, {
+    String? mimeType,
+  }) async {
+    try {
+      final result = await _widgetChannel.invokeMethod<String>(
+        'copyFileToDirectory',
+        {
+          'sourcePath': sourcePath,
+          'targetDir': targetDir,
+          'fileName': fileName,
+          'mimeType': mimeType ?? '',
+        },
+      );
+      if (result != null && result.trim().isNotEmpty) {
+        return result.trim();
+      }
+      return null;
+    } on MissingPluginException {
+      return null;
+    } on PlatformException catch (e) {
+      lastFilePickError = e.message ?? e.code;
+      debugPrint('copyFileToDirectory failed: $e');
+      return null;
+    } catch (e) {
+      lastFilePickError = '$e';
+      debugPrint('copyFileToDirectory failed: $e');
       return null;
     }
   }

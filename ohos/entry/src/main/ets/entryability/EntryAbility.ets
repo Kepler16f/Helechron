@@ -419,31 +419,189 @@ export default class EntryAbility extends FlutterAbility {
     }
   }
 
-  /// 选择或创建课件下载保存目录（优先调用系统 DocumentViewPicker DOWNLOAD 模式授权公共下载目录，回退沙箱目录）
+  private async loadPickedDirUriMap(): Promise<Record<string, string>> {
+    try {
+      const prefs = await this.getWidgetPrefs();
+      const raw = await prefs.get('picked_dir_uri_map', '{}') as string;
+      if (raw && raw.length > 0) {
+        return JSON.parse(raw) as Record<string, string>;
+      }
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, `loadPickedDirUriMap failed: ${JSON.stringify(e)}`);
+    }
+    return {};
+  }
+
+  private async savePickedDirUriMapping(displayPath: string, rawUri: string): Promise<void> {
+    try {
+      const map = await this.loadPickedDirUriMap();
+      map[displayPath] = rawUri;
+      const prefs = await this.getWidgetPrefs();
+      await prefs.put('picked_dir_uri_map', JSON.stringify(map));
+      await prefs.flush();
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, `savePickedDirUriMapping failed: ${JSON.stringify(e)}`);
+    }
+  }
+
+  /// 调用鸿蒙原生 DocumentViewPicker 目录选择模式（DocumentSelectMode.FOLDER）选择保存文件夹，
+  /// 仅当系统不支持 FOLDER 选择抛出异常时，回退至 DocumentPickerMode.DOWNLOAD 授权目录。
   private async pickDirectory(result: MethodResult): Promise<void> {
+    try {
+      const selectOptions = new picker.DocumentSelectOptions();
+      selectOptions.selectMode = picker.DocumentSelectMode.FOLDER;
+      selectOptions.maxSelectNumber = 1;
+      const documentPicker = new picker.DocumentViewPicker(this.context);
+      const uris: Array<string> = await documentPicker.select(selectOptions);
+      if (!uris || uris.length === 0 || uris[0].length === 0) {
+        result.success(null);
+        return;
+      }
+      const rawUri = uris[0];
+      let dirPath = rawUri;
+      try {
+        const resolved = new fileUri.FileUri(rawUri).path;
+        if (resolved && resolved.length > 0) {
+          dirPath = resolved;
+        }
+      } catch (convErr) {
+        hilog.warn(DOMAIN, TAG, `FileUri path convert fallback: ${JSON.stringify(convErr)}`);
+      }
+      await this.savePickedDirUriMapping(dirPath, rawUri);
+      hilog.info(DOMAIN, TAG, `pickDirectory via FOLDER mode: path=${dirPath}, uri=${rawUri}`);
+      result.success(dirPath);
+      return;
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, `pickDirectory FOLDER mode failed: ${JSON.stringify(e)}`);
+    }
+
     try {
       const saveOptions = new picker.DocumentSaveOptions();
       saveOptions.pickerMode = picker.DocumentPickerMode.DOWNLOAD;
       const documentPicker = new picker.DocumentViewPicker(this.context);
       const uris: Array<string> = await documentPicker.save(saveOptions);
       if (uris && uris.length > 0 && uris[0].length > 0) {
-        const dirPath = new fileUri.FileUri(uris[0]).path;
+        const rawUri = uris[0];
+        let dirPath = rawUri;
+        try {
+          const resolved = new fileUri.FileUri(rawUri).path;
+          if (resolved && resolved.length > 0) {
+            dirPath = resolved;
+          }
+        } catch (convErr) {
+          hilog.warn(DOMAIN, TAG, `DOWNLOAD FileUri convert fallback: ${JSON.stringify(convErr)}`);
+        }
+        await this.savePickedDirUriMapping(dirPath, rawUri);
         hilog.info(DOMAIN, TAG, `pickDirectory via DOWNLOAD mode: ${dirPath}`);
         result.success(dirPath);
         return;
       }
-    } catch (e) {
-      hilog.warn(DOMAIN, TAG, `pickDirectory DOWNLOAD mode fallback: ${JSON.stringify(e)}`);
-    }
-    try {
-      const fallbackDir = `${this.context.filesDir}/courseware`;
-      try {
-        if (!fileIo.accessSync(fallbackDir)) {
-          fileIo.mkdirSync(fallbackDir);
-        }
-      } catch (e) {}
-      result.success(fallbackDir);
+      result.success(null);
     } catch (err) {
+      hilog.error(DOMAIN, TAG, `pickDirectory failed: ${JSON.stringify(err)}`);
+      result.error('PICK_DIR_ERROR', this.formatError(err as Object), null);
+    }
+  }
+
+  private async streamCopyFile(srcPath: string, dstUriOrPath: string): Promise<void> {
+    const srcFile = await fileIo.open(srcPath, fileIo.OpenMode.READ_ONLY);
+    try {
+      const dstFile = await fileIo.open(
+        dstUriOrPath,
+        fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC
+      );
+      try {
+        const chunkSize = 64 * 1024;
+        const buf = new ArrayBuffer(chunkSize);
+        while (true) {
+          const readBytes = await fileIo.read(srcFile.fd, buf);
+          if (readBytes <= 0) {
+            break;
+          }
+          await fileIo.write(dstFile.fd, buf, { length: readBytes });
+        }
+      } finally {
+        await fileIo.close(dstFile);
+      }
+    } finally {
+      await fileIo.close(srcFile);
+    }
+  }
+
+  /// 将已下载到临时目录的文件通过 @kit.CoreFileKit 写入系统选择器授权的目标目录
+  private async copyFileToDirectory(call: MethodCall, result: MethodResult): Promise<void> {
+    try {
+      const sourcePath = (call.argument('sourcePath') as string) || '';
+      const targetDir = (call.argument('targetDir') as string) || '';
+      const fileName = (call.argument('fileName') as string) || 'courseware_file';
+      if (sourcePath.length === 0 || targetDir.length === 0) {
+        result.success(null);
+        return;
+      }
+
+      const uriMap = await this.loadPickedDirUriMap();
+      const mappedUri = uriMap[targetDir] || (targetDir.indexOf('file://') === 0 ? targetDir : '');
+      const candidates: Array<string> = [];
+      if (mappedUri.length > 0) {
+        const trimmedUri = mappedUri.endsWith('/') ? mappedUri.substring(0, mappedUri.length - 1) : mappedUri;
+        candidates.push(`${trimmedUri}/${encodeURIComponent(fileName)}`);
+        candidates.push(`${trimmedUri}/${fileName}`);
+      }
+      if (targetDir.indexOf('/') === 0) {
+        const trimmedDir = targetDir.endsWith('/') ? targetDir.substring(0, targetDir.length - 1) : targetDir;
+        candidates.push(`${trimmedDir}/${fileName}`);
+      }
+
+      for (const candidate of candidates) {
+        try {
+          await this.streamCopyFile(sourcePath, candidate);
+          let outPath = candidate;
+          if (candidate.indexOf('file://') === 0) {
+            try {
+              const resolved = new fileUri.FileUri(candidate).path;
+              if (resolved && resolved.length > 0) {
+                outPath = resolved;
+              }
+            } catch (e) {
+              // ignore
+            }
+          }
+          result.success(outPath);
+          return;
+        } catch (writeErr) {
+          hilog.warn(DOMAIN, TAG, `copyFileToDirectory candidate ${candidate} failed: ${JSON.stringify(writeErr)}`);
+        }
+      }
+
+      // 临时文件夹 URI 权限若在重启后失效，回退吊起系统“另存为”选择器完成保存
+      try {
+        const saveOptions = new picker.DocumentSaveOptions();
+        saveOptions.newFileNames = [fileName];
+        if (mappedUri.length > 0) {
+          saveOptions.defaultFilePathUri = mappedUri;
+        }
+        const documentPicker = new picker.DocumentViewPicker(this.context);
+        const savedUris: Array<string> = await documentPicker.save(saveOptions);
+        if (savedUris && savedUris.length > 0 && savedUris[0].length > 0) {
+          await this.streamCopyFile(sourcePath, savedUris[0]);
+          let outPath = savedUris[0];
+          try {
+            const resolved = new fileUri.FileUri(savedUris[0]).path;
+            if (resolved && resolved.length > 0) {
+              outPath = resolved;
+            }
+          } catch (e) {
+            // ignore
+          }
+          result.success(outPath);
+          return;
+        }
+      } catch (saveErr) {
+        hilog.warn(DOMAIN, TAG, `copyFileToDirectory save picker fallback failed: ${JSON.stringify(saveErr)}`);
+      }
+      result.success(null);
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, `copyFileToDirectory failed: ${JSON.stringify(err)}`);
       result.success(null);
     }
   }
@@ -598,6 +756,9 @@ export default class EntryAbility extends FlutterAbility {
         break;
       case 'pickDirectory':
         this.pickDirectory(result);
+        break;
+      case 'copyFileToDirectory':
+        this.copyFileToDirectory(call, result);
         break;
       case 'openFileWithSystem':
         this.openFileWithSystem(call, result);

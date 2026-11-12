@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
+import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/design/persistent_headers.dart';
 import 'package:celechron/design/round_rectangle_card.dart';
@@ -25,14 +28,15 @@ class _ECardBillPageState extends State<ECardBillPage> {
 
   late DateTime _selectedMonth;
   bool _loading = true;
-  bool _loadingMore = false;
+  bool _syncing = false;
   String? _error;
+  String? _syncWarning;
+  DateTime? _cacheUpdatedAt;
+  bool _monthFetchComplete = false;
 
   double? _balance;
   ECardMonthlySummary? _serverSummary;
   final List<ECardTransaction> _records = [];
-  int _currentPage = 1;
-  int _totalPages = 1;
   int _totalCount = 0;
   String _selectedCategory = '全部';
 
@@ -71,6 +75,66 @@ class _ECardBillPageState extends State<ECardBillPage> {
     return nextMonth.subtract(const Duration(days: 1));
   }
 
+  String _monthCacheKey(DateTime month) =>
+      'ecard_bill_${month.year}_${month.month.toString().padLeft(2, '0')}';
+
+  static const String _kBalanceCacheKey = 'ecard_balance_cache';
+
+  DatabaseHelper? get _db => Get.isRegistered<DatabaseHelper>(tag: 'db')
+      ? Get.find<DatabaseHelper>(tag: 'db')
+      : null;
+
+  ECardBillCacheSnapshot? _readMonthCache(DateTime month) {
+    try {
+      final raw = _db?.getCachedWebPage(_monthCacheKey(month));
+      return ECardBillCacheSnapshot.tryParse(raw);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _saveMonthCache(
+      DateTime month, ECardBillCacheSnapshot snapshot) async {
+    try {
+      await _db?.setCachedWebPage(
+          _monthCacheKey(month), snapshot.toJsonString());
+    } catch (_) {}
+  }
+
+  double? _readBalanceCache() {
+    try {
+      final raw = _db?.getCachedWebPage(_kBalanceCacheKey);
+      if (raw == null || raw.isEmpty) return null;
+      final decoded = jsonDecode(raw);
+      if (decoded is Map && decoded['balance'] is num) {
+        return (decoded['balance'] as num).toDouble();
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> _saveBalanceCache(double balance) async {
+    try {
+      await _db?.setCachedWebPage(
+        _kBalanceCacheKey,
+        jsonEncode({
+          'balance': balance,
+          'updatedAt': DateTime.now().toIso8601String(),
+        }),
+      );
+    } catch (_) {}
+  }
+
+  String _formatCacheTime(DateTime dt) {
+    final now = DateTime.now();
+    final hh = dt.hour.toString().padLeft(2, '0');
+    final mm = dt.minute.toString().padLeft(2, '0');
+    if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
+      return '今天 $hh:$mm';
+    }
+    return '${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} $hh:$mm';
+  }
+
   Future<String?> _ensureAuth({bool forceRelogin = false}) async {
     const secureStorage = FlutterSecureStorage();
     if (forceRelogin) {
@@ -87,111 +151,136 @@ class _ECardBillPageState extends State<ECardBillPage> {
   }
 
   Future<void> _loadMonthData({bool reset = true}) async {
-    if (reset) {
-      setState(() {
-        _loading = true;
-        _error = null;
-        _currentPage = 1;
+    final targetMonth = _selectedMonth;
+    final cachedSnapshot = _readMonthCache(targetMonth);
+    final cachedBalance = _readBalanceCache();
+    final hasCachedRecords =
+        cachedSnapshot != null && cachedSnapshot.records.isNotEmpty;
+
+    setState(() {
+      _error = null;
+      _syncWarning = null;
+      if (cachedBalance != null && _balance == null) {
+        _balance = cachedBalance;
+      }
+      if (cachedSnapshot != null) {
+        _records
+          ..clear()
+          ..addAll(cachedSnapshot.records);
+        _totalCount = cachedSnapshot.totalCount;
+        _monthFetchComplete = cachedSnapshot.complete;
+        _serverSummary = cachedSnapshot.summary;
+        _cacheUpdatedAt = cachedSnapshot.updatedAt;
+        _loading = false;
+        _syncing = true;
+      } else {
         _records.clear();
-      });
-    } else {
-      if (_loadingMore || _currentPage >= _totalPages) return;
-      setState(() {
-        _loadingMore = true;
-      });
-    }
+        _totalCount = 0;
+        _monthFetchComplete = false;
+        _cacheUpdatedAt = null;
+        _loading = true;
+        _syncing = false;
+      }
+    });
 
     try {
       var auth = await _ensureAuth();
       if (auth == null || auth.isEmpty) {
+        if (!mounted || targetMonth != _selectedMonth) return;
         setState(() {
           _loading = false;
-          _loadingMore = false;
-          _error = '尚未登录校园卡，请先在设置中登录学号';
+          _syncing = false;
+          if (hasCachedRecords) {
+            _syncWarning = '尚未重新登录校园卡，当前显示本地缓存';
+          } else {
+            _error = '尚未登录校园卡，请先在设置中登录学号';
+          }
         });
         return;
       }
 
       const secureStorage = FlutterSecureStorage();
       var account = await secureStorage.read(key: 'eCardAccount');
-      final timeFrom = _formatDate(_selectedMonth);
+      final timeFrom = _formatDate(targetMonth);
       final timeTo = _formatDate(_monthEnd);
 
-      final targetPage = reset ? 1 : (_currentPage + 1);
-      ECardTransactionPage pageData;
+      ECardMonthFetchResult fetchResult;
       try {
-        pageData = await ECard.getTransactions(
+        fetchResult = await ECard.fetchMonthTransactions(
           _httpClient,
           auth,
-          page: targetPage,
-          size: 50,
-          timeFrom: timeFrom,
-          timeTo: timeTo,
+          month: targetMonth,
           eCardAccount: account,
         );
       } on AuthenticationExpiredException {
         auth = await _ensureAuth(forceRelogin: true);
         if (auth == null || auth.isEmpty) rethrow;
         account = await secureStorage.read(key: 'eCardAccount');
-        pageData = await ECard.getTransactions(
+        fetchResult = await ECard.fetchMonthTransactions(
           _httpClient,
           auth,
-          page: targetPage,
-          size: 50,
-          timeFrom: timeFrom,
-          timeTo: timeTo,
+          month: targetMonth,
           eCardAccount: account,
         );
       }
 
-      // 若是首次加载且第一页数据不足以覆盖整月统计，自动再拉取最多 2 页以丰富统计图表
-      final merged = <ECardTransaction>[...pageData.records];
-      var lastPage = pageData.currentPage;
-      if (reset && pageData.pages > 1) {
-        for (int p = 2; p <= pageData.pages && p <= 3; p++) {
-          try {
-            final more = await ECard.getTransactions(
-              _httpClient,
-              auth,
-              page: p,
-              size: 50,
-              timeFrom: timeFrom,
-              timeTo: timeTo,
-              eCardAccount: account,
-            );
-            merged.addAll(more.records);
-            lastPage = p;
-          } catch (_) {
-            break;
-          }
-        }
+      if (!mounted || targetMonth != _selectedMonth) return;
+
+      // 网络波动保护：如果本月已有非空本地缓存而远端异常返回空列表，保留本地缓存并提示重试
+      if (fetchResult.records.isEmpty && hasCachedRecords) {
+        await _loadBalanceAndSummary(auth, account, timeFrom, timeTo,
+            allowSummary: !fetchResult.complete);
+        if (!mounted || targetMonth != _selectedMonth) return;
+        setState(() {
+          _loading = false;
+          _syncing = false;
+          _syncWarning = '网络波动，未拉取到最新流水，已保留本地缓存';
+        });
+        return;
       }
 
-      if (reset) {
-        _loadBalanceAndSummary(auth, account, timeFrom, timeTo);
-      }
-
-      if (!mounted) return;
+      final now = DateTime.now();
       setState(() {
-        if (reset) {
-          _records
-            ..clear()
-            ..addAll(merged);
-        } else {
-          _records.addAll(merged);
-        }
-        _currentPage = lastPage;
-        _totalPages = pageData.pages;
-        _totalCount = pageData.total;
+        _records
+          ..clear()
+          ..addAll(fetchResult.records);
+        _totalCount = fetchResult.records.length;
+        _monthFetchComplete = fetchResult.complete;
+        _cacheUpdatedAt = now;
         _loading = false;
-        _loadingMore = false;
+        _syncing = false;
+        _syncWarning = null;
       });
+
+      await _loadBalanceAndSummary(
+        auth,
+        account,
+        timeFrom,
+        timeTo,
+        allowSummary: !fetchResult.complete,
+      );
+
+      await _saveMonthCache(
+        targetMonth,
+        ECardBillCacheSnapshot(
+          monthKey: _monthCacheKey(targetMonth),
+          records: fetchResult.records,
+          totalCount: fetchResult.records.length,
+          complete: fetchResult.complete,
+          updatedAt: now,
+          summary: _serverSummary,
+        ),
+      );
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || targetMonth != _selectedMonth) return;
       setState(() {
         _loading = false;
-        _loadingMore = false;
-        _error = e.toString();
+        _syncing = false;
+        if (cachedSnapshot != null) {
+          _syncWarning = '网络波动，当前显示本地缓存（${_formatCacheTime(cachedSnapshot.updatedAt)}）';
+        } else {
+          _error = e.toString();
+        }
       });
     }
   }
@@ -200,11 +289,13 @@ class _ECardBillPageState extends State<ECardBillPage> {
     String auth,
     String? account,
     String timeFrom,
-    String timeTo,
-  ) async {
+    String timeTo, {
+    bool allowSummary = true,
+  }) async {
     try {
       final bal =
           await ECard.getBalance(_httpClient, auth, eCardAccount: account);
+      await _saveBalanceCache(bal);
       if (mounted) {
         setState(() {
           _balance = bal;
@@ -214,6 +305,7 @@ class _ECardBillPageState extends State<ECardBillPage> {
           .setWidgetData('ecardBalance', bal.toStringAsFixed(2));
     } catch (_) {}
 
+    if (!allowSummary) return;
     try {
       final summary = await ECard.getTurnoverCount(
         _httpClient,
@@ -221,7 +313,9 @@ class _ECardBillPageState extends State<ECardBillPage> {
         timeFrom: timeFrom,
         timeTo: timeTo,
       );
-      if (mounted && summary != null) {
+      if (mounted &&
+          summary != null &&
+          (summary.expenses > 0 || summary.income > 0)) {
         setState(() {
           _serverSummary = summary;
         });
@@ -236,6 +330,7 @@ class _ECardBillPageState extends State<ECardBillPage> {
     setState(() {
       _selectedMonth = next;
       _serverSummary = null;
+      _syncWarning = null;
     });
     _loadMonthData(reset: true);
   }
@@ -245,7 +340,9 @@ class _ECardBillPageState extends State<ECardBillPage> {
     for (final r in _records) {
       if (!r.isIncome) sum += r.amount;
     }
-    if (_serverSummary != null && _serverSummary!.expenses > sum) {
+    if (!_monthFetchComplete &&
+        _serverSummary != null &&
+        _serverSummary!.expenses > sum) {
       return _serverSummary!.expenses;
     }
     return sum;
@@ -256,7 +353,9 @@ class _ECardBillPageState extends State<ECardBillPage> {
     for (final r in _records) {
       if (r.isIncome) sum += r.amount;
     }
-    if (_serverSummary != null && _serverSummary!.income > sum) {
+    if (!_monthFetchComplete &&
+        _serverSummary != null &&
+        _serverSummary!.income > sum) {
       return _serverSummary!.income;
     }
     return sum;
@@ -470,7 +569,64 @@ class _ECardBillPageState extends State<ECardBillPage> {
               ),
             ],
           ),
+          if (_cacheUpdatedAt != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              _syncing
+                  ? '正在同步最新流水...'
+                  : '缓存更新于 ${_formatCacheTime(_cacheUpdatedAt!)}',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.tertiaryLabel, context),
+              ),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildSyncBanner(BuildContext context) {
+    if (!_syncing && _syncWarning == null) return const SizedBox.shrink();
+    final isWarning = _syncWarning != null;
+    final tint = isWarning
+        ? CupertinoColors.systemOrange
+        : CupertinoColors.activeBlue;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: RoundRectangleCard(
+        child: Row(
+          children: [
+            if (_syncing && !isWarning)
+              const CupertinoActivityIndicator(radius: 8)
+            else
+              Icon(
+                CupertinoIcons.exclamationmark_triangle_fill,
+                size: 16,
+                color: tint,
+              ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _syncWarning ?? '正在后台同步校园卡最新流水...',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.secondaryLabel, context),
+                ),
+              ),
+            ),
+            if (isWarning)
+              CupertinoButton(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                minSize: 28,
+                onPressed: () => _loadMonthData(reset: true),
+                child: const Text('重试', style: TextStyle(fontSize: 12.5)),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -808,6 +964,9 @@ class _ECardBillPageState extends State<ECardBillPage> {
               )
             else ...[
               SliverToBoxAdapter(
+                child: _buildSyncBanner(context),
+              ),
+              SliverToBoxAdapter(
                 child: Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -832,13 +991,27 @@ class _ECardBillPageState extends State<ECardBillPage> {
                   child: Padding(
                     padding: const EdgeInsets.all(36),
                     child: Center(
-                      child: Text(
-                        '暂无符合条件的流水记录',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: CupertinoDynamicColor.resolve(
-                              CupertinoColors.secondaryLabel, context),
-                        ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '暂无符合条件的流水记录',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: CupertinoDynamicColor.resolve(
+                                  CupertinoColors.secondaryLabel, context),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          CupertinoButton(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 6),
+                            minSize: 32,
+                            onPressed: () => _loadMonthData(reset: true),
+                            child: const Text('刷新重试',
+                                style: TextStyle(fontSize: 13)),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -849,24 +1022,6 @@ class _ECardBillPageState extends State<ECardBillPage> {
                     (context, index) =>
                         _buildTransactionTile(context, filtered[index]),
                     childCount: filtered.length,
-                  ),
-                ),
-              if (_currentPage < _totalPages)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
-                    child: Center(
-                      child: CupertinoButton(
-                        onPressed: _loadingMore
-                            ? null
-                            : () => _loadMonthData(reset: false),
-                        child: _loadingMore
-                            ? const CupertinoActivityIndicator()
-                            : Text(
-                                '加载更多流水（已加载 ${_records.length}/$_totalCount）'),
-                      ),
-                    ),
                   ),
                 ),
               const SliverToBoxAdapter(child: NativeBottomBarSpacer()),

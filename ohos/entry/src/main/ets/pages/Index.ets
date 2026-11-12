@@ -931,7 +931,7 @@ struct Index {
         .commands(commands)
         .fill(filled ? colorStr : '#00000000')
         .stroke(filled ? '#00000000' : colorStr)
-        .strokeWidth(2.1)
+        .strokeWidth(2.2)
         .strokeLineCap(LineCapStyle.Round)
         .strokeLineJoin(LineJoinStyle.Round)
     }
@@ -941,11 +941,31 @@ struct Index {
   }
 
   @Builder
+  PlayerPipIcon(size: number, colorStr: string) {
+    Shape() {
+      Path()
+        .commands('M20.5 10 L20.5 5 L3 5 L3 18 L9.5 18')
+        .fill('#00000000')
+        .stroke(colorStr)
+        .strokeWidth(2.2)
+        .strokeLineCap(LineCapStyle.Round)
+        .strokeLineJoin(LineJoinStyle.Round)
+      Path()
+        .commands('M12 12 L21.5 12 L21.5 19.2 L12 19.2 Z')
+        .fill(colorStr)
+        .stroke('#00000000')
+    }
+    .width(size)
+    .height(size)
+    .viewPort({ x: 0, y: 0, width: 24, height: 24 })
+  }
+
+  @Builder
   PlayerMoreDotsIcon(colorStr: string) {
-    Row({ space: 3 }) {
-      Circle({ width: 4, height: 4 }).fill(colorStr)
-      Circle({ width: 4, height: 4 }).fill(colorStr)
-      Circle({ width: 4, height: 4 }).fill(colorStr)
+    Row({ space: 4 }) {
+      Circle({ width: 5, height: 5 }).fill(colorStr)
+      Circle({ width: 5, height: 5 }).fill(colorStr)
+      Circle({ width: 5, height: 5 }).fill(colorStr)
     }
     .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Center)
@@ -1182,13 +1202,13 @@ struct Index {
             // 应用内悬浮小窗仅展示右上角 2 个简洁图标钮
             if (this.isPlayerMiniWindow) {
               Column() {
-                Row({ space: 6 }) {
+                Row({ space: 8 }) {
                   Stack() {
-                    this.PlayerVectorIcon('M4 9 L4 4 L9 4 M15 4 L20 4 L20 9 M20 15 L20 20 L15 20 M9 20 L4 20 L4 15', false, 14, '#FFFFFF')
+                    this.PlayerVectorIcon('M3.5 9 L3.5 3.5 L9 3.5 M15 3.5 L20.5 3.5 L20.5 9 M20.5 15 L20.5 20.5 L15 20.5 M9 20.5 L3.5 20.5 L3.5 15', false, 20, '#FFFFFF')
                   }
-                  .width(26)
-                  .height(26)
-                  .borderRadius(13)
+                  .width(34)
+                  .height(34)
+                  .borderRadius(17)
                   .backgroundColor('#99000000')
                   .onClick(() => {
                     this.isPlayerMiniWindow = false;
@@ -1196,11 +1216,11 @@ struct Index {
                   })
 
                   Stack() {
-                    this.PlayerVectorIcon('M6 6 L18 18 M18 6 L6 18', false, 14, '#FFFFFF')
+                    this.PlayerVectorIcon('M6 6 L18 18 M18 6 L6 18', false, 20, '#FFFFFF')
                   }
-                  .width(26)
-                  .height(26)
-                  .borderRadius(13)
+                  .width(34)
+                  .height(34)
+                  .borderRadius(17)
                   .backgroundColor('#99000000')
                   .onClick(() => {
                     this.closeVideoOverlay();
@@ -1209,7 +1229,7 @@ struct Index {
               }
               .width('100%')
               .height('100%')
-              .padding({ top: 6, right: 6 })
+              .padding({ top: 8, right: 8 })
               .alignItems(HorizontalAlign.End)
               .justifyContent(FlexAlign.Start)
               .hitTestBehavior(HitTestMode.Transparent)
@@ -1228,16 +1248,16 @@ struct Index {
                 Stack() {
                   this.PlayerVectorIcon(
                     this.isVideoPlaying
-                      ? 'M6.5 5 L10.2 5 L10.2 19 L6.5 19 Z M13.8 5 L17.5 5 L17.5 19 L13.8 19 Z'
-                      : 'M7 4.5 L19.5 12 L7 19.5 Z',
+                      ? 'M6 4.5 L10 4.5 L10 19.5 L6 19.5 Z M14 4.5 L18 4.5 L18 19.5 L14 19.5 Z'
+                      : 'M6.5 4 L20 12 L6.5 20 Z',
                     true,
-                    26,
+                    32,
                     '#FFFFFF'
                   )
                 }
-                .width(56)
-                .height(56)
-                .borderRadius(28)
+                .width(64)
+                .height(64)
+                .borderRadius(32)
                 .backgroundColor('#80000000')
                 .onClick(() => {
                   this.togglePlayPause();
@@ -1268,9 +1288,9 @@ struct Index {
                   Stack() {
                     this.PlayerMoreDotsIcon('#FFFFFF')
                   }
-                  .width(34)
-                  .height(34)
-                  .borderRadius(17)
+                  .width(40)
+                  .height(40)
+                  .borderRadius(20)
                   .backgroundColor('#88000000')
                   .onClick(() => {
                     this.controlsVisible = true;
@@ -1291,11 +1311,11 @@ struct Index {
                   // 顶部渐变控制栏
                   Row({ space: 6 }) {
                     Stack() {
-                      this.PlayerVectorIcon('M15 5 L8 12 L15 19', false, 20, '#FFFFFF')
+                      this.PlayerVectorIcon('M15 4.5 L7.5 12 L15 19.5', false, 26, '#FFFFFF')
                     }
-                    .width(36)
-                    .height(36)
-                    .borderRadius(18)
+                    .width(42)
+                    .height(42)
+                    .borderRadius(21)
                     .onClick(() => {
                       if (this.isPlayerFullscreen) {
                         this.exitLandscapeFullscreen();
@@ -1314,15 +1334,15 @@ struct Index {
 
                     Stack() {
                       this.PlayerVectorIcon(
-                        'M6.5 4.5 L17.5 4.5 L17.5 19.5 L6.5 19.5 Z M3.5 9.5 L3.5 6 L6.8 6 M20.5 14.5 L20.5 18 L17.2 18',
+                        'M4.9 8.7 C7.3 3.5 14.3 2.6 18.0 7.0 M18.2 3.4 L18.2 7.2 L14.4 7.0 M19.1 15.3 C16.7 20.5 9.7 21.4 6.0 17.0 M5.8 20.6 L5.8 16.8 L9.6 17.0 M9.5 7.5 L14.5 7.5 L14.5 16.5 L9.5 16.5 Z',
                         false,
-                        19,
+                        24,
                         this.sensorRotation ? '#FF6699' : '#FFFFFF'
                       )
                     }
-                    .width(36)
-                    .height(36)
-                    .borderRadius(18)
+                    .width(42)
+                    .height(42)
+                    .borderRadius(21)
                     .onClick(() => {
                       this.sensorRotation = !this.sensorRotation;
                       if (this.sensorRotation) {
@@ -1336,16 +1356,11 @@ struct Index {
                     })
 
                     Stack() {
-                      this.PlayerVectorIcon(
-                        'M3 5 L21 5 L21 19 L3 19 Z M12 12 L18.5 12 L18.5 16.5 L12 16.5 Z',
-                        false,
-                        19,
-                        '#FFFFFF'
-                      )
+                      this.PlayerPipIcon(24, '#FFFFFF')
                     }
-                    .width(36)
-                    .height(36)
-                    .borderRadius(18)
+                    .width(42)
+                    .height(42)
+                    .borderRadius(21)
                     .onClick(() => {
                       this.triggerPipOrMiniWindow();
                     })
@@ -1353,9 +1368,9 @@ struct Index {
                     Stack() {
                       this.PlayerMoreDotsIcon('#FFFFFF')
                     }
-                    .width(36)
-                    .height(36)
-                    .borderRadius(18)
+                    .width(42)
+                    .height(42)
+                    .borderRadius(21)
                     .onClick(() => {
                       this.showMoreSheet = !this.showMoreSheet;
                     })
@@ -1380,22 +1395,22 @@ struct Index {
                       Stack() {
                         this.PlayerVectorIcon(
                           this.isVideoPlaying
-                            ? 'M6.5 5 L10.2 5 L10.2 19 L6.5 19 Z M13.8 5 L17.5 5 L17.5 19 L13.8 19 Z'
-                            : 'M7 4.5 L19.5 12 L7 19.5 Z',
+                            ? 'M6 4.5 L10 4.5 L10 19.5 L6 19.5 Z M14 4.5 L18 4.5 L18 19.5 L14 19.5 Z'
+                            : 'M6.5 4 L20 12 L6.5 20 Z',
                           true,
-                          18,
+                          24,
                           '#FFFFFF'
                         )
                       }
-                      .width(34)
-                      .height(34)
-                      .borderRadius(17)
+                      .width(40)
+                      .height(40)
+                      .borderRadius(20)
                       .onClick(() => {
                         this.togglePlayPause();
                       })
 
                       Text(formatVideoTime(this.videoCurrentTime))
-                        .fontSize(11.5)
+                        .fontSize(12)
                         .fontColor(Color.White)
 
                       Slider({
@@ -1426,15 +1441,15 @@ struct Index {
                         })
 
                       Text(this.videoDuration > 0 ? formatVideoTime(this.videoDuration) : 'LIVE')
-                        .fontSize(11.5)
+                        .fontSize(12)
                         .fontColor(this.videoDuration > 0 ? '#CCFFFFFF' : '#FF6699')
                         .fontWeight(this.videoDuration > 0 ? FontWeight.Normal : FontWeight.Bold)
 
                       Text(this.videoSpeedLabel)
-                        .fontSize(11.5)
+                        .fontSize(12.5)
                         .fontColor(Color.White)
-                        .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-                        .borderRadius(11)
+                        .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+                        .borderRadius(12)
                         .backgroundColor('#44FFFFFF')
                         .onClick(() => {
                           this.cycleVideoSpeed();
@@ -1443,16 +1458,16 @@ struct Index {
                       Stack() {
                         this.PlayerVectorIcon(
                           this.isPlayerFullscreen
-                            ? 'M9 4 L9 9 L4 9 M15 4 L15 9 L20 9 M15 20 L15 15 L20 15 M9 20 L9 15 L4 15'
-                            : 'M4 9 L4 4 L9 4 M15 4 L20 4 L20 9 M20 15 L20 20 L15 20 M9 20 L4 20 L4 15',
+                            ? 'M9 3.5 L9 9 L3.5 9 M15 3.5 L15 9 L20.5 9 M15 20.5 L15 15 L20.5 15 M9 20.5 L9 15 L3.5 15'
+                            : 'M3.5 9 L3.5 3.5 L9 3.5 M15 3.5 L20.5 3.5 L20.5 9 M20.5 15 L20.5 20.5 L15 20.5 M9 20.5 L3.5 20.5 L3.5 15',
                           false,
-                          18,
+                          24,
                           '#FFFFFF'
                         )
                       }
-                      .width(34)
-                      .height(34)
-                      .borderRadius(17)
+                      .width(40)
+                      .height(40)
+                      .borderRadius(20)
                       .onClick(() => {
                         if (this.isPlayerFullscreen) {
                           this.exitLandscapeFullscreen();
@@ -1488,7 +1503,7 @@ struct Index {
                 .justifyContent(FlexAlign.Start)
                 .alignItems(HorizontalAlign.End)
                 .padding({
-                  top: (this.isPlayerFullscreen ? 12 : Math.max(14, this.safeTop + 6)) + 46,
+                  top: (this.isPlayerFullscreen ? 12 : Math.max(14, this.safeTop + 6)) + 52,
                   right: Math.max(12, this.safeRight + 8)
                 })
                 .backgroundColor('#33000000')

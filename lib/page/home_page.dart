@@ -359,7 +359,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> initFuse() async {
     await Future.delayed(const Duration(seconds: 1));
     if (!mounted) return;
-    if (UpdateService.instance.autoCheckUpdate) {
+    if (PlatformFeatures.isAndroid && UpdateService.instance.autoCheckUpdate) {
       await UpdateService.instance.performCheckUpdateFlow(
         context,
         showLoading: false,

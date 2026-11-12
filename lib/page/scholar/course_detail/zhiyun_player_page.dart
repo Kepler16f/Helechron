@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/design/persistent_headers.dart';
 import 'package:celechron/design/round_rectangle_card.dart';
+import 'package:celechron/http/zjuServices/courses.dart';
 import 'package:celechron/http/zjuServices/network_defense.dart';
 import 'package:celechron/model/option.dart';
 import 'package:celechron/services/ohos_native_service.dart';
@@ -230,30 +231,31 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
         final docDir = await getApplicationDocumentsDirectory();
         saveDir = '${docDir.path}/courseware';
       }
-      final dir = Directory(saveDir);
-      if (!await dir.exists()) {
-        await dir.create(recursive: true);
-      }
       final safeCourse =
           widget.courseName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-      final filePath =
-          '${dir.path}/${safeCourse}_PPT_${index + 1}_${slide.createdSec}s.jpg';
+      final fileName = '${safeCourse}_PPT_${index + 1}_${slide.createdSec}s.jpg';
       final req = await client
           .getUrl(Uri.parse(slide.imageUrl))
           .timeout(const Duration(seconds: 12));
       req.headers.set('Referer', 'https://classroom.zju.edu.cn/');
       final resp = await req.close().timeout(const Duration(seconds: 20));
       if (resp.statusCode == 200) {
-        final file = File(filePath);
-        final sink = file.openWrite();
-        await resp.pipe(sink);
-        await sink.flush();
-        await sink.close();
-        await OhosNativeService.instance.openFileWithSystem(
-          filePath,
+        final savedPath = await Courses.saveHttpResponseToDirectory(
+          resp,
+          saveDir: saveDir,
+          fileName: fileName,
           mimeType: 'image/jpeg',
-          title: '选择打开方式',
+          nativeCopyToDir: OhosNativeService.instance.copyFileToDirectory,
         );
+        if (savedPath != null && savedPath.isNotEmpty) {
+          await OhosNativeService.instance.openFileWithSystem(
+            savedPath,
+            mimeType: 'image/jpeg',
+            title: '选择打开方式',
+          );
+        }
+      } else {
+        await resp.drain();
       }
     } catch (e) {
       if (mounted) {

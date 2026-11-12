@@ -1583,11 +1583,15 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
       // 检查本地是否已下载
       final saveDir = await _resolveSaveDir();
       final downloaded = <String, String>{};
-      for (final item in list) {
-        final safeName = item.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-        final file = File('$saveDir/$safeName');
-        if (await file.exists() && await file.length() > 0) {
-          downloaded[_itemKey(item)] = file.path;
+      if (!saveDir.startsWith('content://') && !saveDir.startsWith('file://')) {
+        for (final item in list) {
+          final safeName = item.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+          final file = File('$saveDir/$safeName');
+          try {
+            if (await file.exists() && await file.length() > 0) {
+              downloaded[_itemKey(item)] = file.path;
+            }
+          } catch (_) {}
         }
       }
 
@@ -1630,6 +1634,7 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
         client,
         item: item,
         saveDir: saveDir,
+        nativeCopyToDir: OhosNativeService.instance.copyFileToDirectory,
       );
       if (!mounted) return;
       setState(() {

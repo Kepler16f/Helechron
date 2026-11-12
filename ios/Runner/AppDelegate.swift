@@ -3,6 +3,8 @@ import UIKit
 import AVKit
 import AVFoundation
 import SafariServices
+import UniformTypeIdentifiers
+import MobileCoreServices
 import workmanager_apple
 import UserNotifications
 #if canImport(WidgetKit)
@@ -24,11 +26,12 @@ private final class ZhiyunAVPlayerViewController: AVPlayerViewController {
 }
 
 @main
-@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, AVPlayerViewControllerDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, AVPlayerViewControllerDelegate, UIDocumentPickerDelegate {
   private var pendingRoute: String?
   private var documentInteractionController: UIDocumentInteractionController?
   private weak var presentingVideoHostController: UIViewController?
   private var activePipPlayerController: AVPlayerViewController?
+  private var pendingDirPickResult: FlutterResult?
 
   override func application(
     _ application: UIApplication,
@@ -139,9 +142,103 @@ private final class ZhiyunAVPlayerViewController: AVPlayerViewController {
           result(false)
         }
 
+      case "pickDirectory":
+        self?.presentNativeDirectoryPicker(controller: controller, result: result)
+
+      case "copyFileToDirectory":
+        if let args = call.arguments as? [String: Any],
+           let sourcePath = args["sourcePath"] as? String,
+           let targetDir = args["targetDir"] as? String,
+           let fileName = args["fileName"] as? String {
+          result(self?.copyFileToPickedDirectory(sourcePath: sourcePath, targetDir: targetDir, fileName: fileName))
+        } else {
+          result(nil)
+        }
+
       default:
         result(FlutterMethodNotImplemented)
       }
+    }
+  }
+
+  private func presentNativeDirectoryPicker(controller: UIViewController, result: @escaping FlutterResult) {
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self else {
+        result(nil)
+        return
+      }
+      self.pendingDirPickResult?(nil)
+      self.pendingDirPickResult = result
+      let picker: UIDocumentPickerViewController
+      if #available(iOS 14.0, *) {
+        picker = UIDocumentPickerViewController(forOpeningContentTypes: [UTType.folder], asCopy: false)
+      } else {
+        picker = UIDocumentPickerViewController(documentTypes: [kUTTypeFolder as String], in: .open)
+      }
+      picker.allowsMultipleSelection = false
+      picker.delegate = self
+      var presenter: UIViewController = controller
+      while let presented = presenter.presentedViewController, !presented.isBeingDismissed {
+        presenter = presented
+      }
+      presenter.present(picker, animated: true)
+    }
+  }
+
+  func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+    let callback = pendingDirPickResult
+    pendingDirPickResult = nil
+    guard let url = urls.first else {
+      callback?(nil)
+      return
+    }
+    let started = url.startAccessingSecurityScopedResource()
+    defer {
+      if started {
+        url.stopAccessingSecurityScopedResource()
+      }
+    }
+    if let bookmark = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) {
+      let key = "pickedDirBookmark_\(url.path)"
+      UserDefaults.standard.set(bookmark, forKey: key)
+    }
+    callback?(url.path)
+  }
+
+  func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+    let callback = pendingDirPickResult
+    pendingDirPickResult = nil
+    callback?(nil)
+  }
+
+  private func copyFileToPickedDirectory(sourcePath: String, targetDir: String, fileName: String) -> String? {
+    let srcUrl = URL(fileURLWithPath: sourcePath)
+    guard FileManager.default.fileExists(atPath: srcUrl.path) else {
+      return nil
+    }
+    var dirUrl = URL(fileURLWithPath: targetDir)
+    let key = "pickedDirBookmark_\(targetDir)"
+    if let bookmark = UserDefaults.standard.data(forKey: key) {
+      var stale = false
+      if let resolved = try? URL(resolvingBookmarkData: bookmark, options: [], relativeTo: nil, bookmarkDataIsStale: &stale) {
+        dirUrl = resolved
+      }
+    }
+    let started = dirUrl.startAccessingSecurityScopedResource()
+    defer {
+      if started {
+        dirUrl.stopAccessingSecurityScopedResource()
+      }
+    }
+    let dstUrl = dirUrl.appendingPathComponent(fileName)
+    do {
+      if FileManager.default.fileExists(atPath: dstUrl.path) {
+        try FileManager.default.removeItem(at: dstUrl)
+      }
+      try FileManager.default.copyItem(at: srcUrl, to: dstUrl)
+      return dstUrl.path
+    } catch {
+      return nil
     }
   }
 

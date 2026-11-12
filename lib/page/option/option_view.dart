@@ -662,28 +662,30 @@ class OptionPage extends StatelessWidget {
                           padding: const EdgeInsets.only(left: 16),
                           child: Text('关于', style: headerFooterTextStyle)),
                       children: <CupertinoListTile>[
-                        CupertinoListTile(
-                          title: const Text('检查更新'),
-                          subtitle: const Text('支持应用内下载并自动调起安装'),
-                          trailing: BackChervonRow(
-                            child: Text(
-                              'v${_optionController.celechronVersion}',
-                              style: trailingTextStyle,
+                        if (PlatformFeatures.isAndroid) ...[
+                          CupertinoListTile(
+                            title: const Text('检查更新'),
+                            subtitle: const Text('支持应用内下载并自动调起安装'),
+                            trailing: BackChervonRow(
+                              child: Text(
+                                'v${_optionController.celechronVersion}',
+                                style: trailingTextStyle,
+                              ),
+                            ),
+                            onTap: () =>
+                                _optionController.manualCheckUpdate(context),
+                          ),
+                          CupertinoListTile(
+                            title: const Text('启动时自动检查更新'),
+                            trailing: Obx(
+                              () => CupertinoSwitch(
+                                value: _optionController.autoCheckUpdate.value,
+                                onChanged: (value) => _optionController
+                                    .toggleAutoCheckUpdate(value),
+                              ),
                             ),
                           ),
-                          onTap: () =>
-                              _optionController.manualCheckUpdate(context),
-                        ),
-                        CupertinoListTile(
-                          title: const Text('启动时自动检查更新'),
-                          trailing: Obx(
-                            () => CupertinoSwitch(
-                              value: _optionController.autoCheckUpdate.value,
-                              onChanged: (value) => _optionController
-                                  .toggleAutoCheckUpdate(value),
-                            ),
-                          ),
-                        ),
+                        ],
                         CupertinoListTile(
                           title: const Text('关于 Helechron'),
                           trailing: BackChervonRow(
@@ -939,10 +941,29 @@ class OptionPage extends StatelessWidget {
             CupertinoActionSheetAction(
               onPressed: () async {
                 Navigator.pop(sheetContext);
+                // 等待底部弹窗收起动画完成，避免 iOS/HarmonyOS 原生选择器弹出时机冲突
+                await Future<void>.delayed(const Duration(milliseconds: 220));
                 final picked =
                     await OhosNativeService.instance.pickDirectory();
                 if (picked != null && picked.isNotEmpty) {
                   _optionController.downloadPath = picked;
+                  return;
+                }
+                final err = OhosNativeService.instance.lastFilePickError;
+                if (err != null && err.isNotEmpty && context.mounted) {
+                  showCupertinoDialog(
+                    context: context,
+                    builder: (ctx) => CupertinoAlertDialog(
+                      title: const Text('无法打开系统文件夹选择器'),
+                      content: Text(err),
+                      actions: [
+                        CupertinoDialogAction(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('好'),
+                        ),
+                      ],
+                    ),
+                  );
                 }
               },
               child: const Text('通过系统选择器选择文件夹'),

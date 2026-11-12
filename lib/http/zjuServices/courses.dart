@@ -1940,11 +1940,99 @@ class Courses {
     );
   }
 
+  /// 检查目录路径是否允许直接通过 POSIX File API 创建与写入（排除 content:// / file:// 及无权限目录）
+  static Future<bool> isDirectoryDirectlyWritable(String saveDir) async {
+    final trimmed = saveDir.trim();
+    if (trimmed.isEmpty ||
+        trimmed.startsWith('content://') ||
+        trimmed.startsWith('file://')) {
+      return false;
+    }
+    try {
+      final dir = Directory(trimmed);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      final probe = File(
+          '${dir.path}/.celechron_probe_${DateTime.now().microsecondsSinceEpoch}');
+      await probe.writeAsBytes(const [], flush: true);
+      await probe.delete();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 将 HTTP 响应流保存到目标目录；当目标为原生选择器返回的 URI 或受限目录时自动通过临时文件中转原生拷贝
+  static Future<String?> saveHttpResponseToDirectory(
+    Stream<List<int>> resp, {
+    required String saveDir,
+    required String fileName,
+    String? mimeType,
+    bool? directWritable,
+    Future<String?> Function(
+      String sourcePath,
+      String targetDir,
+      String fileName, {
+      String? mimeType,
+    })? nativeCopyToDir,
+  }) async {
+    final canWriteDirect =
+        directWritable ?? await isDirectoryDirectlyWritable(saveDir);
+    if (canWriteDirect) {
+      final dir = Directory(saveDir);
+      final targetFile = File('${dir.path}/$fileName');
+      final sink = targetFile.openWrite();
+      await resp.pipe(sink);
+      await sink.flush();
+      await sink.close();
+      if (await targetFile.exists() && await targetFile.length() > 0) {
+        return targetFile.path;
+      }
+      return null;
+    }
+
+    if (nativeCopyToDir == null) {
+      await resp.drain();
+      return null;
+    }
+
+    final tempFile = File(
+        '${Directory.systemTemp.path}/celechron_dl_${DateTime.now().microsecondsSinceEpoch}.tmp');
+    try {
+      final sink = tempFile.openWrite();
+      await resp.pipe(sink);
+      await sink.flush();
+      await sink.close();
+      if (!await tempFile.exists() || await tempFile.length() == 0) {
+        return null;
+      }
+      return await nativeCopyToDir(
+        tempFile.path,
+        saveDir,
+        fileName,
+        mimeType: mimeType,
+      );
+    } finally {
+      try {
+        if (await tempFile.exists()) {
+          await tempFile.delete();
+        }
+      } catch (_) {}
+    }
+  }
+
   /// 下载课件或附件到本地指定目录（包含 4 级回退下载链，支持仅预览 PDF 课件提取直链下载）
   static Future<String?> downloadCoursewareFile(
     HttpClient httpClient, {
     required CoursewareItem item,
     required String saveDir,
+    Future<String?> Function(
+      String sourcePath,
+      String targetDir,
+      String fileName, {
+      String? mimeType,
+    })? nativeCopyToDir,
   }) async {
     final session = await ensureSession(httpClient);
     final candidateUrls = <String>[];
@@ -1983,12 +2071,11 @@ class Courses {
       } catch (_) {}
     }
 
-    final dir = Directory(saveDir);
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
-    }
     final safeName = item.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    final targetFile = File('${dir.path}/$safeName');
+    final directWritable = await isDirectoryDirectlyWritable(saveDir);
+    if (!directWritable && nativeCopyToDir == null) {
+      return null;
+    }
 
     for (final urlStr in candidateUrls) {
       try {
@@ -2022,12 +2109,16 @@ class Courses {
               await resp.drain();
               break;
             }
-            final sink = targetFile.openWrite();
-            await resp.pipe(sink);
-            await sink.flush();
-            await sink.close();
-            if (await targetFile.exists() && await targetFile.length() > 0) {
-              return targetFile.path;
+            final saved = await saveHttpResponseToDirectory(
+              resp,
+              saveDir: saveDir,
+              fileName: safeName,
+              mimeType: contentType.split(';').first.trim(),
+              directWritable: directWritable,
+              nativeCopyToDir: nativeCopyToDir,
+            );
+            if (saved != null && saved.isNotEmpty) {
+              return saved;
             }
           } else {
             await resp.drain();

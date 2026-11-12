@@ -501,8 +501,11 @@ class OhosNativeService {
 
   /// 选择一个目录用于保存课件下载文件
   Future<String?> pickDirectory() async {
+    lastFilePickError = null;
     if (PlatformFeatures.usesFlutterPlugins) {
-      return MobileNativeService.instance.pickDirectory();
+      final picked = await MobileNativeService.instance.pickDirectory();
+      lastFilePickError = MobileNativeService.instance.lastFilePickError;
+      return picked;
     }
     try {
       final result = await _channel.invokeMethod<String>('pickDirectory');
@@ -515,6 +518,53 @@ class OhosNativeService {
       debugPrint('pickDirectory failed: $e');
       return null;
     } on MissingPluginException {
+      lastFilePickError = '当前平台暂不支持系统文件夹选择器';
+      return null;
+    } catch (e) {
+      lastFilePickError = '$e';
+      debugPrint('pickDirectory failed: $e');
+      return null;
+    }
+  }
+
+  /// 将临时下载好的文件写入用户已授权的目标目录（适配 Android SAF / iOS 安全作用域 / 鸿蒙 FilePicker URI）
+  Future<String?> copyFileToDirectory(
+    String sourcePath,
+    String targetDir,
+    String fileName, {
+    String? mimeType,
+  }) async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.copyFileToDirectory(
+        sourcePath,
+        targetDir,
+        fileName,
+        mimeType: mimeType,
+      );
+    }
+    try {
+      final result = await _channel.invokeMethod<String>(
+        'copyFileToDirectory',
+        {
+          'sourcePath': sourcePath,
+          'targetDir': targetDir,
+          'fileName': fileName,
+          'mimeType': mimeType ?? '',
+        },
+      );
+      if (result != null && result.trim().isNotEmpty) {
+        return result.trim();
+      }
+      return null;
+    } on PlatformException catch (e) {
+      lastFilePickError = e.message ?? e.code;
+      debugPrint('copyFileToDirectory failed: $e');
+      return null;
+    } on MissingPluginException {
+      return null;
+    } catch (e) {
+      lastFilePickError = '$e';
+      debugPrint('copyFileToDirectory failed: $e');
       return null;
     }
   }

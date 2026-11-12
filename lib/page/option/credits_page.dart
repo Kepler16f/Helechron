@@ -268,16 +268,16 @@ class _CreditsPageState extends State<CreditsPage> {
                     height: 8,
                   ),
                   _buildContributorsList(),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 24),
                   const Text(
-                    '📚 参考与致谢开源项目',
+                    '参考与致谢开源项目',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 18,
+                      fontSize: 20,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 16),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 28),
                     child: Text(

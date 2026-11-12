@@ -34,6 +34,13 @@ class MobileNativeService {
   Future<List<Map<String, dynamic>>> pickAnyFiles({int maxCount = 10}) async =>
       [];
   Future<String?> pickDirectory() async => null;
+  Future<String?> copyFileToDirectory(
+    String sourcePath,
+    String targetDir,
+    String fileName, {
+    String? mimeType,
+  }) async =>
+      null;
   Future<bool> openFileWithSystem(
     String filePath, {
     String? mimeType,

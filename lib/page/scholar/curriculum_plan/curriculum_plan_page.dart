@@ -24,10 +24,10 @@ class CurriculumPlanPage extends StatefulWidget {
 
 class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
   final _c = Get.put(CurriculumPlanController());
-  final Set<String> _expandedSections = <String>{};
+  final Set<String> _collapsedSections = <String>{};
   final Set<String> _expandedAuditModules = <String>{};
   bool _showAuditDetails = false;
-  bool _showAllPdfSections = false;
+  bool _showPdfModuleList = true;
   bool _showMoreSimilarPlans = false;
   bool _showObjectivesAndNotes = false;
 
@@ -1238,7 +1238,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
     final sections = _filteredCourseSections(ps);
     if (sections.isEmpty) return const SizedBox.shrink();
     final visibleSections =
-        _showAllPdfSections ? sections : sections.take(18).toList();
+        _showPdfModuleList ? sections : sections.take(0).toList();
 
     return RoundRectangleCard(
       child: Column(
@@ -1267,7 +1267,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
               final sec = visibleSections[i];
               final secKey = '${i}_${sec.label}';
               final indent = ((sec.level - 1) * 12.0).clamp(0.0, 36.0);
-              final isExpanded = _expandedSections.contains(secKey);
+              final isExpanded = !_collapsedSections.contains(secKey);
               final isForeign = PlanAuditHelper.isForeignSection(sec);
               final practiceIdx = PlanAuditHelper.practiceClassroomIndex(
                   '${sec.title} ${sec.parentPath}');
@@ -1337,9 +1337,9 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                           ? () {
                               setState(() {
                                 if (isExpanded) {
-                                  _expandedSections.remove(secKey);
+                                  _collapsedSections.add(secKey);
                                 } else {
-                                  _expandedSections.add(secKey);
+                                  _collapsedSections.remove(secKey);
                                 }
                               });
                             }
@@ -1509,22 +1509,25 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
               );
             }),
           ],
-          if (sections.length > 18)
-            CupertinoButton(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              onPressed: () =>
-                  setState(() => _showAllPdfSections = !_showAllPdfSections),
-              child: Text(
-                _showAllPdfSections
-                    ? '收起模块列表'
-                    : '展开全部 ${sections.length} 个子模块',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: accent,
-                ),
+          CupertinoButton(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            onPressed: () => setState(() {
+              _showPdfModuleList = !_showPdfModuleList;
+              if (_showPdfModuleList) {
+                _collapsedSections.clear();
+              }
+            }),
+            child: Text(
+              _showPdfModuleList
+                  ? '收起模块列表'
+                  : '展开全部 ${sections.length} 个子模块',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: accent,
               ),
             ),
+          ),
         ],
       ),
     );
