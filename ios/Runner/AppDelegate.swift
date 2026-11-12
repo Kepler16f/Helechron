@@ -272,7 +272,35 @@ private final class ZhiyunAVPlayerViewController: AVPlayerViewController {
     if lower.contains("livingroom") {
       return false
     }
-    return lower.contains(".mp4") || lower.contains(".m3u8") || lower.contains(".flv") || lower.contains(".ts")
+    return lower.contains(".mp4") || lower.contains(".m3u8") || lower.contains(".ts")
+  }
+
+  private func buildPhpSerializedToken(_ token: String) -> String {
+    let raw = token.trimmingCharacters(in: .whitespacesAndNewlines)
+    if raw.isEmpty { return "" }
+    let byteLen = raw.lengthOfBytes(using: .utf8)
+    let serialized = "a:2:{i:0;s:6:\"_token\";i:1;s:\(byteLen):\"\(raw)\";}"
+    var allowed = CharacterSet.alphanumerics
+    allowed.insert(charactersIn: "-_.~")
+    return serialized.addingPercentEncoding(withAllowedCharacters: allowed) ?? serialized
+  }
+
+  private func appendTokenToUrl(_ rawUrl: String, token: String?) -> String {
+    let tk = token?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if tk.isEmpty || rawUrl.isEmpty || rawUrl.contains("token=") || rawUrl.contains("_token=") {
+      return rawUrl
+    }
+    var allowed = CharacterSet.alphanumerics
+    allowed.insert(charactersIn: "-_.~")
+    let encoded = tk.addingPercentEncoding(withAllowedCharacters: allowed) ?? tk
+    if let hashIdx = rawUrl.firstIndex(of: "#") {
+      let base = String(rawUrl[..<hashIdx])
+      let hash = String(rawUrl[hashIdx...])
+      let sep = base.contains("?") ? "&" : "?"
+      return "\(base)\(sep)token=\(encoded)\(hash)"
+    }
+    let sep = rawUrl.contains("?") ? "&" : "?"
+    return "\(rawUrl)\(sep)token=\(encoded)"
   }
 
   private func openInAppVideoPlayer(
@@ -293,7 +321,8 @@ private final class ZhiyunAVPlayerViewController: AVPlayerViewController {
     streamUrls.forEach(addCandidate)
     addCandidate(urlStr)
 
-    let fallbackStr = (livingroomUrl?.isEmpty == false ? livingroomUrl : nil) ?? urlStr
+    let rawFallback = (livingroomUrl?.isEmpty == false ? livingroomUrl : nil) ?? urlStr
+    let fallbackStr = appendTokenToUrl(rawFallback, token: token)
     guard !candidates.isEmpty || URL(string: fallbackStr) != nil else {
       return false
     }
@@ -313,7 +342,8 @@ private final class ZhiyunAVPlayerViewController: AVPlayerViewController {
           "Origin": "https://classroom.zju.edu.cn"
         ]
         if let tk = token, !tk.isEmpty {
-          headers["Cookie"] = "_token=\(tk); token=\(tk)"
+          let phpCookie = self.buildPhpSerializedToken(tk)
+          headers["Cookie"] = "_token=\(phpCookie); token=\(tk)"
           headers["Authorization"] = "Bearer \(tk)"
         }
         let asset = AVURLAsset(url: streamUrl, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])

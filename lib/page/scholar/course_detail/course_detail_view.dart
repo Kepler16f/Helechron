@@ -664,11 +664,15 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
             '课节 $sid';
         final isLive = ZhiyunService.checkIsLive(item: item);
         final hasReplay = !isLive && ZhiyunService.checkHasReplay(item: item);
+        final lessonDt = ZhiyunService.parseZhiyunTimestamp(
+          item['start_at'] ?? item['class_begin'] ?? item['course_begin'],
+        );
         replayList.add(ZhiyunReplayInfo(
           courseId: courseId,
           subId: sid,
           courseName: widget.course.name,
           lessonTitle: t,
+          lessonDate: lessonDt,
           hasReplay: hasReplay,
           isLive: isLive,
           isLessonSpecific: true,

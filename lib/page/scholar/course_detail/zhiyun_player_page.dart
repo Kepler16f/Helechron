@@ -65,10 +65,44 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
         widget.replays.any((r) => r.subId == _currentSubId && r.isLive);
     if ((_currentSubId == null || _currentSubId!.isEmpty) &&
         widget.replays.isNotEmpty) {
-      final matched = _isLiveMode
-          ? widget.replays
-              .firstWhereOrNull((r) => r.isLive && r.subId?.isNotEmpty == true)
-          : widget.replays.firstWhereOrNull((r) => r.subId?.isNotEmpty == true);
+      final now = DateTime.now();
+      bool isNotFuture(ZhiyunReplayInfo r) =>
+          r.lessonDate == null ||
+          !r.lessonDate!.isAfter(now.add(const Duration(minutes: 30)));
+      bool isSameDay(DateTime a, DateTime b) =>
+          a.year == b.year && a.month == b.month && a.day == b.day;
+
+      ZhiyunReplayInfo? matched;
+      if (_isLiveMode) {
+        matched = widget.replays.firstWhereOrNull(
+              (r) => r.isLive && r.subId?.isNotEmpty == true,
+            ) ??
+            widget.replays.firstWhereOrNull(
+              (r) =>
+                  r.subId?.isNotEmpty == true &&
+                  r.lessonDate != null &&
+                  isSameDay(r.lessonDate!, now),
+            );
+      } else {
+        final pastWithReplay = widget.replays
+            .where((r) =>
+                r.subId?.isNotEmpty == true && r.hasReplay && isNotFuture(r))
+            .toList();
+        if (pastWithReplay.isNotEmpty) {
+          pastWithReplay.sort((a, b) => (b.lessonDate ?? DateTime(1970))
+              .compareTo(a.lessonDate ?? DateTime(1970)));
+          matched = pastWithReplay.first;
+        } else {
+          final pastAny = widget.replays
+              .where((r) => r.subId?.isNotEmpty == true && isNotFuture(r))
+              .toList();
+          if (pastAny.isNotEmpty) {
+            pastAny.sort((a, b) => (b.lessonDate ?? DateTime(1970))
+                .compareTo(a.lessonDate ?? DateTime(1970)));
+            matched = pastAny.first;
+          }
+        }
+      }
       if (matched != null) {
         _currentSubId = matched.subId;
         _currentTitle = matched.lessonTitle;
@@ -81,39 +115,72 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
   Future<void> _loadLessonData({bool autoPlayFirstTime = false}) async {
     var subId = _currentSubId;
     if ((subId == null || subId.isEmpty) && widget.courseId.isNotEmpty) {
-      // 实时直播常在开课瞬间才生成 sub_id，强制刷新一次课程目录获取最新直播 sub_id
-      final freshCat = await ZhiyunService.fetchCourseCatalogue(
-        widget.courseId,
-        forceRefresh: true,
-      );
-      Map<String, dynamic>? picked;
+      final now = DateTime.now();
       if (_isLiveMode) {
-        picked = freshCat.firstWhereOrNull(
-          (item) =>
-              ZhiyunService.checkIsLive(item: item) &&
-              (item['sub_id']?.toString().isNotEmpty == true ||
-                  item['id']?.toString().isNotEmpty == true),
+        final activeToday = await ZhiyunService.fetchActiveSubIdForDate(
+          widget.courseId,
+          now,
         );
-      } else {
-        picked = freshCat.firstWhereOrNull(
-          (item) =>
-              item['sub_id']?.toString().isNotEmpty == true ||
-              item['id']?.toString().isNotEmpty == true,
-        );
+        if (activeToday != null && activeToday.isNotEmpty) {
+          subId = activeToday;
+          _currentSubId = activeToday;
+          _currentLivingroomUrl =
+              ZhiyunService.buildLivingroomUrl(widget.courseId, activeToday);
+        }
       }
-      final pickedSub =
-          picked?['sub_id']?.toString() ?? picked?['id']?.toString();
-      if (pickedSub != null && pickedSub.isNotEmpty) {
-        subId = pickedSub;
-        _currentSubId = pickedSub;
-        _currentLivingroomUrl =
-            ZhiyunService.buildLivingroomUrl(widget.courseId, pickedSub);
-        if (mounted) {
-          setState(() {
-            _currentTitle = picked?['title']?.toString() ??
-                picked?['sub_title']?.toString() ??
-                _currentTitle;
-          });
+
+      if (subId == null || subId.isEmpty) {
+        // 实时直播常在开课瞬间才生成 sub_id，强制刷新一次课程目录获取最新直播 sub_id
+        final freshCat = await ZhiyunService.fetchCourseCatalogue(
+          widget.courseId,
+          forceRefresh: true,
+        );
+        bool isItemNotFuture(Map<String, dynamic> item) {
+          final dt = ZhiyunService.parseZhiyunTimestamp(
+            item['start_at'] ?? item['class_begin'] ?? item['course_begin'],
+          );
+          return dt == null ||
+              !dt.isAfter(now.add(const Duration(minutes: 30)));
+        }
+
+        Map<String, dynamic>? picked;
+        if (_isLiveMode) {
+          picked = freshCat.firstWhereOrNull(
+                (item) =>
+                    ZhiyunService.checkIsLive(item: item) &&
+                    (item['sub_id']?.toString().isNotEmpty == true ||
+                        item['id']?.toString().isNotEmpty == true),
+              ) ??
+              ZhiyunService.findBestMatchingCatalogueItem(
+                catalogue: freshCat,
+                targetDate: now,
+              );
+        } else {
+          final validPast = freshCat
+              .where((item) =>
+                  (item['sub_id']?.toString().isNotEmpty == true ||
+                      item['id']?.toString().isNotEmpty == true) &&
+                  isItemNotFuture(item))
+              .toList();
+          picked = validPast.firstWhereOrNull(
+                (item) => ZhiyunService.checkHasReplay(item: item),
+              ) ??
+              validPast.firstOrNull;
+        }
+        final pickedSub =
+            picked?['sub_id']?.toString() ?? picked?['id']?.toString();
+        if (pickedSub != null && pickedSub.isNotEmpty) {
+          subId = pickedSub;
+          _currentSubId = pickedSub;
+          _currentLivingroomUrl =
+              ZhiyunService.buildLivingroomUrl(widget.courseId, pickedSub);
+          if (mounted) {
+            setState(() {
+              _currentTitle = picked?['title']?.toString() ??
+                  picked?['sub_title']?.toString() ??
+                  _currentTitle;
+            });
+          }
         }
       }
     }
@@ -184,14 +251,32 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
   }
 
   Future<void> _launchInAppPlayer(String url) async {
-    final token = ZhiyunService.getCachedZhiyunToken();
+    final token = await ZhiyunService.ensureValidToken() ??
+        ZhiyunService.getCachedZhiyunToken();
+    var effectiveLivingroom = _currentLivingroomUrl;
+    if (widget.courseId.isNotEmpty &&
+        _currentSubId != null &&
+        _currentSubId!.isNotEmpty) {
+      effectiveLivingroom = ZhiyunService.buildLivingroomUrl(
+        widget.courseId,
+        _currentSubId!,
+      );
+    }
+    effectiveLivingroom = ZhiyunService.appendTokenToUrl(
+      effectiveLivingroom,
+      token,
+    );
+    final effectiveUrl = url.contains('classroom.zju.edu.cn')
+        ? ZhiyunService.appendTokenToUrl(url, token)
+        : url;
+
     final ok = await OhosNativeService.instance.openInAppVideoPlayer(
-      url: url,
+      url: effectiveUrl,
       title: '${widget.courseName} · $_currentTitle',
       streams: _streams
           .map((s) => {'label': s.label, 'url': s.url})
           .toList(),
-      livingroomUrl: _currentLivingroomUrl,
+      livingroomUrl: effectiveLivingroom,
       token: token,
     );
     if (!ok && mounted) {

@@ -251,5 +251,68 @@ void main() {
       expect(ZhiyunService.checkIsLive(item: item), isTrue);
       expect(ZhiyunService.checkHasReplay(item: item), isFalse);
     });
+
+    test('sub_status=2 与 class_begin/course_begin 字段可正确识别正在直播并匹配当节', () {
+      final now = DateTime.now();
+      final liveItem = <String, dynamic>{
+        'sub_id': '2026001',
+        'title': '第9讲 实时直播',
+        'sub_status': '2',
+        'class_begin':
+            (now.subtract(const Duration(minutes: 15)).millisecondsSinceEpoch ~/
+                    1000)
+                .toString(),
+        'class_end':
+            (now.add(const Duration(minutes: 30)).millisecondsSinceEpoch ~/ 1000)
+                .toString(),
+      };
+      final futureItem = <String, dynamic>{
+        'sub_id': '2026099',
+        'title': '下学期预排课节',
+        'sub_status': '1',
+        'course_begin':
+            (now.add(const Duration(days: 7)).millisecondsSinceEpoch ~/ 1000)
+                .toString(),
+      };
+      expect(ZhiyunService.checkIsLive(item: liveItem), isTrue);
+      expect(ZhiyunService.checkIsLive(item: futureItem), isFalse);
+
+      final matched = ZhiyunService.findBestMatchingCatalogueItem(
+        catalogue: [futureItem, liveItem],
+        targetDate: now,
+      );
+      expect(matched?['sub_id'], equals('2026001'));
+    });
+
+    test('PHP 序列化 _token Cookie 与网页播放器 token Query 拼接正确', () {
+      const token = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.payload.sig';
+      final encoded = ZhiyunService.buildPhpSerializedTokenCookie(token);
+      final decoded = Uri.decodeComponent(encoded);
+      expect(
+        decoded,
+        equals('a:2:{i:0;s:6:"_token";i:1;s:${token.length}:"$token";}'),
+      );
+
+      final appended = ZhiyunService.appendTokenToUrl(
+        'https://livingroom.cmc.zju.edu.cn/living?course_id=85940&sub_id=1973989',
+        token,
+      );
+      expect(appended, contains('&token='));
+      expect(appended, contains(Uri.encodeComponent(token)));
+
+      final refreshed = ZhiyunService.appendTokenToUrl(
+        'https://livingroom.cmc.zju.edu.cn/living?token=stale_token',
+        token,
+      );
+      final refreshedUri = Uri.parse(refreshed);
+      expect(refreshedUri.queryParameters['token'], equals(token));
+      expect(refreshedUri.queryParameters['tenant_code'], equals('112'));
+
+      final signed = ZhiyunService.signPlayUrl(
+        'https://live.cmc.zju.edu.cn/live/stream.m3u8',
+        isLive: true,
+      );
+      expect(Uri.parse(signed).queryParameters['clientUUID'], isNotEmpty);
+    });
   });
 }

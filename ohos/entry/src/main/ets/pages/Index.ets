@@ -151,6 +151,7 @@ struct Index {
   private lastSensorRotateMs: number = 0;
   private hideOverlayTimer: number = -1;
   private hudTimer: number = -1;
+  private prepareWatchdogTimer: number = -1;
   private dragStartX: number = 0;
   private dragStartY: number = 0;
   private tabsController: HdsTabsController = new HdsTabsController();
@@ -309,6 +310,7 @@ struct Index {
     this.isVideoPlaying = true;
     this.miniOffsetX = 0;
     this.miniOffsetY = 0;
+    this.preConfigureWebCookies();
     if (isDirectStreamUrl(this.inAppVideoUrl)) {
       this.activeVideoUrl = this.inAppVideoUrl;
       this.useWebFallback = false;
@@ -329,6 +331,13 @@ struct Index {
     this.scheduleHideOverlay();
   }
 
+  private clearPrepareWatchdog(): void {
+    if (this.prepareWatchdogTimer !== -1) {
+      clearTimeout(this.prepareWatchdogTimer);
+      this.prepareWatchdogTimer = -1;
+    }
+  }
+
   private clearOverlayTimers(): void {
     if (this.hideOverlayTimer !== -1) {
       clearTimeout(this.hideOverlayTimer);
@@ -338,6 +347,7 @@ struct Index {
       clearTimeout(this.hudTimer);
       this.hudTimer = -1;
     }
+    this.clearPrepareWatchdog();
   }
 
   private showHudMessage(msg: string): void {
@@ -442,6 +452,7 @@ struct Index {
   }
 
   private async releaseAvPlayer(): Promise<void> {
+    this.clearPrepareWatchdog();
     const p = this.avPlayer;
     this.avPlayer = undefined;
     if (p !== undefined) {
@@ -574,6 +585,14 @@ struct Index {
         return;
       }
       this.avPlayer = player;
+      this.clearPrepareWatchdog();
+      this.prepareWatchdogTimer = setTimeout(() => {
+        this.prepareWatchdogTimer = -1;
+        if (this.avPlayer === player && this.videoLoading && !this.useWebFallback) {
+          hilog.warn(DOMAIN, TAG, 'AVPlayer prepare watchdog timeout (8s), switching to next stream or web');
+          this.switchNextStreamOrWeb();
+        }
+      }, 8000);
       player.on('videoSizeChange', (width: number, height: number) => {
         if (this.avPlayer !== player) return;
         if (width > 0 && height > 0) {
@@ -588,6 +607,7 @@ struct Index {
       });
       player.on('error', (err: BusinessError) => {
         if (this.avPlayer !== player) return;
+        this.clearPrepareWatchdog();
         hilog.warn(DOMAIN, TAG, `AVPlayer error ${err.code}: ${err.message}`);
         this.switchNextStreamOrWeb();
       });
@@ -600,10 +620,12 @@ struct Index {
           try {
             await player.prepare();
           } catch (prepErr) {
+            this.clearPrepareWatchdog();
             hilog.warn(DOMAIN, TAG, `AVPlayer prepare failed: ${JSON.stringify(prepErr)}`);
             this.switchNextStreamOrWeb();
           }
         } else if (state === 'prepared') {
+          this.clearPrepareWatchdog();
           this.videoDuration = player.duration > 0 ? Math.floor(player.duration / 1000) : 0;
           this.videoLoading = false;
           try {
@@ -618,6 +640,7 @@ struct Index {
             hilog.warn(DOMAIN, TAG, `AVPlayer play failed: ${JSON.stringify(playErr)}`);
           }
         } else if (state === 'playing') {
+          this.clearPrepareWatchdog();
           this.isVideoPlaying = true;
           this.videoLoading = false;
           this.pipController?.setAutoStartEnabled(true);
@@ -643,14 +666,15 @@ struct Index {
         const headers: Record<string, string> = {
           'Referer': 'https://classroom.zju.edu.cn/',
           'Origin': 'https://classroom.zju.edu.cn',
-          'User-Agent': 'Mozilla/5.0 (Linux; HarmonyOS) AppleWebKit/537.36'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
         };
         if (this.inAppVideoToken.length > 0) {
-          headers['Cookie'] = `_token=${this.inAppVideoToken}; token=${this.inAppVideoToken}`;
+          const phpTk = this.buildPhpSerializedToken(this.inAppVideoToken);
+          headers['Cookie'] = `_token=${phpTk}; token=${this.inAppVideoToken}`;
           headers['Authorization'] = `Bearer ${this.inAppVideoToken}`;
         }
         const mediaSource: media.MediaSource = media.createMediaSourceWithUrl(targetUrl, headers);
-        const strategy: media.PlaybackStrategy = { preferredBufferDuration: 10 };
+        const strategy: media.PlaybackStrategy = { preferredBufferDuration: 6 };
         await player.setMediaSource(mediaSource, strategy);
         sourceAssigned = true;
       } catch (srcErr) {
@@ -744,15 +768,79 @@ struct Index {
     this.scheduleHideOverlay();
   }
 
-  private injectWebTokenJs(): void {
+  private seekRelativeSeconds(deltaSec: number): void {
+    if (this.useWebFallback || this.avPlayer === undefined || this.videoDuration <= 0) {
+      return;
+    }
+    const targetSec = Math.max(0, Math.min(this.videoDuration, this.videoCurrentTime + deltaSec));
+    this.videoCurrentTime = targetSec;
+    try {
+      this.avPlayer.seek(Math.floor(targetSec * 1000), media.SeekMode.SEEK_PREV_SYNC);
+      this.showHudMessage(deltaSec > 0 ? `快进 ${deltaSec} 秒` : `快退 ${Math.abs(deltaSec)} 秒`);
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, `seekRelativeSeconds failed: ${JSON.stringify(e)}`);
+    }
+    this.scheduleHideOverlay();
+  }
+
+  private buildPhpSerializedToken(token: string): string {
+    const trimmed = token.trim();
+    if (trimmed.length === 0) {
+      return '';
+    }
+    return encodeURIComponent(`a:2:{i:0;s:6:"_token";i:1;s:${trimmed.length}:"${trimmed}";}`);
+  }
+
+  private preConfigureWebCookies(): void {
     if (this.inAppVideoToken.length === 0) {
       return;
     }
-    const safeTk = this.inAppVideoToken
+    try {
+      const phpTk = this.buildPhpSerializedToken(this.inAppVideoToken);
+      const rawTk = this.inAppVideoToken.trim();
+      const hosts = [
+        'https://classroom.zju.edu.cn',
+        'https://yjapi.cmc.zju.edu.cn',
+        'https://tgmedia.cmc.zju.edu.cn',
+        'https://livingroom.cmc.zju.edu.cn'
+      ];
+      for (let i = 0; i < hosts.length; i++) {
+        webview.WebCookieManager.configCookieSync(hosts[i], `_token=${phpTk}; Path=/`);
+        webview.WebCookieManager.configCookieSync(hosts[i], `_token=${phpTk}; Domain=.zju.edu.cn; Path=/`);
+        webview.WebCookieManager.configCookieSync(hosts[i], `_token=${phpTk}; Domain=classroom.zju.edu.cn; Path=/`);
+        webview.WebCookieManager.configCookieSync(hosts[i], `token=${rawTk}; Path=/`);
+        webview.WebCookieManager.configCookieSync(hosts[i], `token=${rawTk}; Domain=.zju.edu.cn; Path=/`);
+      }
+    } catch (err) {
+      hilog.warn(DOMAIN, TAG, `preConfigureWebCookies failed: ${JSON.stringify(err)}`);
+    }
+  }
+
+  private injectWebTokenJs(): void {
+    const rawTk = this.inAppVideoToken.trim();
+    const safeTk = rawTk
       .replace(/\\/g, '\\\\')
       .replace(/'/g, "\\'")
       .replace(/\n/g, '');
-    const js = `try{localStorage.setItem('token','${safeTk}');localStorage.setItem('_token','${safeTk}');document.cookie='_token=${safeTk};path=/';document.cookie='token=${safeTk};path=/';}catch(e){}`;
+    const phpTk = this.buildPhpSerializedToken(rawTk);
+    const js = `try{` +
+      (safeTk.length > 0
+        ? `localStorage.setItem('token','${safeTk}');localStorage.setItem('_token','${safeTk}');` +
+          `document.cookie='_token=${phpTk};path=/;domain=.zju.edu.cn';` +
+          `document.cookie='_token=${phpTk};path=/';` +
+          `document.cookie='token=${safeTk};path=/;domain=.zju.edu.cn';` +
+          `document.cookie='token=${safeTk};path=/';`
+        : '') +
+      `if(!document.getElementById('celechron_zy_fullscreen_css')){` +
+        `var st=document.createElement('style');st.id='celechron_zy_fullscreen_css';` +
+        `st.innerHTML='html,body,#app{background:#000 !important;margin:0 !important;padding:0 !important;overflow:hidden !important;width:100vw !important;height:100vh !important;}' +` +
+        `'.header-wrapper,.living-header,.living-right,.right-wrapper,.nav-bar,.catalog-wrapper,.sidebar-wrapper,.chat-wrapper,.danmu-send-wrap{display:none !important;}' +` +
+        `'.living-room-wrapper,.living-content,.left-wrapper,.player-wrapper,.cmc-player-container,#cmc_player_container{position:fixed !important;left:0 !important;top:0 !important;right:0 !important;bottom:0 !important;width:100vw !important;height:100vh !important;max-width:100vw !important;max-height:100vh !important;margin:0 !important;padding:0 !important;z-index:9999 !important;background:#000 !important;}' +` +
+        `'video{width:100% !important;height:100% !important;object-fit:contain !important;background:#000 !important;}';` +
+        `document.head.appendChild(st);` +
+      `}` +
+      `setTimeout(function(){try{window.dispatchEvent(new Event('resize'));var v=document.querySelector('video');if(v&&v.paused){v.play().catch(function(){});}}catch(e){}},600);` +
+      `}catch(e){}`;
     try {
       this.webController.runJavaScript(js);
     } catch (e) {
@@ -760,14 +848,28 @@ struct Index {
     }
   }
 
+  private appendTokenParam(rawUrl: string): string {
+    const trimmed = rawUrl.trim();
+    const tk = this.inAppVideoToken.trim();
+    if (trimmed.length === 0 || tk.length === 0) {
+      return trimmed;
+    }
+    if (trimmed.indexOf('token=') >= 0) {
+      return trimmed;
+    }
+    const sep = trimmed.indexOf('?') >= 0 ? '&' : '?';
+    return `${trimmed}${sep}token=${encodeURIComponent(tk)}`;
+  }
+
   private webFallbackTarget(): string {
     if (this.inAppVideoLivingroomUrl.length > 0) {
-      return this.inAppVideoLivingroomUrl;
+      return this.appendTokenParam(this.inAppVideoLivingroomUrl);
     }
-    return !isDirectStreamUrl(this.inAppVideoUrl) ? this.inAppVideoUrl : '';
+    return !isDirectStreamUrl(this.inAppVideoUrl) ? this.appendTokenParam(this.inAppVideoUrl) : '';
   }
 
   private switchNextStreamOrWeb(): void {
+    this.clearPrepareWatchdog();
     const nextIdx = this.activeStreamIndex + 1;
     if (nextIdx < this.videoStreams.length) {
       this.activeStreamIndex = nextIdx;
@@ -777,7 +879,10 @@ struct Index {
       return;
     }
     if (this.webFallbackTarget().length > 0) {
+      this.preConfigureWebCookies();
       this.useWebFallback = true;
+      this.videoLoading = false;
+      this.controlsVisible = true;
       this.releaseSystemPip();
       this.releaseAvPlayer();
     }
@@ -924,48 +1029,50 @@ struct Index {
     .shadow({ radius: 20, color: '#1A000000', offsetX: 0, offsetY: 6 })
   }
 
+  private scaleSvgPath(cmd: string, sizeVp: number): string {
+    const factor: number = vp2px(sizeVp) / 24.0;
+    return cmd.replace(/-?\d+(\.\d+)?/g, (m: string): string => {
+      return (parseFloat(m) * factor).toFixed(2);
+    });
+  }
+
   @Builder
   PlayerVectorIcon(commands: string, filled: boolean, size: number, colorStr: string) {
-    Shape() {
-      Path()
-        .commands(commands)
-        .fill(filled ? colorStr : '#00000000')
-        .stroke(filled ? '#00000000' : colorStr)
-        .strokeWidth(2.2)
-        .strokeLineCap(LineCapStyle.Round)
-        .strokeLineJoin(LineJoinStyle.Round)
-    }
-    .width(size)
-    .height(size)
-    .viewPort({ x: 0, y: 0, width: 24, height: 24 })
+    Path()
+      .width(size)
+      .height(size)
+      .commands(this.scaleSvgPath(commands, size))
+      .fill(filled ? colorStr : '#00000000')
+      .stroke(filled ? '#00000000' : colorStr)
+      .strokeWidth(2.4)
+      .strokeLineCap(LineCapStyle.Round)
+      .strokeLineJoin(LineJoinStyle.Round)
   }
 
   @Builder
   PlayerPipIcon(size: number, colorStr: string) {
-    Shape() {
-      Path()
-        .commands('M20.5 10 L20.5 5 L3 5 L3 18 L9.5 18')
-        .fill('#00000000')
-        .stroke(colorStr)
-        .strokeWidth(2.2)
-        .strokeLineCap(LineCapStyle.Round)
-        .strokeLineJoin(LineJoinStyle.Round)
-      Path()
-        .commands('M12 12 L21.5 12 L21.5 19.2 L12 19.2 Z')
-        .fill(colorStr)
-        .stroke('#00000000')
+    Stack({ alignContent: Alignment.BottomEnd }) {
+      Column()
+        .width(size)
+        .height(Math.round(size * 0.78))
+        .border({ width: 2.0, color: colorStr, radius: 3 })
+      Column()
+        .width(Math.round(size * 0.48))
+        .height(Math.round(size * 0.38))
+        .borderRadius(2)
+        .backgroundColor(colorStr)
+        .margin({ right: 2, bottom: 2 })
     }
     .width(size)
-    .height(size)
-    .viewPort({ x: 0, y: 0, width: 24, height: 24 })
+    .height(Math.round(size * 0.78))
   }
 
   @Builder
   PlayerMoreDotsIcon(colorStr: string) {
-    Row({ space: 4 }) {
-      Circle({ width: 5, height: 5 }).fill(colorStr)
-      Circle({ width: 5, height: 5 }).fill(colorStr)
-      Circle({ width: 5, height: 5 }).fill(colorStr)
+    Row({ space: 5 }) {
+      Circle({ width: 6, height: 6 }).fill(colorStr)
+      Circle({ width: 6, height: 6 }).fill(colorStr)
+      Circle({ width: 6, height: 6 }).fill(colorStr)
     }
     .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Center)
@@ -973,10 +1080,36 @@ struct Index {
 
   @Builder
   VideoPlayerMoreSheet() {
-    Column({ space: 12 }) {
+    Column({ space: 14 }) {
+      Row() {
+        Text('播放控制与设置')
+          .fontSize(15)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .layoutWeight(1)
+        Text(this.sensorRotation ? '重力旋屏：已开启' : '重力旋屏：已锁定')
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.sensorRotation ? '#FF6699' : '#CCFFFFFF')
+          .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+          .borderRadius(14)
+          .backgroundColor(this.sensorRotation ? '#33FF6699' : '#26FFFFFF')
+          .onClick(() => {
+            this.sensorRotation = !this.sensorRotation;
+            if (this.sensorRotation) {
+              this.startGravitySensor();
+              this.showHudMessage('已开启重力旋屏');
+            } else {
+              this.stopGravitySensor();
+              this.showHudMessage('已锁定方向');
+            }
+          })
+      }
+      .width('100%')
+
       if (!this.useWebFallback) {
         Text('播放倍速')
-          .fontSize(12)
+          .fontSize(13)
           .fontWeight(FontWeight.Medium)
           .fontColor('#B3FFFFFF')
         Row({ space: 8 }) {
@@ -989,18 +1122,18 @@ struct Index {
       }
 
       if (!this.useWebFallback && this.videoStreams.length > 1) {
-        Text('视频线路')
-          .fontSize(12)
+        Text('视频线路切换')
+          .fontSize(13)
           .fontWeight(FontWeight.Medium)
           .fontColor('#B3FFFFFF')
         Flex({ wrap: FlexWrap.Wrap }) {
           ForEach(this.videoStreams, (streamItem: StreamSource, idx: number) => {
             Text(streamItem.label)
-              .fontSize(12)
+              .fontSize(13.5)
               .fontColor(this.activeStreamIndex === idx ? '#FF6699' : Color.White)
               .fontWeight(this.activeStreamIndex === idx ? FontWeight.Bold : FontWeight.Normal)
-              .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-              .borderRadius(8)
+              .padding({ left: 14, right: 14, top: 8, bottom: 8 })
+              .borderRadius(10)
               .backgroundColor(this.activeStreamIndex === idx ? '#33FF6699' : '#26FFFFFF')
               .margin({ right: 8, bottom: 8 })
               .onClick(() => {
@@ -1017,12 +1150,14 @@ struct Index {
       Row({ space: 10 }) {
         if (!this.useWebFallback && this.webFallbackTarget().length > 0) {
           Text('切换网页端播放器')
-            .fontSize(12.5)
+            .fontSize(13.5)
+            .fontWeight(FontWeight.Medium)
             .fontColor(Color.White)
-            .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-            .borderRadius(8)
-            .backgroundColor('#330A84FF')
+            .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+            .borderRadius(10)
+            .backgroundColor('#4D0A84FF')
             .onClick(() => {
+              this.preConfigureWebCookies();
               this.useWebFallback = true;
               this.showMoreSheet = false;
               this.controlsVisible = true;
@@ -1031,11 +1166,12 @@ struct Index {
             })
         } else if (this.useWebFallback && (this.videoStreams.length > 0 || isDirectStreamUrl(this.inAppVideoUrl))) {
           Text('返回原生流播放器')
-            .fontSize(12.5)
+            .fontSize(13.5)
+            .fontWeight(FontWeight.Medium)
             .fontColor(Color.White)
-            .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-            .borderRadius(8)
-            .backgroundColor('#33FF6699')
+            .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+            .borderRadius(10)
+            .backgroundColor('#4DFF6699')
             .onClick(() => {
               this.useWebFallback = false;
               this.showMoreSheet = false;
@@ -1047,37 +1183,36 @@ struct Index {
             })
         }
 
-        if (this.useWebFallback) {
-          Text('收起顶栏')
-            .fontSize(12.5)
-            .fontColor('#CCFFFFFF')
-            .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-            .borderRadius(8)
-            .backgroundColor('#26FFFFFF')
-            .onClick(() => {
-              this.showMoreSheet = false;
-              this.controlsVisible = false;
-            })
-        }
+        Text('小窗悬浮播放')
+          .fontSize(13.5)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(Color.White)
+          .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+          .borderRadius(10)
+          .backgroundColor('#33FFFFFF')
+          .onClick(() => {
+            this.showMoreSheet = false;
+            this.triggerPipOrMiniWindow();
+          })
       }
     }
-    .width(300)
-    .padding(14)
-    .borderRadius(14)
-    .backgroundColor('#E81A1A1E')
-    .border({ width: 0.6, color: '#33FFFFFF' })
-    .shadow({ radius: 20, color: '#88000000', offsetX: 0, offsetY: 8 })
+    .width(320)
+    .padding(16)
+    .borderRadius(16)
+    .backgroundColor('#F01A1A1E')
+    .border({ width: 0.8, color: '#33FFFFFF' })
+    .shadow({ radius: 24, color: '#99000000', offsetX: 0, offsetY: 8 })
     .alignItems(HorizontalAlign.Start)
   }
 
   @Builder
   SpeedPresetChip(label: string, spd: media.PlaybackSpeed) {
     Text(label)
-      .fontSize(12)
+      .fontSize(13.5)
       .fontColor(this.videoSpeedLabel === label ? '#FF6699' : Color.White)
-      .fontWeight(this.videoSpeedLabel === label ? FontWeight.Bold : FontWeight.Normal)
-      .padding({ left: 8, right: 8, top: 5, bottom: 5 })
-      .borderRadius(8)
+      .fontWeight(this.videoSpeedLabel === label ? FontWeight.Bold : FontWeight.Medium)
+      .padding({ left: 11, right: 11, top: 7, bottom: 7 })
+      .borderRadius(10)
       .backgroundColor(this.videoSpeedLabel === label ? '#33FF6699' : '#26FFFFFF')
       .onClick(() => {
         this.setVideoSpeedPreset(label, spd);
@@ -1128,30 +1263,125 @@ struct Index {
             // 底层：统一 XComponent（支持应用外系统 PiPWindow + 应用内无重加载切小窗）或 WebView
             if (this.useWebFallback && this.webFallbackTarget().length > 0) {
               Column() {
+                if (!this.isPlayerMiniWindow) {
+                  Row({ space: 10 }) {
+                    Stack() {
+                      this.PlayerVectorIcon('M15 4.5 L7.5 12 L15 19.5', false, 26, '#FFFFFF')
+                    }
+                    .width(46)
+                    .height(46)
+                    .borderRadius(23)
+                    .backgroundColor('#4DFFFFFF')
+                    .onClick(() => {
+                      if (this.isPlayerFullscreen) {
+                        this.exitLandscapeFullscreen();
+                      } else {
+                        this.closeVideoOverlay();
+                      }
+                    })
+
+                    Text(this.inAppVideoTitle)
+                      .fontSize(15.5)
+                      .fontWeight(FontWeight.Medium)
+                      .fontColor(Color.White)
+                      .maxLines(1)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
+                      .layoutWeight(1)
+
+                    if (this.videoStreams.length > 0 || isDirectStreamUrl(this.inAppVideoUrl)) {
+                      Row({ space: 5 }) {
+                        Text('原生流')
+                          .fontSize(13)
+                          .fontWeight(FontWeight.Bold)
+                          .fontColor(Color.White)
+                      }
+                      .height(38)
+                      .padding({ left: 12, right: 12 })
+                      .borderRadius(19)
+                      .backgroundColor('#CCFF6699')
+                      .alignItems(VerticalAlign.Center)
+                      .onClick(() => {
+                        this.useWebFallback = false;
+                        this.showMoreSheet = false;
+                        this.videoLoading = true;
+                        this.scheduleHideOverlay();
+                        if (this.xComponentSurfaceId.length > 0) {
+                          this.startAvPlayerPlayback(this.activeVideoUrl.length > 0 ? this.activeVideoUrl : this.inAppVideoUrl);
+                        }
+                      })
+                    }
+
+                    Row({ space: 5 }) {
+                      this.PlayerVectorIcon(
+                        this.isPlayerFullscreen
+                          ? 'M9 3.5 L9 9 L3.5 9 M15 3.5 L15 9 L20.5 9 M15 20.5 L15 15 L20.5 15 M9 20.5 L9 15 L3.5 15'
+                          : 'M3.5 9 L3.5 3.5 L9 3.5 M15 3.5 L20.5 3.5 L20.5 9 M20.5 15 L20.5 20.5 L15 20.5 M9 20.5 L3.5 20.5 L3.5 15',
+                        false,
+                        18,
+                        '#FFFFFF'
+                      )
+                      Text(this.isPlayerFullscreen ? '竖屏' : '横屏')
+                        .fontSize(13)
+                        .fontWeight(FontWeight.Bold)
+                        .fontColor(Color.White)
+                    }
+                    .height(38)
+                    .padding({ left: 12, right: 12 })
+                    .borderRadius(19)
+                    .backgroundColor('#33FFFFFF')
+                    .alignItems(VerticalAlign.Center)
+                    .onClick(() => {
+                      if (this.isPlayerFullscreen) {
+                        this.exitLandscapeFullscreen();
+                      } else {
+                        this.enterLandscapeFullscreen();
+                      }
+                    })
+
+                    Stack() {
+                      this.PlayerMoreDotsIcon('#FFFFFF')
+                    }
+                    .width(46)
+                    .height(46)
+                    .borderRadius(23)
+                    .backgroundColor('#33FFFFFF')
+                    .onClick(() => {
+                      this.showMoreSheet = !this.showMoreSheet;
+                    })
+                  }
+                  .width('100%')
+                  .padding({
+                    left: Math.max(12, this.safeLeft + 8),
+                    right: Math.max(12, this.safeRight + 8),
+                    top: this.isPlayerFullscreen ? 8 : Math.max(10, this.safeTop + 4),
+                    bottom: 8
+                  })
+                  .backgroundColor('#141418')
+                }
+
                 Web({ src: this.webFallbackTarget(), controller: this.webController })
                   .width('100%')
                   .layoutWeight(1)
+                  .backgroundColor(Color.Black)
                   .javaScriptAccess(true)
                   .domStorageAccess(true)
                   .mediaPlayGestureAccess(false)
                   .mixedMode(MixedMode.All)
                   .onControllerAttached(() => {
-                    if (this.inAppVideoToken.length > 0) {
-                      try {
-                        const hosts = [
-                          'https://classroom.zju.edu.cn',
-                          'https://yjapi.cmc.zju.edu.cn',
-                          'https://tgmedia.cmc.zju.edu.cn'
-                        ];
-                        for (let i = 0; i < hosts.length; i++) {
-                          webview.WebCookieManager.configCookieSync(hosts[i], `_token=${this.inAppVideoToken}; Path=/`);
-                          webview.WebCookieManager.configCookieSync(hosts[i], `token=${this.inAppVideoToken}; Path=/`);
-                          webview.WebCookieManager.configCookieSync(hosts[i], `_token=${this.inAppVideoToken}; Domain=.zju.edu.cn; Path=/`);
-                          webview.WebCookieManager.configCookieSync(hosts[i], `token=${this.inAppVideoToken}; Domain=.zju.edu.cn; Path=/`);
-                        }
-                      } catch (err) {
-                        hilog.warn(DOMAIN, TAG, `configCookieSync failed: ${JSON.stringify(err)}`);
-                      }
+                    this.preConfigureWebCookies();
+                    try {
+                      this.webController.setCustomUserAgent(
+                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+                      );
+                    } catch (uaErr) {
+                      hilog.warn(DOMAIN, TAG, `setCustomUserAgent failed: ${JSON.stringify(uaErr)}`);
+                    }
+                  })
+                  .onSslErrorEventReceive((event) => {
+                    try {
+                      event.handler.handleConfirm();
+                    } catch (sslErr) {
+                      hilog.warn(DOMAIN, TAG, `handleConfirm ssl failed: ${JSON.stringify(sslErr)}`);
                     }
                   })
                   .onPageBegin(() => {
@@ -1163,11 +1393,6 @@ struct Index {
               }
               .width('100%')
               .height('100%')
-              .padding({
-                top: (!this.isPlayerMiniWindow && this.controlsVisible)
-                  ? (this.isPlayerFullscreen ? 54 : (Math.max(14, this.safeTop + 6) + 46))
-                  : 0
-              })
             } else {
               XComponent({
                 id: 'zhiyunPlayerXComponent',
@@ -1199,29 +1424,34 @@ struct Index {
                 })
             }
 
-            // 应用内悬浮小窗仅展示右上角 2 个简洁图标钮
+            // 应用内悬浮小窗仅展示右上角 2 个大号清晰图标钮
             if (this.isPlayerMiniWindow) {
               Column() {
-                Row({ space: 8 }) {
+                Row({ space: 10 }) {
                   Stack() {
-                    this.PlayerVectorIcon('M3.5 9 L3.5 3.5 L9 3.5 M15 3.5 L20.5 3.5 L20.5 9 M20.5 15 L20.5 20.5 L15 20.5 M9 20.5 L3.5 20.5 L3.5 15', false, 20, '#FFFFFF')
+                    this.PlayerVectorIcon(
+                      'M3.5 9 L3.5 3.5 L9 3.5 M15 3.5 L20.5 3.5 L20.5 9 M20.5 15 L20.5 20.5 L15 20.5 M9 20.5 L3.5 20.5 L3.5 15',
+                      false,
+                      22,
+                      '#FFFFFF'
+                    )
                   }
-                  .width(34)
-                  .height(34)
-                  .borderRadius(17)
-                  .backgroundColor('#99000000')
+                  .width(42)
+                  .height(42)
+                  .borderRadius(21)
+                  .backgroundColor('#B3000000')
                   .onClick(() => {
                     this.isPlayerMiniWindow = false;
                     this.enterLandscapeFullscreen();
                   })
 
                   Stack() {
-                    this.PlayerVectorIcon('M6 6 L18 18 M18 6 L6 18', false, 20, '#FFFFFF')
+                    this.PlayerVectorIcon('M6 6 L18 18 M18 6 L6 18', false, 22, '#FFFFFF')
                   }
-                  .width(34)
-                  .height(34)
-                  .borderRadius(17)
-                  .backgroundColor('#99000000')
+                  .width(42)
+                  .height(42)
+                  .borderRadius(21)
+                  .backgroundColor('#B3000000')
                   .onClick(() => {
                     this.closeVideoOverlay();
                   })
@@ -1238,84 +1468,108 @@ struct Index {
             // 中央加载/播放提示与 HUD（非应用内小窗且非系统画中画时展示）
             if (!this.isPlayerMiniWindow && !this.isSystemPipActive) {
               if (!this.useWebFallback && this.videoLoading) {
-                LoadingProgress()
-                  .width(40)
-                  .height(40)
-                  .color('#FF6699')
+                Column({ space: 10 }) {
+                  LoadingProgress()
+                    .width(48)
+                    .height(48)
+                    .color('#FF6699')
+                  Text('正在连接课堂流...')
+                    .fontSize(13)
+                    .fontColor('#CCFFFFFF')
+                }
+                .padding(16)
+                .borderRadius(16)
+                .backgroundColor('#80000000')
               }
 
               if (!this.useWebFallback && this.controlsVisible && !this.videoLoading) {
-                Stack() {
-                  this.PlayerVectorIcon(
-                    this.isVideoPlaying
-                      ? 'M6 4.5 L10 4.5 L10 19.5 L6 19.5 Z M14 4.5 L18 4.5 L18 19.5 L14 19.5 Z'
-                      : 'M6.5 4 L20 12 L6.5 20 Z',
-                    true,
-                    32,
-                    '#FFFFFF'
-                  )
+                Row({ space: 28 }) {
+                  if (this.videoDuration > 0) {
+                    Stack() {
+                      Text('-10s')
+                        .fontSize(14)
+                        .fontWeight(FontWeight.Bold)
+                        .fontColor(Color.White)
+                    }
+                    .width(56)
+                    .height(56)
+                    .borderRadius(28)
+                    .backgroundColor('#80000000')
+                    .border({ width: 0.8, color: '#40FFFFFF' })
+                    .onClick(() => {
+                      this.seekRelativeSeconds(-10);
+                    })
+                  }
+
+                  Stack() {
+                    this.PlayerVectorIcon(
+                      this.isVideoPlaying
+                        ? 'M6 4.5 L10 4.5 L10 19.5 L6 19.5 Z M14 4.5 L18 4.5 L18 19.5 L14 19.5 Z'
+                        : 'M7 4.2 L20.2 12 L7 19.8 Z',
+                      true,
+                      38,
+                      '#FFFFFF'
+                    )
+                  }
+                  .width(76)
+                  .height(76)
+                  .borderRadius(38)
+                  .backgroundColor('#88000000')
+                  .border({ width: 1.0, color: '#4DFFFFFF' })
+                  .onClick(() => {
+                    this.togglePlayPause();
+                  })
+
+                  if (this.videoDuration > 0) {
+                    Stack() {
+                      Text('+10s')
+                        .fontSize(14)
+                        .fontWeight(FontWeight.Bold)
+                        .fontColor(Color.White)
+                    }
+                    .width(56)
+                    .height(56)
+                    .borderRadius(28)
+                    .backgroundColor('#80000000')
+                    .border({ width: 0.8, color: '#40FFFFFF' })
+                    .onClick(() => {
+                      this.seekRelativeSeconds(10);
+                    })
+                  }
                 }
-                .width(64)
-                .height(64)
-                .borderRadius(32)
-                .backgroundColor('#80000000')
-                .onClick(() => {
-                  this.togglePlayPause();
-                })
+                .alignItems(VerticalAlign.Center)
               }
 
               if (this.hudText.length > 0) {
                 Column() {
                   Text(this.hudText)
-                    .fontSize(13)
+                    .fontSize(14)
+                    .fontWeight(FontWeight.Medium)
                     .fontColor(Color.White)
-                    .padding({ left: 14, right: 14, top: 7, bottom: 7 })
-                    .borderRadius(18)
-                    .backgroundColor('#CC1C1C1E')
+                    .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+                    .borderRadius(20)
+                    .backgroundColor('#D91C1C1E')
                 }
                 .width('100%')
                 .height('100%')
-                .padding({ top: (this.isPlayerFullscreen ? 14 : this.safeTop + 12) + 52 })
+                .padding({ top: (this.isPlayerFullscreen ? 18 : this.safeTop + 16) + 60 })
                 .alignItems(HorizontalAlign.Center)
                 .justifyContent(FlexAlign.Start)
                 .hitTestBehavior(HitTestMode.None)
               }
 
-              // 网页全屏/收起顶栏时的右上角微弱呼出钮
-              if (this.useWebFallback && !this.controlsVisible) {
-                Row() {
-                  Blank()
-                  Stack() {
-                    this.PlayerMoreDotsIcon('#FFFFFF')
-                  }
-                  .width(40)
-                  .height(40)
-                  .borderRadius(20)
-                  .backgroundColor('#88000000')
-                  .onClick(() => {
-                    this.controlsVisible = true;
-                  })
-                }
-                .width('100%')
-                .padding({
-                  top: this.isPlayerFullscreen ? 12 : Math.max(14, this.safeTop + 6),
-                  right: Math.max(12, this.safeRight + 8)
-                })
-                .position({ x: 0, y: 0 })
-                .hitTestBehavior(HitTestMode.Transparent)
-              }
-
-              // 悬浮渐隐工具栏（顶部 + 底部）
-              if (this.controlsVisible) {
+              // 原生流播放器悬浮渐隐工具栏（顶部 + 底部双行，参考 Bilibili/主流移动端播放器设计）
+              if (!this.useWebFallback && this.controlsVisible) {
                 Column() {
-                  // 顶部渐变控制栏
-                  Row({ space: 6 }) {
+                  // 顶部渐变控制栏：返回 + 标题 + 小窗胶囊 + 更多
+                  Row({ space: 10 }) {
                     Stack() {
                       this.PlayerVectorIcon('M15 4.5 L7.5 12 L15 19.5', false, 26, '#FFFFFF')
                     }
-                    .width(42)
-                    .height(42)
-                    .borderRadius(21)
+                    .width(48)
+                    .height(48)
+                    .borderRadius(24)
+                    .backgroundColor('#66000000')
                     .onClick(() => {
                       if (this.isPlayerFullscreen) {
                         this.exitLandscapeFullscreen();
@@ -1325,42 +1579,25 @@ struct Index {
                     })
 
                     Text(this.inAppVideoTitle)
-                      .fontSize(15)
+                      .fontSize(16)
                       .fontWeight(FontWeight.Medium)
                       .fontColor(Color.White)
                       .maxLines(1)
                       .textOverflow({ overflow: TextOverflow.Ellipsis })
                       .layoutWeight(1)
 
-                    Stack() {
-                      this.PlayerVectorIcon(
-                        'M4.9 8.7 C7.3 3.5 14.3 2.6 18.0 7.0 M18.2 3.4 L18.2 7.2 L14.4 7.0 M19.1 15.3 C16.7 20.5 9.7 21.4 6.0 17.0 M5.8 20.6 L5.8 16.8 L9.6 17.0 M9.5 7.5 L14.5 7.5 L14.5 16.5 L9.5 16.5 Z',
-                        false,
-                        24,
-                        this.sensorRotation ? '#FF6699' : '#FFFFFF'
-                      )
+                    Row({ space: 6 }) {
+                      this.PlayerPipIcon(20, '#FFFFFF')
+                      Text('小窗')
+                        .fontSize(13.5)
+                        .fontWeight(FontWeight.Medium)
+                        .fontColor(Color.White)
                     }
-                    .width(42)
-                    .height(42)
-                    .borderRadius(21)
-                    .onClick(() => {
-                      this.sensorRotation = !this.sensorRotation;
-                      if (this.sensorRotation) {
-                        this.startGravitySensor();
-                        this.showHudMessage('已开启重力旋屏');
-                      } else {
-                        this.stopGravitySensor();
-                        this.showHudMessage('已锁定方向');
-                      }
-                      this.scheduleHideOverlay();
-                    })
-
-                    Stack() {
-                      this.PlayerPipIcon(24, '#FFFFFF')
-                    }
-                    .width(42)
-                    .height(42)
-                    .borderRadius(21)
+                    .height(40)
+                    .padding({ left: 12, right: 12 })
+                    .borderRadius(20)
+                    .backgroundColor('#66000000')
+                    .alignItems(VerticalAlign.Center)
                     .onClick(() => {
                       this.triggerPipOrMiniWindow();
                     })
@@ -1368,92 +1605,187 @@ struct Index {
                     Stack() {
                       this.PlayerMoreDotsIcon('#FFFFFF')
                     }
-                    .width(42)
-                    .height(42)
-                    .borderRadius(21)
+                    .width(48)
+                    .height(48)
+                    .borderRadius(24)
+                    .backgroundColor('#66000000')
                     .onClick(() => {
                       this.showMoreSheet = !this.showMoreSheet;
                     })
                   }
                   .width('100%')
                   .padding({
-                    left: Math.max(12, this.safeLeft + 8),
-                    right: Math.max(12, this.safeRight + 8),
-                    top: this.isPlayerFullscreen ? 12 : Math.max(14, this.safeTop + 6),
-                    bottom: 14
+                    left: Math.max(14, this.safeLeft + 10),
+                    right: Math.max(14, this.safeRight + 10),
+                    top: this.isPlayerFullscreen ? 12 : Math.max(14, this.safeTop + 8),
+                    bottom: 16
                   })
                   .linearGradient({
                     angle: 180,
-                    colors: [['#CC000000', 0.0], ['#00000000', 1.0]]
+                    colors: [['#D9000000', 0.0], ['#00000000', 1.0]]
                   })
 
                   Blank()
 
-                  // 底部渐变进度控制栏（原生 AVPlayer 模式）
-                  if (!this.useWebFallback) {
-                    Row({ space: 8 }) {
+                  // 底部双行渐变控制栏（Row 1: 进度条/直播状态；Row 2: 播放/网页版/线路/倍速/横竖屏/全屏）
+                  Column({ space: 8 }) {
+                    // 第一行：进度条或直播状态徽标
+                    if (this.videoDuration > 0) {
+                      Row({ space: 10 }) {
+                        Text(formatVideoTime(this.videoCurrentTime))
+                          .fontSize(13)
+                          .fontWeight(FontWeight.Medium)
+                          .fontColor(Color.White)
+
+                        Slider({
+                          value: this.videoDuration > 0 ? this.videoCurrentTime : 1,
+                          min: 0,
+                          max: this.videoDuration > 0 ? this.videoDuration : 1,
+                          step: 1
+                        })
+                          .layoutWeight(1)
+                          .trackThickness(5)
+                          .blockSize({ width: 18, height: 18 })
+                          .selectedColor('#FF6699')
+                          .trackColor('#59FFFFFF')
+                          .blockColor(Color.White)
+                          .onChange((value: number, mode: SliderChangeMode) => {
+                            if (mode === SliderChangeMode.Begin || mode === SliderChangeMode.Moving) {
+                              this.isSeeking = true;
+                              this.videoCurrentTime = value;
+                            } else if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
+                              this.isSeeking = false;
+                              this.videoCurrentTime = value;
+                              try {
+                                this.avPlayer?.seek(Math.floor(value * 1000), media.SeekMode.SEEK_PREV_SYNC);
+                              } catch (seekErr) {
+                                hilog.warn(DOMAIN, TAG, `AVPlayer seek failed: ${JSON.stringify(seekErr)}`);
+                              }
+                              this.scheduleHideOverlay();
+                            }
+                          })
+
+                        Text(formatVideoTime(this.videoDuration))
+                          .fontSize(13)
+                          .fontWeight(FontWeight.Medium)
+                          .fontColor('#D9FFFFFF')
+                      }
+                      .width('100%')
+                    } else {
+                      Row({ space: 8 }) {
+                        Circle({ width: 8, height: 8 }).fill('#FF4D79')
+                        Text('正在直播 LIVE')
+                          .fontSize(13.5)
+                          .fontWeight(FontWeight.Bold)
+                          .fontColor('#FF6699')
+                        Blank()
+                      }
+                      .width('100%')
+                      .padding({ left: 4, bottom: 2 })
+                    }
+
+                    // 第二行：主控按钮栏
+                    Row({ space: 10 }) {
                       Stack() {
                         this.PlayerVectorIcon(
                           this.isVideoPlaying
                             ? 'M6 4.5 L10 4.5 L10 19.5 L6 19.5 Z M14 4.5 L18 4.5 L18 19.5 L14 19.5 Z'
-                            : 'M6.5 4 L20 12 L6.5 20 Z',
+                            : 'M7 4.2 L20.2 12 L7 19.8 Z',
                           true,
-                          24,
+                          26,
                           '#FFFFFF'
                         )
                       }
-                      .width(40)
-                      .height(40)
-                      .borderRadius(20)
+                      .width(46)
+                      .height(46)
+                      .borderRadius(23)
+                      .backgroundColor('#59000000')
                       .onClick(() => {
                         this.togglePlayPause();
                       })
 
-                      Text(formatVideoTime(this.videoCurrentTime))
-                        .fontSize(12)
-                        .fontColor(Color.White)
-
-                      Slider({
-                        value: this.videoDuration > 0 ? this.videoCurrentTime : 1,
-                        min: 0,
-                        max: this.videoDuration > 0 ? this.videoDuration : 1,
-                        step: 1
-                      })
-                        .layoutWeight(1)
-                        .selectedColor('#FF6699')
-                        .trackColor('#4DFFFFFF')
-                        .blockColor(Color.White)
-                        .enabled(this.videoDuration > 0)
-                        .onChange((value: number, mode: SliderChangeMode) => {
-                          if (mode === SliderChangeMode.Begin || mode === SliderChangeMode.Moving) {
-                            this.isSeeking = true;
-                            this.videoCurrentTime = value;
-                          } else if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
-                            this.isSeeking = false;
-                            this.videoCurrentTime = value;
-                            try {
-                              this.avPlayer?.seek(Math.floor(value * 1000), media.SeekMode.SEEK_PREV_SYNC);
-                            } catch (seekErr) {
-                              hilog.warn(DOMAIN, TAG, `AVPlayer seek failed: ${JSON.stringify(seekErr)}`);
-                            }
-                            this.scheduleHideOverlay();
-                          }
+                      if (this.webFallbackTarget().length > 0) {
+                        Row({ space: 4 }) {
+                          Text('网页版')
+                            .fontSize(13.5)
+                            .fontWeight(FontWeight.Medium)
+                            .fontColor(Color.White)
+                        }
+                        .height(38)
+                        .padding({ left: 12, right: 12 })
+                        .borderRadius(19)
+                        .backgroundColor('#4DFFFFFF')
+                        .alignItems(VerticalAlign.Center)
+                        .onClick(() => {
+                          this.preConfigureWebCookies();
+                          this.useWebFallback = true;
+                          this.showMoreSheet = false;
+                          this.controlsVisible = true;
+                          this.releaseSystemPip();
+                          this.releaseAvPlayer();
                         })
+                      }
 
-                      Text(this.videoDuration > 0 ? formatVideoTime(this.videoDuration) : 'LIVE')
-                        .fontSize(12)
-                        .fontColor(this.videoDuration > 0 ? '#CCFFFFFF' : '#FF6699')
-                        .fontWeight(this.videoDuration > 0 ? FontWeight.Normal : FontWeight.Bold)
+                      Blank()
 
-                      Text(this.videoSpeedLabel)
-                        .fontSize(12.5)
-                        .fontColor(Color.White)
-                        .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-                        .borderRadius(12)
-                        .backgroundColor('#44FFFFFF')
+                      if (this.videoStreams.length > 1) {
+                        Row() {
+                          Text(`线路 ${this.activeStreamIndex + 1}/${this.videoStreams.length}`)
+                            .fontSize(13.5)
+                            .fontWeight(FontWeight.Medium)
+                            .fontColor(Color.White)
+                        }
+                        .height(38)
+                        .padding({ left: 12, right: 12 })
+                        .borderRadius(19)
+                        .backgroundColor('#4DFFFFFF')
+                        .alignItems(VerticalAlign.Center)
+                        .onClick(() => {
+                          this.showMoreSheet = true;
+                        })
+                      }
+
+                      if (this.videoDuration > 0) {
+                        Row() {
+                          Text(this.videoSpeedLabel)
+                            .fontSize(13.5)
+                            .fontWeight(FontWeight.Bold)
+                            .fontColor(Color.White)
+                        }
+                        .height(38)
+                        .padding({ left: 13, right: 13 })
+                        .borderRadius(19)
+                        .backgroundColor('#4DFFFFFF')
+                        .alignItems(VerticalAlign.Center)
                         .onClick(() => {
                           this.cycleVideoSpeed();
                         })
+                      }
+
+                      Row({ space: 5 }) {
+                        this.PlayerVectorIcon(
+                          'M4.9 8.7 C7.3 3.5 14.3 2.6 18.0 7.0 M18.2 3.4 L18.2 7.2 L14.4 7.0 M19.1 15.3 C16.7 20.5 9.7 21.4 6.0 17.0 M5.8 20.6 L5.8 16.8 L9.6 17.0',
+                          false,
+                          18,
+                          '#FFFFFF'
+                        )
+                        Text(this.isPlayerFullscreen ? '竖屏' : '横屏')
+                          .fontSize(13.5)
+                          .fontWeight(FontWeight.Bold)
+                          .fontColor(Color.White)
+                      }
+                      .height(40)
+                      .padding({ left: 13, right: 13 })
+                      .borderRadius(20)
+                      .backgroundColor('#80FF6699')
+                      .alignItems(VerticalAlign.Center)
+                      .onClick(() => {
+                        if (this.isPlayerFullscreen) {
+                          this.exitLandscapeFullscreen();
+                        } else {
+                          this.enterLandscapeFullscreen();
+                        }
+                      })
 
                       Stack() {
                         this.PlayerVectorIcon(
@@ -1465,9 +1797,10 @@ struct Index {
                           '#FFFFFF'
                         )
                       }
-                      .width(40)
-                      .height(40)
-                      .borderRadius(20)
+                      .width(46)
+                      .height(46)
+                      .borderRadius(23)
+                      .backgroundColor('#59000000')
                       .onClick(() => {
                         if (this.isPlayerFullscreen) {
                           this.exitLandscapeFullscreen();
@@ -1477,17 +1810,19 @@ struct Index {
                       })
                     }
                     .width('100%')
-                    .padding({
-                      left: Math.max(12, this.safeLeft + 8),
-                      right: Math.max(12, this.safeRight + 8),
-                      top: 14,
-                      bottom: this.isPlayerFullscreen ? Math.max(12, this.safeBottom + 6) : Math.max(14, this.safeBottom + 8)
-                    })
-                    .linearGradient({
-                      angle: 0,
-                      colors: [['#CC000000', 0.0], ['#00000000', 1.0]]
-                    })
+                    .alignItems(VerticalAlign.Center)
                   }
+                  .width('100%')
+                  .padding({
+                    left: Math.max(14, this.safeLeft + 10),
+                    right: Math.max(14, this.safeRight + 10),
+                    top: 16,
+                    bottom: this.isPlayerFullscreen ? Math.max(14, this.safeBottom + 8) : Math.max(16, this.safeBottom + 10)
+                  })
+                  .linearGradient({
+                    angle: 0,
+                    colors: [['#E6000000', 0.0], ['#00000000', 1.0]]
+                  })
                 }
                 .width('100%')
                 .height('100%')
@@ -1503,10 +1838,10 @@ struct Index {
                 .justifyContent(FlexAlign.Start)
                 .alignItems(HorizontalAlign.End)
                 .padding({
-                  top: (this.isPlayerFullscreen ? 12 : Math.max(14, this.safeTop + 6)) + 52,
-                  right: Math.max(12, this.safeRight + 8)
+                  top: (this.isPlayerFullscreen ? 14 : Math.max(16, this.safeTop + 8)) + 56,
+                  right: Math.max(14, this.safeRight + 10)
                 })
-                .backgroundColor('#33000000')
+                .backgroundColor('#4D000000')
                 .onClick(() => {
                   this.showMoreSheet = false;
                   this.scheduleHideOverlay();

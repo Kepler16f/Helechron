@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:hive/hive.dart';
 import 'package:url_launcher/url_launcher_string.dart';
+import 'package:uuid/uuid.dart';
 import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/http/zjuServices/zjuam.dart';
 import 'package:celechron/http/zjuServices/network_defense.dart';
@@ -60,6 +62,7 @@ class ZhiyunService {
   static String? _cachedZhiyunToken;
   static String? _cachedZhiyunAccount;
   static String? _cachedZhiyunUserId;
+  static String? _cachedZhiyunTenantId;
   static Future<int>? _syncFuture;
 
   /// 创建专用于浙大智云课堂的 HttpClient
@@ -111,6 +114,172 @@ class ZhiyunService {
       return saved;
     }
     return null;
+  }
+
+  /// 构建智云前端 getToken() 所需的 PHP 序列化格式 _token Cookie 值
+  /// 智云前端正则：`/{i:\d+;s:\d+:"_token";i:\d+;s:\d+:"(.+?)";}/`
+  static String buildPhpSerializedTokenCookie(String token) {
+    final trimmed = token.trim();
+    final raw =
+        'a:2:{i:0;s:6:"_token";i:1;s:${trimmed.length}:"$trimmed";}';
+    return Uri.encodeComponent(raw);
+  }
+
+  /// 为智云课堂网页 URL 附加 token 与 tenant_code 参数，确保 WebView 首屏加载即完成鉴权
+  static String appendTokenToUrl(String url, String? token) {
+    final trimmedUrl = url.trim();
+    if (trimmedUrl.isEmpty) return trimmedUrl;
+    final tk = (token ?? getCachedZhiyunToken())?.trim() ?? '';
+    if (tk.isEmpty || !trimmedUrl.contains('zju.edu.cn')) return trimmedUrl;
+    try {
+      final uri = Uri.parse(trimmedUrl);
+      final qp = Map<String, String>.from(uri.queryParameters);
+      qp['token'] = tk;
+      qp.putIfAbsent('tenant_code', () => _kTenantCode);
+      return uri.replace(queryParameters: qp).toString();
+    } catch (_) {
+      final sep = trimmedUrl.contains('?') ? '&' : '?';
+      return '$trimmedUrl${sep}token=${Uri.encodeQueryComponent(tk)}';
+    }
+  }
+
+  /// 按照智云课堂前端 1P4N / concatUUID 规范对流媒体地址附加 clientUUID 与播放鉴权签名 t
+  static String signPlayUrl(String rawUrl, {bool isLive = false}) {
+    var url = rawUrl.trim();
+    if (url.isEmpty) return url;
+    try {
+      var uri = Uri.parse(url);
+      final qp = Map<String, String>.from(uri.queryParameters);
+      if (!qp.containsKey('clientUUID')) {
+        qp['clientUUID'] = const Uuid().v4();
+      }
+      final hasOpenSign = qp.containsKey('pt') && qp.containsKey('sig');
+      if (!isLive && !hasOpenSign && !qp.containsKey('t')) {
+        final userId = _getCachedUserId();
+        final tenantId = _cachedZhiyunTenantId ?? _kTenantCode;
+        if (userId != null && userId.isNotEmpty) {
+          final epoch = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+          final path = uri.path;
+          final sig = md5
+              .convert(utf8.encode('$path$userId$tenantId$epoch'))
+              .toString();
+          qp['t'] = '$userId-$epoch-$sig';
+        }
+      }
+      return uri.replace(queryParameters: qp).toString();
+    } catch (_) {
+      return url;
+    }
+  }
+
+  /// 确保智云 Token 有效（若缺失或过期则自动通过 ZJUAM 重新握手刷新）
+  static Future<String?> ensureValidToken({bool forceRefresh = false}) async {
+    var token = forceRefresh ? null : getCachedZhiyunToken();
+    final client = createHttpClient();
+    try {
+      if (token != null && token.isNotEmpty) {
+        try {
+          final infoUri = Uri.parse('$_kZhiyunBaseUrl/userapi/v1/infosimple');
+          final req = await client.getUrl(infoUri);
+          req.headers.set('Authorization', 'Bearer $token');
+          req.headers.set(
+              'Cookie', '_token=${buildPhpSerializedTokenCookie(token)}; token=$token');
+          req.headers.set('User-Agent',
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+          final resp = await req.close().timeout(const Duration(seconds: 5));
+          if (resp.statusCode == 200) {
+            final body = await resp.transform(utf8.decoder).join();
+            final json = jsonDecode(body);
+            if (json is Map &&
+                (json['code'] == 200 || json['code'] == '200') &&
+                json['params'] is Map) {
+              final params = json['params'] as Map;
+              final uid = params['id']?.toString();
+              final acc = params['account']?.toString();
+              final tid = params['tenant_id']?.toString();
+              if (uid != null && uid.isNotEmpty) {
+                _cachedZhiyunUserId = uid;
+                _cachedZhiyunAccount = acc ?? _cachedZhiyunAccount;
+                _cachedZhiyunTenantId = tid ?? _cachedZhiyunTenantId ?? _kTenantCode;
+                final box = _getHiveBox();
+                box?.put('zhiyun_user_id', uid);
+                if (acc != null && acc.isNotEmpty) {
+                  box?.put('zhiyun_account', acc);
+                }
+                return token;
+              }
+            }
+          } else {
+            await resp.drain();
+          }
+        } catch (_) {}
+      }
+
+      // Token 无效或过期，使用学号密码重新执行 CAS 认证握手
+      String? u;
+      String? p;
+      try {
+        if (Get.isRegistered<DatabaseHelper>(tag: 'db')) {
+          final db = Get.find<DatabaseHelper>(tag: 'db');
+          final scholar = await db.getScholar();
+          u = scholar.username;
+          p = scholar.password;
+        }
+      } catch (_) {}
+      if (u != null && u.isNotEmpty && p != null && p.isNotEmpty) {
+        final ssoCookie = await ZjuAm.getSsoCookie(client, u, p);
+        if (ssoCookie != null) {
+          final refreshed = await _loginZhiyunCas(client, ssoCookie);
+          if (refreshed != null && refreshed.isNotEmpty) {
+            return refreshed;
+          }
+        }
+      }
+      return token;
+    } catch (_) {
+      return token;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  static dynamic _rawStartAt(Map? item) {
+    if (item == null) return null;
+    return item['start_at'] ??
+        item['class_begin'] ??
+        item['course_begin'] ??
+        item['begin'];
+  }
+
+  static dynamic _rawEndAt(Map? item) {
+    if (item == null) return null;
+    return item['end_at'] ??
+        item['class_over'] ??
+        item['course_over'] ??
+        item['over'];
+  }
+
+  static Map<String, dynamic> _normalizeCatalogueItem(Map raw) {
+    final item = Map<String, dynamic>.from(raw);
+    final startRaw = _rawStartAt(item);
+    final endRaw = _rawEndAt(item);
+    if (item['start_at'] == null && startRaw != null) {
+      item['start_at'] = startRaw;
+    }
+    if (item['end_at'] == null && endRaw != null) {
+      item['end_at'] = endRaw;
+    }
+    final subId = item['sub_id']?.toString() ?? item['id']?.toString();
+    if (subId != null && subId.isNotEmpty) {
+      item['sub_id'] ??= subId;
+    }
+    final title = item['title']?.toString() ??
+        item['sub_title']?.toString() ??
+        item['course_title']?.toString();
+    if (title != null && title.isNotEmpty) {
+      item['title'] ??= title;
+    }
+    return item;
   }
 
   static final _semesterTagRegex = RegExp(
@@ -714,9 +883,12 @@ class ZhiyunService {
 
           final req = await client.getUrl(uri);
           req.headers.set('Authorization', 'Bearer $token');
-          req.headers.set('Cookie', '_token=$token; token=$token');
+          req.headers.set(
+            'Cookie',
+            '_token=${buildPhpSerializedTokenCookie(token)}; token=$token',
+          );
           req.headers.set('User-Agent',
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36');
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
 
           final resp = await req.close().timeout(const Duration(seconds: 6));
           if (resp.statusCode == 200) {
@@ -893,48 +1065,59 @@ class ZhiyunService {
       final account = _getCachedAccount();
 
       // 1. 优先尝试 get-course-detail 接口 (包含完整的课节结构 sub_list)
-      final detailUri = Uri.parse(
-        '$_kZhiyunBaseUrl/courseapi/v3/multi-search/get-course-detail?course_id=$courseId${account != null ? '&student=$account' : ''}',
-      );
-      final req = await client.getUrl(detailUri);
-      req.headers.set('User-Agent',
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36');
-      if (token != null && token.isNotEmpty) {
-        req.headers.set('Authorization', 'Bearer $token');
-        req.headers.set('Cookie', '_token=$token; token=$token');
-      }
-      final resp = await req.close().timeout(const Duration(seconds: 10));
-      if (resp.statusCode == 200) {
-        final body = await resp.transform(utf8.decoder).join();
-        final json = jsonDecode(body);
-        if (json is Map &&
-            (json['code'] == 0 ||
-                json['code'] == '0' ||
-                json['success'] == true)) {
-          final data = json['data'] ?? json['result'];
-          final subListMap = data is Map ? data['sub_list'] : null;
-          final list = <Map<String, dynamic>>[];
-
-          if (subListMap is Map) {
-            _extractSubList(subListMap, list);
-          } else if (data is Map && data['list'] is List) {
-            for (final item in data['list']) {
-              if (item is Map) list.add(Map<String, dynamic>.from(item));
-            }
+      final detailBases = <String>[
+        'https://yjapi.cmc.zju.edu.cn',
+        _kZhiyunBaseUrl,
+      ];
+      for (final base in detailBases) {
+        try {
+          final detailUri = Uri.parse(
+            '$base/courseapi/v3/multi-search/get-course-detail?course_id=$courseId${account != null ? '&student=$account' : ''}',
+          );
+          final req = await client.getUrl(detailUri);
+          req.headers.set('User-Agent',
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+          req.headers.set('Referer', 'https://classroom.zju.edu.cn/');
+          if (token != null && token.isNotEmpty) {
+            req.headers.set('Authorization', 'Bearer $token');
+            req.headers.set('Cookie', '_token=$token; token=$token');
           }
+          final resp = await req.close().timeout(const Duration(seconds: 8));
+          if (resp.statusCode == 200) {
+            final body = await resp.transform(utf8.decoder).join();
+            final json = jsonDecode(body);
+            if (json is Map &&
+                (json['code'] == 0 ||
+                    json['code'] == '0' ||
+                    json['success'] == true)) {
+              final data = json['data'] ?? json['result'];
+              final subListMap = data is Map ? data['sub_list'] : null;
+              final list = <Map<String, dynamic>>[];
 
-          if (list.isNotEmpty) {
-            _catalogueCache[courseId] = list;
-            _catalogueCacheTime[courseId] = DateTime.now();
-            _registerSubIdsFromList(courseId, list);
-            if (box != null) {
-              box.put('zhiyun_cat_$courseId', jsonEncode(list));
-              box.put('zhiyun_cat_time_$courseId',
-                  DateTime.now().toIso8601String());
+              if (subListMap is Map) {
+                _extractSubList(subListMap, list);
+              } else if (data is Map && data['list'] is List) {
+                for (final item in data['list']) {
+                  if (item is Map) list.add(_normalizeCatalogueItem(item));
+                }
+              }
+
+              if (list.isNotEmpty) {
+                _catalogueCache[courseId] = list;
+                _catalogueCacheTime[courseId] = DateTime.now();
+                _registerSubIdsFromList(courseId, list);
+                if (box != null) {
+                  box.put('zhiyun_cat_$courseId', jsonEncode(list));
+                  box.put('zhiyun_cat_time_$courseId',
+                      DateTime.now().toIso8601String());
+                }
+                return list;
+              }
             }
-            return list;
+          } else {
+            await resp.drain();
           }
-        }
+        } catch (_) {}
       }
 
       // 2. 备用尝试 /courseapi/v2/course/catalogue
@@ -957,7 +1140,7 @@ class ZhiyunService {
           if (rawData is List) {
             final list = <Map<String, dynamic>>[];
             for (final item in rawData) {
-              if (item is Map) list.add(Map<String, dynamic>.from(item));
+              if (item is Map) list.add(_normalizeCatalogueItem(item));
             }
             if (list.isNotEmpty) {
               _catalogueCache[courseId] = list;
@@ -994,7 +1177,7 @@ class ZhiyunService {
               if (weekVal is List) {
                 for (final sub in weekVal) {
                   if (sub is Map) {
-                    target.add(Map<String, dynamic>.from(sub));
+                    target.add(_normalizeCatalogueItem(sub));
                   }
                 }
               }
@@ -1005,12 +1188,90 @@ class ZhiyunService {
     }
   }
 
+  /// 从任意接口响应（嵌套 sub_list 字典、course/sub_list 或扁平列表）提取并归一化课节列表
+  static List<Map<String, dynamic>> _extractSubItemsFromResponse(
+      dynamic decoded) {
+    final items = <Map<String, dynamic>>[];
+
+    void addNormalized(Map raw, String inheritedCid) {
+      final norm = _normalizeCatalogueItem(raw);
+      if ((norm['course_id']?.toString() ?? '').isEmpty &&
+          inheritedCid.isNotEmpty) {
+        norm['course_id'] = inheritedCid;
+      }
+      items.add(norm);
+    }
+
+    void walk(dynamic node, String inheritedCid) {
+      if (node is List) {
+        for (final el in node) {
+          walk(el, inheritedCid);
+        }
+        return;
+      }
+      if (node is! Map) return;
+
+      final nodeCid = (node['course_id'] ??
+                  (node['sub_id'] == null &&
+                          node['save_playback'] == null &&
+                          node['mpc'] == null &&
+                          node['pgc'] == null
+                      ? node['id']
+                      : null))
+              ?.toString() ??
+          '';
+      final nextCid = nodeCid.isNotEmpty ? nodeCid : inheritedCid;
+
+      final looksLikeLesson = node['sub_id'] != null ||
+          node['save_playback'] != null ||
+          node['mpc'] != null ||
+          node['pgc'] != null ||
+          node['relation_data'] != null ||
+          node['class_begin'] != null ||
+          node['course_begin'] != null ||
+          node['start_at'] != null;
+      if (looksLikeLesson) {
+        addNormalized(node, nextCid);
+      }
+
+      if (node['sub_list'] is Map) {
+        final subTarget = <Map<String, dynamic>>[];
+        _extractSubList(node['sub_list'] as Map, subTarget);
+        for (final norm in subTarget) {
+          if ((norm['course_id']?.toString() ?? '').isEmpty &&
+              nextCid.isNotEmpty) {
+            norm['course_id'] = nextCid;
+          }
+          items.add(norm);
+        }
+      } else if (node['sub_list'] is List) {
+        walk(node['sub_list'], nextCid);
+      }
+
+      for (final key in const [
+        'list',
+        'subs',
+        'course',
+        'courses',
+        'data',
+        'result',
+      ]) {
+        if (node[key] != null) {
+          walk(node[key], nextCid);
+        }
+      }
+    }
+
+    walk(decoded, '');
+    return items;
+  }
+
   /// 从课节列表中解析并自动记录日期到 sub_id 的映射
   static void _registerSubIdsFromList(
       String courseId, List<Map<String, dynamic>> list) {
     for (final item in list) {
       final subId = item['sub_id']?.toString() ?? item['id']?.toString();
-      final startAt = int.tryParse(item['start_at']?.toString() ?? '');
+      final startAt = int.tryParse(_rawStartAt(item)?.toString() ?? '');
       if (subId != null && subId.isNotEmpty) {
         if (startAt != null && startAt > 0) {
           final dt = DateTime.fromMillisecondsSinceEpoch(startAt * 1000);
@@ -1311,12 +1572,17 @@ class ZhiyunService {
       }
     }
 
-    final sDt = parseZhiyunTimestamp(item?['start_at']);
-    final eDt = parseZhiyunTimestamp(item?['end_at']);
+    final sDt = parseZhiyunTimestamp(_rawStartAt(item));
+    final eDt = parseZhiyunTimestamp(_rawEndAt(item));
     if (eDt != null && now.isAfter(eDt.add(const Duration(minutes: 30)))) {
       return false;
     }
     if (sDt != null && now.isBefore(sDt.subtract(const Duration(minutes: 20)))) {
+      return false;
+    }
+    if (sDt != null &&
+        eDt == null &&
+        now.isAfter(sDt.add(const Duration(hours: 3)))) {
       return false;
     }
     if (period == null && sDt == null && targetDate != null) {
@@ -1331,8 +1597,12 @@ class ZhiyunService {
     // 1. 排除明确已结束/未开始/仅回放状态
     final statusLabel = item?['status_label']?.toString() ?? '';
     final status = item?['status']?.toString() ?? '';
+    final subStatus = item?['sub_status']?.toString() ?? '';
     if (status == '3' ||
         status == '4' ||
+        subStatus == '3' ||
+        subStatus == '5' ||
+        subStatus == '6' ||
         statusLabel.contains('回放') ||
         statusLabel.contains('录播') ||
         statusLabel.contains('已结束') ||
@@ -1340,8 +1610,11 @@ class ZhiyunService {
       return false;
     }
 
-    // 2. 服务端明确的实时直播信号（注意：智云 status=='1' 为普通发布态而非直播，仅 '2' 表示直播中）
+    // 2. 服务端明确的实时直播信号（注意：智云目录 status=='1' 为普通发布态，而 sub_status=='1'/'2' 表示直播中）
     if (item != null) {
+      if (subStatus == '1' || subStatus == '2') {
+        return true;
+      }
       if (statusLabel == '直播' ||
           statusLabel.contains('直播') ||
           statusLabel.toLowerCase() == 'live') {
@@ -1382,9 +1655,10 @@ class ZhiyunService {
           now.isBefore(period.endTime.add(const Duration(minutes: 15)))) {
         return true;
       }
-    } else if (sDt != null && eDt != null) {
+    } else if (sDt != null) {
+      final effectiveEnd = eDt ?? sDt.add(const Duration(minutes: 100));
       if (now.isAfter(sDt.subtract(const Duration(minutes: 10))) &&
-          now.isBefore(eDt.add(const Duration(minutes: 15)))) {
+          now.isBefore(effectiveEnd.add(const Duration(minutes: 15)))) {
         return true;
       }
     }
@@ -1408,7 +1682,8 @@ class ZhiyunService {
       return true;
     }
     final status = item['status']?.toString();
-    if (status == '4' || status == '3') {
+    final subStatus = item['sub_status']?.toString();
+    if (status == '4' || status == '3' || subStatus == '6') {
       return true;
     }
     final playback = item['playback'];
@@ -1425,7 +1700,7 @@ class ZhiyunService {
 
     // 2. 时间维度：如果是未来的课节，绝无回放
     final now = DateTime.now();
-    final lessonDate = targetDate ?? parseZhiyunTimestamp(item['start_at']);
+    final lessonDate = targetDate ?? parseZhiyunTimestamp(_rawStartAt(item));
     if (lessonDate != null && lessonDate.isAfter(now)) {
       return false;
     }
@@ -1450,7 +1725,7 @@ class ZhiyunService {
   /// 从课程目录项中提取时间
   static DateTime? _extractCatalogueItemDateTime(
       Map<String, dynamic> item, DateTime fallbackDate) {
-    final parsed = parseZhiyunTimestamp(item['start_at']);
+    final parsed = parseZhiyunTimestamp(_rawStartAt(item));
     if (parsed != null) {
       return parsed;
     }
@@ -1495,7 +1770,7 @@ class ZhiyunService {
     // 1. 筛选出属于目标日期的所有候选课节
     final sameDateItems = <Map<String, dynamic>>[];
     for (final item in catalogue) {
-      DateTime? itemDate = parseZhiyunTimestamp(item['start_at']);
+      DateTime? itemDate = parseZhiyunTimestamp(_rawStartAt(item));
       if (itemDate == null && item['date'] != null) {
         itemDate = DateTime.tryParse(item['date'].toString());
       }
@@ -1846,6 +2121,14 @@ class ZhiyunService {
           }
         }
 
+        if (subId == null || subId.isEmpty) {
+          subId = await fetchActiveSubIdForDate(
+            courseId,
+            targetDate,
+            period: period,
+          );
+        }
+
         final isLive = checkIsLive(
           item: matchedItem,
           targetDate: targetDate,
@@ -1955,6 +2238,94 @@ class ZhiyunService {
     );
   }
 
+  /// 按日期实时查询某门课当日/指定日期的课节 sub_id（用于正在直播但目录尚未归档的课节）
+  static Future<String?> fetchActiveSubIdForDate(
+    String courseId,
+    DateTime targetDate, {
+    Period? period,
+  }) async {
+    final dateKey =
+        '${targetDate.year}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}';
+    if (period != null) {
+      final cached = _knownSubIds[
+              '${courseId}_${dateKey}_${period.startTime.hour}_${period.startTime.minute}'] ??
+          _knownSubIds['${courseId}_${dateKey}_${period.startTime.hour}'] ??
+          _knownSubIds['${courseId}_$dateKey'];
+      if (cached != null && cached.isNotEmpty) return cached;
+    } else {
+      final cached = _knownSubIds['${courseId}_$dateKey'];
+      if (cached != null && cached.isNotEmpty) return cached;
+    }
+
+    final client = createHttpClient();
+    try {
+      final token = await ensureValidToken();
+      final candidateItems = <Map<String, dynamic>>[];
+
+      final uris = <Uri>[
+        Uri.parse(
+          '$_kZhiyunBaseUrl/courseapi/v2/course-live/get-my-course-day?day=$dateKey&tenant_code=$_kTenantCode',
+        ),
+        Uri.parse(
+          '$_kZhiyunBaseUrl/courseapi/v2/course-live/search-live-course-list?all=1&course_id=$courseId&with_sub_data=1&with_room_data=1&show_all=1&show_delete=2',
+        ),
+      ];
+
+      for (final uri in uris) {
+        try {
+          final req = await client.getUrl(uri);
+          if (token != null && token.isNotEmpty) {
+            req.headers.set('Authorization', 'Bearer $token');
+            req.headers.set(
+              'Cookie',
+              '_token=${buildPhpSerializedTokenCookie(token)}; token=$token',
+            );
+          }
+          req.headers.set('Origin', 'https://classroom.zju.edu.cn');
+          req.headers.set('Referer', 'https://classroom.zju.edu.cn/');
+          req.headers.set(
+            'User-Agent',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          );
+          final resp = await req.close().timeout(const Duration(seconds: 6));
+          if (resp.statusCode != 200) continue;
+          final body = await resp.transform(utf8.decoder).join();
+          final decoded = jsonDecode(body);
+          for (final item in _extractSubItemsFromResponse(decoded)) {
+            final itemCid = item['course_id']?.toString() ?? '';
+            if (itemCid.isEmpty || itemCid == courseId) {
+              candidateItems.add(item);
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (candidateItems.isNotEmpty) {
+        _registerSubIdsFromList(courseId, candidateItems);
+        final matched = findBestMatchingCatalogueItem(
+          catalogue: candidateItems,
+          targetDate: targetDate,
+          period: period,
+        );
+        final matchedSubId =
+            matched?['sub_id']?.toString() ?? matched?['id']?.toString();
+        if (matchedSubId != null && matchedSubId.isNotEmpty) {
+          return matchedSubId;
+        }
+        for (final item in candidateItems) {
+          if (checkIsLive(item: item, targetDate: targetDate, period: period)) {
+            final sid = item['sub_id']?.toString() ?? item['id']?.toString();
+            if (sid != null && sid.isNotEmpty) return sid;
+          }
+        }
+      }
+    } catch (_) {
+    } finally {
+      client.close(force: true);
+    }
+    return _knownSubIds['${courseId}_$dateKey'];
+  }
+
   /// 通过统一身份认证登录智云课堂并动态同步“我的课程”所有课程及课节回放映射
   static Future<int> syncFromMyCourses({
     HttpClient? httpClient,
@@ -2058,9 +2429,12 @@ class ZhiyunService {
               '$_kZhiyunBaseUrl/courseapi/v2/course-live/get-my-course-month?month=$m&tenant_code=$_kTenantCode');
           final req = await client.getUrl(uri);
           req.headers.set('Authorization', 'Bearer $token');
-          req.headers.set('Cookie', '_token=$token; token=$token');
+          req.headers.set(
+            'Cookie',
+            '_token=${buildPhpSerializedTokenCookie(token)}; token=$token',
+          );
           req.headers.set('User-Agent',
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36');
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
           final resp = await req.close().timeout(const Duration(seconds: 8));
           if (resp.statusCode == 200) {
             final body = await resp.transform(utf8.decoder).join();
@@ -2089,14 +2463,15 @@ class ZhiyunService {
                       for (final c in coursesList) {
                         if (c is Map) {
                           final cid =
-                              c['id']?.toString() ?? c['course_id']?.toString();
+                              c['course_id']?.toString() ?? c['id']?.toString();
                           final title = c['title']?.toString() ??
                               c['course_title']?.toString();
-                          final subId = c['sub_id']?.toString();
+                          final subId =
+                              (c['sub_id'] ?? c['id'])?.toString();
                           final startAt =
-                              int.tryParse(c['start_at']?.toString() ?? '');
+                              int.tryParse(_rawStartAt(c)?.toString() ?? '');
                           final endAt =
-                              int.tryParse(c['end_at']?.toString() ?? '');
+                              int.tryParse(_rawEndAt(c)?.toString() ?? '');
                           final teacher = c['realname']?.toString() ??
                               c['teacher']?.toString() ??
                               c['lecturer_name']?.toString();
@@ -2140,10 +2515,10 @@ class ZhiyunService {
                                 'start_at': startAt,
                                 'end_at': endAt,
                                 'date': dKey,
-                                'status': c['status']?.toString(),
-                                'is_live': c['is_live'] == true ||
-                                    c['is_live'] == 1 ||
-                                    c['is_live'] == '1',
+                                'status': (c['sub_status'] ?? c['status'])
+                                    ?.toString(),
+                                'is_live': checkIsLive(
+                                    item: _normalizeCatalogueItem(c)),
                                 'status_label':
                                     c['status_label']?.toString() ?? '',
                                 'month': m,
@@ -2494,21 +2869,123 @@ class ZhiyunService {
     final seenUrls = <String>{};
 
     void addStream(String label, String? rawUrl, {bool isLive = false}) {
-      final url = _normalizeStreamUrl(rawUrl);
-      if (url == null) return;
-      if (!seenUrls.add(url)) return;
-      final option = ZhiyunStreamOption(label: label, url: url, isLive: isLive);
-      if (isLive) {
-        liveStreams.add(option);
-      } else {
-        replayStreams.add(option);
+      final normalized = _normalizeStreamUrl(rawUrl);
+      if (normalized == null) return;
+      final signedUrl = signPlayUrl(normalized, isLive: isLive);
+      if (seenUrls.add(signedUrl)) {
+        final option = ZhiyunStreamOption(
+          label: label,
+          url: signedUrl,
+          isLive: isLive,
+        );
+        if (isLive) {
+          liveStreams.add(option);
+        } else {
+          replayStreams.add(option);
+        }
+      }
+      // 若直播流返回的是 HTTP-FLV (.flv)，同时派生同路径 .m3u8 HLS 候选，提升移动端原生播放器兼容性
+      if (isLive &&
+          RegExp(r'\.flv(\?|$)', caseSensitive: false).hasMatch(normalized)) {
+        final hlsCandidate = normalized.replaceFirst(
+          RegExp(r'\.flv(\?|$)', caseSensitive: false),
+          r'.m3u8$1',
+        );
+        final signedHls = signPlayUrl(hlsCandidate, isLive: true);
+        if (seenUrls.add(signedHls)) {
+          final hlsLabel = label.contains('(FLV)')
+              ? label.replaceAll('(FLV)', '(HLS)')
+              : '$label (HLS)';
+          liveStreams.add(
+            ZhiyunStreamOption(
+              label: hlsLabel,
+              url: signedHls,
+              isLive: true,
+            ),
+          );
+        }
       }
     }
 
-    void extractLiveNode(String label, dynamic node) {
+    dynamic decodeMultiRateOrJson(String raw) {
+      var trimmed = raw.trim();
+      final prefixMatch = RegExp(
+        r'^mu(?:tl|lt)i-rate:\s*',
+        caseSensitive: false,
+      ).firstMatch(trimmed);
+      if (prefixMatch != null) {
+        trimmed = trimmed.substring(prefixMatch.end).trim();
+      }
+      if ((trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+          (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
+        try {
+          return jsonDecode(trimmed);
+        } catch (_) {}
+      }
+      return null;
+    }
+
+    void extractDynamicUrls(
+      String label,
+      dynamic node, {
+      required bool isLive,
+      int depth = 0,
+    }) {
+      if (node == null || depth > 5) return;
       if (node is String) {
-        addStream(label, node, isLive: true);
-      } else if (node is Map) {
+        final decoded = decodeMultiRateOrJson(node);
+        if (decoded != null) {
+          extractDynamicUrls(label, decoded, isLive: isLive, depth: depth + 1);
+          return;
+        }
+        addStream(label, node, isLive: isLive);
+        return;
+      }
+      if (node is List) {
+        for (var i = 0; i < node.length; i++) {
+          final item = node[i];
+          if (item is Map) {
+            final itemTitle = item['title']?.toString() ??
+                item['name']?.toString() ??
+                item['rate']?.toString() ??
+                (node.length > 1 ? '$label ${i + 1}' : label);
+            final direct = item['m3u8']?.toString() ??
+                item['hls_url']?.toString() ??
+                item['hls']?.toString() ??
+                item['url']?.toString() ??
+                item['play_url']?.toString() ??
+                item['video_url']?.toString() ??
+                item['preview_url']?.toString() ??
+                item['file_url']?.toString() ??
+                item['flv']?.toString() ??
+                item['file_name']?.toString();
+            if (direct != null && direct.trim().isNotEmpty) {
+              extractDynamicUrls(
+                itemTitle,
+                direct,
+                isLive: isLive,
+                depth: depth + 1,
+              );
+            } else {
+              extractDynamicUrls(
+                itemTitle,
+                item,
+                isLive: isLive,
+                depth: depth + 1,
+              );
+            }
+          } else {
+            extractDynamicUrls(
+              node.length > 1 ? '$label ${i + 1}' : label,
+              item,
+              isLive: isLive,
+              depth: depth + 1,
+            );
+          }
+        }
+        return;
+      }
+      if (node is Map) {
         for (final key in [
           'm3u8',
           'hls_url',
@@ -2518,227 +2995,301 @@ class ZhiyunService {
           'pull_url',
           'url',
           'play_url',
+          'video_url',
+          'preview_url',
+          'file_url',
+          'path',
+          'mp4',
           'flv',
           'stream_flv',
+          'play_addres_arr',
+          'contents',
         ]) {
+          if (!node.containsKey(key)) continue;
           final v = node[key];
-          if (v is String) {
-            final suffix = key.contains('flv') ? ' (FLV)' : ' (HLS)';
-            addStream('$label$suffix', v, isLive: true);
+          if (v == null) continue;
+          var subLabel = label;
+          if (key.contains('flv') && !subLabel.contains('FLV')) {
+            subLabel = '$subLabel (FLV)';
+          } else if ((key.contains('m3u8') || key.contains('hls')) &&
+              !subLabel.contains('HLS')) {
+            subLabel = '$subLabel (HLS)';
           }
+          extractDynamicUrls(
+            subLabel,
+            v,
+            isLive: isLive,
+            depth: depth + 1,
+          );
         }
       }
+    }
+
+    void extractLiveNode(String label, dynamic node) {
+      if (node == null) return;
+      if (node is Map) {
+        if (node.containsKey('output')) {
+          extractDynamicUrls('$label (教师画面)', node['output'], isLive: true);
+        }
+        if (node.containsKey('output_student')) {
+          extractDynamicUrls(
+              '$label (学生画面)', node['output_student'], isLive: true);
+        }
+        if (node.containsKey('output_ppt')) {
+          extractDynamicUrls('$label (课件投屏)', node['output_ppt'], isLive: true);
+        }
+        if (node.containsKey('teacher')) {
+          extractDynamicUrls('$label (教师视角)', node['teacher'], isLive: true);
+        }
+        if (node.containsKey('student')) {
+          extractDynamicUrls('$label (学生视角)', node['student'], isLive: true);
+        }
+        if (node.containsKey('ppt')) {
+          extractDynamicUrls('$label (课件画面)', node['ppt'], isLive: true);
+        }
+      }
+      extractDynamicUrls(label, node, isLive: true);
     }
 
     void extractFromMap(Map? container, {String prefix = ''}) {
       if (container == null) return;
 
-      void extractPlayable(String label, dynamic val) {
-        if (val is String) {
-          addStream(label, val);
-        } else if (val is Map) {
-          val.forEach((k, v) {
-            if (v is String) {
-              addStream('$label ($k)', v);
-            } else if (v is Map) {
-              extractPlayable('$label ($k)', v);
-            }
-          });
-        } else if (val is List) {
-          for (var i = 0; i < val.length; i++) {
-            final item = val[i];
-            if (item is String) {
-              addStream('$label ${i + 1}', item);
-            } else if (item is Map) {
-              final title = item['title']?.toString() ??
-                  item['name']?.toString() ??
-                  '$label ${i + 1}';
-              final direct = item['url']?.toString() ??
-                  item['play_url']?.toString() ??
-                  item['video_url']?.toString() ??
-                  item['m3u8']?.toString() ??
-                  item['file_url']?.toString();
-              if (direct != null && _normalizeStreamUrl(direct) != null) {
-                addStream(title, direct);
-              } else {
-                addStream(title, item['file_name']?.toString());
-              }
-            }
-          }
+      extractDynamicUrls(
+        '${prefix}课堂回放',
+        container['playurl'],
+        isLive: false,
+      );
+      extractDynamicUrls(
+        '${prefix}回放视频',
+        container['play_url'],
+        isLive: false,
+      );
+      extractDynamicUrls(
+        '${prefix}视频流',
+        container['video_url'],
+        isLive: false,
+      );
+      extractDynamicUrls(
+        '${prefix}视频列表',
+        container['video_list'],
+        isLive: false,
+      );
+      extractDynamicUrls(
+        '${prefix}点播列表',
+        container['vod_list'],
+        isLive: false,
+      );
+
+      final savePlayback = container['save_playback'];
+      if (savePlayback is Map) {
+        final isMpc = savePlayback['is_mpc']?.toString() == '1';
+        if (isMpc && savePlayback['mpc'] != null) {
+          extractDynamicUrls(
+            '${prefix}多视角回放',
+            savePlayback['mpc'],
+            isLive: false,
+          );
         }
+        if (savePlayback['pgc'] != null) {
+          extractDynamicUrls(
+            '${prefix}导播回放',
+            savePlayback['pgc'],
+            isLive: false,
+          );
+        }
+        extractDynamicUrls(
+          '${prefix}标准回放',
+          savePlayback['play_addres_arr'] ?? savePlayback['contents'],
+          isLive: false,
+        );
+      } else if (savePlayback != null) {
+        extractDynamicUrls('${prefix}标准回放', savePlayback, isLive: false);
       }
 
-      extractPlayable('${prefix}课堂回放', container['playurl']);
-      extractPlayable('${prefix}回放视频', container['play_url']);
-      extractPlayable('${prefix}视频流', container['video_url']);
-      extractPlayable('${prefix}视频列表', container['video_list']);
-      extractPlayable('${prefix}点播列表', container['vod_list']);
-
-      final playback = container['playback'];
-      if (playback is String) {
-        addStream('${prefix}课堂回放主视角', playback);
-      } else if (playback is Map) {
-        addStream(
-          '${prefix}课堂回放主视角',
-          playback['url']?.toString() ??
-              playback['m3u8']?.toString() ??
-              playback['mp4']?.toString() ??
-              playback['play_url']?.toString(),
+      final relationData = container['relation_data'];
+      if (relationData is Map) {
+        extractDynamicUrls(
+          '${prefix}关联回放',
+          relationData['path'] ?? relationData['url'],
+          isLive: false,
         );
       }
 
+      final playback = container['playback'];
+      if (playback != null) {
+        extractDynamicUrls('${prefix}课堂回放主视角', playback, isLive: false);
+      }
+
       final fileList = container['file_list'];
-      if (fileList is List) {
-        for (int i = 0; i < fileList.length; i++) {
-          final item = fileList[i];
-          if (item is Map) {
-            final bestUrl = _normalizeStreamUrl(item['url']?.toString()) ??
-                _normalizeStreamUrl(item['play_url']?.toString()) ??
-                _normalizeStreamUrl(item['video_url']?.toString()) ??
-                _normalizeStreamUrl(item['file_url']?.toString()) ??
-                _normalizeStreamUrl(item['file_name']?.toString());
-            addStream(
-              item['title']?.toString() ?? '${prefix}回放视角 ${i + 1}',
-              bestUrl,
-            );
-          }
-        }
+      if (fileList != null) {
+        extractDynamicUrls('${prefix}回放视角', fileList, isLive: false);
       }
     }
 
     try {
-      var token = getCachedZhiyunToken();
-      if (token == null || token.isEmpty) {
-        await syncFromMyCourses();
-        token = getCachedZhiyunToken();
-      }
+      var token = await ensureValidToken();
 
       Future<HttpClientResponse> getWithHeaders(Uri uri, String? tk) async {
         final req = await client.getUrl(uri);
         if (tk != null && tk.isNotEmpty) {
           req.headers.set('Authorization', 'Bearer $tk');
-          req.headers.set('Cookie', '_token=$tk; token=$tk');
+          req.headers.set(
+            'Cookie',
+            '_token=${buildPhpSerializedTokenCookie(tk)}; token=$tk',
+          );
         }
         req.headers.set('Origin', 'https://classroom.zju.edu.cn');
         req.headers.set('Referer', 'https://classroom.zju.edu.cn/');
-        req.headers.set('User-Agent',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
-        return req.close().timeout(const Duration(seconds: 8));
+        req.headers.set(
+          'User-Agent',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        );
+        return req.close().timeout(const Duration(seconds: 7));
+      }
+
+      var resolvedSubId = subId.trim();
+      if (resolvedSubId.isEmpty || preferLive) {
+        final todayActive = await fetchActiveSubIdForDate(
+          courseId,
+          DateTime.now(),
+        );
+        if (resolvedSubId.isEmpty &&
+            todayActive != null &&
+            todayActive.isNotEmpty) {
+          resolvedSubId = todayActive;
+        }
       }
 
       bool subIsLive = false;
       bool subIsEndedOrReplay = false;
 
-      // 1. 查询 get-sub-info（支持 yjapi 与 classroom 双域名）
-      final subInfoUris = [
-        Uri.parse(
-            'https://yjapi.cmc.zju.edu.cn/courseapi/v3/portal-home-setting/get-sub-info?course_id=$courseId&sub_id=$subId'),
-        Uri.parse(
-            '$_kZhiyunBaseUrl/courseapi/v3/portal-home-setting/get-sub-info?course_id=$courseId&sub_id=$subId'),
-      ];
+      void inspectSubItemMap(Map<String, dynamic> data, {String prefix = ''}) {
+        if (checkIsLive(item: data)) {
+          subIsLive = true;
+        }
+        final statusStr =
+            (data['sub_status'] ?? data['status'])?.toString() ?? '';
+        final statusLabel = data['status_label']?.toString() ?? '';
+        if (statusStr == '3' ||
+            statusStr == '4' ||
+            statusStr == '6' ||
+            statusLabel.contains('回放') ||
+            statusLabel.contains('已结束')) {
+          subIsEndedOrReplay = true;
+        }
 
-      for (final subInfoUri in subInfoUris) {
-        try {
-          var resp = await getWithHeaders(subInfoUri, token);
-          if (resp.statusCode == 401 || resp.statusCode == 403) {
-            await syncFromMyCourses();
-            token = getCachedZhiyunToken();
-            resp = await getWithHeaders(subInfoUri, token);
+        extractFromMap(data, prefix: prefix);
+
+        for (final contentField in ['content', 'sub_content', 'room_data']) {
+          final rawContent = data[contentField];
+          Map? contentMap;
+          if (rawContent is String && rawContent.trim().startsWith('{')) {
+            try {
+              contentMap = jsonDecode(rawContent) as Map?;
+            } catch (_) {}
+          } else if (rawContent is Map) {
+            contentMap = rawContent;
           }
-          if (resp.statusCode != 200) continue;
-          final body = await resp.transform(utf8.decoder).join();
-          final decoded = jsonDecode(body);
-          if (decoded is! Map) continue;
-          final rawData = decoded['data'] ?? decoded['result'];
-          if (rawData is! Map) continue;
-          final data = Map<String, dynamic>.from(rawData);
-
-          subIsLive = checkIsLive(item: data);
-          final statusStr = data['status']?.toString() ?? '';
-          final statusLabel = data['status_label']?.toString() ?? '';
-          subIsEndedOrReplay = statusStr == '3' ||
-              statusStr == '4' ||
-              statusLabel.contains('回放') ||
-              statusLabel.contains('已结束');
-
-          extractFromMap(data);
-
-          for (final contentField in ['content', 'sub_content']) {
-            final rawContent = data[contentField];
-            Map? contentMap;
-            if (rawContent is String && rawContent.trim().startsWith('{')) {
-              try {
-                contentMap = jsonDecode(rawContent) as Map?;
-              } catch (_) {}
-            } else if (rawContent is Map) {
-              contentMap = rawContent;
-            }
-            extractFromMap(contentMap);
+          if (contentMap != null) {
+            extractFromMap(contentMap, prefix: prefix);
+            extractLiveNode('${prefix}直播流', contentMap['live_url']);
           }
+        }
 
-          final liveUrl = data['live_url'];
-          if (liveUrl is String) {
-            addStream('实时直播流', liveUrl, isLive: true);
-          } else if (liveUrl is Map) {
-            extractLiveNode('教师画面直播', liveUrl['output']);
-            extractLiveNode('板书/课件直播', liveUrl['output_student']);
-            extractLiveNode('课件投屏直播', liveUrl['output_ppt']);
-            extractLiveNode('教师直播', liveUrl['teacher']);
-            extractLiveNode('学生端直播', liveUrl['student']);
-            extractLiveNode('直播主线路', liveUrl);
-          }
-          extractLiveNode('直播流', data['stream_url']);
-          extractLiveNode('HLS 直播流', data['hls_url']);
-          if (preferLive || subIsLive) {
-            if (liveStreams.isNotEmpty) break;
-          } else if (replayStreams.isNotEmpty) {
-            break;
-          }
-        } catch (_) {}
+        extractLiveNode('${prefix}实时直播', data['live_url']);
+        extractLiveNode('${prefix}直播流', data['stream_url']);
+        extractLiveNode('${prefix}HLS 直播流', data['hls_url']);
       }
 
-      // 2. 从课程目录缓存与 v2 catalogue 补充提取该 sub_id 的视频直链
+      // 1. 查询 v3/v2 get-sub-info 与 search-live-course-list（与智云 Web 端 livingroom 完全一致）
+      if (resolvedSubId.isNotEmpty) {
+        final subInfoUris = [
+          Uri.parse(
+            '$_kZhiyunBaseUrl/courseapi/v3/portal-home-setting/get-sub-info?course_id=$courseId&sub_id=$resolvedSubId',
+          ),
+          Uri.parse(
+            'https://yjapi.cmc.zju.edu.cn/courseapi/v3/portal-home-setting/get-sub-info?course_id=$courseId&sub_id=$resolvedSubId',
+          ),
+          Uri.parse(
+            '$_kZhiyunBaseUrl/courseapi/v2/course-live/search-live-course-list?all=1&course_id=$courseId&sub_id=$resolvedSubId&with_sub_data=1&with_room_data=1&show_all=1&show_delete=2',
+          ),
+          Uri.parse(
+            '$_kZhiyunBaseUrl/courseapi/v2/course-live/get-sub-info?course_id=$courseId&sub_id=$resolvedSubId',
+          ),
+        ];
+
+        for (final subInfoUri in subInfoUris) {
+          try {
+            var resp = await getWithHeaders(subInfoUri, token);
+            if (resp.statusCode == 401 || resp.statusCode == 403) {
+              token = await ensureValidToken(forceRefresh: true);
+              resp = await getWithHeaders(subInfoUri, token);
+            }
+            if (resp.statusCode != 200) continue;
+            final body = await resp.transform(utf8.decoder).join();
+            final decoded = jsonDecode(body);
+            if (decoded is! Map) continue;
+
+            final rawData = decoded['data'] ?? decoded['result'];
+            if (rawData is Map) {
+              if (rawData['data'] is Map) {
+                inspectSubItemMap(
+                  _normalizeCatalogueItem(rawData['data'] as Map),
+                );
+              } else {
+                inspectSubItemMap(_normalizeCatalogueItem(rawData));
+              }
+            }
+            for (final item in _extractSubItemsFromResponse(decoded)) {
+              final sid =
+                  item['sub_id']?.toString() ?? item['id']?.toString() ?? '';
+              if (sid.isEmpty || sid == resolvedSubId) {
+                inspectSubItemMap(item);
+              }
+            }
+
+            if (preferLive || subIsLive) {
+              if (liveStreams.isNotEmpty) break;
+            } else if (replayStreams.isNotEmpty) {
+              break;
+            }
+          } catch (_) {}
+        }
+      }
+
+      // 2. 从课程目录缓存与 v3/v2 catalogue 补充提取该 sub_id 的视频直链
       final catList = await fetchCourseCatalogue(courseId);
       for (final item in catList) {
         final itemSubId =
             item['sub_id']?.toString() ?? item['id']?.toString() ?? '';
-        if (itemSubId != subId) continue;
-        if (!subIsLive) subIsLive = checkIsLive(item: item);
-        extractFromMap(item);
-        extractLiveNode('目录直播流', item['live_url']);
-        final rawContent = item['content'];
-        Map? contentMap;
-        if (rawContent is String && rawContent.trim().startsWith('{')) {
-          try {
-            contentMap = jsonDecode(rawContent) as Map?;
-          } catch (_) {}
-        } else if (rawContent is Map) {
-          contentMap = rawContent;
-        }
-        extractFromMap(contentMap, prefix: '目录');
-        if (contentMap != null) {
-          extractLiveNode('目录内容直播流', contentMap['live_url']);
-        }
+        if (resolvedSubId.isNotEmpty && itemSubId != resolvedSubId) continue;
+        inspectSubItemMap(item, prefix: '目录');
       }
 
-      // 3. 直播流接口 getscreenstream（在直播模式、正在直播，或尚无可用流时拉取，支持双域名）
-      if (preferLive ||
-          subIsLive ||
-          (replayStreams.isEmpty && !subIsEndedOrReplay)) {
+      // 3. 直播流接口 getscreenstream（在直播模式、正在直播，或尚无可用流时拉取，支持双域名与新旧路由）
+      if (resolvedSubId.isNotEmpty &&
+          (preferLive ||
+              subIsLive ||
+              (replayStreams.isEmpty && !subIsEndedOrReplay))) {
         final screenUris = [
           Uri.parse(
-            'https://yjapi.cmc.zju.edu.cn/courseapi/index.php/v2/meta/getscreenstream?sub_id=$subId',
+            '$_kZhiyunBaseUrl/courseapi/index.php/v2/meta/getscreenstream?sub_id=$resolvedSubId',
           ),
           Uri.parse(
-            '$_kZhiyunBaseUrl/courseapi/index.php/v2/meta/getscreenstream?sub_id=$subId',
+            'https://yjapi.cmc.zju.edu.cn/courseapi/index.php/v2/meta/getscreenstream?sub_id=$resolvedSubId',
+          ),
+          Uri.parse(
+            '$_kZhiyunBaseUrl/courseapi/v2/Room/getscreenstream?sub_id=$resolvedSubId',
+          ),
+          Uri.parse(
+            'https://yjapi.cmc.zju.edu.cn/courseapi/v2/Room/getscreenstream?sub_id=$resolvedSubId',
           ),
         ];
         for (final screenUri in screenUris) {
           try {
             var screenResp = await getWithHeaders(screenUri, token);
             if (screenResp.statusCode == 401 || screenResp.statusCode == 403) {
-              await syncFromMyCourses();
-              token = getCachedZhiyunToken();
+              token = await ensureValidToken(forceRefresh: true);
               screenResp = await getWithHeaders(screenUri, token);
             }
             if (screenResp.statusCode != 200) continue;
@@ -2764,6 +3315,8 @@ class ZhiyunService {
                     extractLiveNode(label, item);
                   }
                 }
+              } else if (dataList is Map) {
+                extractLiveNode('课堂实时直播', dataList);
               }
             }
             if (liveStreams.isNotEmpty) break;

@@ -14,8 +14,10 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PixelFormat
 import android.graphics.RectF
+import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.net.http.SslError
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -32,6 +34,7 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.webkit.CookieManager
+import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
@@ -87,6 +90,34 @@ class ZhiyunPlayerActivity : Activity() {
                 lower.contains(".flv") ||
                 lower.contains(".ts")
         }
+
+        fun buildPhpSerializedToken(token: String): String {
+            val raw = token.trim()
+            if (raw.isEmpty()) return ""
+            val byteLen = raw.toByteArray(Charsets.UTF_8).size
+            val serialized = "a:2:{i:0;s:6:\"_token\";i:1;s:$byteLen:\"$raw\";}"
+            return try {
+                java.net.URLEncoder.encode(serialized, "UTF-8").replace("+", "%20")
+            } catch (_: Exception) {
+                serialized
+            }
+        }
+
+        fun appendTokenToUrl(rawUrl: String, token: String): String {
+            val tk = token.trim()
+            if (tk.isEmpty() || rawUrl.isBlank()) return rawUrl
+            if (rawUrl.contains("token=") || rawUrl.contains("_token=")) return rawUrl
+            val encoded = try {
+                java.net.URLEncoder.encode(tk, "UTF-8").replace("+", "%20")
+            } catch (_: Exception) {
+                tk
+            }
+            val hashIdx = rawUrl.indexOf('#')
+            val base = if (hashIdx >= 0) rawUrl.substring(0, hashIdx) else rawUrl
+            val hash = if (hashIdx >= 0) rawUrl.substring(hashIdx) else ""
+            val sep = if (base.contains('?')) '&' else '?'
+            return "$base${sep}token=$encoded$hash"
+        }
     }
 
     private enum class IconKind {
@@ -95,7 +126,8 @@ class ZhiyunPlayerActivity : Activity() {
 
     private class VectorIconDrawable(
         private val kind: IconKind,
-        private val color: Int = Color.WHITE
+        private val color: Int = Color.WHITE,
+        private val intrinsicSizePx: Int = 72
     ) : Drawable() {
         private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             this.color = this@VectorIconDrawable.color
@@ -107,6 +139,9 @@ class ZhiyunPlayerActivity : Activity() {
             this.color = this@VectorIconDrawable.color
             style = Paint.Style.FILL
         }
+
+        override fun getIntrinsicWidth(): Int = intrinsicSizePx
+        override fun getIntrinsicHeight(): Int = intrinsicSizePx
 
         override fun draw(canvas: Canvas) {
             val b = bounds
@@ -224,15 +259,22 @@ class ZhiyunPlayerActivity : Activity() {
     private lateinit var topBar: LinearLayout
     private lateinit var bottomBar: LinearLayout
     private lateinit var titleView: TextView
-    private lateinit var rotateBtn: ImageView
+    private lateinit var webReturnNativePill: TextView
+    private lateinit var webOrientPill: TextView
     private lateinit var pipBtn: ImageView
     private lateinit var moreBtn: ImageView
+    private lateinit var centerControlsRow: LinearLayout
+    private lateinit var rewind10Btn: TextView
     private lateinit var centerPlayBtn: ImageView
+    private lateinit var forward10Btn: TextView
     private lateinit var bottomPlayBtn: ImageView
     private lateinit var timeCurrentView: TextView
     private lateinit var timeDurationView: TextView
     private lateinit var seekBar: SeekBar
+    private lateinit var liveSourcePill: TextView
+    private lateinit var webFallbackPill: TextView
     private lateinit var speedPill: TextView
+    private lateinit var orientPill: TextView
     private lateinit var fullscreenBtn: ImageView
     private lateinit var bufferingSpinner: ProgressBar
     private lateinit var hudPill: TextView
@@ -247,6 +289,7 @@ class ZhiyunPlayerActivity : Activity() {
     private var controlsVisible = true
     private var isFullscreen = false
     private var isFullscreenLocked = false
+    private var isLiveStream = false
     private var sensorAutoRotate = true
     private var currentRequestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     private var lastRotateTimeMs = 0L
@@ -263,6 +306,25 @@ class ZhiyunPlayerActivity : Activity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val autoHideRunnable = Runnable { setControlsVisible(false) }
     private val hudHideRunnable = Runnable { hudPill.visibility = View.GONE }
+    private val prepareWatchdogRunnable = Runnable {
+        if (activePlayer != null && activeWebView == null) {
+            val state = activePlayer?.playbackState
+            if (state == Player.STATE_BUFFERING || state == Player.STATE_IDLE) {
+                val nextIdx = currentStreamIndex + 1
+                if (nextIdx < streamCandidates.size) {
+                    showHud("当前线路连接超时，切换备用线路...")
+                    playStreamAt(nextIdx)
+                } else if (webFallbackUrl.isNotEmpty()) {
+                    Toast.makeText(
+                        this@ZhiyunPlayerActivity,
+                        "原生流连接超时，已切换网页端播放",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    attachWebView(webFallbackUrl)
+                }
+            }
+        }
+    }
     private val progressRunnable = object : Runnable {
         override fun run() {
             updatePlaybackProgress()
@@ -304,7 +366,7 @@ class ZhiyunPlayerActivity : Activity() {
         fun addCandidate(label: String, candidateUrl: String) {
             val trimmed = candidateUrl.trim()
             if (trimmed.isEmpty() || !seenUrls.add(trimmed)) return
-            if (isDirectStreamUrl(trimmed) || trimmed.contains("cmc.zju.edu.cn")) {
+            if (isDirectStreamUrl(trimmed)) {
                 streamCandidates.add(Pair(label, trimmed))
             }
         }
@@ -324,13 +386,65 @@ class ZhiyunPlayerActivity : Activity() {
         }
     }
 
-    private fun makeIconBtn(kind: IconKind, sizeDp: Int = 38, padDp: Int = 9, color: Int = Color.WHITE, onClick: () -> Unit): ImageView {
+    private fun makeIconBtn(
+        kind: IconKind,
+        sizeDp: Int = 46,
+        padDp: Int = 10,
+        color: Int = Color.WHITE,
+        onClick: () -> Unit
+    ): ImageView {
+        val iconPx = dp((sizeDp - padDp * 2).coerceAtLeast(22))
         return ImageView(this).apply {
-            setImageDrawable(VectorIconDrawable(kind, color))
+            setImageDrawable(VectorIconDrawable(kind, color, iconPx))
             scaleType = ImageView.ScaleType.FIT_CENTER
             val p = dp(padDp)
             setPadding(p, p, p, p)
             layoutParams = LinearLayout.LayoutParams(dp(sizeDp), dp(sizeDp))
+            setOnClickListener {
+                scheduleAutoHide()
+                onClick()
+            }
+        }
+    }
+
+    private fun makePillButton(
+        label: String,
+        bgColor: Int = Color.parseColor("#44FFFFFF"),
+        textColor: Int = Color.WHITE,
+        onClick: () -> Unit
+    ): TextView {
+        return TextView(this).apply {
+            text = label
+            textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(textColor)
+            gravity = Gravity.CENTER
+            minHeight = dp(34)
+            setPadding(dp(12), dp(6), dp(12), dp(6))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(17).toFloat()
+                setColor(bgColor)
+            }
+            setOnClickListener {
+                scheduleAutoHide()
+                onClick()
+            }
+        }
+    }
+
+    private fun makeCircleSeekBtn(label: String, onClick: () -> Unit): TextView {
+        return TextView(this).apply {
+            text = label
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.parseColor("#88000000"))
+                setStroke(dp(1), Color.parseColor("#33FFFFFF"))
+            }
+            layoutParams = LinearLayout.LayoutParams(dp(58), dp(58))
             setOnClickListener {
                 scheduleAutoHide()
                 onClick()
@@ -368,11 +482,11 @@ class ZhiyunPlayerActivity : Activity() {
             }
 
             override fun onDoubleTap(e: MotionEvent): Boolean {
-                val player = activePlayer ?: return false
+                activePlayer ?: return false
                 val w = gestureLayer.width.coerceAtLeast(1)
                 when {
-                    e.x < w * 0.30f -> seekBy(-10_000L, "-10s")
-                    e.x > w * 0.70f -> seekBy(10_000L, "+10s")
+                    e.x < w * 0.30f -> seekBy(-10_000L, "后退 10s")
+                    e.x > w * 0.70f -> seekBy(10_000L, "前进 10s")
                     else -> togglePlayPause(showBanner = true)
                 }
                 return true
@@ -393,7 +507,7 @@ class ZhiyunPlayerActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(Color.parseColor("#CC000000"), Color.TRANSPARENT)
+                intArrayOf(Color.parseColor("#DD000000"), Color.parseColor("#66000000"), Color.TRANSPARENT)
             )
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -402,7 +516,7 @@ class ZhiyunPlayerActivity : Activity() {
             )
         }
 
-        val backBtn = makeIconBtn(IconKind.BACK, sizeDp = 44, padDp = 8) {
+        val backBtn = makeIconBtn(IconKind.BACK, sizeDp = 48, padDp = 11) {
             if (isFullscreen) {
                 toggleLandscapeFullscreen()
             } else {
@@ -412,7 +526,8 @@ class ZhiyunPlayerActivity : Activity() {
 
         titleView = TextView(this).apply {
             text = titleText
-            textSize = 15f
+            textSize = 15.5f
+            typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
             isSingleLine = true
             ellipsize = TextUtils.TruncateAt.END
@@ -420,56 +535,103 @@ class ZhiyunPlayerActivity : Activity() {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
 
-        rotateBtn = makeIconBtn(IconKind.ROTATE, sizeDp = 44, padDp = 9, color = SAKURA_ACCENT) {
-            sensorAutoRotate = !sensorAutoRotate
-            updateRotateIcon()
-            if (!sensorAutoRotate && !isFullscreenLocked) {
-                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LOCKED
-                showHud("已锁定当前方向")
-            } else if (sensorAutoRotate) {
-                orientationListener?.enable()
-                showHud("已开启重力旋屏")
+        webReturnNativePill = makePillButton(
+            "原生流",
+            bgColor = Color.parseColor("#33FB7299"),
+            textColor = SAKURA_ACCENT
+        ) {
+            if (streamCandidates.isNotEmpty()) {
+                playStreamAt(currentStreamIndex.coerceIn(0, streamCandidates.lastIndex))
+            }
+        }.apply {
+            visibility = View.GONE
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                marginEnd = dp(6)
             }
         }
 
-        pipBtn = makeIconBtn(IconKind.PIP, sizeDp = 44, padDp = 9) {
+        webOrientPill = makePillButton("横屏") {
+            toggleLandscapeFullscreen()
+        }.apply {
+            visibility = View.GONE
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                marginEnd = dp(4)
+            }
+        }
+
+        pipBtn = makeIconBtn(IconKind.PIP, sizeDp = 48, padDp = 11) {
             enterPipMode()
         }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             pipBtn.visibility = View.GONE
         }
 
-        moreBtn = makeIconBtn(IconKind.MORE, sizeDp = 44, padDp = 9) {
+        moreBtn = makeIconBtn(IconKind.MORE, sizeDp = 48, padDp = 11) {
             showMoreMenuDialog()
         }
 
         topBar.addView(backBtn)
         topBar.addView(titleView)
-        topBar.addView(rotateBtn)
+        topBar.addView(webReturnNativePill)
+        topBar.addView(webOrientPill)
         topBar.addView(pipBtn)
         topBar.addView(moreBtn)
 
-        // Center Play/Pause Floating Button
+        // Center Transport Row (-10s / Play / +10s)
+        centerControlsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+            )
+        }
+
+        rewind10Btn = makeCircleSeekBtn("-10s") {
+            seekBy(-10_000L, "后退 10s")
+        }.apply {
+            (layoutParams as LinearLayout.LayoutParams).marginEnd = dp(24)
+        }
+
         centerPlayBtn = ImageView(this).apply {
-            setImageDrawable(VectorIconDrawable(IconKind.PLAY, Color.WHITE))
+            setImageDrawable(VectorIconDrawable(IconKind.PLAY, Color.WHITE, dp(38)))
             scaleType = ImageView.ScaleType.FIT_CENTER
-            val p = dp(15)
+            val p = dp(19)
             setPadding(p, p, p, p)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(Color.parseColor("#88000000"))
+                setColor(Color.parseColor("#99000000"))
+                setStroke(dp(1), Color.parseColor("#44FFFFFF"))
             }
-            layoutParams = FrameLayout.LayoutParams(dp(64), dp(64), Gravity.CENTER)
-            setOnClickListener { togglePlayPause(showBanner = false) }
+            layoutParams = LinearLayout.LayoutParams(dp(76), dp(76))
+            setOnClickListener {
+                togglePlayPause(showBanner = false)
+            }
         }
 
-        // Bottom Bar Scrim
+        forward10Btn = makeCircleSeekBtn("+10s") {
+            seekBy(10_000L, "前进 10s")
+        }.apply {
+            (layoutParams as LinearLayout.LayoutParams).marginStart = dp(24)
+        }
+
+        centerControlsRow.addView(rewind10Btn)
+        centerControlsRow.addView(centerPlayBtn)
+        centerControlsRow.addView(forward10Btn)
+
+        // Bottom Bar Scrim (Bilibili / iQiyi 2-row style)
         bottomBar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.VERTICAL
             background = GradientDrawable(
                 GradientDrawable.Orientation.BOTTOM_TOP,
-                intArrayOf(Color.parseColor("#CC000000"), Color.TRANSPARENT)
+                intArrayOf(Color.parseColor("#DD000000"), Color.parseColor("#77000000"), Color.TRANSPARENT)
             )
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -478,15 +640,21 @@ class ZhiyunPlayerActivity : Activity() {
             )
         }
 
-        bottomPlayBtn = makeIconBtn(IconKind.PLAY, sizeDp = 42, padDp = 8) {
-            togglePlayPause(showBanner = false)
+        val progressRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
         }
 
         timeCurrentView = TextView(this).apply {
             text = "00:00"
-            textSize = 11.5f
+            textSize = 12.5f
+            typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
-            setPadding(dp(4), 0, dp(6), 0)
+            setPadding(dp(4), 0, dp(8), 0)
         }
 
         seekBar = SeekBar(this).apply {
@@ -494,7 +662,7 @@ class ZhiyunPlayerActivity : Activity() {
             progressTintList = ColorStateList.valueOf(SAKURA_ACCENT)
             thumbTintList = ColorStateList.valueOf(Color.WHITE)
             progressBackgroundTintList = ColorStateList.valueOf(Color.parseColor("#55FFFFFF"))
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            layoutParams = LinearLayout.LayoutParams(0, dp(34), 1f)
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                     if (fromUser) {
@@ -523,69 +691,131 @@ class ZhiyunPlayerActivity : Activity() {
 
         timeDurationView = TextView(this).apply {
             text = "00:00"
-            textSize = 11.5f
-            setTextColor(Color.parseColor("#CCFFFFFF"))
-            setPadding(dp(6), 0, dp(6), 0)
-        }
-
-        speedPill = TextView(this).apply {
-            text = "1.0x"
             textSize = 12.5f
-            setTextColor(Color.WHITE)
-            setPadding(dp(10), dp(5), dp(10), dp(5))
-            background = GradientDrawable().apply {
-                cornerRadius = dp(13).toFloat()
-                setColor(Color.parseColor("#44FFFFFF"))
-            }
-            setOnClickListener {
-                cycleSpeed()
-                scheduleAutoHide()
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#DDFFFFFF"))
+            setPadding(dp(8), 0, dp(4), 0)
+        }
+
+        progressRow.addView(timeCurrentView)
+        progressRow.addView(seekBar)
+        progressRow.addView(timeDurationView)
+
+        val actionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(4)
             }
         }
 
-        fullscreenBtn = makeIconBtn(IconKind.FULLSCREEN, sizeDp = 42, padDp = 8) {
+        bottomPlayBtn = makeIconBtn(IconKind.PLAY, sizeDp = 46, padDp = 10) {
+            togglePlayPause(showBanner = false)
+        }
+
+        val actionSpacer = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, 1, 1f)
+        }
+
+        liveSourcePill = makePillButton("线路") {
+            showSourceDialog()
+        }.apply {
+            visibility = if (streamCandidates.size > 1) View.VISIBLE else View.GONE
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                marginEnd = dp(8)
+            }
+        }
+
+        webFallbackPill = makePillButton("网页版") {
+            if (webFallbackUrl.isNotEmpty()) {
+                attachWebView(webFallbackUrl)
+            }
+        }.apply {
+            visibility = if (webFallbackUrl.isNotEmpty()) View.VISIBLE else View.GONE
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                marginEnd = dp(8)
+            }
+        }
+
+        speedPill = makePillButton("1.0x") {
+            cycleSpeed()
+        }.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                marginEnd = dp(8)
+            }
+        }
+
+        orientPill = makePillButton("横屏") {
+            toggleLandscapeFullscreen()
+        }.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                marginEnd = dp(4)
+            }
+        }
+
+        fullscreenBtn = makeIconBtn(IconKind.FULLSCREEN, sizeDp = 46, padDp = 10) {
             toggleLandscapeFullscreen()
         }
 
-        bottomBar.addView(bottomPlayBtn)
-        bottomBar.addView(timeCurrentView)
-        bottomBar.addView(seekBar)
-        bottomBar.addView(timeDurationView)
-        bottomBar.addView(speedPill)
-        bottomBar.addView(fullscreenBtn)
+        actionRow.addView(bottomPlayBtn)
+        actionRow.addView(actionSpacer)
+        actionRow.addView(liveSourcePill)
+        actionRow.addView(webFallbackPill)
+        actionRow.addView(speedPill)
+        actionRow.addView(orientPill)
+        actionRow.addView(fullscreenBtn)
+
+        bottomBar.addView(progressRow)
+        bottomBar.addView(actionRow)
 
         overlayRoot.addView(topBar)
-        overlayRoot.addView(centerPlayBtn)
+        overlayRoot.addView(centerControlsRow)
         overlayRoot.addView(bottomBar)
 
         bufferingSpinner = ProgressBar(this).apply {
             indeterminateTintList = ColorStateList.valueOf(SAKURA_ACCENT)
             visibility = View.GONE
-            layoutParams = FrameLayout.LayoutParams(dp(42), dp(42), Gravity.CENTER)
+            layoutParams = FrameLayout.LayoutParams(dp(48), dp(48), Gravity.CENTER)
         }
 
         webBarToggleBtn = ImageView(this).apply {
-            setImageDrawable(VectorIconDrawable(IconKind.MORE, Color.WHITE))
+            setImageDrawable(VectorIconDrawable(IconKind.MORE, Color.WHITE, dp(26)))
             scaleType = ImageView.ScaleType.FIT_CENTER
-            val p = dp(8)
+            val p = dp(10)
             setPadding(p, p, p, p)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(Color.parseColor("#88000000"))
+                setColor(Color.parseColor("#99000000"))
             }
             visibility = View.GONE
-            layoutParams = FrameLayout.LayoutParams(dp(42), dp(42), Gravity.TOP or Gravity.END)
+            layoutParams = FrameLayout.LayoutParams(dp(46), dp(46), Gravity.TOP or Gravity.END)
             setOnClickListener {
                 setControlsVisible(!controlsVisible)
             }
         }
 
         hudPill = TextView(this).apply {
-            textSize = 13f
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
-            setPadding(dp(14), dp(7), dp(14), dp(7))
+            setPadding(dp(16), dp(8), dp(16), dp(8))
             background = GradientDrawable().apply {
-                cornerRadius = dp(18).toFloat()
+                cornerRadius = dp(20).toFloat()
                 setColor(Color.parseColor("#CC1C1C1E"))
             }
             visibility = View.GONE
@@ -624,33 +854,42 @@ class ZhiyunPlayerActivity : Activity() {
     private fun applyBarSafePadding() {
         val hPadLeft = maxOf(dp(12), safeLeft + dp(8))
         val hPadRight = maxOf(dp(12), safeRight + dp(8))
-        val topExtra = if (isFullscreen) maxOf(dp(10), safeTop + dp(6)) else maxOf(dp(14), safeTop + dp(8))
+        val topExtra = if (isFullscreen) maxOf(dp(8), safeTop + dp(4)) else maxOf(dp(12), safeTop + dp(6))
         val bottomExtra = if (isFullscreen) maxOf(dp(10), safeBottom + dp(6)) else maxOf(dp(12), safeBottom + dp(8))
 
-        topBar.setPadding(hPadLeft, topExtra, hPadRight, dp(14))
+        topBar.setPadding(hPadLeft, topExtra, hPadRight, dp(10))
         bottomBar.setPadding(hPadLeft, dp(14), hPadRight, bottomExtra)
 
+        val vcParams = videoContainer.layoutParams as FrameLayout.LayoutParams
+        val desiredTopMargin = if (activeWebView != null && customViewExitCallback == null) {
+            topExtra + dp(58)
+        } else {
+            0
+        }
+        if (vcParams.topMargin != desiredTopMargin) {
+            vcParams.topMargin = desiredTopMargin
+            videoContainer.layoutParams = vcParams
+        }
+
         (webBarToggleBtn.layoutParams as FrameLayout.LayoutParams).apply {
-            topMargin = topExtra + dp(2)
-            rightMargin = hPadRight + dp(2)
+            topMargin = topExtra + dp(4)
+            rightMargin = hPadRight + dp(4)
         }
         webBarToggleBtn.requestLayout()
 
-        (hudPill.layoutParams as FrameLayout.LayoutParams).topMargin = topExtra + dp(60)
+        (hudPill.layoutParams as FrameLayout.LayoutParams).topMargin = topExtra + dp(64)
         hudPill.requestLayout()
     }
 
-    private fun updateRotateIcon() {
-        rotateBtn.setImageDrawable(
-            VectorIconDrawable(IconKind.ROTATE, if (sensorAutoRotate) SAKURA_ACCENT else Color.WHITE)
-        )
+    private fun clearPrepareWatchdog() {
+        mainHandler.removeCallbacks(prepareWatchdogRunnable)
     }
 
     private fun updatePlayPauseIcons() {
         val playing = activePlayer?.isPlaying == true
         val kind = if (playing) IconKind.PAUSE else IconKind.PLAY
-        centerPlayBtn.setImageDrawable(VectorIconDrawable(kind, Color.WHITE))
-        bottomPlayBtn.setImageDrawable(VectorIconDrawable(kind, Color.WHITE))
+        centerPlayBtn.setImageDrawable(VectorIconDrawable(kind, Color.WHITE, dp(38)))
+        bottomPlayBtn.setImageDrawable(VectorIconDrawable(kind, Color.WHITE, dp(26)))
     }
 
     private fun showHud(msg: String) {
@@ -666,13 +905,25 @@ class ZhiyunPlayerActivity : Activity() {
             webBarToggleBtn.visibility = View.GONE
             return
         }
-        controlsVisible = visible
-        overlayRoot.visibility = if (visible) View.VISIBLE else View.GONE
         val isWeb = activeWebView != null
+        val isWebCustomFullscreen = isWeb && customViewExitCallback != null
+        val effectiveVisible = if (isWeb && !isWebCustomFullscreen) true else visible
+        controlsVisible = effectiveVisible
+
+        overlayRoot.visibility = if (effectiveVisible) View.VISIBLE else View.GONE
         bottomBar.visibility = if (isWeb) View.GONE else View.VISIBLE
-        centerPlayBtn.visibility = if (isWeb) View.GONE else View.VISIBLE
-        webBarToggleBtn.visibility = if (isWeb && !visible) View.VISIBLE else View.GONE
-        if (visible) {
+        centerControlsRow.visibility = if (isWeb) View.GONE else View.VISIBLE
+        webReturnNativePill.visibility = if (isWeb && streamCandidates.isNotEmpty()) View.VISIBLE else View.GONE
+        webOrientPill.visibility = if (isWeb) View.VISIBLE else View.GONE
+        pipBtn.visibility = if (!isWeb && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) View.VISIBLE else View.GONE
+        webBarToggleBtn.visibility = if (isWebCustomFullscreen && !effectiveVisible) View.VISIBLE else View.GONE
+
+        if (!isWeb) {
+            liveSourcePill.visibility = if (streamCandidates.size > 1) View.VISIBLE else View.GONE
+            webFallbackPill.visibility = if (webFallbackUrl.isNotEmpty()) View.VISIBLE else View.GONE
+        }
+
+        if (effectiveVisible && !isWeb) {
             scheduleAutoHide()
         } else {
             mainHandler.removeCallbacks(autoHideRunnable)
@@ -715,15 +966,23 @@ class ZhiyunPlayerActivity : Activity() {
         if (isUserSeeking) return
         val dur = player.duration
         val pos = player.currentPosition.coerceAtLeast(0L)
-        if (player.isCurrentMediaItemLive || dur <= 0L || dur == C.TIME_UNSET) {
-            timeCurrentView.text = if (pos > 0) formatMs(pos) else "直播"
-            timeDurationView.text = "LIVE"
+        val live = player.isCurrentMediaItemLive || dur <= 0L || dur == C.TIME_UNSET
+        isLiveStream = live
+        rewind10Btn.visibility = if (live) View.GONE else View.VISIBLE
+        forward10Btn.visibility = if (live) View.GONE else View.VISIBLE
+        speedPill.visibility = if (live) View.GONE else View.VISIBLE
+
+        if (live) {
+            timeCurrentView.text = if (pos > 0) formatMs(pos) else "00:00"
+            timeDurationView.text = "● LIVE"
+            timeDurationView.setTextColor(SAKURA_ACCENT)
             seekBar.isEnabled = false
             seekBar.progress = 1000
         } else {
             seekBar.isEnabled = true
             timeCurrentView.text = formatMs(pos)
             timeDurationView.text = formatMs(dur)
+            timeDurationView.setTextColor(Color.parseColor("#DDFFFFFF"))
             seekBar.progress = ((pos * 1000L) / dur).toInt().coerceIn(0, 1000)
         }
     }
@@ -792,8 +1051,10 @@ class ZhiyunPlayerActivity : Activity() {
 
     private fun applyFullscreenChrome(fullscreen: Boolean) {
         isFullscreen = fullscreen
+        orientPill.text = if (fullscreen) "竖屏" else "横屏"
+        webOrientPill.text = if (fullscreen) "竖屏" else "横屏"
         fullscreenBtn.setImageDrawable(
-            VectorIconDrawable(if (fullscreen) IconKind.FULLSCREEN_EXIT else IconKind.FULLSCREEN, Color.WHITE)
+            VectorIconDrawable(if (fullscreen) IconKind.FULLSCREEN_EXIT else IconKind.FULLSCREEN, Color.WHITE, dp(26))
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             window.insetsController?.let { controller ->
@@ -897,6 +1158,7 @@ class ZhiyunPlayerActivity : Activity() {
     }
 
     private fun playStreamAt(index: Int) {
+        clearPrepareWatchdog()
         if (index < 0 || index >= streamCandidates.size) {
             if (webFallbackUrl.isNotEmpty()) {
                 Toast.makeText(this, "视频流加载失败，正在切换网页播放", Toast.LENGTH_SHORT).show()
@@ -908,6 +1170,8 @@ class ZhiyunPlayerActivity : Activity() {
         val streamUrl = streamCandidates[index].second
         activeWebView?.destroy()
         activeWebView = null
+        customViewExitCallback = null
+        exitWebFullscreen = null
         releasePlayer()
         videoContainer.removeAllViews()
         gestureLayer.visibility = View.VISIBLE
@@ -916,17 +1180,22 @@ class ZhiyunPlayerActivity : Activity() {
         val headers = mutableMapOf(
             "Referer" to "https://classroom.zju.edu.cn/",
             "Origin" to "https://classroom.zju.edu.cn",
-            "User-Agent" to "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         )
         if (token.isNotBlank()) {
-            headers["Cookie"] = "_token=$token; token=$token"
+            val phpCookie = buildPhpSerializedToken(token)
+            headers["Cookie"] = if (phpCookie.isNotEmpty()) {
+                "_token=$phpCookie; token=$token"
+            } else {
+                "_token=$token; token=$token"
+            }
             headers["Authorization"] = "Bearer $token"
         }
 
         val dataSourceFactory = DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15000)
-            .setReadTimeoutMs(20000)
+            .setConnectTimeoutMs(8000)
+            .setReadTimeoutMs(10000)
             .setDefaultRequestProperties(headers)
 
         val player = ExoPlayer.Builder(this)
@@ -940,15 +1209,24 @@ class ZhiyunPlayerActivity : Activity() {
 
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY || playbackState == Player.STATE_ENDED) {
+                    clearPrepareWatchdog()
+                }
                 bufferingSpinner.visibility =
                     if (playbackState == Player.STATE_BUFFERING) View.VISIBLE else View.GONE
                 updatePlayPauseIcons()
                 if (playbackState == Player.STATE_READY) {
+                    updatePlaybackProgress()
                     scheduleAutoHide()
+                    updatePipParams()
                 }
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (isPlaying) {
+                    clearPrepareWatchdog()
+                    bufferingSpinner.visibility = View.GONE
+                }
                 updatePlayPauseIcons()
                 if (isPlaying) {
                     scheduleAutoHide()
@@ -958,6 +1236,7 @@ class ZhiyunPlayerActivity : Activity() {
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                clearPrepareWatchdog()
                 bufferingSpinner.visibility = View.GONE
                 val nextIdx = currentStreamIndex + 1
                 if (nextIdx < streamCandidates.size) {
@@ -990,21 +1269,24 @@ class ZhiyunPlayerActivity : Activity() {
 
         videoContainer.addView(playerView)
         activePlayer = player
+        applyBarSafePadding()
         setControlsVisible(true)
         updatePipParams()
         player.setPlaybackParameters(PlaybackParameters(speeds[speedIndex]))
         player.setMediaItem(mediaBuilder.build())
         player.prepare()
         player.playWhenReady = true
+        mainHandler.postDelayed(prepareWatchdogRunnable, 8000L)
     }
 
     private fun attachWebView(targetUrl: String) {
+        clearPrepareWatchdog()
         if (targetUrl.isBlank()) return
         releasePlayer()
         activeWebView?.destroy()
         videoContainer.removeAllViews()
         gestureLayer.visibility = View.GONE
-        bufferingSpinner.visibility = View.GONE
+        bufferingSpinner.visibility = View.VISIBLE
 
         val customViewHolder = FrameLayout(this).apply {
             visibility = View.GONE
@@ -1017,16 +1299,21 @@ class ZhiyunPlayerActivity : Activity() {
 
         val cookieManager = CookieManager.getInstance()
         cookieManager.setAcceptCookie(true)
+        val phpCookie = buildPhpSerializedToken(token)
         if (token.isNotBlank()) {
             val hosts = listOf(
                 "https://classroom.zju.edu.cn",
+                "https://livingroom.cmc.zju.edu.cn",
                 "https://yjapi.cmc.zju.edu.cn",
-                "https://tgmedia.cmc.zju.edu.cn"
+                "https://tgmedia.cmc.zju.edu.cn",
+                "https://www.zju.edu.cn"
             )
             for (h in hosts) {
-                cookieManager.setCookie(h, "_token=$token; Path=/")
+                if (phpCookie.isNotEmpty()) {
+                    cookieManager.setCookie(h, "_token=$phpCookie; Path=/")
+                    cookieManager.setCookie(h, "_token=$phpCookie; Domain=.zju.edu.cn; Path=/")
+                }
                 cookieManager.setCookie(h, "token=$token; Path=/")
-                cookieManager.setCookie(h, "_token=$token; Domain=.zju.edu.cn; Path=/")
                 cookieManager.setCookie(h, "token=$token; Domain=.zju.edu.cn; Path=/")
             }
             cookieManager.flush()
@@ -1036,11 +1323,33 @@ class ZhiyunPlayerActivity : Activity() {
             .replace("\\", "\\\\")
             .replace("'", "\\'")
             .replace("\n", "")
-        val injectJs = if (escapedToken.isNotEmpty()) {
-            "try{localStorage.setItem('token','$escapedToken');localStorage.setItem('_token','$escapedToken');document.cookie='_token=$escapedToken;path=/';document.cookie='token=$escapedToken;path=/';}catch(e){}"
-        } else {
-            ""
+        val escapedPhpCookie = phpCookie
+            .replace("\\", "\\\\")
+            .replace("'", "\\'")
+            .replace("\n", "")
+        val injectJs = buildString {
+            append("(function(){try{")
+            if (escapedToken.isNotEmpty()) {
+                append("localStorage.setItem('token','$escapedToken');")
+                append("localStorage.setItem('_token','$escapedToken');")
+                val cookieToken = if (escapedPhpCookie.isNotEmpty()) escapedPhpCookie else escapedToken
+                append("document.cookie='_token=$cookieToken;path=/;domain=.zju.edu.cn';")
+                append("document.cookie='_token=$cookieToken;path=/';")
+                append("document.cookie='token=$escapedToken;path=/;domain=.zju.edu.cn';")
+                append("document.cookie='token=$escapedToken;path=/';")
+            }
+            append(
+                "if(!document.getElementById('helechron-zy-fix')){" +
+                    "var s=document.createElement('style');s.id='helechron-zy-fix';" +
+                    "s.innerHTML='html,body{background:#000!important;margin:0!important;padding:0!important;overflow-x:hidden!important;}" +
+                    ".player-wrapper,.prism-player,video{max-width:100vw!important;background:#000!important;}';" +
+                    "(document.head||document.documentElement).appendChild(s);" +
+                    "}"
+            )
+            append("}catch(e){}})();")
         }
+
+        val finalUrl = appendTokenToUrl(targetUrl.trim(), token)
 
         val wv = WebView(this).apply {
             setBackgroundColor(Color.BLACK)
@@ -1051,7 +1360,7 @@ class ZhiyunPlayerActivity : Activity() {
             settings.loadWithOverviewMode = true
             settings.useWideViewPort = true
             settings.userAgentString =
-                "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
             cookieManager.setAcceptThirdPartyCookies(this, true)
             val chromeClient = object : WebChromeClient() {
                 override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
@@ -1071,6 +1380,7 @@ class ZhiyunPlayerActivity : Activity() {
                     currentRequestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                     requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                     applyFullscreenChrome(true)
+                    setControlsVisible(false)
                 }
 
                 override fun onHideCustomView() {
@@ -1083,6 +1393,7 @@ class ZhiyunPlayerActivity : Activity() {
                     currentRequestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                     requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                     applyFullscreenChrome(false)
+                    setControlsVisible(true)
                 }
             }
             exitWebFullscreen = { chromeClient.onHideCustomView() }
@@ -1090,15 +1401,28 @@ class ZhiyunPlayerActivity : Activity() {
             webViewClient = object : WebViewClient() {
                 override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                     super.onPageStarted(view, url, favicon)
-                    if (injectJs.isNotEmpty()) {
-                        view?.evaluateJavascript(injectJs, null)
-                    }
+                    view?.evaluateJavascript(injectJs, null)
                 }
 
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
-                    if (injectJs.isNotEmpty()) {
-                        view?.evaluateJavascript(injectJs, null)
+                    bufferingSpinner.visibility = View.GONE
+                    view?.evaluateJavascript(injectJs, null)
+                }
+
+                override fun onReceivedSslError(
+                    view: WebView?,
+                    handler: SslErrorHandler?,
+                    error: SslError?
+                ) {
+                    val urlStr = error?.url?.lowercase() ?: ""
+                    if (urlStr.contains("zju.edu.cn") ||
+                        urlStr.contains("chinamcloud.com") ||
+                        urlStr.contains("chinamcache.com")
+                    ) {
+                        handler?.proceed()
+                    } else {
+                        handler?.cancel()
                     }
                 }
 
@@ -1111,7 +1435,7 @@ class ZhiyunPlayerActivity : Activity() {
                 }
             }
             loadUrl(
-                targetUrl,
+                finalUrl,
                 mapOf(
                     "Referer" to "https://classroom.zju.edu.cn/",
                     "Origin" to "https://classroom.zju.edu.cn"
@@ -1127,6 +1451,7 @@ class ZhiyunPlayerActivity : Activity() {
             )
         )
         videoContainer.addView(customViewHolder)
+        applyBarSafePadding()
         setControlsVisible(true)
         updatePipParams()
     }
@@ -1135,7 +1460,7 @@ class ZhiyunPlayerActivity : Activity() {
         val options = mutableListOf<String>()
         val actions = mutableListOf<() -> Unit>()
 
-        if (activeWebView == null) {
+        if (activeWebView == null && !isLiveStream) {
             options.add("倍速播放（当前 ${speeds[speedIndex]}x）")
             actions.add { showSpeedDialog() }
         }
@@ -1143,6 +1468,26 @@ class ZhiyunPlayerActivity : Activity() {
             options.add("切换视频线路（共 ${streamCandidates.size} 条）")
             actions.add { showSourceDialog() }
         }
+        options.add(if (isFullscreen) "退出横屏全屏" else "切换横屏全屏")
+        actions.add { toggleLandscapeFullscreen() }
+
+        options.add(if (sensorAutoRotate) "关闭重力感应旋屏" else "开启重力感应旋屏")
+        actions.add {
+            sensorAutoRotate = !sensorAutoRotate
+            if (!sensorAutoRotate && !isFullscreenLocked) {
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LOCKED
+                showHud("已锁定当前方向")
+            } else if (sensorAutoRotate) {
+                orientationListener?.enable()
+                showHud("已开启重力旋屏")
+            }
+        }
+
+        if (activeWebView == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            options.add("画中画小窗播放")
+            actions.add { enterPipMode() }
+        }
+
         if (activeWebView == null && webFallbackUrl.isNotEmpty()) {
             options.add("切换网页端智云播放器")
             actions.add { attachWebView(webFallbackUrl) }
@@ -1150,8 +1495,8 @@ class ZhiyunPlayerActivity : Activity() {
             options.add("返回原生流媒体播放器")
             actions.add { playStreamAt(currentStreamIndex.coerceIn(0, streamCandidates.lastIndex)) }
         }
-        if (activeWebView != null) {
-            options.add("收起顶部工具栏")
+        if (activeWebView != null && customViewExitCallback != null) {
+            options.add("隐藏顶部控制栏")
             actions.add { setControlsVisible(false) }
         }
         if (options.isEmpty()) return
@@ -1203,6 +1548,7 @@ class ZhiyunPlayerActivity : Activity() {
     }
 
     private fun releasePlayer() {
+        clearPrepareWatchdog()
         try {
             activePlayer?.stop()
             activePlayer?.release()
