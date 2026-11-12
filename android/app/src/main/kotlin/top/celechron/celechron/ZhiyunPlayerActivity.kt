@@ -886,7 +886,9 @@ class ZhiyunPlayerActivity : Activity() {
     }
 
     private fun updatePlayPauseIcons() {
-        val playing = activePlayer?.isPlaying == true
+        val playing = activePlayer?.let {
+            it.playWhenReady && it.playbackState != Player.STATE_ENDED
+        } == true
         val kind = if (playing) IconKind.PAUSE else IconKind.PLAY
         centerPlayBtn.setImageDrawable(VectorIconDrawable(kind, Color.WHITE, dp(38)))
         bottomPlayBtn.setImageDrawable(VectorIconDrawable(kind, Color.WHITE, dp(26)))
@@ -939,7 +941,9 @@ class ZhiyunPlayerActivity : Activity() {
 
     private fun togglePlayPause(showBanner: Boolean) {
         val player = activePlayer ?: return
-        if (player.isPlaying) {
+        val currentlyPlaying =
+            player.playWhenReady && player.playbackState != Player.STATE_ENDED
+        if (currentlyPlaying) {
             player.pause()
             if (showBanner) showHud("已暂停")
         } else {

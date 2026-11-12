@@ -161,7 +161,18 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                   (item['sub_id']?.toString().isNotEmpty == true ||
                       item['id']?.toString().isNotEmpty == true) &&
                   isItemNotFuture(item))
-              .toList();
+              .toList()
+            ..sort((a, b) {
+              final dtA = ZhiyunService.parseZhiyunTimestamp(
+                    a['start_at'] ?? a['class_begin'] ?? a['course_begin'],
+                  ) ??
+                  DateTime(1970);
+              final dtB = ZhiyunService.parseZhiyunTimestamp(
+                    b['start_at'] ?? b['class_begin'] ?? b['course_begin'],
+                  ) ??
+                  DateTime(1970);
+              return dtB.compareTo(dtA);
+            });
           picked = validPast.firstWhereOrNull(
                 (item) => ZhiyunService.checkHasReplay(item: item),
               ) ??
@@ -190,12 +201,6 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
         setState(() {
           _loading = false;
         });
-      }
-      if (autoPlayFirstTime &&
-          !_autoLaunched &&
-          _currentLivingroomUrl.isNotEmpty) {
-        _autoLaunched = true;
-        await _launchInAppPlayer(_currentLivingroomUrl);
       }
       return;
     }
@@ -240,13 +245,9 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
       subId: subId,
     );
 
-    if (autoPlayFirstTime && !_autoLaunched) {
+    if (autoPlayFirstTime && !_autoLaunched && streams.isNotEmpty) {
       _autoLaunched = true;
-      final launchUrl =
-          streams.isNotEmpty ? streams.first.url : _currentLivingroomUrl;
-      if (launchUrl.isNotEmpty) {
-        await _launchInAppPlayer(launchUrl);
-      }
+      await _launchInAppPlayer(streams.first.url);
     }
   }
 
@@ -379,7 +380,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                       _loadLessonData(autoPlayFirstTime: false);
                     },
                     child: Text(
-                      '${r.lessonTitle}${r.isLive ? " [直播中]" : r.hasReplay ? " [有回放]" : ""}',
+                      '${r.lessonTitle}${r.isLive ? " [直播中]" : r.hasReplay ? " [有回放]" : " [暂无回放]"}',
                       style: TextStyle(
                         fontWeight: r.subId == _currentSubId
                             ? FontWeight.bold

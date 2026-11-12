@@ -290,6 +290,49 @@ void main() {
       expect(matched?['sub_id'], equals('2026001'));
     });
 
+    test('处于上课时间段但无直播信号或未录制回放时不按时间偷懒误判', () {
+      final now = DateTime.now();
+      final scheduledItem = <String, dynamic>{
+        'sub_id': '2026123',
+        'title': '未开启直播的排课',
+        'status': '1',
+        'start_at':
+            (now.subtract(const Duration(minutes: 10)).millisecondsSinceEpoch ~/
+                    1000)
+                .toString(),
+        'end_at':
+            (now.add(const Duration(minutes: 40)).millisecondsSinceEpoch ~/ 1000)
+                .toString(),
+      };
+      expect(
+        ZhiyunService.checkIsLive(item: null, targetDate: now),
+        isFalse,
+      );
+      expect(
+        ZhiyunService.checkIsLive(item: scheduledItem, targetDate: now),
+        isFalse,
+      );
+
+      final pastNoReplay = <String, dynamic>{
+        'sub_id': '2026124',
+        'title': '没有录播的往期课节',
+        'status': '1',
+        'playback': '',
+        'start_at':
+            (now.subtract(const Duration(hours: 4)).millisecondsSinceEpoch ~/
+                    1000)
+                .toString(),
+        'end_at':
+            (now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch ~/
+                    1000)
+                .toString(),
+      };
+      expect(
+        ZhiyunService.checkHasReplay(item: pastNoReplay, targetDate: now),
+        isFalse,
+      );
+    });
+
     test('PHP 序列化 _token Cookie 与网页播放器 token Query 拼接正确', () {
       const token = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.payload.sig';
       final encoded = ZhiyunService.buildPhpSerializedTokenCookie(token);

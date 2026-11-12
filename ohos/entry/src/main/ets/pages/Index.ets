@@ -124,6 +124,11 @@ struct Index {
   @State private isPlayerFullscreen: boolean = false;
   @State private isPlayerMiniWindow: boolean = false;
   @State private isSystemPipActive: boolean = false;
+  @State private isFloatingWindow: boolean = false;
+  @State private isSplitWindow: boolean = false;
+  @State private isFreeWindowMode: boolean = false;
+  @State private winWidthVp: number = 0;
+  @State private winHeightVp: number = 0;
   @State private sensorRotation: boolean = true;
   @State private controlsVisible: boolean = true;
   @State private showMoreSheet: boolean = false;
@@ -145,6 +150,11 @@ struct Index {
   private xComponentSurfaceId: string = '';
   private avPlayer: media.AVPlayer | undefined = undefined;
   private pipController: PiPWindow.PiPController | undefined = undefined;
+  private mainWindow: window.Window | undefined = undefined;
+  private pipRestoring: boolean = false;
+  private landscapeMultiWindowEnabled: boolean = false;
+  private lastManualPlayToggleMs: number = 0;
+  private manualTargetPlaying: boolean = true;
   private manualFullscreenLock: boolean = false;
   private sensorSubscribed: boolean = false;
   private currentOri: window.Orientation = window.Orientation.UNSPECIFIED;
@@ -166,6 +176,8 @@ struct Index {
   aboutToDisappear(): void {
     this.stopGravitySensor();
     this.clearOverlayTimers();
+    this.setLandscapeMultiWindowEnabled(false);
+    this.unregisterWindowListeners();
     this.releaseSystemPip();
     this.releaseAvPlayer();
   }
@@ -207,6 +219,83 @@ struct Index {
     }
   }
 
+  private unregisterWindowListeners(): void {
+    const win = this.mainWindow;
+    if (win === undefined) {
+      return;
+    }
+    try {
+      win.off('avoidAreaChange');
+    } catch (_) {
+    }
+    try {
+      win.off('windowStatusChange');
+    } catch (_) {
+    }
+    try {
+      win.off('windowSizeChange');
+    } catch (_) {
+    }
+    this.mainWindow = undefined;
+  }
+
+  private isSystemMultiWindow(): boolean {
+    return this.isFloatingWindow || this.isSplitWindow;
+  }
+
+  private isCompactSmallWindow(): boolean {
+    if (this.isSystemMultiWindow()) {
+      return true;
+    }
+    return this.winWidthVp > 0 && this.winWidthVp < 420 && this.winHeightVp > 0 && this.winHeightVp < 560;
+  }
+
+  private refreshWindowMetrics(win: window.Window): void {
+    try {
+      const props = win.getWindowProperties();
+      const rect = props.windowRect;
+      if (rect.width > 0 && rect.height > 0) {
+        this.winWidthVp = px2vp(rect.width);
+        this.winHeightVp = px2vp(rect.height);
+      }
+    } catch (_) {
+    }
+    try {
+      this.isFreeWindowMode = win.isInFreeWindowMode();
+    } catch (_) {
+    }
+  }
+
+  private async setLandscapeMultiWindowEnabled(enable: boolean): Promise<void> {
+    if (this.landscapeMultiWindowEnabled === enable) {
+      return;
+    }
+    this.landscapeMultiWindowEnabled = enable;
+    try {
+      const win = this.mainWindow ?? await window.getLastWindow(this.context);
+      if (enable) {
+        await win.enableLandscapeMultiWindow();
+      } else {
+        await win.disableLandscapeMultiWindow();
+      }
+    } catch (e) {
+      const be = e as BusinessError;
+      hilog.warn(DOMAIN, TAG, `setLandscapeMultiWindowEnabled(${enable}) failed: ${be.code} ${be.message}`);
+    }
+  }
+
+  private syncLandscapeMultiWindow(): void {
+    // 参照 PiliPlus WindowState：非自由窗口模式下，播放横屏视频/全屏且未进入系统画中画时启用横向小窗，
+    // 挂起为系统悬浮小窗后窗口自动横置铺满；进入系统画中画前须关闭以避免小窗进 PiP 黑屏。
+    const shouldEnable = this.inAppVideoVisible
+      && !this.useWebFallback
+      && !this.isSystemPipActive
+      && !this.isPlayerMiniWindow
+      && !this.isFreeWindowMode
+      && (this.isPlayerFullscreen || (this.isFloatingWindow && this.videoAspectRatio >= 1.05) || this.videoAspectRatio >= 1.15);
+    this.setLandscapeMultiWindowEnabled(shouldEnable);
+  }
+
   private refreshAvoidAreas(win: window.Window): void {
     try {
       const navArea = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
@@ -216,8 +305,9 @@ struct Index {
       const t = Math.max(px2vp(sysArea.topRect.height), px2vp(cutoutArea.topRect.height));
       const l = Math.max(px2vp(sysArea.leftRect.width), px2vp(cutoutArea.leftRect.width));
       const r = Math.max(px2vp(sysArea.rightRect.width), px2vp(cutoutArea.rightRect.width));
-      this.safeBottom = b > 0 ? b : 24;
-      this.safeTop = t > 0 ? t : 16;
+      const inMulti = this.isSystemMultiWindow();
+      this.safeBottom = b > 0 ? b : (inMulti ? 0 : 24);
+      this.safeTop = t > 0 ? t : (inMulti ? 0 : 16);
       this.safeLeft = l;
       this.safeRight = r;
     } catch (e) {
@@ -228,11 +318,37 @@ struct Index {
   private async loadSafeArea(): Promise<void> {
     try {
       const win = await window.getLastWindow(this.context);
+      this.mainWindow = win;
+      this.refreshWindowMetrics(win);
       this.refreshAvoidAreas(win);
       this.apiLevel = resolveApiLevel();
       win.on('avoidAreaChange', () => {
         this.refreshAvoidAreas(win);
       });
+      try {
+        win.on('windowSizeChange', (size: window.Size) => {
+          if (size.width > 0 && size.height > 0) {
+            this.winWidthVp = px2vp(size.width);
+            this.winHeightVp = px2vp(size.height);
+          }
+          this.refreshWindowMetrics(win);
+          this.refreshAvoidAreas(win);
+          this.syncLandscapeMultiWindow();
+        });
+      } catch (wsErr) {
+        hilog.warn(DOMAIN, TAG, `windowSizeChange subscribe failed: ${JSON.stringify(wsErr)}`);
+      }
+      try {
+        win.on('windowStatusChange', (status: window.WindowStatusType) => {
+          this.isFloatingWindow = status === window.WindowStatusType.FLOATING;
+          this.isSplitWindow = status === window.WindowStatusType.SPLIT_SCREEN;
+          this.refreshWindowMetrics(win);
+          this.refreshAvoidAreas(win);
+          this.syncLandscapeMultiWindow();
+        });
+      } catch (stErr) {
+        hilog.warn(DOMAIN, TAG, `windowStatusChange subscribe failed: ${JSON.stringify(stErr)}`);
+      }
       hilog.info(DOMAIN, TAG, `safeTop=${this.safeTop}, safeBottom=${this.safeBottom}, apiLevel=${this.apiLevel}, versionId=${deviceInfo.versionId}`);
     } catch (e) {
       hilog.warn(DOMAIN, TAG, `loadSafeArea failed: ${JSON.stringify(e)}`);
@@ -265,6 +381,7 @@ struct Index {
       this.isPlayerFullscreen = false;
       this.isPlayerMiniWindow = false;
       this.isSystemPipActive = false;
+      this.pipRestoring = false;
       this.showMoreSheet = false;
       this.controlsVisible = true;
       this.miniOffsetX = 0;
@@ -272,6 +389,7 @@ struct Index {
       this.xComponentSurfaceId = '';
       this.stopGravitySensor();
       this.clearOverlayTimers();
+      this.setLandscapeMultiWindowEnabled(false);
       this.releaseSystemPip();
       this.releaseAvPlayer();
       this.applyPlayerWindowMode(window.Orientation.UNSPECIFIED, false);
@@ -308,6 +426,8 @@ struct Index {
     this.videoCurrentTime = 0;
     this.videoDuration = 0;
     this.isVideoPlaying = true;
+    this.manualTargetPlaying = true;
+    this.pipRestoring = false;
     this.miniOffsetX = 0;
     this.miniOffsetY = 0;
     this.preConfigureWebCookies();
@@ -321,7 +441,8 @@ struct Index {
       this.activeVideoUrl = this.webFallbackTarget();
       this.useWebFallback = true;
     }
-    this.applyPlayerWindowMode(window.Orientation.PORTRAIT, false);
+    this.applyPlayerWindowMode(this.isSystemMultiWindow() ? window.Orientation.UNSPECIFIED : window.Orientation.PORTRAIT, false);
+    this.syncLandscapeMultiWindow();
     if (this.sensorRotation) {
       this.startGravitySensor();
     }
@@ -402,7 +523,7 @@ struct Index {
   }
 
   private handleAccelerometerData(x: number, y: number, z: number): void {
-    if (!this.inAppVideoVisible || !this.sensorRotation || this.isPlayerMiniWindow) {
+    if (!this.inAppVideoVisible || !this.sensorRotation || this.isPlayerMiniWindow || this.isSystemPipActive || this.isSystemMultiWindow()) {
       return;
     }
     // 手机几乎平放桌面时忽略重力微扰
@@ -437,14 +558,17 @@ struct Index {
   ): Promise<void> {
     this.currentOri = targetOri;
     try {
-      const win = await window.getLastWindow(this.context);
-      await win.setPreferredOrientation(targetOri);
-      if (this.inAppVideoVisible && hideBars && !this.isPlayerMiniWindow) {
+      const win = this.mainWindow ?? await window.getLastWindow(this.context);
+      if (!this.isSystemMultiWindow() || targetOri === window.Orientation.UNSPECIFIED) {
+        await win.setPreferredOrientation(targetOri);
+      }
+      if (this.inAppVideoVisible && hideBars && !this.isPlayerMiniWindow && !this.isSystemPipActive && !this.isSystemMultiWindow()) {
         await win.setWindowSystemBarEnable([]);
       } else {
         await win.setWindowSystemBarEnable(['status', 'navigation']);
       }
       this.refreshAvoidAreas(win);
+      this.syncLandscapeMultiWindow();
     } catch (e) {
       const be = e as BusinessError;
       hilog.warn(DOMAIN, TAG, `applyPlayerWindowMode failed: ${be.code} ${be.message}`);
@@ -484,6 +608,7 @@ struct Index {
     const pip = this.pipController;
     this.pipController = undefined;
     this.isSystemPipActive = false;
+    this.pipRestoring = false;
     if (pip !== undefined) {
       try {
         pip.setAutoStartEnabled(false);
@@ -506,6 +631,10 @@ struct Index {
       }
       if (this.pipController !== undefined) {
         this.pipController.setAutoStartEnabled(this.isVideoPlaying);
+        try {
+          this.pipController.updateContentSize(this.videoContentWidth, this.videoContentHeight);
+        } catch (_) {
+        }
         this.syncPipPlaybackState();
         return;
       }
@@ -521,29 +650,81 @@ struct Index {
       ctrl.setAutoStartEnabled(this.isVideoPlaying);
       ctrl.on('stateChange', (state: PiPWindow.PiPState, reason: string) => {
         hilog.info(DOMAIN, TAG, `PiP stateChange: ${state}, reason=${reason}`);
-        if (state === PiPWindow.PiPState.STARTED) {
+        if (state === PiPWindow.PiPState.ABOUT_TO_START) {
+          this.pipRestoring = false;
           this.isSystemPipActive = true;
+          this.controlsVisible = false;
+          this.showMoreSheet = false;
+          this.stopGravitySensor();
+          this.setLandscapeMultiWindowEnabled(false);
+        } else if (state === PiPWindow.PiPState.STARTED) {
+          this.pipRestoring = false;
+          this.isSystemPipActive = true;
+          this.controlsVisible = false;
+          this.showMoreSheet = false;
           this.syncPipPlaybackState();
+          if (this.isPlayerFullscreen) {
+            this.isPlayerFullscreen = false;
+            this.manualFullscreenLock = false;
+          }
+          this.applyPlayerWindowMode(window.Orientation.UNSPECIFIED, false);
         } else if (state === PiPWindow.PiPState.ABOUT_TO_RESTORE) {
+          this.pipRestoring = true;
           this.isSystemPipActive = false;
           this.controlsVisible = true;
+          if (this.sensorRotation && !this.isSystemMultiWindow()) {
+            this.startGravitySensor();
+          }
+          this.syncLandscapeMultiWindow();
           this.scheduleHideOverlay();
+        } else if (state === PiPWindow.PiPState.ABOUT_TO_STOP) {
+          if (!this.pipRestoring) {
+            this.isSystemPipActive = false;
+          }
         } else if (state === PiPWindow.PiPState.STOPPED || state === PiPWindow.PiPState.ERROR) {
+          const wasRestoring = this.pipRestoring;
+          this.pipRestoring = false;
           this.isSystemPipActive = false;
+          const finishedCtrl = this.pipController;
           this.pipController = undefined;
+          if (finishedCtrl !== undefined) {
+            try {
+              finishedCtrl.off('stateChange');
+              finishedCtrl.off('controlPanelActionEvent');
+            } catch (_) {
+            }
+          }
+          if (wasRestoring) {
+            this.controlsVisible = true;
+            this.syncLandscapeMultiWindow();
+            this.scheduleHideOverlay();
+            setTimeout(() => {
+              if (this.inAppVideoVisible && !this.useWebFallback && !this.isSystemPipActive) {
+                this.initOrUpdateSystemPip();
+              }
+            }, 200);
+          } else if (this.inAppVideoVisible) {
+            this.closeVideoOverlay();
+          }
         }
       });
       ctrl.on('controlPanelActionEvent', (event: PiPWindow.PiPActionEventType, status?: number) => {
         if (event === 'playbackStateChanged') {
           if (status === 1) {
-            this.avPlayer?.play();
+            this.manualTargetPlaying = true;
+            this.lastManualPlayToggleMs = Date.now();
             this.isVideoPlaying = true;
+            this.avPlayer?.play();
           } else if (status === 0) {
-            this.avPlayer?.pause();
+            this.manualTargetPlaying = false;
+            this.lastManualPlayToggleMs = Date.now();
             this.isVideoPlaying = false;
+            this.avPlayer?.pause();
           } else {
             this.togglePlayPause();
+            return;
           }
+          ctrl.setAutoStartEnabled(this.isVideoPlaying);
           this.syncPipPlaybackState();
         }
       });
@@ -556,16 +737,28 @@ struct Index {
     if (!this.useWebFallback && this.avPlayer !== undefined) {
       try {
         if (PiPWindow.isPiPEnabled()) {
+          await this.setLandscapeMultiWindowEnabled(false);
+          this.manualFullscreenLock = false;
+          this.isPlayerFullscreen = false;
+          this.isPlayerMiniWindow = false;
+          await this.applyPlayerWindowMode(window.Orientation.UNSPECIFIED, false);
           await this.initOrUpdateSystemPip();
           if (this.pipController !== undefined) {
-            this.manualFullscreenLock = false;
-            this.isPlayerFullscreen = false;
-            await this.applyPlayerWindowMode(window.Orientation.PORTRAIT, false);
+            try {
+              this.pipController.updateContentSize(this.videoContentWidth, this.videoContentHeight);
+            } catch (_) {
+            }
+            this.pipRestoring = false;
+            this.isSystemPipActive = true;
+            this.controlsVisible = false;
+            this.showMoreSheet = false;
             await this.pipController.startPiP();
             return;
           }
         }
       } catch (e) {
+        this.isSystemPipActive = false;
+        this.syncLandscapeMultiWindow();
         hilog.warn(DOMAIN, TAG, `startPiP failed, fallback to in-app mini: ${JSON.stringify(e)}`);
       }
     }
@@ -599,6 +792,11 @@ struct Index {
           this.videoContentWidth = width;
           this.videoContentHeight = height;
           this.videoAspectRatio = width / height;
+          try {
+            this.pipController?.updateContentSize(width, height);
+          } catch (_) {
+          }
+          this.syncLandscapeMultiWindow();
         }
       });
       player.on('timeUpdate', (timeMs: number) => {
@@ -641,13 +839,21 @@ struct Index {
           }
         } else if (state === 'playing') {
           this.clearPrepareWatchdog();
-          this.isVideoPlaying = true;
           this.videoLoading = false;
+          if (Date.now() - this.lastManualPlayToggleMs < 350 && !this.manualTargetPlaying) {
+            return;
+          }
+          this.isVideoPlaying = true;
+          this.manualTargetPlaying = true;
           this.pipController?.setAutoStartEnabled(true);
           this.syncPipPlaybackState();
           this.scheduleHideOverlay();
         } else if (state === 'paused') {
+          if (Date.now() - this.lastManualPlayToggleMs < 350 && this.manualTargetPlaying) {
+            return;
+          }
           this.isVideoPlaying = false;
+          this.manualTargetPlaying = false;
           this.pipController?.setAutoStartEnabled(false);
           this.syncPipPlaybackState();
           if (!this.isSystemPipActive) {
@@ -655,6 +861,7 @@ struct Index {
           }
         } else if (state === 'completed') {
           this.isVideoPlaying = false;
+          this.manualTargetPlaying = false;
           this.pipController?.setAutoStartEnabled(false);
           this.syncPipPlaybackState();
           this.controlsVisible = true;
@@ -694,12 +901,14 @@ struct Index {
     this.isPlayerFullscreen = false;
     this.isPlayerMiniWindow = false;
     this.isSystemPipActive = false;
+    this.pipRestoring = false;
     this.showMoreSheet = false;
     this.miniOffsetX = 0;
     this.miniOffsetY = 0;
     this.xComponentSurfaceId = '';
     this.stopGravitySensor();
     this.clearOverlayTimers();
+    this.setLandscapeMultiWindowEnabled(false);
     this.releaseSystemPip();
     this.releaseAvPlayer();
     this.inAppVideoVisible = false;
@@ -712,7 +921,7 @@ struct Index {
     this.isPlayerFullscreen = true;
     this.showMoreSheet = false;
     this.applyPlayerWindowMode(window.Orientation.LANDSCAPE, true);
-    if (this.sensorRotation) {
+    if (this.sensorRotation && !this.isSystemMultiWindow()) {
       this.startGravitySensor();
     }
     this.scheduleHideOverlay();
@@ -722,7 +931,7 @@ struct Index {
     this.manualFullscreenLock = false;
     this.isPlayerFullscreen = false;
     this.showMoreSheet = false;
-    this.applyPlayerWindowMode(window.Orientation.PORTRAIT, false);
+    this.applyPlayerWindowMode(this.isSystemMultiWindow() ? window.Orientation.UNSPECIFIED : window.Orientation.PORTRAIT, false);
     this.scheduleHideOverlay();
   }
 
@@ -733,21 +942,32 @@ struct Index {
     this.showMoreSheet = false;
     this.stopGravitySensor();
     this.clearOverlayTimers();
-    this.applyPlayerWindowMode(window.Orientation.PORTRAIT, false);
+    this.applyPlayerWindowMode(this.isSystemMultiWindow() ? window.Orientation.UNSPECIFIED : window.Orientation.PORTRAIT, false);
   }
 
   private togglePlayPause(): void {
     if (this.useWebFallback || this.avPlayer === undefined) {
       return;
     }
+    const nextPlaying = !this.isVideoPlaying;
+    this.lastManualPlayToggleMs = Date.now();
+    this.manualTargetPlaying = nextPlaying;
+    this.isVideoPlaying = nextPlaying;
+    if (this.hideOverlayTimer !== -1) {
+      clearTimeout(this.hideOverlayTimer);
+      this.hideOverlayTimer = -1;
+    }
     try {
-      if (this.isVideoPlaying) {
-        this.avPlayer.pause();
-        this.isVideoPlaying = false;
-      } else {
+      this.pipController?.setAutoStartEnabled(nextPlaying);
+      this.syncPipPlaybackState();
+      if (nextPlaying) {
         this.avPlayer.play();
-        this.isVideoPlaying = true;
         this.scheduleHideOverlay();
+      } else {
+        this.avPlayer.pause();
+        if (!this.isSystemPipActive) {
+          this.controlsVisible = true;
+        }
       }
     } catch (e) {
       hilog.warn(DOMAIN, TAG, `togglePlayPause failed: ${JSON.stringify(e)}`);
@@ -902,7 +1122,21 @@ struct Index {
     }
   }
 
+  private getMiniWindowWidth(): number {
+    return this.videoAspectRatio >= 1.0 ? 256 : 144;
+  }
+
+  private getMiniWindowHeight(): number {
+    if (this.videoAspectRatio >= 1.0) {
+      return Math.max(120, Math.min(200, Math.round(256 / this.videoAspectRatio)));
+    }
+    return Math.max(160, Math.min(260, Math.round(144 / this.videoAspectRatio)));
+  }
+
   private getXComponentWidth(): Length {
+    if (this.isSystemPipActive) {
+      return 1;
+    }
     if (this.playerContainerW > 0 && this.playerContainerH > 0 &&
         this.playerContainerAspect > this.videoAspectRatio) {
       return Math.round(this.playerContainerH * this.videoAspectRatio);
@@ -911,6 +1145,9 @@ struct Index {
   }
 
   private getXComponentHeight(): Length {
+    if (this.isSystemPipActive) {
+      return 1;
+    }
     if (this.playerContainerW > 0 && this.playerContainerH > 0 &&
         this.playerContainerAspect > this.videoAspectRatio) {
       return '100%';
@@ -1312,14 +1549,21 @@ struct Index {
                     }
 
                     Row({ space: 5 }) {
-                      this.PlayerVectorIcon(
-                        this.isPlayerFullscreen
-                          ? 'M9 3.5 L9 9 L3.5 9 M15 3.5 L15 9 L20.5 9 M15 20.5 L15 15 L20.5 15 M9 20.5 L9 15 L3.5 15'
-                          : 'M3.5 9 L3.5 3.5 L9 3.5 M15 3.5 L20.5 3.5 L20.5 9 M20.5 15 L20.5 20.5 L15 20.5 M9 20.5 L3.5 20.5 L3.5 15',
-                        false,
-                        18,
-                        '#FFFFFF'
-                      )
+                      if (this.isPlayerFullscreen) {
+                        this.PlayerVectorIcon(
+                          'M9 3.5 L9 9 L3.5 9 M15 3.5 L15 9 L20.5 9 M15 20.5 L15 15 L20.5 15 M9 20.5 L9 15 L3.5 15',
+                          false,
+                          18,
+                          '#FFFFFF'
+                        )
+                      } else {
+                        this.PlayerVectorIcon(
+                          'M3.5 9 L3.5 3.5 L9 3.5 M15 3.5 L20.5 3.5 L20.5 9 M20.5 15 L20.5 20.5 L15 20.5 M9 20.5 L3.5 20.5 L3.5 15',
+                          false,
+                          18,
+                          '#FFFFFF'
+                        )
+                      }
                       Text(this.isPlayerFullscreen ? '竖屏' : '横屏')
                         .fontSize(13)
                         .fontWeight(FontWeight.Bold)
@@ -1401,27 +1645,57 @@ struct Index {
               })
                 .width(this.getXComponentWidth())
                 .height(this.getXComponentHeight())
-                .aspectRatio(this.videoAspectRatio)
+                .aspectRatio(this.isSystemPipActive ? 1 : this.videoAspectRatio)
+                .hitTestBehavior(this.isSystemPipActive ? HitTestMode.None : HitTestMode.Default)
                 .onLoad(() => {
                   this.xComponentSurfaceId = this.xComponentController.getXComponentSurfaceId();
                   const target = this.activeVideoUrl.length > 0 ? this.activeVideoUrl : this.inAppVideoUrl;
                   this.startAvPlayerPlayback(target);
                 })
-                .onClick(() => {
-                  if (this.isPlayerMiniWindow) {
-                    this.isPlayerMiniWindow = false;
-                    this.enterLandscapeFullscreen();
-                    return;
-                  }
-                  if (this.showMoreSheet) {
-                    this.showMoreSheet = false;
-                    return;
-                  }
-                  this.controlsVisible = !this.controlsVisible;
-                  if (this.controlsVisible) {
-                    this.scheduleHideOverlay();
-                  }
-                })
+                .gesture(
+                  GestureGroup(
+                    GestureMode.Exclusive,
+                    TapGesture({ count: 2 })
+                      .onAction((event: GestureEvent) => {
+                        if (this.isSystemPipActive) {
+                          return;
+                        }
+                        if (this.isPlayerMiniWindow) {
+                          this.isPlayerMiniWindow = false;
+                          this.enterLandscapeFullscreen();
+                          return;
+                        }
+                        const tapX = event.fingerList.length > 0 ? event.fingerList[0].localX : 0;
+                        const w = this.playerContainerW > 0 ? this.playerContainerW : 360;
+                        if (this.videoDuration > 0 && tapX > 0 && tapX < w * 0.32) {
+                          this.seekRelativeSeconds(-10);
+                        } else if (this.videoDuration > 0 && tapX > w * 0.68) {
+                          this.seekRelativeSeconds(10);
+                        } else {
+                          this.togglePlayPause();
+                        }
+                      }),
+                    TapGesture({ count: 1 })
+                      .onAction(() => {
+                        if (this.isSystemPipActive) {
+                          return;
+                        }
+                        if (this.isPlayerMiniWindow) {
+                          this.isPlayerMiniWindow = false;
+                          this.enterLandscapeFullscreen();
+                          return;
+                        }
+                        if (this.showMoreSheet) {
+                          this.showMoreSheet = false;
+                          return;
+                        }
+                        this.controlsVisible = !this.controlsVisible;
+                        if (this.controlsVisible) {
+                          this.scheduleHideOverlay();
+                        }
+                      })
+                  )
+                )
             }
 
             // 应用内悬浮小窗仅展示右上角 2 个大号清晰图标钮
@@ -1483,17 +1757,17 @@ struct Index {
               }
 
               if (!this.useWebFallback && this.controlsVisible && !this.videoLoading) {
-                Row({ space: 28 }) {
+                Row({ space: this.isCompactSmallWindow() ? 16 : 28 }) {
                   if (this.videoDuration > 0) {
                     Stack() {
                       Text('-10s')
-                        .fontSize(14)
+                        .fontSize(this.isCompactSmallWindow() ? 12 : 14)
                         .fontWeight(FontWeight.Bold)
                         .fontColor(Color.White)
                     }
-                    .width(56)
-                    .height(56)
-                    .borderRadius(28)
+                    .width(this.isCompactSmallWindow() ? 44 : 56)
+                    .height(this.isCompactSmallWindow() ? 44 : 56)
+                    .borderRadius(this.isCompactSmallWindow() ? 22 : 28)
                     .backgroundColor('#80000000')
                     .border({ width: 0.8, color: '#40FFFFFF' })
                     .onClick(() => {
@@ -1502,18 +1776,25 @@ struct Index {
                   }
 
                   Stack() {
-                    this.PlayerVectorIcon(
-                      this.isVideoPlaying
-                        ? 'M6 4.5 L10 4.5 L10 19.5 L6 19.5 Z M14 4.5 L18 4.5 L18 19.5 L14 19.5 Z'
-                        : 'M7 4.2 L20.2 12 L7 19.8 Z',
-                      true,
-                      38,
-                      '#FFFFFF'
-                    )
+                    if (this.isVideoPlaying) {
+                      this.PlayerVectorIcon(
+                        'M6 4.5 L10 4.5 L10 19.5 L6 19.5 Z M14 4.5 L18 4.5 L18 19.5 L14 19.5 Z',
+                        true,
+                        this.isCompactSmallWindow() ? 30 : 38,
+                        '#FFFFFF'
+                      )
+                    } else {
+                      this.PlayerVectorIcon(
+                        'M7 4.2 L20.2 12 L7 19.8 Z',
+                        true,
+                        this.isCompactSmallWindow() ? 30 : 38,
+                        '#FFFFFF'
+                      )
+                    }
                   }
-                  .width(76)
-                  .height(76)
-                  .borderRadius(38)
+                  .width(this.isCompactSmallWindow() ? 58 : 76)
+                  .height(this.isCompactSmallWindow() ? 58 : 76)
+                  .borderRadius(this.isCompactSmallWindow() ? 29 : 38)
                   .backgroundColor('#88000000')
                   .border({ width: 1.0, color: '#4DFFFFFF' })
                   .onClick(() => {
@@ -1523,13 +1804,13 @@ struct Index {
                   if (this.videoDuration > 0) {
                     Stack() {
                       Text('+10s')
-                        .fontSize(14)
+                        .fontSize(this.isCompactSmallWindow() ? 12 : 14)
                         .fontWeight(FontWeight.Bold)
                         .fontColor(Color.White)
                     }
-                    .width(56)
-                    .height(56)
-                    .borderRadius(28)
+                    .width(this.isCompactSmallWindow() ? 44 : 56)
+                    .height(this.isCompactSmallWindow() ? 44 : 56)
+                    .borderRadius(this.isCompactSmallWindow() ? 22 : 28)
                     .backgroundColor('#80000000')
                     .border({ width: 0.8, color: '#40FFFFFF' })
                     .onClick(() => {
@@ -1685,20 +1966,27 @@ struct Index {
                     }
 
                     // 第二行：主控按钮栏
-                    Row({ space: 10 }) {
+                    Row({ space: this.isCompactSmallWindow() ? 6 : 10 }) {
                       Stack() {
-                        this.PlayerVectorIcon(
-                          this.isVideoPlaying
-                            ? 'M6 4.5 L10 4.5 L10 19.5 L6 19.5 Z M14 4.5 L18 4.5 L18 19.5 L14 19.5 Z'
-                            : 'M7 4.2 L20.2 12 L7 19.8 Z',
-                          true,
-                          26,
-                          '#FFFFFF'
-                        )
+                        if (this.isVideoPlaying) {
+                          this.PlayerVectorIcon(
+                            'M6 4.5 L10 4.5 L10 19.5 L6 19.5 Z M14 4.5 L18 4.5 L18 19.5 L14 19.5 Z',
+                            true,
+                            26,
+                            '#FFFFFF'
+                          )
+                        } else {
+                          this.PlayerVectorIcon(
+                            'M7 4.2 L20.2 12 L7 19.8 Z',
+                            true,
+                            26,
+                            '#FFFFFF'
+                          )
+                        }
                       }
-                      .width(46)
-                      .height(46)
-                      .borderRadius(23)
+                      .width(this.isCompactSmallWindow() ? 40 : 46)
+                      .height(this.isCompactSmallWindow() ? 40 : 46)
+                      .borderRadius(this.isCompactSmallWindow() ? 20 : 23)
                       .backgroundColor('#59000000')
                       .onClick(() => {
                         this.togglePlayPause();
@@ -1788,18 +2076,25 @@ struct Index {
                       })
 
                       Stack() {
-                        this.PlayerVectorIcon(
-                          this.isPlayerFullscreen
-                            ? 'M9 3.5 L9 9 L3.5 9 M15 3.5 L15 9 L20.5 9 M15 20.5 L15 15 L20.5 15 M9 20.5 L9 15 L3.5 15'
-                            : 'M3.5 9 L3.5 3.5 L9 3.5 M15 3.5 L20.5 3.5 L20.5 9 M20.5 15 L20.5 20.5 L15 20.5 M9 20.5 L3.5 20.5 L3.5 15',
-                          false,
-                          24,
-                          '#FFFFFF'
-                        )
+                        if (this.isPlayerFullscreen) {
+                          this.PlayerVectorIcon(
+                            'M9 3.5 L9 9 L3.5 9 M15 3.5 L15 9 L20.5 9 M15 20.5 L15 15 L20.5 15 M9 20.5 L9 15 L3.5 15',
+                            false,
+                            24,
+                            '#FFFFFF'
+                          )
+                        } else {
+                          this.PlayerVectorIcon(
+                            'M3.5 9 L3.5 3.5 L9 3.5 M15 3.5 L20.5 3.5 L20.5 9 M20.5 15 L20.5 20.5 L15 20.5 M9 20.5 L3.5 20.5 L3.5 15',
+                            false,
+                            24,
+                            '#FFFFFF'
+                          )
+                        }
                       }
-                      .width(46)
-                      .height(46)
-                      .borderRadius(23)
+                      .width(this.isCompactSmallWindow() ? 40 : 46)
+                      .height(this.isCompactSmallWindow() ? 40 : 46)
+                      .borderRadius(this.isCompactSmallWindow() ? 20 : 23)
                       .backgroundColor('#59000000')
                       .onClick(() => {
                         if (this.isPlayerFullscreen) {
@@ -1849,16 +2144,18 @@ struct Index {
               }
             }
           }
-          .width(this.isPlayerMiniWindow ? 256 : '100%')
-          .height(this.isPlayerMiniWindow ? 144 : '100%')
-          .borderRadius(this.isPlayerMiniWindow ? 12 : 0)
-          .clip(this.isPlayerMiniWindow)
-          .backgroundColor(Color.Black)
-          .border(this.isPlayerMiniWindow ? { width: 0.8, color: '#44FFFFFF' } : { width: 0 })
-          .shadow(this.isPlayerMiniWindow ? { radius: 18, color: '#66000000', offsetX: 0, offsetY: 6 } : { radius: 0 })
-          .margin(this.isPlayerMiniWindow ? { right: Math.max(12, this.safeRight + 8), bottom: this.safeBottom + 72 } : { right: 0, bottom: 0 })
-          .translate(this.isPlayerMiniWindow ? { x: this.miniOffsetX, y: this.miniOffsetY } : { x: 0, y: 0 })
+          .width(this.isSystemPipActive ? 1 : (this.isPlayerMiniWindow ? this.getMiniWindowWidth() : '100%'))
+          .height(this.isSystemPipActive ? 1 : (this.isPlayerMiniWindow ? this.getMiniWindowHeight() : '100%'))
+          .borderRadius(this.isPlayerMiniWindow && !this.isSystemPipActive ? 12 : 0)
+          .clip(this.isPlayerMiniWindow && !this.isSystemPipActive)
+          .opacity(this.isSystemPipActive ? 0.01 : 1)
+          .backgroundColor(this.isSystemPipActive ? Color.Transparent : Color.Black)
+          .border(this.isPlayerMiniWindow && !this.isSystemPipActive ? { width: 0.8, color: '#44FFFFFF' } : { width: 0 })
+          .shadow(this.isPlayerMiniWindow && !this.isSystemPipActive ? { radius: 18, color: '#66000000', offsetX: 0, offsetY: 6 } : { radius: 0 })
+          .margin(this.isPlayerMiniWindow && !this.isSystemPipActive ? { right: Math.max(12, this.safeRight + 8), bottom: this.safeBottom + 72 } : { right: 0, bottom: 0 })
+          .translate(this.isPlayerMiniWindow && !this.isSystemPipActive ? { x: this.miniOffsetX, y: this.miniOffsetY } : { x: 0, y: 0 })
           .onAreaChange((_oldArea: Area, newArea: Area) => {
+            if (this.isSystemPipActive) return;
             const w = Number(newArea.width);
             const h = Number(newArea.height);
             if (w > 0 && h > 0) {
@@ -1883,7 +2180,7 @@ struct Index {
         }
         .width('100%')
         .height('100%')
-        .hitTestBehavior(this.isPlayerMiniWindow ? HitTestMode.Transparent : HitTestMode.Default)
+        .hitTestBehavior(this.isSystemPipActive ? HitTestMode.None : (this.isPlayerMiniWindow ? HitTestMode.Transparent : HitTestMode.Default))
       }
     }
     .width('100%')
@@ -1892,6 +2189,10 @@ struct Index {
 
   onBackPress(): boolean {
     if (this.inAppVideoVisible) {
+      if (this.isSystemPipActive || this.isPlayerMiniWindow) {
+        this.context.eventHub.emit(EVENT_BACK_PRESS);
+        return true;
+      }
       if (this.showMoreSheet) {
         this.showMoreSheet = false;
         this.scheduleHideOverlay();

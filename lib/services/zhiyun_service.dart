@@ -89,6 +89,10 @@ class ZhiyunService {
   /// 智云课程元数据缓存 (course_id -> publish/show/term_name/is_off_shelf 等)
   static final Map<String, Map<String, dynamic>> _courseDetailMetaCache = {};
 
+  /// 单节课流媒体存在性短时缓存 ("courseId_subId" -> ({bool isLive, bool hasReplay, DateTime cachedAt}))
+  static final Map<String, ({bool isLive, bool hasReplay, DateTime cachedAt})>
+      _lessonAvailabilityCache = {};
+
   static const int _kCacheSchemaVersion = 2;
 
   /// 智云认证 Token 与用户信息内存缓存
@@ -2283,6 +2287,7 @@ class ZhiyunService {
     _catalogueCache.clear();
     _catalogueCacheTime.clear();
     _courseDetailMetaCache.clear();
+    _lessonAvailabilityCache.clear();
     _cachedZhiyunToken = null;
     _cachedZhiyunAccount = null;
     _cachedZhiyunUserId = null;
@@ -2310,6 +2315,7 @@ class ZhiyunService {
     _catalogueCache.clear();
     _catalogueCacheTime.clear();
     _courseDetailMetaCache.clear();
+    _lessonAvailabilityCache.clear();
     _cachedZhiyunToken = null;
     _cachedZhiyunAccount = null;
     _cachedZhiyunUserId = null;
@@ -2435,31 +2441,43 @@ class ZhiyunService {
       }
     }
 
-    // 3. 时间窗口辅助判定：若当前确实处于本节课上课时间段内且尚未转为回放/未开始
+    // 3. 仅当接口明确返回直播流地址（且尚未转为回放）时才判定为直播，
+    // 禁止仅凭课表时间段“偷懒猜直播”（并非每门课/每节课都开启智云直播）。
     final hasReplayMedia = item != null &&
         ((item['playback'] != null &&
                 item['playback'] != false &&
                 item['playback'] != 'false' &&
                 item['playback'].toString().isNotEmpty) ||
-            ((item['video_url'] ?? item['play_url'] ?? item['m3u8'])
+            ((item['video_url'] ??
+                        item['play_url'] ??
+                        item['m3u8'] ??
+                        item['replay_url'])
                     ?.toString()
+                    .trim()
                     .isNotEmpty ==
                 true));
-    if (hasReplayMedia) {
+    if (hasReplayMedia || item == null) {
       return false;
     }
 
-    if (period != null) {
-      if (now.isAfter(period.startTime.subtract(const Duration(minutes: 10))) &&
-          now.isBefore(period.endTime.add(const Duration(minutes: 15)))) {
-        return true;
+    final liveUrl = (item['live_url'] ??
+            item['stream_url'] ??
+            item['hls_url'] ??
+            item['rtmp_url'])
+        ?.toString()
+        .trim();
+    if (liveUrl != null && liveUrl.isNotEmpty) {
+      if (period != null) {
+        return now.isAfter(
+                period.startTime.subtract(const Duration(minutes: 15))) &&
+            now.isBefore(period.endTime.add(const Duration(minutes: 30)));
       }
-    } else if (sDt != null) {
-      final effectiveEnd = eDt ?? sDt.add(const Duration(minutes: 100));
-      if (now.isAfter(sDt.subtract(const Duration(minutes: 10))) &&
-          now.isBefore(effectiveEnd.add(const Duration(minutes: 15)))) {
-        return true;
+      if (sDt != null) {
+        final effectiveEnd = eDt ?? sDt.add(const Duration(minutes: 120));
+        return now.isAfter(sDt.subtract(const Duration(minutes: 15))) &&
+            now.isBefore(effectiveEnd.add(const Duration(minutes: 30)));
       }
+      return true;
     }
 
     return false;
@@ -2489,11 +2507,18 @@ class ZhiyunService {
     if (playback != null &&
         playback != false &&
         playback != 'false' &&
-        playback.toString().isNotEmpty) {
+        playback.toString().trim().isNotEmpty) {
       return true;
     }
-    final videoUrl = item['video_url'] ?? item['play_url'] ?? item['m3u8'];
-    if (videoUrl != null && videoUrl.toString().isNotEmpty) {
+    final videoUrl = item['video_url'] ??
+        item['play_url'] ??
+        item['m3u8'] ??
+        item['replay_url'];
+    if (videoUrl != null && videoUrl.toString().trim().isNotEmpty) {
+      return true;
+    }
+    final explicitReplay = item['has_replay'] ?? item['is_replay'];
+    if (explicitReplay == true || explicitReplay?.toString() == '1') {
       return true;
     }
 
@@ -2504,20 +2529,8 @@ class ZhiyunService {
       return false;
     }
 
-    // 3. 如果当前未开始或正在实时直播，无回放
-    if (statusLabel == '未开始' ||
-        checkIsLive(item: item, targetDate: targetDate, period: period)) {
-      return false;
-    }
-
-    // 4. 如果过去发生且有 sub_id，且距离开课已超过 30 分钟（录播转码分段切片）
-    final subId = item['sub_id']?.toString() ?? item['id']?.toString();
-    if (subId != null && subId.isNotEmpty && lessonDate != null) {
-      if (now.difference(lessonDate) > const Duration(minutes: 30)) {
-        return true;
-      }
-    }
-
+    // 3. 若未给出任何回放标识/媒体链接，不凭“开课超过 30 分钟”假设有回放：
+    // 同一门课的不同课节不一定都有回放，需由目录字段或流媒体探测实际证实。
     return false;
   }
 
@@ -2711,6 +2724,99 @@ class ZhiyunService {
     return sameDateItems.first;
   }
 
+  /// 按智云课堂真实流媒体结果核验单节课是否确有直播或录播回放，避免仅靠排课时间段误判
+  static Future<ZhiyunReplayInfo> _resolveVerifiedLessonReplayInfo({
+    required String courseId,
+    required String subId,
+    required String courseName,
+    required Map<String, dynamic>? matchedItem,
+    required String shortDateKey,
+    DateTime? targetDate,
+    Period? period,
+  }) async {
+    var isLive = checkIsLive(
+      item: matchedItem,
+      targetDate: targetDate,
+      period: period,
+    );
+    var hasReplay = checkHasReplay(
+      item: matchedItem,
+      targetDate: targetDate,
+      period: period,
+    );
+
+    final now = DateTime.now();
+    final effectiveStart = period?.startTime ??
+        targetDate ??
+        (matchedItem != null
+            ? parseZhiyunTimestamp(_rawStartAt(matchedItem))
+            : null);
+    final effectiveEnd = period?.endTime ??
+        (matchedItem != null
+            ? parseZhiyunTimestamp(_rawEndAt(matchedItem))
+            : null) ??
+        effectiveStart?.add(const Duration(minutes: 120));
+
+    final isFutureLesson = effectiveStart != null &&
+        effectiveStart.isAfter(now.add(const Duration(minutes: 15)));
+    final isInLiveWindow = effectiveStart == null ||
+        (now.isAfter(effectiveStart.subtract(const Duration(minutes: 20))) &&
+            now.isBefore(
+                (effectiveEnd ?? effectiveStart.add(const Duration(minutes: 120)))
+                    .add(const Duration(minutes: 30))));
+
+    // 若目录/日程摘要未给出明确状态，主动探测该节真实音视频流
+    if (!isLive && !hasReplay && !isFutureLesson) {
+      final cacheKey = '${courseId}_$subId';
+      final cached = _lessonAvailabilityCache[cacheKey];
+      if (cached != null &&
+          now.difference(cached.cachedAt) < const Duration(minutes: 2)) {
+        isLive = cached.isLive && isInLiveWindow;
+        hasReplay = cached.hasReplay;
+      } else {
+        final streams = await fetchLessonStreams(
+          courseId: courseId,
+          subId: subId,
+          preferLive: isInLiveWindow,
+        );
+        if (streams.any((s) => !s.isLive)) {
+          hasReplay = true;
+          isLive = false;
+        } else if (streams.any((s) => s.isLive) && isInLiveWindow) {
+          isLive = true;
+        }
+        _lessonAvailabilityCache[cacheKey] = (
+          isLive: isLive,
+          hasReplay: hasReplay,
+          cachedAt: now,
+        );
+      }
+    }
+
+    final rawTitle = (matchedItem?['title'] ?? matchedItem?['sub_title'])
+        ?.toString()
+        .trim();
+    final lessonTitle = (rawTitle != null && rawTitle.isNotEmpty)
+        ? rawTitle
+        : (isLive
+            ? '$shortDateKey 课堂直播'
+            : hasReplay
+                ? '$shortDateKey 课堂录播'
+                : '$shortDateKey 智云课程');
+
+    return ZhiyunReplayInfo(
+      courseId: courseId,
+      subId: subId,
+      courseName: courseName,
+      lessonTitle: lessonTitle,
+      lessonDate: targetDate,
+      hasReplay: hasReplay,
+      isLive: isLive,
+      isLessonSpecific: true,
+      livingroomUrl: buildLivingroomUrl(courseId, subId),
+    );
+  }
+
   /// 解析指定课程/节次的回放或直播信息。若为体育/素质课等非录播课程，返回 null（自动隐藏入口）
   static Future<ZhiyunReplayInfo?> getLessonReplay({
     required Course course,
@@ -2823,21 +2929,14 @@ class ZhiyunService {
             sSubId != null &&
             sSubId.isNotEmpty &&
             !isCourseOffShelfMeta(_courseDetailMetaCache[sCid])) {
-          final isLive = checkIsLive(
-              item: bestSession, targetDate: targetDate, period: period);
-          final hasReplay = checkHasReplay(
-              item: bestSession, targetDate: targetDate, period: period);
-          return ZhiyunReplayInfo(
+          return _resolveVerifiedLessonReplayInfo(
             courseId: sCid,
             subId: sSubId,
             courseName: course.name,
-            lessonTitle: bestSession['title']?.toString() ??
-                (isLive ? '$shortDateKey 课堂直播' : '$shortDateKey 课堂录播'),
-            lessonDate: targetDate,
-            hasReplay: hasReplay,
-            isLive: isLive,
-            isLessonSpecific: true,
-            livingroomUrl: buildLivingroomUrl(sCid, sSubId),
+            matchedItem: bestSession,
+            shortDateKey: shortDateKey,
+            targetDate: targetDate,
+            period: period,
           );
         }
       }
@@ -2988,17 +3087,6 @@ class ZhiyunService {
           );
         }
 
-        final isLive = checkIsLive(
-          item: matchedItem,
-          targetDate: targetDate,
-          period: period,
-        );
-        final hasReplay = checkHasReplay(
-          item: matchedItem,
-          targetDate: targetDate,
-          period: period,
-        );
-
         if (subId != null && subId.isNotEmpty) {
           if (period != null) {
             registerSubIdMapping(
@@ -3009,20 +3097,20 @@ class ZhiyunService {
               minute: period.startTime.minute,
             );
           }
-          return ZhiyunReplayInfo(
+          return _resolveVerifiedLessonReplayInfo(
             courseId: courseId,
             subId: subId,
             courseName: course.name,
-            lessonTitle: matchedItem?['title']?.toString() ??
-                matchedItem?['sub_title']?.toString() ??
-                (isLive ? '$shortDateKey 课堂直播' : '$shortDateKey 课堂录播'),
-            lessonDate: targetDate,
-            hasReplay: hasReplay,
-            isLive: isLive,
-            isLessonSpecific: true,
-            livingroomUrl: buildLivingroomUrl(courseId, subId),
+            matchedItem: matchedItem,
+            shortDateKey: shortDateKey,
+            targetDate: targetDate,
+            period: period,
           );
-        } else if (isLive) {
+        } else if (checkIsLive(
+          item: matchedItem,
+          targetDate: targetDate,
+          period: period,
+        )) {
           // 当前时段正在直播，但未拿到特定 subId，直达整门课程房间
           return ZhiyunReplayInfo(
             courseId: courseId,
@@ -3041,7 +3129,7 @@ class ZhiyunService {
             courseId: courseId,
             subId: null,
             courseName: course.name,
-            lessonTitle: '$shortDateKey 课堂录播',
+            lessonTitle: '$shortDateKey 智云课程',
             lessonDate: targetDate,
             hasReplay: false,
             isLive: false,
