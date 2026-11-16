@@ -28,9 +28,6 @@ class LoginForm extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var brightness = CupertinoTheme.of(context).brightness ??
-        MediaQuery.of(context).platformBrightness;
-
     return Container(
         decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
@@ -67,17 +64,27 @@ class LoginForm extends StatelessWidget {
                         child: CupertinoTextField(
                           controller: usernameController,
                           keyboardType: TextInputType.number,
+                          style: TextStyle(
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.label, context),
+                          ),
+                          placeholderStyle: TextStyle(
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.placeholderText, context),
+                          ),
                           prefix: Container(
                               padding: const EdgeInsets.only(left: 12),
                               child: Text('学号',
-                                  style: CupertinoTheme.of(context)
-                                      .textTheme
-                                      .textStyle)),
+                                  style: TextStyle(
+                                    color: CupertinoDynamicColor.resolve(
+                                        CupertinoColors.label, context),
+                                  ))),
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           decoration: BoxDecoration(
-                            color: brightness == Brightness.light
-                                ? CupertinoColors.systemBackground
-                                : CupertinoColors.secondarySystemBackground,
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors
+                                    .secondarySystemGroupedBackground,
+                                context),
                             borderRadius: BorderRadius.circular(10),
                           ),
                         )),
@@ -87,18 +94,28 @@ class LoginForm extends StatelessWidget {
                         child: CupertinoTextField(
                           controller: passwordController,
                           obscureText: true,
+                          style: TextStyle(
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.label, context),
+                          ),
+                          placeholderStyle: TextStyle(
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.placeholderText, context),
+                          ),
                           prefix: Container(
                             padding: const EdgeInsets.only(left: 12),
                             child: Text('密码',
-                                style: CupertinoTheme.of(context)
-                                    .textTheme
-                                    .textStyle),
+                                style: TextStyle(
+                                  color: CupertinoDynamicColor.resolve(
+                                      CupertinoColors.label, context),
+                                )),
                           ),
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           decoration: BoxDecoration(
-                            color: brightness == Brightness.light
-                                ? CupertinoColors.systemBackground
-                                : CupertinoColors.secondarySystemBackground,
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors
+                                    .secondarySystemGroupedBackground,
+                                context),
                             borderRadius: BorderRadius.circular(10),
                           ),
                         )),

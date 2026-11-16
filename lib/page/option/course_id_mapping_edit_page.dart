@@ -20,9 +20,6 @@ class CourseIdMappingEditForm extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var brightness = CupertinoTheme.of(context).brightness ??
-        MediaQuery.of(context).platformBrightness;
-
     return Container(
         decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
@@ -55,17 +52,27 @@ class CourseIdMappingEditForm extends StatelessWidget {
                         height: 48,
                         child: CupertinoTextField(
                           controller: oldIdController,
+                          style: TextStyle(
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.label, context),
+                          ),
+                          placeholderStyle: TextStyle(
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.placeholderText, context),
+                          ),
                           prefix: Container(
                               padding: const EdgeInsets.only(left: 12),
                               child: Text('原课号',
-                                  style: CupertinoTheme.of(context)
-                                      .textTheme
-                                      .textStyle)),
+                                  style: TextStyle(
+                                    color: CupertinoDynamicColor.resolve(
+                                        CupertinoColors.label, context),
+                                  ))),
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           decoration: BoxDecoration(
-                            color: brightness == Brightness.light
-                                ? CupertinoColors.systemBackground
-                                : CupertinoColors.secondarySystemBackground,
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors
+                                    .secondarySystemGroupedBackground,
+                                context),
                             borderRadius: BorderRadius.circular(10),
                           ),
                         )),
@@ -74,18 +81,28 @@ class CourseIdMappingEditForm extends StatelessWidget {
                         height: 48,
                         child: CupertinoTextField(
                           controller: newIdController,
+                          style: TextStyle(
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.label, context),
+                          ),
+                          placeholderStyle: TextStyle(
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.placeholderText, context),
+                          ),
                           prefix: Container(
                             padding: const EdgeInsets.only(left: 12),
                             child: Text('新课号',
-                                style: CupertinoTheme.of(context)
-                                    .textTheme
-                                    .textStyle),
+                                style: TextStyle(
+                                  color: CupertinoDynamicColor.resolve(
+                                      CupertinoColors.label, context),
+                                )),
                           ),
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           decoration: BoxDecoration(
-                            color: brightness == Brightness.light
-                                ? CupertinoColors.systemBackground
-                                : CupertinoColors.secondarySystemBackground,
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors
+                                    .secondarySystemGroupedBackground,
+                                context),
                             borderRadius: BorderRadius.circular(10),
                           ),
                         )),
@@ -94,18 +111,28 @@ class CourseIdMappingEditForm extends StatelessWidget {
                         height: 48,
                         child: CupertinoTextField(
                           controller: commentController,
+                          style: TextStyle(
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.label, context),
+                          ),
+                          placeholderStyle: TextStyle(
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.placeholderText, context),
+                          ),
                           prefix: Container(
                             padding: const EdgeInsets.only(left: 12),
                             child: Text('备注名',
-                                style: CupertinoTheme.of(context)
-                                    .textTheme
-                                    .textStyle),
+                                style: TextStyle(
+                                  color: CupertinoDynamicColor.resolve(
+                                      CupertinoColors.label, context),
+                                )),
                           ),
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           decoration: BoxDecoration(
-                            color: brightness == Brightness.light
-                                ? CupertinoColors.systemBackground
-                                : CupertinoColors.secondarySystemBackground,
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors
+                                    .secondarySystemGroupedBackground,
+                                context),
                             borderRadius: BorderRadius.circular(10),
                           ),
                         )),

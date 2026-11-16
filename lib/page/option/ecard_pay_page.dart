@@ -5,6 +5,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:get/get.dart';
+import 'package:celechron/design/app_notification.dart';
 import 'package:celechron/services/ohos_native_service.dart';
 import 'package:celechron/services/secure_storage_service.dart';
 import 'package:celechron/worker/ecard_widget_messenger.dart';
@@ -249,10 +250,9 @@ class _ECardPayPageState extends State<ECardPayPage>
   }
 
   void _showErrorSnack(String message) {
-    Get.snackbar(
+    AppNotification.error(
       '付款码刷新失败',
       message,
-      snackPosition: SnackPosition.TOP,
       duration: const Duration(seconds: 3),
     );
   }

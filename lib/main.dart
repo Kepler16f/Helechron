@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show Theme, ThemeData;
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
@@ -376,8 +377,33 @@ class _CelechronAppState extends State<CelechronApp>
                 : brightnessMode.value == BrightnessMode.dark
                     ? Brightness.dark
                     : Brightness.light,
+            primaryColor: CupertinoColors.activeBlue,
             scaffoldBackgroundColor: CupertinoColors.systemBackground,
             barBackgroundColor: CupertinoColors.systemBackground,
+            textTheme: const CupertinoTextThemeData(
+              textStyle: TextStyle(
+                color: CupertinoColors.label,
+                fontSize: 17.0,
+                letterSpacing: -0.41,
+              ),
+              actionTextStyle: TextStyle(
+                color: CupertinoColors.activeBlue,
+                fontSize: 17.0,
+                letterSpacing: -0.41,
+              ),
+              navTitleTextStyle: TextStyle(
+                color: CupertinoColors.label,
+                fontSize: 17.0,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.41,
+              ),
+              navLargeTitleTextStyle: TextStyle(
+                color: CupertinoColors.label,
+                fontSize: 34.0,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.41,
+              ),
+            ),
           ),
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
@@ -389,10 +415,21 @@ class _CelechronAppState extends State<CelechronApp>
             Locale('en'),
           ],
           locale: const Locale('zh'),
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
-            child: child!,
-          ),
+          builder: (context, child) {
+            final isDark = brightnessMode.value == BrightnessMode.system
+                ? (MediaQuery.platformBrightnessOf(context) == Brightness.dark)
+                : (brightnessMode.value == BrightnessMode.dark);
+            return Theme(
+              data: ThemeData(
+                brightness: isDark ? Brightness.dark : Brightness.light,
+                useMaterial3: true,
+              ),
+              child: MediaQuery(
+                data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                child: child!,
+              ),
+            );
+          },
           title: 'Helechron',
           home: const HomePage(title: 'Helechron'),
           initialRoute: '/',

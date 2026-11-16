@@ -517,6 +517,19 @@ class GpaSimulatorPage extends StatelessWidget {
                       controller: nameController,
                       placeholder: '课程名称 (例如: 计算机系统)',
                       autofocus: true,
+                      style: TextStyle(
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.label, dialogCtx),
+                      ),
+                      placeholderStyle: TextStyle(
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.placeholderText, dialogCtx),
+                      ),
+                      decoration: BoxDecoration(
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.tertiarySystemFill, dialogCtx),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                     const SizedBox(height: 8),
                     CupertinoTextField(
@@ -524,15 +537,38 @@ class GpaSimulatorPage extends StatelessWidget {
                       placeholder: '学分 (例如: 3.5)',
                       keyboardType: const TextInputType.numberWithOptions(
                           decimal: true),
+                      style: TextStyle(
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.label, dialogCtx),
+                      ),
+                      placeholderStyle: TextStyle(
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.placeholderText, dialogCtx),
+                      ),
+                      decoration: BoxDecoration(
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.tertiarySystemFill, dialogCtx),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('预估绩点:'),
+                        Text(
+                          '预估绩点:',
+                          style: TextStyle(
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.label, dialogCtx),
+                          ),
+                        ),
                         Text(
                           '${selectedScore.toStringAsFixed(1)} (${Grade.fivePointToLetter(selectedScore)})',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.label, dialogCtx),
+                          ),
                         ),
                       ],
                     ),

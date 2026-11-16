@@ -106,7 +106,7 @@ class _ConsentPageState extends State<ConsentPage> {
                           fontSize: 28,
                           fontWeight: FontWeight.w700,
                           letterSpacing: -0.5,
-                          color: CupertinoColors.black,
+                          color: CupertinoColors.label,
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -491,7 +491,7 @@ class _LegalTile extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
-                      color: CupertinoColors.black,
+                      color: CupertinoColors.label,
                     ),
                   ),
                   const SizedBox(height: 2),

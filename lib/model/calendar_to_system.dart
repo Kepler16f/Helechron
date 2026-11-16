@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:get/get.dart';
+import 'package:celechron/design/app_notification.dart';
 import 'package:celechron/model/location_mapper.dart';
 import 'package:celechron/model/option.dart';
 import 'package:celechron/model/period.dart';
@@ -25,36 +26,16 @@ class CalendarToSystemManager {
 
   CalendarToSystemManager(this._scholarRx);
 
-  /// 深色模式自适应的顶部提示。
-  /// GetX 默认 snackbar 不随主题切换文字/背景色，深色模式下文字会不可读。
+  /// 深色模式自适应的顶部提示（使用统一的 AppNotification 自动适配深浅色模式）。
   void _showSyncSnackbar(String title, String message,
       {required Duration duration}) {
-    final context = Get.context;
-    Brightness brightness = Brightness.light;
-    if (context != null) {
-      brightness = CupertinoTheme.of(context).brightness ??
-          MediaQuery.of(context).platformBrightness;
+    if (title.contains('成功')) {
+      AppNotification.success(title, message, duration: duration);
+    } else if (title.contains('失败') || title.contains('错误')) {
+      AppNotification.error(title, message, duration: duration);
+    } else {
+      AppNotification.info(title, message, duration: duration);
     }
-    final bool isDark = brightness == Brightness.dark;
-
-    Get.snackbar(
-      title,
-      message,
-      snackPosition: SnackPosition.TOP,
-      duration: duration,
-      margin: const EdgeInsets.all(12),
-      borderRadius: 14,
-      backgroundColor:
-          isDark ? const Color(0xF22C2C2E) : const Color(0xF2FFFFFF),
-      colorText: isDark ? const Color(0xFFF2F2F7) : const Color(0xFF1C1C1E),
-      boxShadows: const [
-        BoxShadow(
-          color: Color(0x26000000),
-          blurRadius: 12,
-          offset: Offset(0, 4),
-        ),
-      ],
-    );
   }
 
   Future<bool> checkPermissions() async {

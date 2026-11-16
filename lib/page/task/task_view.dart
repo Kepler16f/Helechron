@@ -97,7 +97,7 @@ class TaskPage extends StatelessWidget {
   }
 
   Future<void> showCardDialog(BuildContext context, Task deadline) async {
-    return showDialog<void>(
+    return showCupertinoDialog<void>(
       context: context,
       builder: (BuildContext dialogContext) {
         String titleType;

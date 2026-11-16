@@ -79,8 +79,17 @@ class ImageCodePortal {
                       padding: const EdgeInsets.symmetric(
                           vertical: 12, horizontal: 10),
                       textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.label, context),
+                      ),
+                      placeholderStyle: TextStyle(
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.placeholderText, context),
+                      ),
                       decoration: BoxDecoration(
-                        color: CupertinoColors.quaternarySystemFill,
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.tertiarySystemFill, context),
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),

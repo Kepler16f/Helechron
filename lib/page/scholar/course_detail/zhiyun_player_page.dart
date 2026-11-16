@@ -12,6 +12,7 @@ import 'package:celechron/design/round_rectangle_card.dart';
 import 'package:celechron/http/zjuServices/courses.dart';
 import 'package:celechron/http/zjuServices/network_defense.dart';
 import 'package:celechron/model/option.dart';
+import 'package:celechron/design/app_notification.dart';
 import 'package:celechron/services/ohos_native_service.dart';
 import 'package:celechron/services/zhiyun_service.dart';
 
@@ -109,7 +110,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
         _currentLivingroomUrl = matched.livingroomUrl;
       }
     }
-    _loadLessonData(autoPlayFirstTime: true);
+    _loadLessonData(autoPlayFirstTime: _isLiveMode);
   }
 
   Future<void> _loadLessonData({bool autoPlayFirstTime = false}) async {
@@ -192,6 +193,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
         });
       }
       if (autoPlayFirstTime &&
+          _isLiveMode &&
           !_autoLaunched &&
           _currentLivingroomUrl.isNotEmpty) {
         _autoLaunched = true;
@@ -240,7 +242,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
       subId: subId,
     );
 
-    if (autoPlayFirstTime && !_autoLaunched) {
+    if (autoPlayFirstTime && _isLiveMode && !_autoLaunched) {
       _autoLaunched = true;
       final launchUrl =
           streams.isNotEmpty ? streams.first.url : _currentLivingroomUrl;
@@ -351,7 +353,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
       }
     } catch (e) {
       if (mounted) {
-        Get.snackbar('保存失败', '$e', snackPosition: SnackPosition.TOP);
+        AppNotification.error('保存失败', '$e');
       }
     } finally {
       client.close(force: true);
@@ -646,6 +648,14 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
               Expanded(
                 child: CupertinoSearchTextField(
                   placeholder: '搜索课堂语音转写内容...',
+                  style: TextStyle(
+                    color: CupertinoDynamicColor.resolve(
+                        CupertinoColors.label, context),
+                  ),
+                  placeholderStyle: TextStyle(
+                    color: CupertinoDynamicColor.resolve(
+                        CupertinoColors.placeholderText, context),
+                  ),
                   onChanged: (val) {
                     setState(() {
                       _searchKeyword = val;
@@ -667,8 +677,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                         .join('\n');
                     await Clipboard.setData(ClipboardData(text: allText));
                     if (mounted) {
-                      Get.snackbar('已复制', '全部语音转写字幕已复制到剪贴板',
-                          snackPosition: SnackPosition.TOP);
+                      AppNotification.success('已复制', '全部语音转写字幕已复制到剪贴板');
                     }
                   },
                   child: const Text('复制全文',

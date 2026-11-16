@@ -152,6 +152,19 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             placeholder: '如: 4.0',
             autofocus: true,
+            style: TextStyle(
+              color: CupertinoDynamicColor.resolve(
+                  CupertinoColors.label, ctx),
+            ),
+            placeholderStyle: TextStyle(
+              color: CupertinoDynamicColor.resolve(
+                  CupertinoColors.placeholderText, ctx),
+            ),
+            decoration: BoxDecoration(
+              color: CupertinoDynamicColor.resolve(
+                  CupertinoColors.tertiarySystemFill, ctx),
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
         ),
         actions: [

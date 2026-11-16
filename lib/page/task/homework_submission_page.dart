@@ -2078,6 +2078,14 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
               placeholder: '给教师的留言或作业文字说明（可选）',
               maxLines: 3,
               padding: const EdgeInsets.all(10),
+              style: TextStyle(
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.label, context),
+              ),
+              placeholderStyle: TextStyle(
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.placeholderText, context),
+              ),
               decoration: BoxDecoration(
                 color: CupertinoDynamicColor.resolve(
                     CupertinoColors.tertiarySystemFill, context),

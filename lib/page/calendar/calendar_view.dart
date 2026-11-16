@@ -5,7 +5,6 @@ import 'package:celechron/page/task/task_controller.dart';
 import 'package:celechron/page/task/task_edit_page.dart';
 import 'package:celechron/page/flow/flow_controller.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:celechron/model/period.dart';
@@ -333,7 +332,7 @@ class CalendarPage extends StatelessWidget {
                                     decoration: BoxDecoration(
                                         border: Border.all(
                                             color: CustomCupertinoDynamicColors
-                                                .okGreen.darkColor,
+                                                .okGreen.resolveFrom(context),
                                             width: 1),
                                         borderRadius:
                                             BorderRadius.circular(10)),
@@ -344,7 +343,7 @@ class CalendarPage extends StatelessWidget {
                                               .copyWith(isUtc: false)]!,
                                       style: TextStyle(
                                           color: CustomCupertinoDynamicColors
-                                              .okGreen.darkColor,
+                                              .okGreen.resolveFrom(context),
                                           fontSize: 12),
                                     ),
                                   )
@@ -412,7 +411,7 @@ class CalendarPage extends StatelessWidget {
   }
 
   Future<void> showCardDialog(BuildContext context, Task deadline) async {
-    return showDialog<void>(
+    return showCupertinoDialog<void>(
       context: context,
       builder: (BuildContext context) {
         return CupertinoAlertDialog(
@@ -643,7 +642,7 @@ class CalendarPage extends StatelessWidget {
         ? CupertinoColors.systemRed.resolveFrom(context)
         : (info.kind == SwapDayKind.makeUp
             ? CupertinoColors.systemIndigo.resolveFrom(context)
-            : CustomCupertinoDynamicColors.okGreen.darkColor);
+            : CustomCupertinoDynamicColors.okGreen.resolveFrom(context));
     final icon = isHoliday
         ? CupertinoIcons.moon_stars_fill
         : (info.kind == SwapDayKind.makeUp

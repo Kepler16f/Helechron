@@ -26,6 +26,7 @@ import 'package:celechron/model/task.dart';
 import 'package:celechron/model/todo.dart';
 import 'package:celechron/page/scholar/todo/todo_card.dart';
 import 'package:celechron/page/task/homework_submission_page.dart';
+import 'package:celechron/design/app_notification.dart';
 import 'package:celechron/services/zhiyun_service.dart';
 import 'zhiyun_player_page.dart';
 
@@ -704,10 +705,96 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
       setState(() {});
     }
 
+    if (preferLive) {
+      // 直播模式：直接进入播放器界面
+      final token = await ZhiyunService.ensureValidToken() ??
+          ZhiyunService.getCachedZhiyunToken();
+      var targetSubId = subId;
+      if ((targetSubId == null || targetSubId.isEmpty) &&
+          courseId != null &&
+          courseId.isNotEmpty) {
+        final now = DateTime.now();
+        targetSubId =
+            await ZhiyunService.fetchActiveSubIdForDate(courseId, now);
+        if (targetSubId == null || targetSubId.isEmpty) {
+          final cat = await ZhiyunService.fetchCourseCatalogue(courseId,
+              forceRefresh: true);
+          final liveItem = cat.firstWhereOrNull((item) =>
+              ZhiyunService.checkIsLive(item: item) &&
+              (item['sub_id']?.toString().isNotEmpty == true ||
+                  item['id']?.toString().isNotEmpty == true));
+          targetSubId =
+              liveItem?['sub_id']?.toString() ?? liveItem?['id']?.toString();
+        }
+      }
+
+      List<ZhiyunStreamOption> liveStreams = [];
+      if (courseId != null &&
+          courseId.isNotEmpty &&
+          targetSubId != null &&
+          targetSubId.isNotEmpty) {
+        liveStreams = await ZhiyunService.fetchLessonStreams(
+          courseId: courseId,
+          subId: targetSubId,
+          preferLive: true,
+        );
+      }
+
+      var effectiveLivingroom = url;
+      if (courseId != null && courseId.isNotEmpty) {
+        effectiveLivingroom = ZhiyunService.buildCourseLivingroomUrl(
+          courseId,
+          subId: targetSubId,
+        );
+      }
+      effectiveLivingroom =
+          ZhiyunService.appendTokenToUrl(effectiveLivingroom, token);
+
+      final playUrl = liveStreams.isNotEmpty
+          ? liveStreams.first.url
+          : (effectiveLivingroom.contains('classroom.zju.edu.cn')
+              ? ZhiyunService.appendTokenToUrl(effectiveLivingroom, token)
+              : effectiveLivingroom);
+
+      final ok = await OhosNativeService.instance.openInAppVideoPlayer(
+        url: playUrl,
+        title: '${widget.course.name} · $title',
+        streams:
+            liveStreams.map((s) => {'label': s.label, 'url': s.url}).toList(),
+        livingroomUrl: effectiveLivingroom,
+        token: token,
+      );
+      if (!ok && context.mounted) {
+        showCupertinoDialog(
+          context: context,
+          builder: (ctx) => CupertinoAlertDialog(
+            title: const Text('未能启动内置播放器'),
+            content: const Text('可尝试改用系统浏览器打开智云课堂页面播放。'),
+            actions: [
+              CupertinoDialogAction(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('取消'),
+              ),
+              CupertinoDialogAction(
+                isDefaultAction: true,
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  ZhiyunService.openUrl(effectiveLivingroom);
+                },
+                child: const Text('浏览器打开'),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
+    // 回放模式：进入智云课堂展示页面即可，不直接进入播放器
     if (courseId != null && courseId.isNotEmpty) {
       final rawCat = await ZhiyunService.fetchCourseCatalogue(
         courseId,
-        forceRefresh: preferLive,
+        forceRefresh: false,
       );
       final replayList = <ZhiyunReplayInfo>[];
       for (final item in rawCat) {
@@ -745,7 +832,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
             initialTitle: title,
             livingroomUrl: url,
             replays: replayList,
-            preferLive: preferLive,
+            preferLive: false,
           ),
         ),
       );
@@ -821,6 +908,19 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                 placeholder: '85940 或 粘贴课程网页链接',
                 autofocus: true,
                 clearButtonMode: OverlayVisibilityMode.editing,
+                style: TextStyle(
+                  color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.label, dialogCtx),
+                ),
+                placeholderStyle: TextStyle(
+                  color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.placeholderText, dialogCtx),
+                ),
+                decoration: BoxDecoration(
+                  color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.tertiarySystemFill, dialogCtx),
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               const SizedBox(height: 12),
               Center(
@@ -1527,15 +1627,14 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
           ),
         );
       } else if (context.mounted) {
-        Get.snackbar('下载失败', '未能获取该课件的下载文件流，请确认已登录学在浙大',
-            snackPosition: SnackPosition.TOP);
+        AppNotification.error('下载失败', '未能获取该课件的下载文件流，请确认已登录学在浙大');
       }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _downloadingKeys.remove(key);
       });
-      Get.snackbar('下载异常', '$e', snackPosition: SnackPosition.TOP);
+      AppNotification.error('下载异常', '$e');
     } finally {
       client.close(force: true);
     }

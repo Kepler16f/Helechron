@@ -1908,6 +1908,14 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: CupertinoSearchTextField(
                 placeholder: '搜索专业名称、学院、年级或计划号',
+                style: TextStyle(
+                  color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.label, modalCtx),
+                ),
+                placeholderStyle: TextStyle(
+                  color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.placeholderText, modalCtx),
+                ),
                 onChanged: (v) => _c.searchQuery.value = v,
               ),
             ),
@@ -2028,6 +2036,19 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
             keyboardType:
                 const TextInputType.numberWithOptions(decimal: true),
             placeholder: '例如 160 或 156.5',
+            style: TextStyle(
+              color: CupertinoDynamicColor.resolve(
+                  CupertinoColors.label, ctx),
+            ),
+            placeholderStyle: TextStyle(
+              color: CupertinoDynamicColor.resolve(
+                  CupertinoColors.placeholderText, ctx),
+            ),
+            decoration: BoxDecoration(
+              color: CupertinoDynamicColor.resolve(
+                  CupertinoColors.tertiarySystemFill, ctx),
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
         ),
         actions: [
@@ -2073,6 +2094,19 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
             keyboardType:
                 const TextInputType.numberWithOptions(decimal: true),
             placeholder: '0 表示免修',
+            style: TextStyle(
+              color: CupertinoDynamicColor.resolve(
+                  CupertinoColors.label, ctx),
+            ),
+            placeholderStyle: TextStyle(
+              color: CupertinoDynamicColor.resolve(
+                  CupertinoColors.placeholderText, ctx),
+            ),
+            decoration: BoxDecoration(
+              color: CupertinoDynamicColor.resolve(
+                  CupertinoColors.tertiarySystemFill, ctx),
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
         ),
         actions: [

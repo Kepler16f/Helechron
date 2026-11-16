@@ -904,6 +904,19 @@ class OptionPage extends StatelessWidget {
                   const TextInputType.numberWithOptions(decimal: true),
               placeholder: '输入金额（0 表示关闭）',
               autofocus: true,
+              style: TextStyle(
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.label, dialogContext),
+              ),
+              placeholderStyle: TextStyle(
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.placeholderText, dialogContext),
+              ),
+              decoration: BoxDecoration(
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.tertiarySystemFill, dialogContext),
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
           ),
           actions: [
@@ -1008,6 +1021,19 @@ class OptionPage extends StatelessWidget {
               controller: controller,
               placeholder: '留空使用应用默认目录',
               autofocus: true,
+              style: TextStyle(
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.label, dialogContext),
+              ),
+              placeholderStyle: TextStyle(
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.placeholderText, dialogContext),
+              ),
+              decoration: BoxDecoration(
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.tertiarySystemFill, dialogContext),
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
           ),
           actions: [

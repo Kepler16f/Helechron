@@ -194,12 +194,38 @@ class _CoursesProbePageState extends State<CoursesProbePage> {
               controller: _usernameController,
               placeholder: '学号',
               keyboardType: TextInputType.number,
+              style: TextStyle(
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.label, context),
+              ),
+              placeholderStyle: TextStyle(
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.placeholderText, context),
+              ),
+              decoration: BoxDecoration(
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.tertiarySystemFill, context),
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             const SizedBox(height: 12),
             CupertinoTextField(
               controller: _passwordController,
               placeholder: '密码',
               obscureText: true,
+              style: TextStyle(
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.label, context),
+              ),
+              placeholderStyle: TextStyle(
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.placeholderText, context),
+              ),
+              decoration: BoxDecoration(
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.tertiarySystemFill, context),
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
