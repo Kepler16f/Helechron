@@ -976,7 +976,8 @@ class ZhiyunPlayerActivity : Activity() {
         if (isUserSeeking) return
         val dur = player.duration
         val pos = player.currentPosition.coerceAtLeast(0L)
-        val isExplicitLive = isLiveStream || player.isCurrentMediaItemLive || (dur <= 0L && activeStreamTitle.contains("直播"))
+        val currentStreamLabel = streamCandidates.getOrNull(currentStreamIndex)?.first ?: ""
+        val isExplicitLive = isLiveStream || player.isCurrentMediaItemLive || (dur <= 0L && (titleText.contains("直播") || currentStreamLabel.contains("直播")))
         isLiveStream = isExplicitLive
         rewind10Btn.visibility = if (isExplicitLive) View.GONE else View.VISIBLE
         forward10Btn.visibility = if (isExplicitLive) View.GONE else View.VISIBLE

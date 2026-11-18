@@ -53,6 +53,7 @@ class MobileNativeService {
     List<Map<String, String>> streams = const [],
     String? livingroomUrl,
     String? token,
+    bool isLive = false,
   }) async =>
       false;
   Future<bool> installApk(String filePath) async => false;
