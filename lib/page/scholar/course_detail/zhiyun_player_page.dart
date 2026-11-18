@@ -642,7 +642,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
       }
 
       final zipData = ZipEncoder().encode(archive);
-      if (zipData == null || zipData.isEmpty) {
+      if (zipData.isEmpty) {
         AppNotification.error('打包失败', 'ZIP 压缩包生成失败');
         return;
       }

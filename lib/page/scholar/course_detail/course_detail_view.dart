@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
@@ -14,7 +15,6 @@ import 'package:celechron/services/diagnostic_log_service.dart';
 import 'package:celechron/services/ohos_native_service.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:celechron/model/course.dart';
@@ -2039,7 +2039,7 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Icon(
-                          CupertinoIcons.rectangle_stack_badge_person_crop_fill,
+                          CupertinoIcons.photo_on_rectangle,
                           size: 18,
                           color: CupertinoColors.white,
                         ),
@@ -2104,17 +2104,14 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
     );
   }
 
-  String? get _semesterScopeKey => ZhiyunService.inferSemesterHint(
-        course: widget.course,
-        semesterName: widget.semesterName,
-        preferredHalfTag: widget.preferredHalfTag,
-      ).scopeKey;
-
   Future<void> _showZhiyunSubtitleBatchDialog(BuildContext context) async {
     final cid = ZhiyunService.getKnownCourseId(
       widget.course.name,
       courseCode: widget.course.id,
-      scopeKey: _semesterScopeKey,
+      teacher: widget.course.teacher,
+      course: widget.course,
+      semesterName: widget.semesterName,
+      preferredHalfTag: widget.preferredHalfTag,
     );
     if (cid == null || cid.isEmpty) {
       AppNotification.info('提示', '未检索到该课程的智云课堂 ID，请先在上方智云卡片同步');
@@ -2134,7 +2131,10 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
     final cid = ZhiyunService.getKnownCourseId(
       widget.course.name,
       courseCode: widget.course.id,
-      scopeKey: _semesterScopeKey,
+      teacher: widget.course.teacher,
+      course: widget.course,
+      semesterName: widget.semesterName,
+      preferredHalfTag: widget.preferredHalfTag,
     );
     if (cid == null || cid.isEmpty) {
       AppNotification.info('提示', '未检索到该课程的智云课堂 ID，请先在上方智云卡片同步');
@@ -2807,7 +2807,7 @@ class _ZhiyunBatchManagerSheetState extends State<_ZhiyunBatchManagerSheet> {
       }
 
       final zipData = ZipEncoder().encode(archive);
-      if (zipData == null || zipData.isEmpty) {
+      if (zipData.isEmpty) {
         AppNotification.error('打包失败', 'ZIP 压缩生成失败');
         return;
       }
