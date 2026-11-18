@@ -191,7 +191,7 @@ class ZhiyunService {
         qp['clientUUID'] = const Uuid().v4();
       }
       final hasOpenSign = qp.containsKey('pt') && qp.containsKey('sig');
-      if (!isLive && !hasOpenSign && !qp.containsKey('t')) {
+      if (!hasOpenSign && !qp.containsKey('t')) {
         final userId = _getCachedUserId();
         final tenantId = _cachedZhiyunTenantId ?? _kTenantCode;
         if (userId != null && userId.isNotEmpty) {
@@ -3924,11 +3924,28 @@ class ZhiyunService {
     final replayStreams = <ZhiyunStreamOption>[];
     final liveStreams = <ZhiyunStreamOption>[];
     final seenUrls = <String>{};
+    final seenCanonicalUrls = <String>{};
+
+    String getCanonicalStreamKey(String raw) {
+      try {
+        final u = Uri.parse(raw);
+        return '${u.scheme}://${u.host}${u.path}'.toLowerCase();
+      } catch (_) {
+        return raw.split('?').first.toLowerCase();
+      }
+    }
 
     void addStream(String label, String? rawUrl, {bool isLive = false}) {
       final normalized = _normalizeStreamUrl(rawUrl);
       if (normalized == null) return;
-      final signedUrl = signPlayUrl(normalized, isLive: isLive);
+      final canonicalKey = getCanonicalStreamKey(normalized);
+      if (!seenCanonicalUrls.add(canonicalKey)) {
+        return;
+      }
+      var signedUrl = signPlayUrl(normalized, isLive: isLive);
+      if (isLive) {
+        signedUrl = appendTokenToUrl(signedUrl, null);
+      }
       if (seenUrls.add(signedUrl)) {
         final option = ZhiyunStreamOption(
           label: label,
@@ -3948,7 +3965,8 @@ class ZhiyunService {
           RegExp(r'\.flv(\?|$)', caseSensitive: false),
           r'.m3u8$1',
         );
-        final signedHls = signPlayUrl(hlsCandidate, isLive: true);
+        var signedHls = signPlayUrl(hlsCandidate, isLive: true);
+        signedHls = appendTokenToUrl(signedHls, null);
         if (seenUrls.add(signedHls)) {
           final hlsLabel = label.contains('(FLV)')
               ? label.replaceAll('(FLV)', '(HLS)')
@@ -4381,20 +4399,57 @@ class ZhiyunService {
         }
       }
 
+      List<ZhiyunStreamOption> disambiguateStreams(
+          List<ZhiyunStreamOption> list) {
+        final labelCounts = <String, int>{};
+        for (final opt in list) {
+          labelCounts[opt.label] = (labelCounts[opt.label] ?? 0) + 1;
+        }
+        final labelIndices = <String, int>{};
+        final result = <ZhiyunStreamOption>[];
+        for (final opt in list) {
+          if ((labelCounts[opt.label] ?? 0) > 1) {
+            final idx = (labelIndices[opt.label] ?? 0) + 1;
+            labelIndices[opt.label] = idx;
+            var formatSuffix = '';
+            final u = opt.url.toLowerCase();
+            if (u.contains('.m3u8')) {
+              formatSuffix = ' (HLS)';
+            } else if (u.contains('.mp4')) {
+              formatSuffix = ' (MP4)';
+            } else if (u.contains('.flv')) {
+              formatSuffix = ' (FLV)';
+            }
+            final newLabel = formatSuffix.isNotEmpty &&
+                    !opt.label.contains(formatSuffix.trim())
+                ? '${opt.label}$formatSuffix'
+                : '${opt.label} $idx';
+            result.add(ZhiyunStreamOption(
+                label: newLabel, url: opt.url, isLive: opt.isLive));
+          } else {
+            result.add(opt);
+          }
+        }
+        return result;
+      }
+
       liveStreams
           .sort((a, b) => _streamPriority(b).compareTo(_streamPriority(a)));
       replayStreams
           .sort((a, b) => _streamPriority(b).compareTo(_streamPriority(a)));
 
+      final finalLive = disambiguateStreams(liveStreams);
+      final finalReplay = disambiguateStreams(replayStreams);
+
       // 直播模式/正在直播时优先直播流；回放模式优先回放流
       if (preferLive || subIsLive) {
-        return [...liveStreams, ...replayStreams];
+        return [...finalLive, ...finalReplay];
       }
-      if (replayStreams.isNotEmpty) {
+      if (finalReplay.isNotEmpty) {
         // 如果已明确生成回放或课已结束，不再把失效的直播 URL 放在可选列表里干扰播放
-        return replayStreams;
+        return finalReplay;
       }
-      return liveStreams;
+      return finalLive;
     } catch (e) {
       debugPrint('[ZhiyunService] fetchLessonStreams error: $e');
       return const [];

@@ -140,6 +140,14 @@ class ScholarPage extends StatelessWidget {
     };
   }
 
+  static Color _getForeheadColor(
+      BuildContext context, CupertinoDynamicColor dynamicColor) {
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    return isDark
+        ? dynamicColor.darkColor.withValues(alpha: 0.28)
+        : dynamicColor.darkColor.withValues(alpha: 0.25);
+  }
+
   final _scholarController = Get.put(ScholarController());
   final ValueNotifier<bool> _isRefreshing = ValueNotifier(false);
 
@@ -179,9 +187,8 @@ class ScholarPage extends StatelessWidget {
                     child: Hero(
                         tag: 'gradeBrief',
                         child: RoundRectangleCardWithForehead(
-                            foreheadColor: CustomCupertinoDynamicColors
-                                .okGreen.resolveFrom(context)
-                                .withValues(alpha: 0.25),
+                            foreheadColor: _getForeheadColor(
+                                context, CustomCupertinoDynamicColors.okGreen),
                             forehead: Obx(() => Row(children: [
                                   // University Icon
                                   Padding(
@@ -350,9 +357,8 @@ class ScholarPage extends StatelessWidget {
                 Expanded(
                     child: RoundRectangleCardWithForehead(
                         animate: false,
-                        foreheadColor: CustomCupertinoDynamicColors
-                            .cyan.resolveFrom(context)
-                            .withValues(alpha: 0.25),
+                        foreheadColor: _getForeheadColor(
+                            context, CustomCupertinoDynamicColors.cyan),
                         forehead: Obx(() => Row(children: [
                               // University Icon
                               Padding(
@@ -608,9 +614,8 @@ class ScholarPage extends StatelessWidget {
                 Expanded(
                     child: RoundRectangleCardWithForehead(
                         animate: false,
-                        foreheadColor: CustomCupertinoDynamicColors
-                            .magenta.resolveFrom(context)
-                            .withValues(alpha: 0.25),
+                        foreheadColor: _getForeheadColor(
+                            context, CustomCupertinoDynamicColors.magenta),
                         forehead: Obx(() => Row(children: [
                               Padding(
                                 padding: const EdgeInsets.only(
@@ -739,9 +744,8 @@ class ScholarPage extends StatelessWidget {
                 Expanded(
                     child: RoundRectangleCardWithForehead(
                         animate: false,
-                        foreheadColor: CustomCupertinoDynamicColors
-                            .peach.resolveFrom(context)
-                            .withValues(alpha: 0.25),
+                        foreheadColor: _getForeheadColor(
+                            context, CustomCupertinoDynamicColors.peach),
                         forehead: Obx(() => Row(children: [
                               Padding(
                                 padding: const EdgeInsets.only(

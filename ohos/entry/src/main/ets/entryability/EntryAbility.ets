@@ -665,6 +665,7 @@ export default class EntryAbility extends FlutterAbility {
       const livingroomUrl = (call.argument('livingroomUrl') as string) || '';
       const token = (call.argument('token') as string) || '';
       const streamsJsonArg = (call.argument('streamsJson') as string) || '[]';
+      const isLiveArg = (call.argument('isLive') as boolean) || false;
       if (url.length === 0 && livingroomUrl.length === 0) {
         result.success(false);
         return;
@@ -674,6 +675,7 @@ export default class EntryAbility extends FlutterAbility {
       AppStorage.setOrCreate('inAppVideoLivingroomUrl', livingroomUrl);
       AppStorage.setOrCreate('inAppVideoToken', token);
       AppStorage.setOrCreate('inAppVideoStreamsJson', streamsJsonArg);
+      AppStorage.setOrCreate('inAppVideoIsLive', isLiveArg);
       AppStorage.setOrCreate('inAppVideoVisible', true);
       result.success(true);
     } catch (err) {

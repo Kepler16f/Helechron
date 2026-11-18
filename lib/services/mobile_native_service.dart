@@ -399,6 +399,7 @@ class MobileNativeService {
     List<Map<String, String>> streams = const [],
     String? livingroomUrl,
     String? token,
+    bool isLive = false,
   }) async {
     try {
       final result =
@@ -406,6 +407,7 @@ class MobileNativeService {
         'url': url,
         'title': title,
         'streams': streams,
+        'isLive': isLive,
         if (livingroomUrl != null && livingroomUrl.isNotEmpty)
           'livingroomUrl': livingroomUrl,
         if (token != null && token.isNotEmpty) 'token': token,

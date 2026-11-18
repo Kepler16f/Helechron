@@ -62,8 +62,8 @@ class PracticeScoreColumns extends StatelessWidget {
               Text(
                 passed.join(' · '),
                 key: const ValueKey('practice-passed-status'),
-                style: const TextStyle(
-                  color: CupertinoColors.secondaryLabel,
+                style: TextStyle(
+                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
                   fontSize: 13,
                 ),
               ),
@@ -203,22 +203,46 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
       padding: const EdgeInsets.only(bottom: 12),
       child: CupertinoSlidingSegmentedControl<int>(
         groupValue: _selectedCategoryId,
-        children: const {
+        children: {
           0: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Text('总览', style: TextStyle(fontSize: 13)),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Text(
+              '总览',
+              style: TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.label.resolveFrom(context),
+              ),
+            ),
           ),
           1: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Text('二课', style: TextStyle(fontSize: 13)),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Text(
+              '二课',
+              style: TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.label.resolveFrom(context),
+              ),
+            ),
           ),
           2: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Text('三课', style: TextStyle(fontSize: 13)),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Text(
+              '三课',
+              style: TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.label.resolveFrom(context),
+              ),
+            ),
           ),
           3: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Text('四课', style: TextStyle(fontSize: 13)),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Text(
+              '四课',
+              style: TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.label.resolveFrom(context),
+              ),
+            ),
           ),
         },
         onValueChanged: (val) {
@@ -244,8 +268,11 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
             children: [
               Text(
                 '${_getCategoryTitle(catId)}目标',
-                style:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: CupertinoColors.label.resolveFrom(context),
+                ),
               ),
               CupertinoButton(
                 padding: EdgeInsets.zero,
@@ -254,9 +281,16 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
                   children: [
                     Text(
                       hasTarget ? '修改目标' : '设置目标',
-                      style: const TextStyle(fontSize: 13),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: CupertinoColors.activeBlue.resolveFrom(context),
+                      ),
                     ),
-                    const Icon(CupertinoIcons.chevron_forward, size: 13),
+                    Icon(
+                      CupertinoIcons.chevron_forward,
+                      size: 13,
+                      color: CupertinoColors.activeBlue.resolveFrom(context),
+                    ),
                   ],
                 ),
               ),
@@ -267,15 +301,18 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
             children: [
               Text(
                 '当前 ${current.toStringAsFixed(2)}',
-                style:
-                    const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: CupertinoColors.label.resolveFrom(context),
+                ),
               ),
               if (hasTarget) ...[
                 Text(
                   ' / ${target.toStringAsFixed(2)}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
-                    color: CupertinoColors.secondaryLabel,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
                   ),
                 ),
               ],
@@ -352,9 +389,13 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               '素质类型记点统计',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+                color: CupertinoColors.label.resolveFrom(context),
+              ),
             ),
             const SizedBox(height: 10),
             Wrap(
@@ -373,7 +414,10 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
                     children: [
                       Text(
                         entry.key,
-                        style: const TextStyle(fontSize: 13),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: CupertinoColors.label.resolveFrom(context),
+                        ),
                       ),
                       const SizedBox(width: 6),
                       Text(
@@ -439,11 +483,15 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
                     ? CupertinoIcons.sort_up
                     : CupertinoIcons.sort_down,
                 size: 16,
+                color: CupertinoColors.activeBlue.resolveFrom(context),
               ),
               const SizedBox(width: 2),
               Text(
                 _sortAscending ? '正序' : '倒序',
-                style: const TextStyle(fontSize: 13),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: CupertinoColors.activeBlue.resolveFrom(context),
+                ),
               ),
             ],
           ),
@@ -590,10 +638,10 @@ class PracticeScoreDetailPage extends StatelessWidget {
             ),
             if (!item.countsTowardTotal) ...[
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 '该项目当前未计入总分。',
                 style: TextStyle(
-                  color: CupertinoColors.systemOrange,
+                  color: CupertinoColors.systemOrange.resolveFrom(context),
                   fontSize: 14,
                 ),
               ),
@@ -636,56 +684,79 @@ class _SummaryCard extends StatelessWidget {
         children: [
           Text(
             categoryName,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: CupertinoColors.label.resolveFrom(context),
+            ),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             '正式汇总记点',
-            style:
-                TextStyle(color: CupertinoColors.secondaryLabel, fontSize: 13),
+            style: TextStyle(
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              fontSize: 13,
+            ),
           ),
           const SizedBox(height: 2),
           Text(
             total.toStringAsFixed(2),
-            style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.bold,
+              color: CupertinoColors.label.resolveFrom(context),
+            ),
           ),
           const SizedBox(height: 8),
           Text(
             '已计入 $includedCount 项 · 审核中/未计入 $excludedCount 项',
-            style: const TextStyle(fontSize: 13),
+            style: TextStyle(
+              fontSize: 13,
+              color: CupertinoColors.label.resolveFrom(context),
+            ),
           ),
           const SizedBox(height: 4),
           Text(
             '记点来源：${source.label}',
-            style: const TextStyle(
-                color: CupertinoColors.secondaryLabel, fontSize: 12),
+            style: TextStyle(
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              fontSize: 12,
+            ),
           ),
           const SizedBox(height: 2),
           Text(
             '项目明细来源：${detailSource.label}',
-            style: const TextStyle(
-                color: CupertinoColors.secondaryLabel, fontSize: 12),
+            style: TextStyle(
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              fontSize: 12,
+            ),
           ),
           const SizedBox(height: 2),
           Text(
             '更新时间：${_dateTime(updatedAt)}',
-            style: const TextStyle(
-                color: CupertinoColors.secondaryLabel, fontSize: 12),
+            style: TextStyle(
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              fontSize: 12,
+            ),
           ),
           if (stale) ...[
             const SizedBox(height: 8),
-            const Text(
+            Text(
               '当前记点使用缓存或项目合计，请在网络恢复后刷新。',
-              style:
-                  TextStyle(color: CupertinoColors.systemOrange, fontSize: 12),
+              style: TextStyle(
+                color: CupertinoColors.systemOrange.resolveFrom(context),
+                fontSize: 12,
+              ),
             ),
           ],
           if (detailsStale) ...[
             const SizedBox(height: 4),
-            const Text(
+            Text(
               '项目明细为缓存或上一次结果。',
-              style:
-                  TextStyle(color: CupertinoColors.systemOrange, fontSize: 12),
+              style: TextStyle(
+                color: CupertinoColors.systemOrange.resolveFrom(context),
+                fontSize: 12,
+              ),
             ),
           ],
         ],
@@ -707,8 +778,8 @@ class _NoDetailsCard extends StatelessWidget {
       child: Text(
         zdbkOnly ? '当前仅获取到旧实践汇总，暂无 getSqjl 项目明细。' : '当前 getSqjl 项目明细不可用，请稍后刷新。',
         key: const ValueKey('practice-no-details'),
-        style: const TextStyle(
-          color: CupertinoColors.secondaryLabel,
+        style: TextStyle(
+          color: CupertinoColors.secondaryLabel.resolveFrom(context),
           height: 1.5,
         ),
       ),
@@ -744,9 +815,10 @@ class _PracticeItemCard extends StatelessWidget {
                   children: [
                     Text(
                       item.projectName,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
+                        color: CupertinoColors.label.resolveFrom(context),
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -758,10 +830,10 @@ class _PracticeItemCard extends StatelessWidget {
                               : '${item.statusLabel} · 未计入总分'),
                       style: TextStyle(
                         color: counted
-                            ? CupertinoColors.systemGreen
+                            ? CupertinoColors.systemGreen.resolveFrom(context)
                             : (isInReview
-                                ? CupertinoColors.systemOrange
-                                : CupertinoColors.secondaryLabel),
+                                ? CupertinoColors.systemOrange.resolveFrom(context)
+                                : CupertinoColors.secondaryLabel.resolveFrom(context)),
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                       ),
@@ -769,16 +841,16 @@ class _PracticeItemCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       '${item.projectType} · ${item.qualityType}',
-                      style: const TextStyle(
-                        color: CupertinoColors.secondaryLabel,
+                      style: TextStyle(
+                        color: CupertinoColors.secondaryLabel.resolveFrom(context),
                         fontSize: 13,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       '更新于 ${_dateTime(item.updatedAt)}',
-                      style: const TextStyle(
-                        color: CupertinoColors.tertiaryLabel,
+                      style: TextStyle(
+                        color: CupertinoColors.tertiaryLabel.resolveFrom(context),
                         fontSize: 12,
                       ),
                     ),
@@ -790,17 +862,17 @@ class _PracticeItemCard extends StatelessWidget {
                 '${counted ? '+' : ''}${_score(item)}',
                 style: TextStyle(
                   color: counted
-                      ? CupertinoColors.systemGreen
-                      : CupertinoColors.label,
+                      ? CupertinoColors.systemGreen.resolveFrom(context)
+                      : CupertinoColors.label.resolveFrom(context),
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(width: 4),
-              const Icon(
+              Icon(
                 CupertinoIcons.chevron_forward,
                 size: 14,
-                color: CupertinoColors.tertiaryLabel,
+                color: CupertinoColors.tertiaryLabel.resolveFrom(context),
               ),
             ],
           ),
@@ -821,8 +893,8 @@ class _SectionTitle extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(4, 4, 4, 10),
         child: Text(
           '$title（$count）',
-          style: const TextStyle(
-            color: CupertinoColors.secondaryLabel,
+          style: TextStyle(
+            color: CupertinoColors.secondaryLabel.resolveFrom(context),
             fontSize: 14,
             fontWeight: FontWeight.w600,
           ),
@@ -840,7 +912,9 @@ class _EmptyGroup extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(4, 8, 4, 18),
         child: Text(
           text,
-          style: const TextStyle(color: CupertinoColors.secondaryLabel),
+          style: TextStyle(
+            color: CupertinoColors.secondaryLabel.resolveFrom(context),
+          ),
         ),
       );
 }
@@ -890,11 +964,19 @@ class _DetailRow extends StatelessWidget {
               width: 112,
               child: Text(
                 label,
-                style: const TextStyle(color: CupertinoColors.secondaryLabel),
+                style: TextStyle(
+                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                ),
               ),
             ),
             Expanded(
-              child: Text(value, textAlign: TextAlign.right),
+              child: Text(
+                value,
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  color: CupertinoColors.label.resolveFrom(context),
+                ),
+              ),
             ),
           ],
         ),

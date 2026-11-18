@@ -59,6 +59,7 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
@@ -79,6 +80,7 @@ class ZhiyunPlayerActivity : Activity() {
         const val EXTRA_TOKEN = "token"
         const val EXTRA_STREAM_LABELS = "streamLabels"
         const val EXTRA_STREAM_URLS = "streamUrls"
+        const val EXTRA_IS_LIVE = "isLive"
 
         private val SAKURA_ACCENT = Color.parseColor("#FB7299")
 
@@ -360,6 +362,10 @@ class ZhiyunPlayerActivity : Activity() {
         titleText = intent?.getStringExtra(EXTRA_TITLE)?.ifBlank { "智云课堂" } ?: "智云课堂"
         val rawLivingroom = intent?.getStringExtra(EXTRA_LIVINGROOM_URL) ?: ""
         token = intent?.getStringExtra(EXTRA_TOKEN) ?: ""
+        isLiveStream = intent?.getBooleanExtra(EXTRA_IS_LIVE, false) == true ||
+            titleText.contains("直播") ||
+            rawUrl.contains("/live/") ||
+            rawUrl.contains(".flv")
         val labels = intent?.getStringArrayListExtra(EXTRA_STREAM_LABELS) ?: arrayListOf()
         val urls = intent?.getStringArrayListExtra(EXTRA_STREAM_URLS) ?: arrayListOf()
 
@@ -970,24 +976,25 @@ class ZhiyunPlayerActivity : Activity() {
         if (isUserSeeking) return
         val dur = player.duration
         val pos = player.currentPosition.coerceAtLeast(0L)
-        val live = player.isCurrentMediaItemLive || dur <= 0L || dur == C.TIME_UNSET
-        isLiveStream = live
-        rewind10Btn.visibility = if (live) View.GONE else View.VISIBLE
-        forward10Btn.visibility = if (live) View.GONE else View.VISIBLE
-        speedPill.visibility = if (live) View.GONE else View.VISIBLE
+        val isExplicitLive = isLiveStream || player.isCurrentMediaItemLive || (dur <= 0L && activeStreamTitle.contains("直播"))
+        isLiveStream = isExplicitLive
+        rewind10Btn.visibility = if (isExplicitLive) View.GONE else View.VISIBLE
+        forward10Btn.visibility = if (isExplicitLive) View.GONE else View.VISIBLE
+        speedPill.visibility = if (isExplicitLive) View.GONE else View.VISIBLE
 
-        if (live) {
+        if (isExplicitLive) {
             timeCurrentView.text = if (pos > 0) formatMs(pos) else "00:00"
             timeDurationView.text = "● LIVE"
             timeDurationView.setTextColor(SAKURA_ACCENT)
             seekBar.isEnabled = false
             seekBar.progress = 1000
         } else {
-            seekBar.isEnabled = true
+            val validDur = dur > 0L && dur != C.TIME_UNSET
+            seekBar.isEnabled = validDur
             timeCurrentView.text = formatMs(pos)
-            timeDurationView.text = formatMs(dur)
+            timeDurationView.text = if (validDur) formatMs(dur) else "--:--"
             timeDurationView.setTextColor(Color.parseColor("#DDFFFFFF"))
-            seekBar.progress = ((pos * 1000L) / dur).toInt().coerceIn(0, 1000)
+            seekBar.progress = if (validDur) ((pos * 1000L) / dur).toInt().coerceIn(0, 1000) else 0
         }
     }
 
@@ -1196,19 +1203,39 @@ class ZhiyunPlayerActivity : Activity() {
             headers["Authorization"] = "Bearer $token"
         }
 
+        headers["Connection"] = "keep-alive"
+
         val dataSourceFactory = DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(8000)
             .setReadTimeoutMs(10000)
             .setDefaultRequestProperties(headers)
 
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                if (isLiveStream) 2500 else DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
+                if (isLiveStream) 8000 else DefaultLoadControl.DEFAULT_MAX_BUFFER_MS,
+                if (isLiveStream) 500 else DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                if (isLiveStream) 1000 else DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
+            )
+            .build()
+
         val player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+            .setLoadControl(loadControl)
             .build()
 
         val mediaBuilder = MediaItem.Builder().setUri(streamUrl)
         if (streamUrl.lowercase().contains(".m3u8")) {
             mediaBuilder.setMimeType(MimeTypes.APPLICATION_M3U8)
+        }
+        if (isLiveStream) {
+            mediaBuilder.setLiveConfiguration(
+                MediaItem.LiveConfiguration.Builder()
+                    .setMaxPlaybackSpeed(1.02f)
+                    .setMinPlaybackSpeed(0.98f)
+                    .build()
+            )
         }
 
         player.addListener(object : Player.Listener {
@@ -1348,6 +1375,26 @@ class ZhiyunPlayerActivity : Activity() {
                     "s.innerHTML='html,body{background:#000!important;margin:0!important;padding:0!important;overflow-x:hidden!important;}" +
                     ".player-wrapper,.prism-player,video{max-width:100vw!important;background:#000!important;}';" +
                     "(document.head||document.documentElement).appendChild(s);" +
+                    "};" +
+                    "function autoClickLogin(){try{" +
+                    "var b=document.querySelectorAll('button,a,.btn,[role=\"button\"],span');" +
+                    "for(var i=0;i<b.length;i++){" +
+                    "var t=(b[i].innerText||b[i].textContent||'').trim();" +
+                    "if(t==='登录浙大通行证'||t==='浙大通行证登录'||t.indexOf('通行证')>=0||t==='登录'){" +
+                    "if(b[i].offsetParent!==null){b[i].click();return true;}" +
+                    "}" +
+                    "}" +
+                    "var l=document.querySelectorAll('a[href*=\"cas/login\"],a[href*=\"auth/login\"]');" +
+                    "if(l.length>0){l[0].click();return true;}" +
+                    "}catch(e){}" +
+                    "return false;" +
+                    "};" +
+                    "if(!autoClickLogin()){" +
+                    "var ckCnt=0;" +
+                    "var ckTimer=setInterval(function(){" +
+                    "ckCnt++;" +
+                    "if(autoClickLogin()||ckCnt>25){clearInterval(ckTimer);}" +
+                    "},200);" +
                     "}"
             )
             append("}catch(e){}})();")

@@ -604,6 +604,7 @@ class OhosNativeService {
     List<Map<String, String>> streams = const [],
     String? livingroomUrl,
     String? token,
+    bool isLive = false,
   }) async {
     if (PlatformFeatures.usesFlutterPlugins) {
       return MobileNativeService.instance.openInAppVideoPlayer(
@@ -612,6 +613,7 @@ class OhosNativeService {
         streams: streams,
         livingroomUrl: livingroomUrl,
         token: token,
+        isLive: isLive,
       );
     }
     try {
@@ -621,6 +623,7 @@ class OhosNativeService {
         'title': title,
         'streams': streams,
         'streamsJson': jsonEncode(streams),
+        'isLive': isLive,
         if (livingroomUrl != null && livingroomUrl.isNotEmpty)
           'livingroomUrl': livingroomUrl,
         if (token != null && token.isNotEmpty) 'token': token,

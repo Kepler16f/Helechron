@@ -112,7 +112,8 @@ class MainActivity : FlutterActivity() {
                     }
                     val livingroomUrl = call.argument<String>("livingroomUrl") ?: ""
                     val token = call.argument<String>("token") ?: ""
-                    result.success(showInAppVideoDialog(url, title, streams, livingroomUrl, token))
+                    val isLive = call.argument<Boolean>("isLive") ?: false
+                    result.success(showInAppVideoDialog(url, title, streams, livingroomUrl, token, isLive))
                 }
                 "installApk" -> {
                     val filePath = call.argument<String>("filePath") ?: ""
@@ -391,7 +392,8 @@ class MainActivity : FlutterActivity() {
         title: String,
         streams: List<Pair<String, String>> = emptyList(),
         livingroomUrl: String = "",
-        token: String = ""
+        token: String = "",
+        isLive: Boolean = false
     ): Boolean {
         if (url.isEmpty() && livingroomUrl.isEmpty() && streams.isEmpty()) return false
         return try {
@@ -402,6 +404,7 @@ class MainActivity : FlutterActivity() {
                 putExtra(ZhiyunPlayerActivity.EXTRA_TITLE, title)
                 putExtra(ZhiyunPlayerActivity.EXTRA_LIVINGROOM_URL, livingroomUrl)
                 putExtra(ZhiyunPlayerActivity.EXTRA_TOKEN, token)
+                putExtra(ZhiyunPlayerActivity.EXTRA_IS_LIVE, isLive)
                 putStringArrayListExtra(ZhiyunPlayerActivity.EXTRA_STREAM_LABELS, labels)
                 putStringArrayListExtra(ZhiyunPlayerActivity.EXTRA_STREAM_URLS, urls)
             }

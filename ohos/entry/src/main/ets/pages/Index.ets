@@ -110,6 +110,7 @@ struct Index {
   @StorageLink('inAppVideoLivingroomUrl') inAppVideoLivingroomUrl: string = '';
   @StorageLink('inAppVideoToken') inAppVideoToken: string = '';
   @StorageLink('inAppVideoStreamsJson') inAppVideoStreamsJson: string = '[]';
+  @StorageLink('inAppVideoIsLive') inAppVideoIsLive: boolean = false;
   @State private safeBottom: number = 24;
   @State private safeTop: number = 36;
   @State private safeLeft: number = 0;
@@ -121,6 +122,7 @@ struct Index {
   @State private activeStreamIndex: number = 0;
   @State private videoStreams: StreamSource[] = [];
   @State private useWebFallback: boolean = false;
+  @State private isLiveStream: boolean = false;
   @State private isPlayerFullscreen: boolean = false;
   @State private isPlayerMiniWindow: boolean = false;
   @State private isSystemPipActive: boolean = false;
@@ -441,6 +443,8 @@ struct Index {
       this.activeVideoUrl = this.webFallbackTarget();
       this.useWebFallback = true;
     }
+    const checkUrl = this.activeVideoUrl.length > 0 ? this.activeVideoUrl : this.inAppVideoUrl;
+    this.isLiveStream = this.inAppVideoIsLive || this.inAppVideoTitle.includes('直播') || checkUrl.includes('/live/') || checkUrl.includes('.flv');
     this.applyPlayerWindowMode(this.isSystemMultiWindow() ? window.Orientation.UNSPECIFIED : window.Orientation.PORTRAIT, false);
     this.syncLandscapeMultiWindow();
     if (this.sensorRotation) {
@@ -881,7 +885,9 @@ struct Index {
           headers['Authorization'] = `Bearer ${this.inAppVideoToken}`;
         }
         const mediaSource: media.MediaSource = media.createMediaSourceWithUrl(targetUrl, headers);
-        const strategy: media.PlaybackStrategy = { preferredBufferDuration: 6 };
+        const strategy: media.PlaybackStrategy = {
+          preferredBufferDuration: this.isLiveStream ? 2 : 6
+        };
         await player.setMediaSource(mediaSource, strategy);
         sourceAssigned = true;
       } catch (srcErr) {
@@ -1058,6 +1064,27 @@ struct Index {
         `'.living-room-wrapper,.living-content,.left-wrapper,.player-wrapper,.cmc-player-container,#cmc_player_container{position:fixed !important;left:0 !important;top:0 !important;right:0 !important;bottom:0 !important;width:100vw !important;height:100vh !important;max-width:100vw !important;max-height:100vh !important;margin:0 !important;padding:0 !important;z-index:9999 !important;background:#000 !important;}' +` +
         `'video{width:100% !important;height:100% !important;object-fit:contain !important;background:#000 !important;}';` +
         `document.head.appendChild(st);` +
+      `}` +
+      `function autoClickLogin(){` +
+        `try{` +
+          `var b=document.querySelectorAll('button,a,.btn,[role="button"],span');` +
+          `for(var i=0;i<b.length;i++){` +
+            `var t=(b[i].innerText||b[i].textContent||'').trim();` +
+            `if(t==='登录浙大通行证'||t==='浙大通行证登录'||t.indexOf('通行证')>=0||t==='登录'){` +
+              `if(b[i].offsetParent!==null){b[i].click();return true;}` +
+            `}` +
+          `}` +
+          `var l=document.querySelectorAll('a[href*="cas/login"],a[href*="auth/login"]');` +
+          `if(l.length>0){l[0].click();return true;}` +
+        `}catch(e){}` +
+        `return false;` +
+      `};` +
+      `if(!autoClickLogin()){` +
+        `var ckCnt=0;` +
+        `var ckTimer=setInterval(function(){` +
+          `ckCnt++;` +
+          `if(autoClickLogin()||ckCnt>25){clearInterval(ckTimer);}` +
+        `},200);` +
       `}` +
       `setTimeout(function(){try{window.dispatchEvent(new Event('resize'));var v=document.querySelector('video');if(v&&v.paused){v.play().catch(function(){});}}catch(e){}},600);` +
       `}catch(e){}`;
@@ -1952,7 +1979,7 @@ struct Index {
                           .fontColor('#D9FFFFFF')
                       }
                       .width('100%')
-                    } else {
+                    } else if (this.isLiveStream) {
                       Row({ space: 8 }) {
                         Circle({ width: 8, height: 8 }).fill('#FF4D79')
                         Text('正在直播 LIVE')
@@ -1963,6 +1990,28 @@ struct Index {
                       }
                       .width('100%')
                       .padding({ left: 4, bottom: 2 })
+                    } else {
+                      Row({ space: 10 }) {
+                        Text('00:00')
+                          .fontSize(13)
+                          .fontWeight(FontWeight.Medium)
+                          .fontColor('#99FFFFFF')
+
+                        Slider({ value: 0, min: 0, max: 1 })
+                          .layoutWeight(1)
+                          .trackThickness(5)
+                          .blockSize({ width: 14, height: 14 })
+                          .selectedColor('#FF6699')
+                          .trackColor('#33FFFFFF')
+                          .blockColor('#80FFFFFF')
+                          .enabled(false)
+
+                        Text('--:--')
+                          .fontSize(13)
+                          .fontWeight(FontWeight.Medium)
+                          .fontColor('#99FFFFFF')
+                      }
+                      .width('100%')
                     }
 
                     // 第二行：主控按钮栏

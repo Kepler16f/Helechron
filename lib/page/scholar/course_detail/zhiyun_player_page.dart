@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -279,6 +281,9 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
         ? ZhiyunService.appendTokenToUrl(rawTargetUrl, token)
         : rawTargetUrl;
 
+    final bool streamIsLive = _isLiveMode ||
+        _streams.firstWhereOrNull((s) => s.url == url)?.isLive == true;
+
     final ok = await OhosNativeService.instance.openInAppVideoPlayer(
       url: effectiveUrl,
       title: '${widget.courseName} · $_currentTitle',
@@ -287,6 +292,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
           .toList(),
       livingroomUrl: effectiveLivingroom,
       token: token,
+      isLive: streamIsLive,
     );
     if (!ok && mounted) {
       showCupertinoDialog(
@@ -358,6 +364,344 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
     } finally {
       client.close(force: true);
     }
+  }
+
+  Future<void> _exportTranscriptAsTxt(BuildContext context) async {
+    if (_transcript.isEmpty) {
+      AppNotification.info('提示', '当前课节暂无语音转写字幕可导出');
+      return;
+    }
+    final safeCourse =
+        widget.courseName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final safeTitle = _currentTitle.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final defaultFileName = '${safeCourse}_${safeTitle}_语音字幕.txt';
+    final nameCtrl = TextEditingController(text: defaultFileName);
+
+    await showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogCtx) => CupertinoAlertDialog(
+        title: const Text('导出语音字幕'),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '共 ${_transcript.length} 条语音字幕，将保存为 txt 文本。可自定义文件名：',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: CupertinoColors.secondaryLabel.resolveFrom(dialogCtx),
+                ),
+              ),
+              const SizedBox(height: 8),
+              CupertinoTextField(
+                controller: nameCtrl,
+                autofocus: true,
+                style: TextStyle(
+                  color: CupertinoColors.label.resolveFrom(dialogCtx),
+                ),
+                placeholderStyle: TextStyle(
+                  color: CupertinoColors.placeholderText.resolveFrom(dialogCtx),
+                ),
+                decoration: BoxDecoration(
+                  color: CupertinoColors.tertiarySystemFill
+                      .resolveFrom(dialogCtx),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            onPressed: () async {
+              Navigator.of(dialogCtx).pop();
+              final pickedDir =
+                  await OhosNativeService.instance.pickDirectory();
+              if (pickedDir != null && pickedDir.isNotEmpty) {
+                await _doSaveTranscriptFile(nameCtrl.text.trim(),
+                    targetDir: pickedDir);
+              }
+            },
+            child: const Text('选择目录保存'),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () async {
+              Navigator.of(dialogCtx).pop();
+              await _doSaveTranscriptFile(nameCtrl.text.trim());
+            },
+            child: const Text('保存到默认目录'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _doSaveTranscriptFile(String fileName,
+      {String? targetDir}) async {
+    final cleanName = fileName.trim();
+    final finalName = cleanName.endsWith('.txt') ? cleanName : '$cleanName.txt';
+    String saveDir = targetDir ?? '';
+    if (saveDir.isEmpty && Get.isRegistered<Option>(tag: 'option')) {
+      saveDir = Get.find<Option>(tag: 'option').downloadPath.value.trim();
+    }
+    if (saveDir.isEmpty) {
+      final docDir = await getApplicationDocumentsDirectory();
+      saveDir = '${docDir.path}/courseware';
+    }
+
+    final buffer = StringBuffer();
+    buffer.writeln('课程：${widget.courseName}');
+    buffer.writeln('课节：$_currentTitle');
+    buffer.writeln('导出时间：${DateTime.now().toString().split('.').first}');
+    buffer.writeln('=' * 40);
+    buffer.writeln();
+    for (final seg in _transcript) {
+      buffer.writeln('[${seg.timeLabel}] ${seg.text}');
+    }
+
+    try {
+      final tempDir = Directory.systemTemp;
+      final tempFile = File(
+          '${tempDir.path}/temp_sub_${DateTime.now().millisecondsSinceEpoch}.txt');
+      await tempFile.writeAsString(buffer.toString(), encoding: utf8);
+
+      String? savedPath;
+      final canDirect = await Courses.isDirectoryDirectlyWritable(saveDir);
+      if (canDirect) {
+        final destDir = Directory(saveDir);
+        if (!await destDir.exists()) await destDir.create(recursive: true);
+        final destFile = File('${destDir.path}/$finalName');
+        await tempFile.copy(destFile.path);
+        savedPath = destFile.path;
+      } else {
+        savedPath = await OhosNativeService.instance.copyFileToDirectory(
+          tempFile.path,
+          saveDir,
+          finalName,
+          mimeType: 'text/plain',
+        );
+      }
+      try {
+        if (await tempFile.exists()) await tempFile.delete();
+      } catch (_) {}
+
+      if (savedPath != null && savedPath.isNotEmpty) {
+        AppNotification.success('字幕已保存', '已成功导出至: $finalName');
+        await OhosNativeService.instance.openFileWithSystem(
+          savedPath,
+          mimeType: 'text/plain',
+          title: '选择打开方式',
+        );
+      } else {
+        AppNotification.error('保存失败', '未能将字幕文件写入目标目录');
+      }
+    } catch (e) {
+      AppNotification.error('导出失败', '$e');
+    }
+  }
+
+  Future<void> _exportAllSlidesAsZip(BuildContext context) async {
+    if (_slides.isEmpty) {
+      AppNotification.info('提示', '当前课节暂无 PPT 幻灯片可打包');
+      return;
+    }
+    final safeCourse =
+        widget.courseName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final safeTitle = _currentTitle.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final defaultFileName = '${safeCourse}_${safeTitle}_切片课件.zip';
+    final nameCtrl = TextEditingController(text: defaultFileName);
+
+    await showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogCtx) => CupertinoAlertDialog(
+        title: const Text('打包下载切片课件'),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '共 ${_slides.length} 页 PPT 切片截图，将打包为 ZIP 压缩包保存。可自定义文件名：',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: CupertinoColors.secondaryLabel.resolveFrom(dialogCtx),
+                ),
+              ),
+              const SizedBox(height: 8),
+              CupertinoTextField(
+                controller: nameCtrl,
+                autofocus: true,
+                style: TextStyle(
+                  color: CupertinoColors.label.resolveFrom(dialogCtx),
+                ),
+                placeholderStyle: TextStyle(
+                  color: CupertinoColors.placeholderText.resolveFrom(dialogCtx),
+                ),
+                decoration: BoxDecoration(
+                  color: CupertinoColors.tertiarySystemFill
+                      .resolveFrom(dialogCtx),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            onPressed: () async {
+              Navigator.of(dialogCtx).pop();
+              final pickedDir =
+                  await OhosNativeService.instance.pickDirectory();
+              if (pickedDir != null && pickedDir.isNotEmpty) {
+                await _doPackageSlidesZip(nameCtrl.text.trim(),
+                    targetDir: pickedDir);
+              }
+            },
+            child: const Text('选择目录保存'),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () async {
+              Navigator.of(dialogCtx).pop();
+              await _doPackageSlidesZip(nameCtrl.text.trim());
+            },
+            child: const Text('保存到默认目录'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _doPackageSlidesZip(String fileName, {String? targetDir}) async {
+    final cleanName = fileName.trim();
+    final finalName = cleanName.endsWith('.zip') ? cleanName : '$cleanName.zip';
+    String saveDir = targetDir ?? '';
+    if (saveDir.isEmpty && Get.isRegistered<Option>(tag: 'option')) {
+      saveDir = Get.find<Option>(tag: 'option').downloadPath.value.trim();
+    }
+    if (saveDir.isEmpty) {
+      final docDir = await getApplicationDocumentsDirectory();
+      saveDir = '${docDir.path}/courseware';
+    }
+
+    AppNotification.info('正在打包 PPT', '共 ${_slides.length} 页，正在下载切片并生成压缩包...');
+
+    final client = HttpClient();
+    applyZjuNetworkDefense(client);
+
+    try {
+      final archive = Archive();
+      var downloadedCount = 0;
+      final poolSize = 4;
+      for (var i = 0; i < _slides.length; i += poolSize) {
+        final end =
+            (i + poolSize < _slides.length) ? i + poolSize : _slides.length;
+        final chunk = <Future<void>>[];
+        for (var j = i; j < end; j++) {
+          final idx = j;
+          final slide = _slides[idx];
+          chunk.add(() async {
+            try {
+              final req = await client
+                  .getUrl(Uri.parse(slide.imageUrl))
+                  .timeout(const Duration(seconds: 12));
+              req.headers.set('Referer', 'https://classroom.zju.edu.cn/');
+              final resp =
+                  await req.close().timeout(const Duration(seconds: 20));
+              if (resp.statusCode == 200) {
+                final bytes =
+                    await resp.fold<List<int>>([], (a, b) => a..addAll(b));
+                final entryName =
+                    'PPT_${(idx + 1).toString().padLeft(3, '0')}_${slide.createdSec}s.jpg';
+                archive.addFile(ArchiveFile(entryName, bytes.length, bytes));
+                downloadedCount++;
+              } else {
+                await resp.drain();
+              }
+            } catch (_) {}
+          }());
+        }
+        await Future.wait(chunk);
+      }
+
+      if (downloadedCount == 0) {
+        AppNotification.error('打包失败', '未能下载任何一页 PPT 切片截图');
+        return;
+      }
+
+      final zipData = ZipEncoder().encode(archive);
+      if (zipData == null || zipData.isEmpty) {
+        AppNotification.error('打包失败', 'ZIP 压缩包生成失败');
+        return;
+      }
+
+      final tempFile = File(
+          '${Directory.systemTemp.path}/temp_ppt_${DateTime.now().millisecondsSinceEpoch}.zip');
+      await tempFile.writeAsBytes(zipData);
+
+      String? savedPath;
+      final canDirect = await Courses.isDirectoryDirectlyWritable(saveDir);
+      if (canDirect) {
+        final destDir = Directory(saveDir);
+        if (!await destDir.exists()) await destDir.create(recursive: true);
+        final destFile = File('${destDir.path}/$finalName');
+        await tempFile.copy(destFile.path);
+        savedPath = destFile.path;
+      } else {
+        savedPath = await OhosNativeService.instance.copyFileToDirectory(
+          tempFile.path,
+          saveDir,
+          finalName,
+          mimeType: 'application/zip',
+        );
+      }
+      try {
+        if (await tempFile.exists()) await tempFile.delete();
+      } catch (_) {}
+
+      if (savedPath != null && savedPath.isNotEmpty) {
+        AppNotification.success(
+            '打包完成', '已成功打包 $downloadedCount 页 PPT 为 ZIP 压缩包');
+        await OhosNativeService.instance.openFileWithSystem(
+          savedPath,
+          mimeType: 'application/zip',
+          title: '选择打开方式',
+        );
+      } else {
+        AppNotification.error('保存失败', '未能将 ZIP 压缩包写入目标目录');
+      }
+    } catch (e) {
+      AppNotification.error('打包异常', '$e');
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  void _showFullscreenSlide(int index) {
+    if (index < 0 || index >= _slides.length) return;
+    Navigator.of(context, rootNavigator: true).push(
+      CupertinoPageRoute(
+        builder: (ctx) => _FullscreenPptViewer(
+          slides: _slides,
+          initialIndex: index,
+          courseName: widget.courseName,
+          lessonTitle: _currentTitle,
+          onSave: (slide, i) => _saveAndOpenSlide(slide, i),
+        ),
+      ),
+    );
   }
 
   void _showLessonPicker(BuildContext context) {
@@ -574,60 +918,142 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
       );
     }
     return Column(
-      children: List.generate(_slides.length, (index) {
-        final slide = _slides[index];
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          child: RoundRectangleCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+          child: Row(
+            children: [
+              Text(
+                '共 ${_slides.length} 页切片 · 点击可放大浏览',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.secondaryLabel, context),
+                ),
+              ),
+              const Spacer(),
+              CupertinoButton(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                minSize: 30,
+                color: CupertinoColors.activeBlue,
+                borderRadius: BorderRadius.circular(8),
+                onPressed: () => _exportAllSlidesAsZip(context),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
+                    Icon(CupertinoIcons.archivebox_fill,
+                        size: 14, color: CupertinoColors.white),
+                    SizedBox(width: 4),
                     Text(
-                      '第 ${index + 1} 页 · 课堂时间 ${slide.timeLabel}',
-                      style: const TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w600),
-                    ),
-                    CupertinoButton(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      minSize: 26,
-                      onPressed: () => _saveAndOpenSlide(slide, index),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(CupertinoIcons.arrow_down_to_line, size: 14),
-                          SizedBox(width: 4),
-                          Text('保存并打开', style: TextStyle(fontSize: 12)),
-                        ],
+                      '打包全部 PPT',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: CupertinoColors.white,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: InteractiveViewer(
-                    child: Image.network(
-                      slide.imageUrl,
-                      headers: const {
-                        'Referer': 'https://classroom.zju.edu.cn/',
-                      },
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const SizedBox(
-                        height: 120,
-                        child: Center(child: Text('PPT 图片加载失败')),
+              ),
+            ],
+          ),
+        ),
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _slides.length,
+          itemBuilder: (context, index) {
+            final slide = _slides[index];
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: RoundRectangleCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '第 ${index + 1} 页 · 课堂时间 ${slide.timeLabel}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.label, context),
+                          ),
+                        ),
+                        CupertinoButton(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          minSize: 26,
+                          onPressed: () => _saveAndOpenSlide(slide, index),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(CupertinoIcons.arrow_down_to_line, size: 14),
+                              SizedBox(width: 4),
+                              Text('保存并打开', style: TextStyle(fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: GestureDetector(
+                        onTap: () => _showFullscreenSlide(index),
+                        child: Stack(
+                          alignment: Alignment.bottomRight,
+                          children: [
+                            Image.network(
+                              slide.imageUrl,
+                              headers: const {
+                                'Referer': 'https://classroom.zju.edu.cn/',
+                              },
+                              fit: BoxFit.contain,
+                              cacheWidth: 1080,
+                              errorBuilder: (_, __, ___) => const SizedBox(
+                                height: 120,
+                                child: Center(child: Text('PPT 图片加载失败')),
+                              ),
+                            ),
+                            Container(
+                              margin: const EdgeInsets.all(8),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0x99000000),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(CupertinoIcons.zoom_in,
+                                      size: 13, color: CupertinoColors.white),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    '点击放大',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: CupertinoColors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-        );
-      }),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 
@@ -683,6 +1109,31 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                   child: const Text('复制全文',
                       style: TextStyle(
                           fontSize: 12, color: CupertinoColors.activeBlue)),
+                ),
+                const SizedBox(width: 6),
+                CupertinoButton(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  minSize: 32,
+                  color: CupertinoColors.activeBlue,
+                  borderRadius: BorderRadius.circular(8),
+                  onPressed: () => _exportTranscriptAsTxt(context),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(CupertinoIcons.square_arrow_down,
+                          size: 14, color: CupertinoColors.white),
+                      SizedBox(width: 4),
+                      Text(
+                        '导出字幕',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: CupertinoColors.white,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ],
@@ -793,6 +1244,93 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
             ),
             const SliverToBoxAdapter(child: NativeBottomBarSpacer()),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FullscreenPptViewer extends StatefulWidget {
+  final List<ZhiyunPptSlide> slides;
+  final int initialIndex;
+  final String courseName;
+  final String lessonTitle;
+  final void Function(ZhiyunPptSlide slide, int index) onSave;
+
+  const _FullscreenPptViewer({
+    required this.slides,
+    required this.initialIndex,
+    required this.courseName,
+    required this.lessonTitle,
+    required this.onSave,
+  });
+
+  @override
+  State<_FullscreenPptViewer> createState() => _FullscreenPptViewerState();
+}
+
+class _FullscreenPptViewerState extends State<_FullscreenPptViewer> {
+  late PageController _pageController;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final slide = widget.slides[_currentIndex];
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.black,
+      navigationBar: CupertinoNavigationBar(
+        backgroundColor: const Color(0xCC000000),
+        middle: Text(
+          '第 ${_currentIndex + 1} / ${widget.slides.length} 页 (${slide.timeLabel})',
+          style: const TextStyle(color: CupertinoColors.white),
+        ),
+        trailing: CupertinoButton(
+          padding: EdgeInsets.zero,
+          onPressed: () => widget.onSave(slide, _currentIndex),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(CupertinoIcons.arrow_down_to_line,
+                  size: 16, color: CupertinoColors.white),
+              SizedBox(width: 4),
+              Text('保存',
+                  style: TextStyle(color: CupertinoColors.white, fontSize: 13)),
+            ],
+          ),
+        ),
+      ),
+      child: SafeArea(
+        child: PageView.builder(
+          controller: _pageController,
+          itemCount: widget.slides.length,
+          onPageChanged: (idx) => setState(() => _currentIndex = idx),
+          itemBuilder: (ctx, i) {
+            final s = widget.slides[i];
+            return Center(
+              child: InteractiveViewer(
+                minScale: 1.0,
+                maxScale: 4.0,
+                child: Image.network(
+                  s.imageUrl,
+                  headers: const {'Referer': 'https://classroom.zju.edu.cn/'},
+                  fit: BoxFit.contain,
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
