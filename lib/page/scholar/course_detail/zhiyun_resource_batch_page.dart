@@ -818,7 +818,7 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
         ),
         trailing: CupertinoButton(
           padding: EdgeInsets.zero,
-          minimumSize: const Size(32, 32),
+          minSize: 32,
           onPressed: (_loadingCatalogue || _probing || _isBatchProcessing)
               ? null
               : () => _initAndLoad(forceRefresh: true),
@@ -915,7 +915,7 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
                         CupertinoButton(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
-                          minimumSize: const Size(0, 30),
+                          minSize: 30,
                           onPressed:
                               _isBatchProcessing ? null : _toggleSelectAll,
                           child: Row(
@@ -950,7 +950,7 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
                         CupertinoButton(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 9, vertical: 4),
-                          minimumSize: const Size(0, 28),
+                          minSize: 28,
                           color: CupertinoColors.tertiarySystemFill
                               .resolveFrom(context),
                           borderRadius: BorderRadius.circular(7),
@@ -970,7 +970,7 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
                         CupertinoButton(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
-                          minimumSize: const Size(0, 28),
+                          minSize: 28,
                           color: CupertinoColors.tertiarySystemFill
                               .resolveFrom(context),
                           borderRadius: BorderRadius.circular(7),
@@ -1277,7 +1277,7 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
                   CupertinoButton(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    minimumSize: const Size(0, 30),
+                    minSize: 30,
                     color: CupertinoColors.activeGreen
                         .resolveFrom(context)
                         .withValues(alpha: 0.14),
@@ -1306,7 +1306,7 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
                   CupertinoButton(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    minimumSize: const Size(0, 30),
+                    minSize: 30,
                     color: CupertinoColors.activeBlue
                         .resolveFrom(context)
                         .withValues(alpha: 0.12),
@@ -1396,7 +1396,7 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
                   CupertinoButton(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    minimumSize: const Size(0, 26),
+                    minSize: 26,
                     onPressed: _isBatchProcessing ? null : _pickSaveDirectory,
                     child: Text(
                       '更改目录',
@@ -1461,7 +1461,7 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
                     CupertinoButton(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
-                      minimumSize: const Size(0, 34),
+                      minSize: 34,
                       color: CupertinoColors.systemRed
                           .resolveFrom(context)
                           .withValues(alpha: 0.14),
