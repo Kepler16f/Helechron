@@ -843,5 +843,64 @@ void main() {
       expect(summerAugHint.halfTag, equals('summer'));
       expect(summerAugHint.scopeKey, equals('2025_summer'));
     });
+
+    test('filterGeneratedResourceCandidates 严格过滤未来课节与未录制课节并按时间正序去重', () {
+      final now = DateTime(2026, 11, 19, 12, 0);
+      int sec(DateTime dt) => dt.millisecondsSinceEpoch ~/ 1000;
+
+      final catalogue = <Map<String, dynamic>>[
+        // 未来课节（即使错误带了状态也不得放行）
+        {
+          'sub_id': 'future_1',
+          'title': '第12讲 未来排课',
+          'status': '1',
+          'start_at': sec(now.add(const Duration(days: 3))).toString(),
+        },
+        {
+          'sub_id': 'future_2',
+          'title': '第11讲 稍后开课',
+          'status': '4',
+          'start_at': sec(now.add(const Duration(hours: 2))).toString(),
+        },
+        // 往期未录制课节（无回放信号且 status=1）
+        {
+          'sub_id': 'past_unrecorded',
+          'title': '第2讲 国庆放假未录制',
+          'status': '1',
+          'playback': '',
+          'start_at': sec(now.subtract(const Duration(days: 14))).toString(),
+        },
+        // 往期已生成回放课节（乱序 + 重复 sub_id）
+        {
+          'sub_id': 'past_replay_2',
+          'title': '第5讲 已录播（较晚）',
+          'sub_status': '6',
+          'start_at': sec(now.subtract(const Duration(days: 2))).toString(),
+        },
+        {
+          'sub_id': 'past_replay_1',
+          'title': '第1讲 占位重复项',
+          'status': '1',
+          'start_at': sec(now.subtract(const Duration(days: 21))).toString(),
+        },
+        {
+          'sub_id': 'past_replay_1',
+          'title': '第1讲 已录播（最早）',
+          'status': '4',
+          'playback': 'https://example.com/replay1.m3u8',
+          'start_at': sec(now.subtract(const Duration(days: 21))).toString(),
+        },
+      ];
+
+      final filtered = ZhiyunService.filterGeneratedResourceCandidates(
+        catalogue,
+        now: now,
+      );
+      expect(
+        filtered.map((e) => e['sub_id']).toList(),
+        equals(['past_replay_1', 'past_replay_2']),
+      );
+      expect(filtered.first['title'], equals('第1讲 已录播（最早）'));
+    });
   });
 }

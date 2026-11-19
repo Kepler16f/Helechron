@@ -2534,6 +2534,85 @@ class ZhiyunService {
     return false;
   }
 
+  /// 从课程目录中筛选可能已经生成字幕/切片课件的候选课节：
+  /// 1. 严格排除尚未开课的未来课节（start_at > now）；
+  /// 2. 严格排除明确未录制/未开始的课节（无回放标记且非正在直播）；
+  /// 3. 按 sub_id 去重（优先保留含回放标记的条目）并按开课时间正序排列。
+  static List<Map<String, dynamic>> filterGeneratedResourceCandidates(
+    List<Map<String, dynamic>> rawCat, {
+    DateTime? now,
+  }) {
+    final refNow = now ?? DateTime.now();
+    final deduped = <String, Map<String, dynamic>>{};
+    final order = <String>[];
+
+    for (final raw in rawCat) {
+      final sid =
+          (raw['sub_id']?.toString() ?? raw['id']?.toString() ?? '').trim();
+      if (sid.isEmpty) continue;
+      final existing = deduped[sid];
+      if (existing == null) {
+        deduped[sid] = raw;
+        order.add(sid);
+      } else if (!checkHasReplay(item: existing) && checkHasReplay(item: raw)) {
+        deduped[sid] = raw;
+      }
+    }
+
+    final uniqueItems = [for (final sid in order) deduped[sid]!];
+    final hasAnyReplaySignal =
+        uniqueItems.any((item) => checkHasReplay(item: item));
+
+    bool isExplicitlyUnrecorded(Map<String, dynamic> item) {
+      final status = item['status']?.toString().trim() ?? '';
+      final subStatus = item['sub_status']?.toString().trim() ?? '';
+      final statusLabel = item['status_label']?.toString().trim() ?? '';
+      if (status == '1' || subStatus == '1') return true;
+      if (statusLabel.contains('未开始') ||
+          statusLabel.contains('未开播') ||
+          statusLabel.contains('预告')) {
+        return true;
+      }
+      return false;
+    }
+
+    final candidates = <Map<String, dynamic>>[];
+    for (final item in uniqueItems) {
+      final startDt = parseZhiyunTimestamp(_rawStartAt(item));
+      // 尚未开课的未来课节绝不可能已生成语音字幕或切片课件
+      if (startDt != null && startDt.isAfter(refNow)) {
+        continue;
+      }
+
+      final hasReplay = checkHasReplay(item: item, targetDate: startDt);
+      final isLive = checkIsLive(item: item, targetDate: startDt);
+
+      if (hasReplay || isLive) {
+        candidates.add(item);
+        continue;
+      }
+
+      // 仅当整个目录均缺乏回放状态字段（老接口降级）且该课节已过开课时间、
+      // 未被显式标为“未开始/未录制”时，才交给二级资源接口探测兜底
+      if (!hasAnyReplaySignal &&
+          startDt != null &&
+          !isExplicitlyUnrecorded(item)) {
+        candidates.add(item);
+      }
+    }
+
+    candidates.sort((a, b) {
+      final da = parseZhiyunTimestamp(_rawStartAt(a));
+      final db = parseZhiyunTimestamp(_rawStartAt(b));
+      if (da == null && db == null) return 0;
+      if (da == null) return 1;
+      if (db == null) return -1;
+      return da.compareTo(db);
+    });
+
+    return candidates;
+  }
+
   /// 从课程目录项中提取时间
   static DateTime? _extractCatalogueItemDateTime(
       Map<String, dynamic> item, DateTime fallbackDate) {
@@ -4462,30 +4541,55 @@ class ZhiyunService {
   static Future<List<ZhiyunPptSlide>> fetchLessonPptSlides({
     required String courseId,
     required String subId,
+    bool throwOnError = false,
   }) async {
     final client = createHttpClient();
     final slides = <ZhiyunPptSlide>[];
     final seenUrls = <String>{};
 
     try {
-      final token = getCachedZhiyunToken();
-      final uri = Uri.parse(
-        '$_kZhiyunBaseUrl/pptnote/v1/schedule/search-ppt?course_id=$courseId&sub_id=$subId&page=1&per_page=100',
-      );
-      final req = await client.getUrl(uri);
-      if (token != null && token.isNotEmpty) {
-        req.headers.set('Authorization', 'Bearer $token');
-        req.headers.set('Cookie', '_token=$token; token=$token');
+      var token = getCachedZhiyunToken();
+
+      Future<HttpClientResponse> requestPage(int page, String? tk) async {
+        final uri = Uri.parse(
+          '$_kZhiyunBaseUrl/pptnote/v1/schedule/search-ppt?course_id=$courseId&sub_id=$subId&page=$page&per_page=100',
+        );
+        final req = await client.getUrl(uri);
+        if (tk != null && tk.isNotEmpty) {
+          req.headers.set('Authorization', 'Bearer $tk');
+          req.headers.set(
+            'Cookie',
+            '_token=${buildPhpSerializedTokenCookie(tk)}; token=$tk',
+          );
+        }
+        req.headers.set('Origin', 'https://classroom.zju.edu.cn');
+        req.headers.set('Referer', 'https://classroom.zju.edu.cn/');
+        return req.close().timeout(const Duration(seconds: 8));
       }
-      req.headers.set('Referer', 'https://classroom.zju.edu.cn/');
-      final resp = await req.close().timeout(const Duration(seconds: 8));
-      if (resp.statusCode == 200) {
+
+      for (var page = 1; page <= 5; page++) {
+        var resp = await requestPage(page, token);
+        if (resp.statusCode == 401 || resp.statusCode == 403) {
+          await resp.drain();
+          token = await ensureValidToken(forceRefresh: true);
+          resp = await requestPage(page, token);
+        }
+        if (resp.statusCode != 200) {
+          final statusCode = resp.statusCode;
+          await resp.drain();
+          if (throwOnError && page == 1) {
+            throw HttpException('HTTP $statusCode');
+          }
+          break;
+        }
         final body = await resp.transform(utf8.decoder).join();
         final decoded = jsonDecode(body);
+        var pageCount = 0;
         if (decoded is Map) {
           final list = decoded['list'] ??
               (decoded['data'] is Map ? decoded['data']['list'] : null);
           if (list is List) {
+            pageCount = list.length;
             for (final item in list) {
               if (item is! Map) continue;
               final sec =
@@ -4511,9 +4615,11 @@ class ZhiyunService {
             }
           }
         }
+        if (pageCount < 100) break;
       }
     } catch (e) {
       debugPrint('[ZhiyunService] fetchLessonPptSlides error: $e');
+      if (throwOnError) rethrow;
     } finally {
       client.close(force: true);
     }
@@ -4524,32 +4630,53 @@ class ZhiyunService {
   /// 获取智云课堂单节课的语音转写字幕列表
   static Future<List<ZhiyunTranscriptSegment>> fetchLessonTranscript({
     required String subId,
+    bool throwOnError = false,
   }) async {
     final client = createHttpClient();
     final segments = <ZhiyunTranscriptSegment>[];
 
     try {
-      final token = getCachedZhiyunToken();
+      var token = getCachedZhiyunToken();
       final uri = Uri.parse(
         'https://yjapi.cmc.zju.edu.cn/courseapi/v3/web-socket/search-trans-result?sub_id=$subId&format=json',
       );
-      final req = await client.getUrl(uri);
-      if (token != null && token.isNotEmpty) {
-        req.headers.set('Authorization', 'Bearer $token');
-        req.headers.set('Cookie', '_token=$token; token=$token');
+
+      Future<HttpClientResponse> sendReq(String? tk) async {
+        final req = await client.getUrl(uri);
+        if (tk != null && tk.isNotEmpty) {
+          req.headers.set('Authorization', 'Bearer $tk');
+          req.headers.set(
+            'Cookie',
+            '_token=${buildPhpSerializedTokenCookie(tk)}; token=$tk',
+          );
+        }
+        req.headers.set('Origin', 'https://classroom.zju.edu.cn');
+        req.headers.set('Referer', 'https://classroom.zju.edu.cn/');
+        return req.close().timeout(const Duration(seconds: 8));
       }
-      req.headers.set('Origin', 'https://classroom.zju.edu.cn');
-      req.headers.set('Referer', 'https://classroom.zju.edu.cn/');
-      final resp = await req.close().timeout(const Duration(seconds: 8));
-      if (resp.statusCode == 200) {
-        final body = await resp.transform(utf8.decoder).join();
-        final decoded = jsonDecode(body);
-        if (decoded is Map) {
-          final list = decoded['list'];
-          if (list is List && list.isNotEmpty) {
-            final first = list.first;
-            if (first is Map && first['all_content'] is List) {
-              for (final seg in first['all_content'] as List) {
+
+      var resp = await sendReq(token);
+      if (resp.statusCode == 401 || resp.statusCode == 403) {
+        await resp.drain();
+        token = await ensureValidToken(forceRefresh: true);
+        resp = await sendReq(token);
+      }
+      if (resp.statusCode != 200) {
+        final statusCode = resp.statusCode;
+        await resp.drain();
+        if (throwOnError) {
+          throw HttpException('HTTP $statusCode');
+        }
+        return segments;
+      }
+      final body = await resp.transform(utf8.decoder).join();
+      final decoded = jsonDecode(body);
+      if (decoded is Map) {
+        final list = decoded['list'];
+        if (list is List && list.isNotEmpty) {
+          for (final entry in list) {
+            if (entry is Map && entry['all_content'] is List) {
+              for (final seg in entry['all_content'] as List) {
                 if (seg is! Map) continue;
                 final text = seg['Text']?.toString().trim() ?? '';
                 if (text.isEmpty) continue;
@@ -4568,6 +4695,7 @@ class ZhiyunService {
       }
     } catch (e) {
       debugPrint('[ZhiyunService] fetchLessonTranscript error: $e');
+      if (throwOnError) rethrow;
     } finally {
       client.close(force: true);
     }

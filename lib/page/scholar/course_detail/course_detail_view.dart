@@ -1,7 +1,5 @@
-import 'dart:convert';
 import 'dart:io';
 
-import 'package:archive/archive.dart';
 import 'package:celechron/page/scholar/course_list/course_brief_card.dart';
 import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/design/sub_title.dart';
@@ -30,6 +28,7 @@ import 'package:celechron/page/task/homework_submission_page.dart';
 import 'package:celechron/design/app_notification.dart';
 import 'package:celechron/services/zhiyun_service.dart';
 import 'zhiyun_player_page.dart';
+import 'zhiyun_resource_batch_page.dart';
 
 class CourseDetailPage extends StatelessWidget {
   final Course? course;
@@ -1986,7 +1985,7 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                '批量管理与导出各课节语音转写字幕（txt 格式）',
+                                '多选批量导出已生成的课节语音转写字幕（txt 格式）',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: CupertinoDynamicColor.resolve(
@@ -2063,7 +2062,7 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                '批量管理与打包下载各课节课堂 PPT 切片（ZIP 压缩包）',
+                                '多选批量打包下载已生成的课堂 PPT 切片（ZIP 压缩包）',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: CupertinoDynamicColor.resolve(
@@ -2113,16 +2112,15 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
       semesterName: widget.semesterName,
       preferredHalfTag: widget.preferredHalfTag,
     );
-    if (cid == null || cid.isEmpty) {
-      AppNotification.info('提示', '未检索到该课程的智云课堂 ID，请先在上方智云卡片同步');
-      return;
-    }
-    await showCupertinoModalPopup<void>(
-      context: context,
-      builder: (modalCtx) => _ZhiyunBatchManagerSheet(
-        course: widget.course,
-        courseId: cid,
-        mode: _ZhiyunBatchMode.subtitles,
+    await Navigator.of(context, rootNavigator: true).push(
+      CupertinoPageRoute<void>(
+        builder: (_) => ZhiyunResourceBatchPage(
+          course: widget.course,
+          initialCourseId: cid,
+          semesterName: widget.semesterName,
+          preferredHalfTag: widget.preferredHalfTag,
+          mode: ZhiyunResourceBatchMode.subtitles,
+        ),
       ),
     );
   }
@@ -2136,16 +2134,15 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
       semesterName: widget.semesterName,
       preferredHalfTag: widget.preferredHalfTag,
     );
-    if (cid == null || cid.isEmpty) {
-      AppNotification.info('提示', '未检索到该课程的智云课堂 ID，请先在上方智云卡片同步');
-      return;
-    }
-    await showCupertinoModalPopup<void>(
-      context: context,
-      builder: (modalCtx) => _ZhiyunBatchManagerSheet(
-        course: widget.course,
-        courseId: cid,
-        mode: _ZhiyunBatchMode.pptSlices,
+    await Navigator.of(context, rootNavigator: true).push(
+      CupertinoPageRoute<void>(
+        builder: (_) => ZhiyunResourceBatchPage(
+          course: widget.course,
+          initialCourseId: cid,
+          semesterName: widget.semesterName,
+          preferredHalfTag: widget.preferredHalfTag,
+          mode: ZhiyunResourceBatchMode.pptSlides,
+        ),
       ),
     );
   }
@@ -2161,7 +2158,7 @@ class CourseHomeworkCard extends StatefulWidget {
 }
 
 class _CourseHomeworkCardState extends State<CourseHomeworkCard> {
-  bool _expanded = true;
+  bool _expanded = false;
   bool _loading = false;
   bool _fetchedOnce = false;
   String? _error;
@@ -2337,6 +2334,9 @@ class _CourseHomeworkCardState extends State<CourseHomeworkCard> {
     if (_loading && _items.isEmpty) {
       return '正在从学在浙大同步全部作业与小测...';
     }
+    if (_error != null && _items.isEmpty) {
+      return '获取作业失败，点击展开查看详情或重试';
+    }
     if (_items.isEmpty) {
       return _fetchedOnce ? '暂未检索到该课程的作业记录' : '点击同步该课程全部作业与提交状态';
     }
@@ -2431,7 +2431,7 @@ class _CourseHomeworkCardState extends State<CourseHomeworkCard> {
                                 : const Icon(CupertinoIcons.arrow_clockwise,
                                     size: 14),
                           ),
-                          if (_items.isNotEmpty) ...[
+                          if (_items.isNotEmpty || _error != null) ...[
                             const SizedBox(width: 6),
                             CupertinoButton(
                               padding: const EdgeInsets.symmetric(
@@ -2602,491 +2602,3 @@ class _CourseHomeworkCardState extends State<CourseHomeworkCard> {
   }
 }
 
-enum _ZhiyunBatchMode { subtitles, pptSlices }
-
-class _ZhiyunBatchManagerSheet extends StatefulWidget {
-  final Course course;
-  final String courseId;
-  final _ZhiyunBatchMode mode;
-
-  const _ZhiyunBatchManagerSheet({
-    required this.course,
-    required this.courseId,
-    required this.mode,
-  });
-
-  @override
-  State<_ZhiyunBatchManagerSheet> createState() =>
-      _ZhiyunBatchManagerSheetState();
-}
-
-class _ZhiyunBatchManagerSheetState extends State<_ZhiyunBatchManagerSheet> {
-  bool _loading = true;
-  List<Map<String, dynamic>> _lessons = [];
-  final Set<String> _processingSubIds = {};
-  bool _isBatchProcessing = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadLessons();
-  }
-
-  Future<void> _loadLessons() async {
-    try {
-      final rawCat =
-          await ZhiyunService.fetchCourseCatalogue(widget.courseId);
-      final list = <Map<String, dynamic>>[];
-      for (final item in rawCat) {
-        final sid =
-            item['sub_id']?.toString() ?? item['id']?.toString() ?? '';
-        if (sid.isEmpty) continue;
-        list.add(item);
-      }
-      if (mounted) {
-        setState(() {
-          _lessons = list;
-          _loading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-        });
-      }
-    }
-  }
-
-  Future<String> _resolveSaveDir({String? customDir}) async {
-    if (customDir != null && customDir.isNotEmpty) return customDir;
-    if (Get.isRegistered<Option>(tag: 'option')) {
-      final custom = Get.find<Option>(tag: 'option').downloadPath.value.trim();
-      if (custom.isNotEmpty) return custom;
-    }
-    final doc = await getApplicationDocumentsDirectory();
-    return '${doc.path}/courseware';
-  }
-
-  Future<void> _processSingleLesson(
-      Map<String, dynamic> lesson, {String? targetDir}) async {
-    final sid =
-        lesson['sub_id']?.toString() ?? lesson['id']?.toString() ?? '';
-    if (sid.isEmpty) return;
-    final title = lesson['title']?.toString() ??
-        lesson['sub_title']?.toString() ??
-        '课节 $sid';
-
-    setState(() => _processingSubIds.add(sid));
-    try {
-      if (widget.mode == _ZhiyunBatchMode.subtitles) {
-        await _exportSubtitleForLesson(sid, title, targetDir: targetDir);
-      } else {
-        await _packagePptForLesson(sid, title, targetDir: targetDir);
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _processingSubIds.remove(sid));
-      }
-    }
-  }
-
-  Future<void> _exportSubtitleForLesson(String sid, String title,
-      {String? targetDir}) async {
-    final transcript =
-        await ZhiyunService.fetchLessonTranscript(subId: sid);
-    if (transcript.isEmpty) {
-      AppNotification.info('提示', '课节「$title」暂无语音转写字幕');
-      return;
-    }
-
-    final safeCourse =
-        widget.course.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    final safeTitle = title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    final fileName = '${safeCourse}_${safeTitle}_语音字幕.txt';
-    final saveDir = await _resolveSaveDir(customDir: targetDir);
-
-    final buffer = StringBuffer();
-    buffer.writeln('课程：${widget.course.name}');
-    buffer.writeln('课节：$title');
-    buffer.writeln('导出时间：${DateTime.now().toString().split('.').first}');
-    buffer.writeln('=' * 40);
-    buffer.writeln();
-    for (final seg in transcript) {
-      buffer.writeln('[${seg.timeLabel}] ${seg.text}');
-    }
-
-    final tempFile = File(
-        '${Directory.systemTemp.path}/temp_sub_${DateTime.now().millisecondsSinceEpoch}_$sid.txt');
-    await tempFile.writeAsString(buffer.toString(), encoding: utf8);
-
-    String? savedPath;
-    final canDirect = await Courses.isDirectoryDirectlyWritable(saveDir);
-    if (canDirect) {
-      final destDir = Directory(saveDir);
-      if (!await destDir.exists()) await destDir.create(recursive: true);
-      final destFile = File('${destDir.path}/$fileName');
-      await tempFile.copy(destFile.path);
-      savedPath = destFile.path;
-    } else {
-      savedPath = await OhosNativeService.instance.copyFileToDirectory(
-        tempFile.path,
-        saveDir,
-        fileName,
-        mimeType: 'text/plain',
-      );
-    }
-    try {
-      if (await tempFile.exists()) await tempFile.delete();
-    } catch (_) {}
-
-    if (savedPath != null && savedPath.isNotEmpty) {
-      AppNotification.success('字幕已保存', '已导出「$title」字幕');
-    } else {
-      AppNotification.error('保存失败', '未能保存「$title」字幕');
-    }
-  }
-
-  Future<void> _packagePptForLesson(String sid, String title,
-      {String? targetDir}) async {
-    final slides = await ZhiyunService.fetchLessonPptSlides(
-      courseId: widget.courseId,
-      subId: sid,
-    );
-    if (slides.isEmpty) {
-      AppNotification.info('提示', '课节「$title」暂无 PPT 切片截图');
-      return;
-    }
-
-    final safeCourse =
-        widget.course.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    final safeTitle = title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    final fileName = '${safeCourse}_${safeTitle}_切片课件.zip';
-    final saveDir = await _resolveSaveDir(customDir: targetDir);
-
-    final client = HttpClient();
-    applyZjuNetworkDefense(client);
-    try {
-      final archive = Archive();
-      var downloadedCount = 0;
-      final poolSize = 4;
-      for (var i = 0; i < slides.length; i += poolSize) {
-        final end =
-            (i + poolSize < slides.length) ? i + poolSize : slides.length;
-        final chunk = <Future<void>>[];
-        for (var j = i; j < end; j++) {
-          final idx = j;
-          final s = slides[idx];
-          chunk.add(() async {
-            try {
-              final req = await client
-                  .getUrl(Uri.parse(s.imageUrl))
-                  .timeout(const Duration(seconds: 12));
-              req.headers.set('Referer', 'https://classroom.zju.edu.cn/');
-              final resp =
-                  await req.close().timeout(const Duration(seconds: 20));
-              if (resp.statusCode == 200) {
-                final bytes =
-                    await resp.fold<List<int>>([], (a, b) => a..addAll(b));
-                final entryName =
-                    'PPT_${(idx + 1).toString().padLeft(3, '0')}_${s.createdSec}s.jpg';
-                archive.addFile(ArchiveFile(entryName, bytes.length, bytes));
-                downloadedCount++;
-              } else {
-                await resp.drain();
-              }
-            } catch (_) {}
-          }());
-        }
-        await Future.wait(chunk);
-      }
-
-      if (downloadedCount == 0) {
-        AppNotification.error('打包失败', '课节「$title」切片下载失败');
-        return;
-      }
-
-      final zipData = ZipEncoder().encode(archive);
-      if (zipData.isEmpty) {
-        AppNotification.error('打包失败', 'ZIP 压缩生成失败');
-        return;
-      }
-
-      final tempFile = File(
-          '${Directory.systemTemp.path}/temp_ppt_${DateTime.now().millisecondsSinceEpoch}_$sid.zip');
-      await tempFile.writeAsBytes(zipData);
-
-      String? savedPath;
-      final canDirect = await Courses.isDirectoryDirectlyWritable(saveDir);
-      if (canDirect) {
-        final destDir = Directory(saveDir);
-        if (!await destDir.exists()) await destDir.create(recursive: true);
-        final destFile = File('${destDir.path}/$fileName');
-        await tempFile.copy(destFile.path);
-        savedPath = destFile.path;
-      } else {
-        savedPath = await OhosNativeService.instance.copyFileToDirectory(
-          tempFile.path,
-          saveDir,
-          fileName,
-          mimeType: 'application/zip',
-        );
-      }
-      try {
-        if (await tempFile.exists()) await tempFile.delete();
-      } catch (_) {}
-
-      if (savedPath != null && savedPath.isNotEmpty) {
-        AppNotification.success('打包完成', '已打包「$title」$downloadedCount 页 PPT');
-      } else {
-        AppNotification.error('保存失败', '未能保存「$title」ZIP 压缩包');
-      }
-    } catch (e) {
-      AppNotification.error('打包异常', '$e');
-    } finally {
-      client.close(force: true);
-    }
-  }
-
-  Future<void> _processAllLessons() async {
-    if (_isBatchProcessing || _lessons.isEmpty) return;
-
-    final pickedDir = await OhosNativeService.instance.pickDirectory();
-    final targetDir = (pickedDir != null && pickedDir.isNotEmpty)
-        ? pickedDir
-        : await _resolveSaveDir();
-
-    setState(() => _isBatchProcessing = true);
-    AppNotification.info(
-      '批量处理中',
-      widget.mode == _ZhiyunBatchMode.subtitles
-          ? '正在批量导出全部课节语音字幕...'
-          : '正在批量打包全部课节 PPT 切片...',
-    );
-
-    var count = 0;
-    try {
-      for (final lesson in _lessons) {
-        await _processSingleLesson(lesson, targetDir: targetDir);
-        count++;
-      }
-      AppNotification.success(
-        '批量处理完成',
-        '共处理 $count 个课节，已全部存入目标目录',
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isBatchProcessing = false);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final title = widget.mode == _ZhiyunBatchMode.subtitles
-        ? '智云课堂语音字幕下载'
-        : '智云课堂切片课件下载';
-    final actionLabel =
-        widget.mode == _ZhiyunBatchMode.subtitles ? '一键导出全部字幕' : '一键打包全部 PPT';
-
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.75,
-      decoration: BoxDecoration(
-        color: CupertinoDynamicColor.resolve(
-            CupertinoColors.systemBackground, context),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                        color: CupertinoDynamicColor.resolve(
-                            CupertinoColors.label, context),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${widget.course.name} · 共 ${_lessons.length} 节课',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: CupertinoDynamicColor.resolve(
-                            CupertinoColors.secondaryLabel, context),
-                      ),
-                    ),
-                  ],
-                ),
-                CupertinoButton(
-                  padding: EdgeInsets.zero,
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('关闭'),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            height: 0.5,
-            color: CupertinoDynamicColor.resolve(
-                CupertinoColors.separator, context),
-          ),
-          if (!_loading && _lessons.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: SizedBox(
-                width: double.infinity,
-                child: CupertinoButton(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  color: CupertinoColors.activeBlue,
-                  borderRadius: BorderRadius.circular(10),
-                  onPressed: _isBatchProcessing ? null : _processAllLessons,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (_isBatchProcessing)
-                        const CupertinoActivityIndicator(
-                            color: CupertinoColors.white, radius: 8)
-                      else ...[
-                        Icon(
-                          widget.mode == _ZhiyunBatchMode.subtitles
-                              ? CupertinoIcons.square_arrow_down_fill
-                              : CupertinoIcons.archivebox_fill,
-                          size: 16,
-                          color: CupertinoColors.white,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          actionLabel,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: CupertinoColors.white,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          Expanded(
-            child: _loading
-                ? const Center(child: CupertinoActivityIndicator())
-                : _lessons.isEmpty
-                    ? Center(
-                        child: Text(
-                          '未检索到已录制课节',
-                          style: TextStyle(
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.secondaryLabel, context),
-                          ),
-                        ),
-                      )
-                    : ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                        itemCount: _lessons.length,
-                        separatorBuilder: (_, __) => Container(
-                          height: 0.5,
-                          color: CupertinoDynamicColor.resolve(
-                              CupertinoColors.separator, context),
-                        ),
-                        itemBuilder: (ctx, idx) {
-                          final lesson = _lessons[idx];
-                          final sid = lesson['sub_id']?.toString() ??
-                              lesson['id']?.toString() ??
-                              '';
-                          final lTitle = lesson['title']?.toString() ??
-                              lesson['sub_title']?.toString() ??
-                              '课节 $sid';
-                          final startAt = lesson['start_at'] ??
-                              lesson['class_begin'] ??
-                              lesson['course_begin'];
-                          final dt =
-                              ZhiyunService.parseZhiyunTimestamp(startAt);
-                          final dateStr = dt != null
-                              ? '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}'
-                              : '';
-                          final isBusy = _processingSubIds.contains(sid);
-
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        lTitle,
-                                        style: TextStyle(
-                                          fontSize: 14.5,
-                                          fontWeight: FontWeight.w500,
-                                          color: CupertinoDynamicColor.resolve(
-                                              CupertinoColors.label, context),
-                                        ),
-                                      ),
-                                      if (dateStr.isNotEmpty) ...[
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          dateStr,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: CupertinoDynamicColor.resolve(
-                                                CupertinoColors.secondaryLabel,
-                                                context),
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                CupertinoButton(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 5),
-                                  minSize: 30,
-                                  color: CupertinoDynamicColor.resolve(
-                                      CupertinoColors.secondarySystemFill,
-                                      context),
-                                  borderRadius: BorderRadius.circular(8),
-                                  onPressed: isBusy || _isBatchProcessing
-                                      ? null
-                                      : () => _processSingleLesson(lesson),
-                                  child: isBusy
-                                      ? const CupertinoActivityIndicator(
-                                          radius: 6)
-                                      : Text(
-                                          widget.mode ==
-                                                  _ZhiyunBatchMode.subtitles
-                                              ? '导出字幕'
-                                              : '打包 PPT',
-                                          style: TextStyle(
-                                            fontSize: 12.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: CupertinoDynamicColor.resolve(
-                                                CupertinoColors.activeBlue,
-                                                context),
-                                          ),
-                                        ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-          ),
-        ],
-      ),
-    );
-  }
-}
