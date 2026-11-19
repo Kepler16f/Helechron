@@ -100,12 +100,13 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
     int referenceId = 0,
   }) async {
     if (_downloadingAttachments.contains(attKey)) return;
-    final saveDir = await FileDownloadShareHelper.chooseSaveDirectory(
+    final target = await FileDownloadShareHelper.chooseSaveTarget(
       context,
+      defaultFileName: name,
       title: '下载并分享作业附件',
-      fileLabel: name,
     );
-    if (saveDir == null || !mounted) return;
+    if (target == null || !mounted) return;
+    final saveDir = target.directory;
 
     setState(() {
       _downloadingAttachments.add(attKey);
@@ -126,6 +127,7 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
           directUrl: fullUrl,
         ),
         saveDir: saveDir,
+        customFileName: target.fileName,
       );
       if (!mounted) return;
       setState(() {
@@ -673,19 +675,23 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
         final file = _selectedAttachments[i];
         final name = file['name'] as String;
         final bytes = file['bytes'] as Uint8List;
+        var maxSentForCurrentFile = 0;
 
         if (mounted) {
+          final initProgress = HomeworkSubmissionPage.computeUploadProgress(
+            uploadedBytesBefore: uploadedBytesBefore,
+            currentFileSentBytes: 0,
+            currentFileTotalBytes: bytes.length,
+            totalBytes: totalBytes,
+            fileIndex: i,
+            fileCount: _selectedAttachments.length,
+          );
           setState(() {
-            _submitProgress = HomeworkSubmissionPage.computeUploadProgress(
-              uploadedBytesBefore: uploadedBytesBefore,
-              currentFileSentBytes: 0,
-              currentFileTotalBytes: bytes.length,
-              totalBytes: totalBytes,
-              fileIndex: i,
-              fileCount: _selectedAttachments.length,
-            );
+            if (initProgress > _submitProgress) {
+              _submitProgress = initProgress;
+            }
             _submittingStatusText =
-                '正在上传 (${i + 1}/${_selectedAttachments.length}): $name';
+                '正在连接 (${i + 1}/${_selectedAttachments.length}) · $name';
           });
         }
 
@@ -697,21 +703,41 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
           courseId: _resolvedCourseId,
           onProgress: (sentBytes, fileTotal) {
             if (!mounted) return;
-            final nextProgress = HomeworkSubmissionPage.computeUploadProgress(
+            final clampedSent = fileTotal > 0
+                ? sentBytes.clamp(0, fileTotal)
+                : sentBytes;
+            if (clampedSent < maxSentForCurrentFile) {
+              return;
+            }
+            maxSentForCurrentFile = clampedSent;
+            final rawProgress = HomeworkSubmissionPage.computeUploadProgress(
               uploadedBytesBefore: uploadedBytesBefore,
-              currentFileSentBytes: sentBytes,
+              currentFileSentBytes: clampedSent,
               currentFileTotalBytes: fileTotal,
               totalBytes: totalBytes,
               fileIndex: i,
               fileCount: _selectedAttachments.length,
             );
-            final filePct = fileTotal > 0
-                ? ((sentBytes / fileTotal).clamp(0.0, 1.0) * 100).round()
-                : 100;
-            final nextStatus =
-                '正在上传 (${i + 1}/${_selectedAttachments.length}) $filePct% · $name';
-            if ((nextProgress - _submitProgress).abs() >= 0.01 ||
-                sentBytes >= fileTotal ||
+            // 严格保证进度单调递增，杜绝任何通道回退或重传导致的进度条倒退
+            final nextProgress =
+                rawProgress > _submitProgress ? rawProgress : _submitProgress;
+            final String nextStatus;
+            if (fileTotal > 0 && clampedSent >= fileTotal) {
+              nextStatus =
+                  '已上传 (${i + 1}/${_selectedAttachments.length}) · $name';
+            } else if (fileTotal > 0 &&
+                clampedSent >= (fileTotal * 0.90).round()) {
+              nextStatus =
+                  '等待确认 (${i + 1}/${_selectedAttachments.length}) · $name';
+            } else if (fileTotal > 0) {
+              nextStatus =
+                  '上传 (${i + 1}/${_selectedAttachments.length}) ${_formatFileSize(clampedSent)}/${_formatFileSize(fileTotal)}';
+            } else {
+              nextStatus =
+                  '正在上传 (${i + 1}/${_selectedAttachments.length}) · $name';
+            }
+            if ((nextProgress - _submitProgress).abs() >= 0.005 ||
+                clampedSent >= fileTotal ||
                 _submittingStatusText != nextStatus) {
               setState(() {
                 _submitProgress = nextProgress;

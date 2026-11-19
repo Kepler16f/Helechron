@@ -436,10 +436,12 @@ class Courses {
     if (total == 0) {
       onProgress?.call(0, 0);
     } else {
-      const chunkSize = 32 * 1024;
+      const chunkSize = 16 * 1024;
       final typed = fileBytes is Uint8List ? fileBytes : null;
       var offset = 0;
-      onProgress?.call(0, total);
+      var lastReported = -1;
+      // 套接字写入阶段最多汇报至 92%，剩余 8% 待服务器真正响应确认后再补齐，避免提前跑满后等待或回退
+      final maxSocketReported = total > 1 ? (total * 0.92).round().clamp(1, total - 1) : 0;
       while (offset < total) {
         final end = offset + chunkSize < total ? offset + chunkSize : total;
         final chunk = typed != null
@@ -448,7 +450,13 @@ class Courses {
         req.add(chunk);
         await req.flush();
         offset = end;
-        onProgress?.call(offset, total);
+        final reported = total > 1
+            ? ((offset / total) * maxSocketReported).round().clamp(0, maxSocketReported)
+            : 0;
+        if (reported > lastReported) {
+          lastReported = reported;
+          onProgress?.call(reported, total);
+        }
       }
     }
 
@@ -476,6 +484,7 @@ class Courses {
         req.contentLength = 2;
         req.write('{}');
         final resp = await req.close();
+        await resp.drain<void>();
         if (resp.statusCode == HttpStatus.ok ||
             resp.statusCode == HttpStatus.noContent) {
           break;
@@ -498,10 +507,13 @@ class Courses {
           ? Uri.parse(uploadUrlStr)
           : Uri.parse('https://courses.zju.edu.cn$uploadUrlStr');
 
-      final isExternalOss = uploadUri.host.contains('aliyuncs.com') ||
-          uploadUri.host.contains('amazonaws.com') ||
-          uploadUri.queryParameters.containsKey('OSSAccessKeyId') ||
-          uploadUri.queryParameters.containsKey('Signature');
+      final isExternalOss =
+          uploadUri.host.toLowerCase() != 'courses.zju.edu.cn' ||
+              uploadUri.host.contains('aliyuncs.com') ||
+              uploadUri.host.contains('amazonaws.com') ||
+              uploadUri.queryParameters.containsKey('OSSAccessKeyId') ||
+              uploadUri.queryParameters.containsKey('Signature') ||
+              uploadUri.queryParameters.containsKey('X-Amz-Signature');
 
       Future<bool> sendRawPut({required bool attachSessionCookie}) async {
         final putReq = await httpClient.putUrl(uploadUri).timeout(
@@ -522,10 +534,12 @@ class Courses {
               const Duration(seconds: 120),
               onTimeout: () => throw requestTimeout(),
             );
+        await putResp.drain<void>();
         if (putResp.statusCode == HttpStatus.ok ||
             putResp.statusCode == HttpStatus.created ||
             putResp.statusCode == HttpStatus.noContent) {
           await _notifyUploadFinish(httpClient, session, uploadId);
+          onProgress?.call(fileBytes.length, fileBytes.length);
           return true;
         }
         return false;
@@ -536,7 +550,6 @@ class Courses {
       } else {
         if (await sendRawPut(attachSessionCookie: true)) return true;
 
-        onProgress?.call(0, fileBytes.length);
         final boundary =
             '----TronStreamBoundary${DateTime.now().millisecondsSinceEpoch}';
         final env = _buildMultipartEnvelope(
@@ -562,10 +575,12 @@ class Courses {
               const Duration(seconds: 120),
               onTimeout: () => throw requestTimeout(),
             );
+        await postResp.drain<void>();
         if (postResp.statusCode == HttpStatus.ok ||
             postResp.statusCode == HttpStatus.created ||
             postResp.statusCode == HttpStatus.noContent) {
           await _notifyUploadFinish(httpClient, session, uploadId);
+          onProgress?.call(fileBytes.length, fileBytes.length);
           return true;
         }
       }
@@ -575,7 +590,7 @@ class Courses {
     return false;
   }
 
-  /// 上传作业附件文件至学在浙大服务器（支持直接表单与两阶段凭据流式直传），返回 uploadId
+  /// 上传作业附件文件至学在浙大服务器（优先两阶段凭据流式直传，避免先传整文件失败再重传导致进度条来回跳动），返回 uploadId
   static Future<int?> uploadSubmissionFile(
     HttpClient httpClient, {
     required String fileName,
@@ -592,7 +607,79 @@ class Courses {
     }
     Cookie activeSession = currentSession;
 
-    // 策略 1：直接通过 multipart/form-data POST 上传至 /api/uploads
+    // 策略 1（官方默认）：两阶段凭据上传（先发轻量 JSON 申请上传凭据，拿到 upload_url 后单次流式直传文件字节）
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        final ticketUri = Uri.parse('https://courses.zju.edu.cn/api/uploads');
+        final ticketReq = await httpClient.postUrl(ticketUri).timeout(
+              const Duration(seconds: 15),
+              onTimeout: () => throw requestTimeout(),
+            );
+        ticketReq.followRedirects = false;
+        ticketReq.cookies.add(activeSession);
+        ticketReq.headers.set(
+            HttpHeaders.contentTypeHeader, 'application/json;charset=utf-8');
+        ticketReq.headers.set(HttpHeaders.acceptHeader, 'application/json');
+
+        final ticketPayload = jsonEncode({
+          'name': fileName,
+          'size': fileBytes.length,
+          'parent_type': 'submission_upload',
+          'parent_id': 0,
+        });
+        final payloadBytes = utf8.encode(ticketPayload);
+        ticketReq.contentLength = payloadBytes.length;
+        ticketReq.add(payloadBytes);
+
+        final ticketResp = await ticketReq.close().timeout(
+              const Duration(seconds: 20),
+              onTimeout: () => throw requestTimeout(),
+            );
+        if (ticketResp.statusCode == HttpStatus.ok ||
+            ticketResp.statusCode == HttpStatus.created) {
+          final ticketBody =
+              await readResponseBody(ticketResp, context: '学在浙大上传凭据接口');
+          final ticketJson = decodeJsonMap(ticketBody, context: '学在浙大上传凭据');
+          final uploadId = (ticketJson['id'] as num?)?.toInt();
+          final uploadUrlStr = ticketJson['upload_url']?.toString();
+
+          if (uploadId != null) {
+            if (uploadUrlStr == null || uploadUrlStr.isEmpty) {
+              onProgress?.call(fileBytes.length, fileBytes.length);
+              return uploadId;
+            }
+            final streamed = await _streamBytesToUploadUrl(
+              httpClient: httpClient,
+              session: activeSession,
+              uploadUrlStr: uploadUrlStr,
+              fileName: fileName,
+              fileBytes: fileBytes,
+              uploadId: uploadId,
+              onProgress: onProgress,
+            );
+            if (streamed) return uploadId;
+          }
+          break;
+        } else {
+          await ticketResp.drain<void>();
+          if (attempt == 0 &&
+              (ticketResp.statusCode == HttpStatus.unauthorized ||
+                  ticketResp.statusCode == HttpStatus.found)) {
+            final refreshed = await ensureSession(httpClient);
+            if (refreshed != null) {
+              activeSession = refreshed;
+              continue;
+            }
+          }
+          break;
+        }
+      } catch (e) {
+        debugPrint('uploadSubmissionFile Strategy 1 (ticketed) error: $e');
+        break;
+      }
+    }
+
+    // 策略 2（回退）：直接通过 multipart/form-data POST 上传至 /api/uploads
     try {
       final boundary =
           '----TronClassBoundary${DateTime.now().millisecondsSinceEpoch}';
@@ -636,7 +723,6 @@ class Courses {
             onProgress?.call(fileBytes.length, fileBytes.length);
             return uploadId;
           }
-          onProgress?.call(0, fileBytes.length);
           final streamed = await _streamBytesToUploadUrl(
             httpClient: httpClient,
             session: activeSession,
@@ -648,71 +734,21 @@ class Courses {
           );
           if (streamed) return uploadId;
         }
-      } else if (resp.statusCode == HttpStatus.unauthorized ||
-          resp.statusCode == HttpStatus.found) {
-        final refreshed = await ensureSession(httpClient);
-        if (refreshed != null) activeSession = refreshed;
+      } else {
+        await resp.drain<void>();
+        if (resp.statusCode == HttpStatus.unauthorized ||
+            resp.statusCode == HttpStatus.found) {
+          final refreshed = await ensureSession(httpClient);
+          if (refreshed != null) activeSession = refreshed;
+        }
       }
     } catch (e) {
       debugPrint(
-          'uploadSubmissionFile Strategy 1 (direct multipart) error: $e');
+          'uploadSubmissionFile Strategy 2 (direct multipart) error: $e');
     }
 
-    // 策略 2：两阶段凭据上传（POST /api/uploads 申请凭据 JSON -> 写入目标地址）
-    onProgress?.call(0, fileBytes.length);
-    try {
-      final ticketUri = Uri.parse('https://courses.zju.edu.cn/api/uploads');
-      final ticketReq = await httpClient.postUrl(ticketUri).timeout(
-            const Duration(seconds: 15),
-            onTimeout: () => throw requestTimeout(),
-          );
-      ticketReq.cookies.add(activeSession);
-      ticketReq.headers
-          .set(HttpHeaders.contentTypeHeader, 'application/json;charset=utf-8');
-      ticketReq.headers.set(HttpHeaders.acceptHeader, 'application/json');
-
-      final ticketPayload = jsonEncode({
-        'name': fileName,
-        'size': fileBytes.length,
-        'parent_type': 'submission_upload',
-        'parent_id': 0,
-      });
-      ticketReq.contentLength = utf8.encode(ticketPayload).length;
-      ticketReq.write(ticketPayload);
-
-      final ticketResp = await ticketReq.close();
-      if (ticketResp.statusCode == HttpStatus.ok ||
-          ticketResp.statusCode == HttpStatus.created) {
-        final ticketBody =
-            await readResponseBody(ticketResp, context: '学在浙大上传凭据接口');
-        final ticketJson = decodeJsonMap(ticketBody, context: '学在浙大上传凭据');
-        final uploadId = (ticketJson['id'] as num?)?.toInt();
-        final uploadUrlStr = ticketJson['upload_url']?.toString();
-
-        if (uploadId != null) {
-          if (uploadUrlStr == null || uploadUrlStr.isEmpty) {
-            onProgress?.call(fileBytes.length, fileBytes.length);
-            return uploadId;
-          }
-          final streamed = await _streamBytesToUploadUrl(
-            httpClient: httpClient,
-            session: activeSession,
-            uploadUrlStr: uploadUrlStr,
-            fileName: fileName,
-            fileBytes: fileBytes,
-            uploadId: uploadId,
-            onProgress: onProgress,
-          );
-          if (streamed) return uploadId;
-        }
-      }
-    } catch (e) {
-      debugPrint('uploadSubmissionFile Strategy 2 (ticketed) error: $e');
-    }
-
-    // 策略 3：课程级接口回退（POST /api/courses/$courseId/uploads）
+    // 策略 3（回退）：课程级接口（POST /api/courses/$courseId/uploads）
     if (courseId != null && courseId.isNotEmpty) {
-      onProgress?.call(0, fileBytes.length);
       try {
         final boundary =
             '----TronClassBoundary${DateTime.now().millisecondsSinceEpoch}';
@@ -753,6 +789,8 @@ class Courses {
             onProgress?.call(fileBytes.length, fileBytes.length);
             return uploadId;
           }
+        } else {
+          await resp.drain<void>();
         }
       } catch (e) {
         debugPrint(

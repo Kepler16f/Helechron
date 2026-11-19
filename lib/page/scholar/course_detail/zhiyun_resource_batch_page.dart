@@ -33,6 +33,7 @@ class _GeneratedLessonResource {
   final List<ZhiyunPptSlide>? slides;
   final int charCount;
   String? localFilePath;
+  String? customFileName;
   _LessonDownloadStatus status = _LessonDownloadStatus.idle;
   String? progressText;
   String? errorMessage;
@@ -112,7 +113,6 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
   bool _probing = false;
   int _probedCount = 0;
   int _totalCandidates = 0;
-  int _filteredNotReadyCount = 0;
   int _probeErrorCount = 0;
   String? _fatalError;
 
@@ -175,8 +175,13 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
     }
   }
 
-  String _buildFileName(_GeneratedLessonResource lesson) {
-    final safeCourse = widget.course.name
+  String _buildFileName(
+    _GeneratedLessonResource lesson, {
+    String? customPrefix,
+  }) {
+    final safeCourse = (customPrefix != null && customPrefix.trim().isNotEmpty
+            ? customPrefix
+            : widget.course.name)
         .replaceAll(RegExp(r'[\\/:*?"<>|\r\n]'), '_')
         .trim();
     final safeTitle = lesson.title
@@ -264,7 +269,6 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
         _probing = false;
         _probedCount = 0;
         _totalCandidates = 0;
-        _filteredNotReadyCount = 0;
         _probeErrorCount = 0;
         _fatalError = null;
         _lessons.clear();
@@ -295,14 +299,11 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
       final candidates = ZhiyunService.filterGeneratedResourceCandidates(
         rawCat,
       );
-      final skippedBySchedule =
-          (rawCat.length - candidates.length).clamp(0, rawCat.length);
 
       if (candidates.isEmpty) {
         setState(() {
           _loadingCatalogue = false;
           _probing = false;
-          _filteredNotReadyCount = skippedBySchedule;
         });
         return;
       }
@@ -312,7 +313,6 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
         _probing = true;
         _totalCandidates = candidates.length;
         _probedCount = 0;
-        _filteredNotReadyCount = skippedBySchedule;
       });
 
       const poolSize = 4;
@@ -388,8 +388,6 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
               _sortLessonsInPlace();
             } else if (hadError) {
               _probeErrorCount++;
-            } else {
-              _filteredNotReadyCount++;
             }
           });
         }));
@@ -477,6 +475,7 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
   Future<SavedShareFileResult?> _downloadSingleLesson(
     _GeneratedLessonResource lesson, {
     required String targetDir,
+    String? customFileName,
     bool showToast = true,
   }) async {
     if (!mounted) return null;
@@ -493,22 +492,31 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
         effectiveDir = _saveDir;
       }
       final result = _isSubtitleMode
-          ? await _exportSubtitle(lesson, targetDir: effectiveDir)
-          : await _packagePpt(lesson, targetDir: effectiveDir);
+          ? await _exportSubtitle(
+              lesson,
+              targetDir: effectiveDir,
+              customFileName: customFileName,
+            )
+          : await _packagePpt(
+              lesson,
+              targetDir: effectiveDir,
+              customFileName: customFileName,
+            );
       if (!mounted) return result;
 
       if (result.isSuccess) {
         setState(() {
           lesson.status = _LessonDownloadStatus.done;
           lesson.localFilePath = result.savedPath;
+          lesson.customFileName = result.fileName;
           lesson.progressText = null;
         });
         if (showToast) {
           AppNotification.success(
             _isSubtitleMode ? '字幕已导出' : 'PPT 已打包保存',
             _isSubtitleMode
-                ? '已保存「${lesson.title}」语音字幕'
-                : '已保存「${lesson.title}」(${lesson.itemCount} 页 PPT)',
+                ? '已保存「${result.fileName}」'
+                : '已保存「${result.fileName}」(${lesson.itemCount} 页 PPT)',
           );
         }
         return result;
@@ -549,13 +557,14 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
       await _initSaveDir();
     }
     if (!mounted) return;
-    final pickedDir = await FileDownloadShareHelper.chooseSaveDirectory(
+    final target = await FileDownloadShareHelper.chooseSaveTarget(
       context,
+      defaultFileName: lesson.customFileName ?? _buildFileName(lesson),
       currentDir: _saveDir,
       title: _isSubtitleMode ? '下载并分享语音字幕' : '下载并分享 PPT 课件',
-      fileLabel: _buildFileName(lesson),
     );
-    if (pickedDir == null || !mounted) return;
+    if (target == null || !mounted) return;
+    final pickedDir = target.directory;
     if (pickedDir != _saveDir) {
       setState(() {
         _saveDir = pickedDir;
@@ -566,6 +575,7 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
     final result = await _downloadSingleLesson(
       lesson,
       targetDir: pickedDir,
+      customFileName: target.fileName,
       showToast: true,
     );
     if (!mounted || result == null || !result.isSuccess) return;
@@ -582,7 +592,7 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
   Future<void> _handleShareAlreadyDownloaded(
     _GeneratedLessonResource lesson,
   ) async {
-    final fileName = _buildFileName(lesson);
+    final fileName = lesson.customFileName ?? _buildFileName(lesson);
     await FileDownloadShareHelper.shareSavedOrPrepare(
       savedPath: lesson.localFilePath,
       fileName: fileName,
@@ -593,12 +603,13 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
   }
 
   Future<File?> _prepareShareFileOnly(_GeneratedLessonResource lesson) async {
+    final fileName = lesson.customFileName ?? _buildFileName(lesson);
     try {
       if (_isSubtitleMode) {
         final tempFile = await _writeSubtitleTempFile(lesson);
         try {
           return await FileDownloadShareHelper.prepareShareCacheFile(
-            _buildFileName(lesson),
+            fileName,
             sourceFile: tempFile,
           );
         } finally {
@@ -608,7 +619,7 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
         final tempFile = await _buildPptTempZip(lesson);
         try {
           return await FileDownloadShareHelper.prepareShareCacheFile(
-            _buildFileName(lesson),
+            fileName,
             sourceFile: tempFile,
           );
         } finally {
@@ -650,8 +661,15 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
   Future<SavedShareFileResult> _exportSubtitle(
     _GeneratedLessonResource lesson, {
     required String targetDir,
+    String? customFileName,
   }) async {
-    final fileName = _buildFileName(lesson);
+    final defaultName = _buildFileName(lesson);
+    final fileName = (customFileName != null && customFileName.trim().isNotEmpty)
+        ? FileDownloadShareHelper.resolveFinalFileName(
+            customFileName,
+            defaultFileName: defaultName,
+          )
+        : defaultName;
     final tempFile = await _writeSubtitleTempFile(lesson);
     try {
       return await FileDownloadShareHelper.saveTempFileAndPrepareShare(
@@ -753,8 +771,15 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
   Future<SavedShareFileResult> _packagePpt(
     _GeneratedLessonResource lesson, {
     required String targetDir,
+    String? customFileName,
   }) async {
-    final fileName = _buildFileName(lesson);
+    final defaultName = _buildFileName(lesson);
+    final fileName = (customFileName != null && customFileName.trim().isNotEmpty)
+        ? FileDownloadShareHelper.resolveFinalFileName(
+            customFileName,
+            defaultFileName: defaultName,
+          )
+        : defaultName;
     final tempFile = await _buildPptTempZip(lesson);
     try {
       return await FileDownloadShareHelper.saveTempFileAndPrepareShare(
@@ -781,14 +806,24 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
       await _initSaveDir();
     }
     if (!mounted) return;
-    final targetDir = await FileDownloadShareHelper.chooseSaveDirectory(
+    final isSingleTarget = targets.length == 1;
+    final saveChoice = await FileDownloadShareHelper.chooseSaveTarget(
       context,
+      defaultFileName: isSingleTarget
+          ? (targets.first.customFileName ?? _buildFileName(targets.first))
+          : FileDownloadShareHelper.sanitizeFileName(widget.course.name),
       currentDir: _saveDir,
-      title: '批量下载并分享（${targets.length} 节）',
-      fileLabel:
-          '${targets.length} 节${_isSubtitleMode ? "语音字幕 (.txt)" : "切片课件 (.zip)"}',
+      title: isSingleTarget
+          ? (_isSubtitleMode ? '下载并分享语音字幕' : '下载并分享 PPT 课件')
+          : '批量下载并分享（${targets.length} 节）',
+      description: isSingleTarget
+          ? null
+          : '已勾选 ${targets.length} 节${_isSubtitleMode ? "语音字幕 (.txt)" : "切片课件 (.zip)"}，可修改统一文件名前缀',
+      fileNamePlaceholder: isSingleTarget ? '请输入文件名' : '请输入统一文件名前缀',
+      preserveExtension: isSingleTarget,
     );
-    if (targetDir == null || !mounted) return;
+    if (saveChoice == null || !mounted) return;
+    final targetDir = saveChoice.directory;
     if (targetDir != _saveDir) {
       setState(() {
         _saveDir = targetDir;
@@ -815,9 +850,13 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
         setState(() {
           _batchCurrentLabel = lesson.title;
         });
+        final customName = isSingleTarget
+            ? saveChoice.fileName
+            : _buildFileName(lesson, customPrefix: saveChoice.fileName);
         final result = await _downloadSingleLesson(
           lesson,
           targetDir: targetDir,
+          customFileName: customName,
           showToast: false,
         );
         if (result != null && result.isSuccess) {
@@ -1149,10 +1188,7 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
       }
       return '当前暂无已生成$resourceName的课节';
     }
-    final filteredPart = _filteredNotReadyCount > 0
-        ? ' · 已自动过滤 $_filteredNotReadyCount 节未生成课节'
-        : '';
-    return '当前可下载 ${_lessons.length} 节已生成$resourceName$filteredPart';
+    return '当前可下载 ${_lessons.length} 节已生成$resourceName';
   }
 
   Widget _buildBody(

@@ -337,13 +337,16 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
   Future<void> _downloadAndShareSlide(ZhiyunPptSlide slide, int index) async {
     final safeCourse =
         FileDownloadShareHelper.sanitizeFileName(widget.courseName);
-    final fileName = '${safeCourse}_PPT_${index + 1}_${slide.createdSec}s.jpg';
-    final saveDir = await FileDownloadShareHelper.chooseSaveDirectory(
+    final defaultFileName =
+        '${safeCourse}_PPT_${index + 1}_${slide.createdSec}s.jpg';
+    final target = await FileDownloadShareHelper.chooseSaveTarget(
       context,
+      defaultFileName: defaultFileName,
       title: '下载并分享 PPT 截图',
-      fileLabel: fileName,
     );
-    if (saveDir == null || saveDir.isEmpty) return;
+    if (target == null) return;
+    final saveDir = target.directory;
+    final fileName = target.fileName;
 
     final client = HttpClient();
     applyZjuNetworkDefense(client);

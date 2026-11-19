@@ -25,6 +25,16 @@ class SavedShareFileResult {
   bool get isSuccess => savedPath != null && savedPath!.isNotEmpty;
 }
 
+class SaveTargetChoice {
+  final String directory;
+  final String fileName;
+
+  const SaveTargetChoice({
+    required this.directory,
+    required this.fileName,
+  });
+}
+
 class FileDownloadShareHelper {
   FileDownloadShareHelper._();
 
@@ -32,6 +42,28 @@ class FileDownloadShareHelper {
     final cleaned =
         raw.trim().replaceAll(RegExp(r'[\\/:*?"<>|\r\n]'), '_').trim();
     return cleaned.isEmpty ? 'helechron_export' : cleaned;
+  }
+
+  /// 根据用户输入和默认文件名生成安全文件名，若用户去掉了后缀且未输入新后缀则自动补回原后缀
+  static String resolveFinalFileName(
+    String userInput, {
+    required String defaultFileName,
+    bool preserveExtension = true,
+  }) {
+    final fallback = sanitizeFileName(defaultFileName);
+    final trimmedInput = userInput.trim();
+    if (trimmedInput.isEmpty) return fallback;
+    final cleaned = sanitizeFileName(trimmedInput);
+    if (!preserveExtension) return cleaned;
+    final dotIdx = fallback.lastIndexOf('.');
+    if (dotIdx > 0 && dotIdx < fallback.length - 1) {
+      final defaultExt = fallback.substring(dotIdx);
+      if (!cleaned.toLowerCase().endsWith(defaultExt.toLowerCase()) &&
+          !cleaned.contains('.')) {
+        return '$cleaned$defaultExt';
+      }
+    }
+    return cleaned;
   }
 
   static String inferMimeType(String fileName) {
@@ -125,6 +157,104 @@ class FileDownloadShareHelper {
       return picked.trim();
     }
     return fallbackDir;
+  }
+
+  /// 弹窗让用户在下载前自定义文件名并选择保存路径（文件管理器自选路径 或 使用当前目录）
+  static Future<SaveTargetChoice?> chooseSaveTarget(
+    BuildContext context, {
+    required String defaultFileName,
+    String? currentDir,
+    String title = '下载并分享',
+    String? description,
+    String fileNamePlaceholder = '请输入文件名',
+    bool preserveExtension = true,
+  }) async {
+    final fallbackDir = (currentDir != null && currentDir.trim().isNotEmpty)
+        ? currentDir.trim()
+        : await resolveDefaultSaveDir();
+    if (!context.mounted) return null;
+
+    final safeDefault = sanitizeFileName(defaultFileName);
+    final nameCtrl = TextEditingController(text: safeDefault);
+
+    final choice = await showCupertinoDialog<String>(
+      context: context,
+      builder: (dialogCtx) => CupertinoAlertDialog(
+        title: Text(title),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${description != null && description.isNotEmpty ? "$description\n" : ""}保存路径：${formatDirShort(fallbackDir)}\n可自定义文件名，下载完成后自动调起原生分享：',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: CupertinoColors.secondaryLabel.resolveFrom(dialogCtx),
+                ),
+              ),
+              const SizedBox(height: 8),
+              CupertinoTextField(
+                controller: nameCtrl,
+                autofocus: true,
+                clearButtonMode: OverlayVisibilityMode.editing,
+                placeholder: fileNamePlaceholder,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  color: CupertinoColors.label.resolveFrom(dialogCtx),
+                ),
+                placeholderStyle: TextStyle(
+                  fontSize: 13,
+                  color: CupertinoColors.placeholderText.resolveFrom(dialogCtx),
+                ),
+                decoration: BoxDecoration(
+                  color: CupertinoColors.tertiarySystemFill
+                      .resolveFrom(dialogCtx),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogCtx).pop('pick'),
+            child: const Text('选择保存文件夹'),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(dialogCtx).pop('default'),
+            child: const Text('使用当前目录'),
+          ),
+        ],
+      ),
+    );
+
+    final finalFileName = resolveFinalFileName(
+      nameCtrl.text,
+      defaultFileName: safeDefault,
+      preserveExtension: preserveExtension,
+    );
+    Future<void>.delayed(const Duration(milliseconds: 400), nameCtrl.dispose);
+
+    if (choice == null) return null;
+    if (choice == 'pick') {
+      final picked = await OhosNativeService.instance.pickDirectory();
+      if (picked == null || picked.trim().isEmpty) return null;
+      return SaveTargetChoice(
+        directory: picked.trim(),
+        fileName: finalFileName,
+      );
+    }
+    return SaveTargetChoice(
+      directory: fallbackDir,
+      fileName: finalFileName,
+    );
   }
 
   static Future<Directory> _ensureShareCacheDir() async {
@@ -231,14 +361,28 @@ class FileDownloadShareHelper {
     HttpClient client, {
     required CoursewareItem item,
     required String saveDir,
+    String? customFileName,
   }) async {
-    final safeName = sanitizeFileName(item.name);
+    final safeName = (customFileName != null && customFileName.trim().isNotEmpty)
+        ? resolveFinalFileName(customFileName, defaultFileName: item.name)
+        : sanitizeFileName(item.name);
+    final effectiveItem = safeName == item.name
+        ? item
+        : CoursewareItem(
+            name: safeName,
+            sectionTitle: item.sectionTitle,
+            sizeBytes: item.sizeBytes,
+            uploadId: item.uploadId,
+            referenceId: item.referenceId,
+            directUrl: item.directUrl,
+            source: item.source,
+          );
     final resolvedMime = inferMimeType(safeName);
     File? capturedShareFile;
 
     final savedPath = await Courses.downloadCoursewareFile(
       client,
-      item: item,
+      item: effectiveItem,
       saveDir: saveDir,
       nativeCopyToDir: (sourcePath, targetDir, fileName, {mimeType}) async {
         capturedShareFile = await prepareShareCacheFile(

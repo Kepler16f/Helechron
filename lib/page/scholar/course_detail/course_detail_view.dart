@@ -1544,9 +1544,11 @@ class CoursewareDownloadCard extends StatefulWidget {
 class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
   bool _expanded = false;
   bool _loading = false;
+  bool _hasFetched = false;
   String? _error;
   final List<CoursewareItem> _items = [];
   final Map<String, String> _downloadedPaths = {};
+  final Map<String, String> _downloadedNames = {};
   final Set<String> _downloadingKeys = {};
 
   Future<String> _resolveSaveDir() async {
@@ -1622,11 +1624,13 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
         _downloadedPaths
           ..clear()
           ..addAll(downloaded);
+        _hasFetched = true;
         _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
+        _hasFetched = true;
         _loading = false;
         _error = '$e';
       });
@@ -1644,13 +1648,14 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
 
     final currentDir = await _resolveSaveDir();
     if (!context.mounted) return;
-    final saveDir = await FileDownloadShareHelper.chooseSaveDirectory(
+    final target = await FileDownloadShareHelper.chooseSaveTarget(
       context,
+      defaultFileName: _downloadedNames[key] ?? item.name,
       currentDir: currentDir,
       title: '下载并分享课件',
-      fileLabel: item.name,
     );
-    if (saveDir == null || !mounted) return;
+    if (target == null || !mounted) return;
+    final saveDir = target.directory;
 
     setState(() {
       _downloadingKeys.add(key);
@@ -1664,12 +1669,14 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
         client,
         item: item,
         saveDir: saveDir,
+        customFileName: target.fileName,
       );
       if (!mounted) return;
       setState(() {
         _downloadingKeys.remove(key);
         if (result.isSuccess) {
           _downloadedPaths[key] = result.savedPath!;
+          _downloadedNames[key] = result.fileName;
         }
       });
 
@@ -1705,11 +1712,12 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
     CoursewareItem item,
     String savedPath,
   ) async {
+    final effectiveName = _downloadedNames[_itemKey(item)] ?? item.name;
     await FileDownloadShareHelper.shareSavedOrPrepare(
       savedPath: savedPath,
-      fileName: item.name,
-      mimeType: FileDownloadShareHelper.inferMimeType(item.name),
-      subject: item.name,
+      fileName: effectiveName,
+      mimeType: FileDownloadShareHelper.inferMimeType(effectiveName),
+      subject: effectiveName,
       onPrepareShareFile: () async {
         final client = HttpClient();
         applyZjuNetworkDefense(client);
@@ -1724,6 +1732,7 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
             client,
             item: item,
             saveDir: dlDir.path,
+            customFileName: effectiveName,
           );
           return result.shareFile;
         } finally {
@@ -1766,12 +1775,16 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           onTap: () {
-                            if (_items.isEmpty) {
-                              if (!_loading) _fetchCourseware();
-                            } else {
+                            if (_expanded) {
                               setState(() {
-                                _expanded = !_expanded;
+                                _expanded = false;
                               });
+                            } else if (_hasFetched) {
+                              setState(() {
+                                _expanded = true;
+                              });
+                            } else if (!_loading) {
+                              _fetchCourseware();
                             }
                           },
                           child: Column(
@@ -1790,7 +1803,9 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
                               Text(
                                 _items.isNotEmpty
                                     ? '已获取 ${_items.length} 个附件 · 点击${_expanded ? "收起" : "展开"}'
-                                    : '支持选择保存路径、下载课件并唤起原生分享',
+                                    : _hasFetched
+                                        ? '暂无公开课件附件 · 点击${_expanded ? "收起" : "展开"}'
+                                        : '支持选择保存路径、下载课件并唤起原生分享',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: CupertinoDynamicColor.resolve(
@@ -1802,7 +1817,7 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      if (_items.isEmpty)
+                      if (!_hasFetched && !_expanded)
                         CupertinoButton(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 6),

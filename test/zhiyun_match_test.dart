@@ -917,6 +917,38 @@ void main() {
       );
     });
 
+    test('resolveFinalFileName 支持自定义改名并自动保留原扩展名', () {
+      expect(
+        FileDownloadShareHelper.resolveFinalFileName(
+          '第1讲笔记',
+          defaultFileName: '微积分_语音字幕.txt',
+        ),
+        equals('第1讲笔记.txt'),
+      );
+      expect(
+        FileDownloadShareHelper.resolveFinalFileName(
+          'custom_name.md',
+          defaultFileName: '微积分_语音字幕.txt',
+        ),
+        equals('custom_name.md'),
+      );
+      expect(
+        FileDownloadShareHelper.resolveFinalFileName(
+          '   ',
+          defaultFileName: '课件.pdf',
+        ),
+        equals('课件.pdf'),
+      );
+      expect(
+        FileDownloadShareHelper.resolveFinalFileName(
+          '高数甲',
+          defaultFileName: '微积分',
+          preserveExtension: false,
+        ),
+        equals('高数甲'),
+      );
+    });
+
     test('inferMimeType 准确识别字幕、压缩包、文档与图片格式', () {
       expect(FileDownloadShareHelper.inferMimeType('a.TXT'), equals('text/plain'));
       expect(FileDownloadShareHelper.inferMimeType('ppt.zip'), equals('application/zip'));
