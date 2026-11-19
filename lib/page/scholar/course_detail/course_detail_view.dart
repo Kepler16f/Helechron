@@ -26,6 +26,7 @@ import 'package:celechron/model/todo.dart';
 import 'package:celechron/page/scholar/todo/todo_card.dart';
 import 'package:celechron/page/task/homework_submission_page.dart';
 import 'package:celechron/design/app_notification.dart';
+import 'package:celechron/services/file_download_share_helper.dart';
 import 'package:celechron/services/zhiyun_service.dart';
 import 'zhiyun_player_page.dart';
 import 'zhiyun_resource_batch_page.dart';
@@ -667,9 +668,14 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
     );
   }
 
-  void _openAndRecord(String url, String title,
-      {String? courseId, String? subId}) {
-    ZhiyunService.saveLastWatchedReplay(
+  Future<void> _openAndRecord(
+    String url,
+    String title, {
+    String? courseId,
+    String? subId,
+    bool isLive = false,
+  }) async {
+    await ZhiyunService.saveLastWatchedReplay(
       courseName: widget.course.name,
       lessonTitle: title,
       livingroomUrl: url,
@@ -678,9 +684,38 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
       courseCode: widget.course.id,
       scopeKey: _semesterScopeKey,
     );
-    ZhiyunService.openUrl(url);
     if (mounted) {
       setState(() {});
+    }
+
+    final authResults = await Future.wait<String?>([
+      ZhiyunService.ensureValidToken(),
+      ZhiyunService.ensureSsoCookieValue(),
+    ]);
+    final token = authResults[0] ?? ZhiyunService.getCachedZhiyunToken();
+    final ssoCookie = authResults[1];
+
+    var effectiveLivingroom = url;
+    if (courseId != null && courseId.isNotEmpty) {
+      effectiveLivingroom = ZhiyunService.buildCourseLivingroomUrl(
+        courseId,
+        subId: subId,
+      );
+    }
+    effectiveLivingroom =
+        ZhiyunService.appendTokenToUrl(effectiveLivingroom, token);
+
+    final ok = await OhosNativeService.instance.openInAppVideoPlayer(
+      url: effectiveLivingroom,
+      title: '${widget.course.name} · $title',
+      livingroomUrl: effectiveLivingroom,
+      token: token,
+      ssoCookie: ssoCookie,
+      isLive: isLive,
+      preferWeb: true,
+    );
+    if (!ok) {
+      await ZhiyunService.openUrl(effectiveLivingroom);
     }
   }
 
@@ -707,8 +742,12 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
 
     if (preferLive) {
       // 直播模式：直接进入播放器界面
-      final token = await ZhiyunService.ensureValidToken() ??
-          ZhiyunService.getCachedZhiyunToken();
+      final authResults = await Future.wait<String?>([
+        ZhiyunService.ensureValidToken(),
+        ZhiyunService.ensureSsoCookieValue(),
+      ]);
+      final token = authResults[0] ?? ZhiyunService.getCachedZhiyunToken();
+      final ssoCookie = authResults[1];
       var targetSubId = subId;
       if ((targetSubId == null || targetSubId.isEmpty) &&
           courseId != null &&
@@ -763,7 +802,9 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
             liveStreams.map((s) => {'label': s.label, 'url': s.url}).toList(),
         livingroomUrl: effectiveLivingroom,
         token: token,
+        ssoCookie: ssoCookie,
         isLive: true,
+        preferWeb: liveStreams.isEmpty,
       );
       if (!ok && context.mounted) {
         showCupertinoDialog(
@@ -840,11 +881,20 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
       return;
     }
 
+    final authResults = await Future.wait<String?>([
+      ZhiyunService.ensureValidToken(),
+      ZhiyunService.ensureSsoCookieValue(),
+    ]);
+    final token = authResults[0] ?? ZhiyunService.getCachedZhiyunToken();
+    final ssoCookie = authResults[1];
+    final effectiveUrl = ZhiyunService.appendTokenToUrl(url, token);
     await OhosNativeService.instance.openInAppVideoPlayer(
-      url: url,
+      url: effectiveUrl,
       title: '${widget.course.name} · $title',
-      livingroomUrl: url,
-      token: ZhiyunService.getCachedZhiyunToken(),
+      livingroomUrl: effectiveUrl,
+      token: token,
+      ssoCookie: ssoCookie,
+      preferWeb: true,
     );
   }
 
@@ -1232,7 +1282,13 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
             iconColor: CupertinoColors.systemRed,
             title: '智云实时直播',
             tag: '● 正在直播',
-            onTagTap: () => ZhiyunService.openUrl(info.livingroomUrl),
+            onTagTap: () => _openAndRecord(
+              info.livingroomUrl,
+              '实时直播',
+              courseId: info.courseId,
+              subId: info.subId,
+              isLive: true,
+            ),
             subtitle: '该课程当前正在智云课堂进行实时直播，点击可直达直播间观看',
             buttons: [
               Expanded(
@@ -1279,8 +1335,13 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                 borderRadius: BorderRadius.circular(8),
                 minSize: 36,
                 child: const Icon(CupertinoIcons.compass, size: 16),
-                onPressed: () => _openAndRecord(info.livingroomUrl, '实时直播',
-                    courseId: info.courseId, subId: info.subId),
+                onPressed: () => _openAndRecord(
+                  info.livingroomUrl,
+                  '实时直播',
+                  courseId: info.courseId,
+                  subId: info.subId,
+                  isLive: true,
+                ),
               ),
               if (info.courseId != null) ...[
                 const SizedBox(width: 8),
@@ -1580,6 +1641,17 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
   Future<void> _downloadItem(BuildContext context, CoursewareItem item) async {
     final key = _itemKey(item);
     if (_downloadingKeys.contains(key)) return;
+
+    final currentDir = await _resolveSaveDir();
+    if (!context.mounted) return;
+    final saveDir = await FileDownloadShareHelper.chooseSaveDirectory(
+      context,
+      currentDir: currentDir,
+      title: '下载并分享课件',
+      fileLabel: item.name,
+    );
+    if (saveDir == null || !mounted) return;
+
     setState(() {
       _downloadingKeys.add(key);
     });
@@ -1587,46 +1659,34 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
     final client = HttpClient();
     applyZjuNetworkDefense(client);
     try {
-      final saveDir = await _resolveSaveDir();
-      final savedPath = await Courses.downloadCoursewareFile(
+      final result =
+          await FileDownloadShareHelper.downloadCoursewareAndPrepareShare(
         client,
         item: item,
         saveDir: saveDir,
-        nativeCopyToDir: OhosNativeService.instance.copyFileToDirectory,
       );
       if (!mounted) return;
       setState(() {
         _downloadingKeys.remove(key);
-        if (savedPath != null) {
-          _downloadedPaths[key] = savedPath;
+        if (result.isSuccess) {
+          _downloadedPaths[key] = result.savedPath!;
         }
       });
 
-      if (savedPath != null && context.mounted) {
-        showCupertinoDialog(
-          context: context,
-          builder: (dialogCtx) => CupertinoAlertDialog(
-            title: const Text('课件下载完成'),
-            content: Text('文件已保存至：\n$savedPath'),
-            actions: [
-              CupertinoDialogAction(
-                child: const Text('稍后查看'),
-                onPressed: () => Navigator.pop(dialogCtx),
-              ),
-              CupertinoDialogAction(
-                isDefaultAction: true,
-                child: const Text('打开'),
-                onPressed: () {
-                  Navigator.pop(dialogCtx);
-                  OhosNativeService.instance.openFileWithSystem(
-                    savedPath,
-                    title: '打开文件',
-                  );
-                },
-              ),
-            ],
-          ),
+      if (result.isSuccess) {
+        AppNotification.success(
+          '下载完成',
+          '${result.fileName}\n已保存：${FileDownloadShareHelper.formatDirShort(saveDir)}',
         );
+        if (result.shareFile != null) {
+          await FileDownloadShareHelper.shareFiles(
+            [result.shareFile!],
+            mimeTypes: [result.mimeType],
+            subject: result.fileName,
+          );
+        } else {
+          AppNotification.info('分享提示', '文件已保存，暂未能生成系统分享副本');
+        }
       } else if (context.mounted) {
         AppNotification.error('下载失败', '未能获取该课件的下载文件流，请确认已登录学在浙大');
       }
@@ -1639,6 +1699,38 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
     } finally {
       client.close(force: true);
     }
+  }
+
+  Future<void> _shareCoursewareItem(
+    CoursewareItem item,
+    String savedPath,
+  ) async {
+    await FileDownloadShareHelper.shareSavedOrPrepare(
+      savedPath: savedPath,
+      fileName: item.name,
+      mimeType: FileDownloadShareHelper.inferMimeType(item.name),
+      subject: item.name,
+      onPrepareShareFile: () async {
+        final client = HttpClient();
+        applyZjuNetworkDefense(client);
+        try {
+          final tempDir = await getTemporaryDirectory();
+          final dlDir = Directory('${tempDir.path}/celechron_share_dl');
+          if (!await dlDir.exists()) {
+            await dlDir.create(recursive: true);
+          }
+          final result =
+              await FileDownloadShareHelper.downloadCoursewareAndPrepareShare(
+            client,
+            item: item,
+            saveDir: dlDir.path,
+          );
+          return result.shareFile;
+        } finally {
+          client.close(force: true);
+        }
+      },
+    );
   }
 
   @override
@@ -1698,7 +1790,7 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
                               Text(
                                 _items.isNotEmpty
                                     ? '已获取 ${_items.length} 个附件 · 点击${_expanded ? "收起" : "展开"}'
-                                    : '支持一键下载课程讲义、作业附件并唤起系统打开',
+                                    : '支持选择保存路径、下载课件并唤起原生分享',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: CupertinoDynamicColor.resolve(
@@ -1891,22 +1983,17 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
                               if (savedPath != null) ...[
                                 CupertinoButton(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 5),
+                                      horizontal: 8, vertical: 5),
                                   minSize: 28,
                                   color: CupertinoColors.activeGreen
                                       .withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(6),
-                                  onPressed: () {
-                                    OhosNativeService.instance
-                                        .openFileWithSystem(
-                                      savedPath,
-                                      title: '选择打开方式',
-                                    );
-                                  },
+                                  onPressed: () =>
+                                      _shareCoursewareItem(item, savedPath),
                                   child: const Text(
-                                    '打开',
+                                    '分享',
                                     style: TextStyle(
-                                      fontSize: 12,
+                                      fontSize: 11.5,
                                       fontWeight: FontWeight.w600,
                                       color: CupertinoColors.activeGreen,
                                     ),
@@ -1915,8 +2002,9 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
                                 const SizedBox(width: 4),
                               ],
                               CupertinoButton(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 5),
+                                padding: EdgeInsets.symmetric(
+                                    horizontal: savedPath != null ? 8 : 10,
+                                    vertical: 5),
                                 minSize: 28,
                                 color: CupertinoColors.activeBlue
                                     .withValues(alpha: 0.14),
@@ -1928,9 +2016,10 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
                                     ? const CupertinoActivityIndicator(
                                         radius: 7)
                                     : Text(
-                                        savedPath != null ? '重新下载' : '下载',
-                                        style: const TextStyle(
-                                          fontSize: 12,
+                                        '下载并分享',
+                                        style: TextStyle(
+                                          fontSize:
+                                              savedPath != null ? 11.5 : 12,
                                           fontWeight: FontWeight.w600,
                                           color: CupertinoColors.activeBlue,
                                         ),

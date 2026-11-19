@@ -399,7 +399,9 @@ class MobileNativeService {
     List<Map<String, String>> streams = const [],
     String? livingroomUrl,
     String? token,
+    String? ssoCookie,
     bool isLive = false,
+    bool preferWeb = false,
   }) async {
     try {
       final result =
@@ -408,9 +410,11 @@ class MobileNativeService {
         'title': title,
         'streams': streams,
         'isLive': isLive,
+        'preferWeb': preferWeb,
         if (livingroomUrl != null && livingroomUrl.isNotEmpty)
           'livingroomUrl': livingroomUrl,
         if (token != null && token.isNotEmpty) 'token': token,
+        if (ssoCookie != null && ssoCookie.isNotEmpty) 'ssoCookie': ssoCookie,
       });
       return result ?? false;
     } catch (e) {

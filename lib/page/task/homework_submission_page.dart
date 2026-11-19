@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 import 'package:hive/hive.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
+import 'package:celechron/design/app_notification.dart';
 import 'package:celechron/design/round_rectangle_card.dart';
 import 'package:celechron/http/zjuServices/courses.dart';
 import 'package:celechron/http/zjuServices/network_defense.dart';
@@ -17,6 +18,7 @@ import 'package:celechron/model/task.dart';
 import 'package:celechron/model/todo.dart';
 import 'package:celechron/page/flow/flow_controller.dart';
 import 'package:celechron/page/task/task_controller.dart';
+import 'package:celechron/services/file_download_share_helper.dart';
 import 'package:celechron/services/ohos_native_service.dart';
 import 'package:celechron/services/todo_task_sync.dart';
 import 'package:celechron/utils/json_utils.dart';
@@ -87,6 +89,74 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
   double? _score;
   DateTime? _submittedAt;
   bool _allowRetract = true;
+  final Set<String> _downloadingAttachments = <String>{};
+
+  Future<void> _downloadAndShareAttachment({
+    required String attKey,
+    required String name,
+    required String fullUrl,
+    required int size,
+    int uploadId = 0,
+    int referenceId = 0,
+  }) async {
+    if (_downloadingAttachments.contains(attKey)) return;
+    final saveDir = await FileDownloadShareHelper.chooseSaveDirectory(
+      context,
+      title: '下载并分享作业附件',
+      fileLabel: name,
+    );
+    if (saveDir == null || !mounted) return;
+
+    setState(() {
+      _downloadingAttachments.add(attKey);
+    });
+
+    final client = HttpClient();
+    applyZjuNetworkDefense(client);
+    try {
+      final result =
+          await FileDownloadShareHelper.downloadCoursewareAndPrepareShare(
+        client,
+        item: CoursewareItem(
+          name: name,
+          sectionTitle: '作业附件',
+          sizeBytes: size,
+          uploadId: uploadId,
+          referenceId: referenceId,
+          directUrl: fullUrl,
+        ),
+        saveDir: saveDir,
+      );
+      if (!mounted) return;
+      setState(() {
+        _downloadingAttachments.remove(attKey);
+      });
+      if (result.isSuccess) {
+        AppNotification.success(
+          '下载完成',
+          '${result.fileName}\n已保存：${FileDownloadShareHelper.formatDirShort(saveDir)}',
+        );
+        if (result.shareFile != null) {
+          await FileDownloadShareHelper.shareFiles(
+            [result.shareFile!],
+            mimeTypes: [result.mimeType],
+            subject: result.fileName,
+          );
+        }
+      } else {
+        AppNotification.error('下载失败', '未能下载「$name」，请确认已登录学在浙大');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _downloadingAttachments.remove(attKey);
+        });
+      }
+      AppNotification.error('下载异常', '$e');
+    } finally {
+      client.close(force: true);
+    }
+  }
 
   /// 是否为在线小测 / 随堂测验
   bool get _isQuiz {
@@ -1729,11 +1799,15 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
           ..._teacherUploads.map((file) {
             final name = file['name']?.toString() ?? '附件文件';
             final size = (file['size'] as num?)?.toInt() ?? 0;
+            final uploadId = (file['id'] as num?)?.toInt() ?? 0;
+            final referenceId = (file['reference_id'] as num?)?.toInt() ?? 0;
             final downloadUrl = file['download_url']?.toString() ??
                 '/api/uploads/${file['id']}/blob';
             final fullUrl = downloadUrl.startsWith('http')
                 ? downloadUrl
                 : 'https://courses.zju.edu.cn$downloadUrl';
+            final attKey = '${uploadId}_${referenceId}_$fullUrl';
+            final isDownloading = _downloadingAttachments.contains(attKey);
 
             final isImage =
                 RegExp(r'\.(png|jpe?g|gif|webp|bmp)$', caseSensitive: false)
@@ -1809,9 +1883,21 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
                       minSize: 0,
                       color: CupertinoColors.activeBlue,
                       borderRadius: BorderRadius.circular(6),
-                      onPressed: () => launchUrlString(fullUrl,
-                          mode: LaunchMode.externalApplication),
-                      child: const Text('下载', style: TextStyle(fontSize: 12)),
+                      onPressed: isDownloading
+                          ? null
+                          : () => _downloadAndShareAttachment(
+                                attKey: attKey,
+                                name: name,
+                                fullUrl: fullUrl,
+                                size: size,
+                                uploadId: uploadId,
+                                referenceId: referenceId,
+                              ),
+                      child: isDownloading
+                          ? const CupertinoActivityIndicator(
+                              radius: 7, color: CupertinoColors.white)
+                          : const Text('下载并分享',
+                              style: TextStyle(fontSize: 12)),
                     ),
                   ],
                 ),

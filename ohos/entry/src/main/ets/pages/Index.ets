@@ -109,8 +109,10 @@ struct Index {
   @StorageLink('inAppVideoTitle') inAppVideoTitle: string = '智云课堂';
   @StorageLink('inAppVideoLivingroomUrl') inAppVideoLivingroomUrl: string = '';
   @StorageLink('inAppVideoToken') inAppVideoToken: string = '';
+  @StorageLink('inAppVideoSsoCookie') inAppVideoSsoCookie: string = '';
   @StorageLink('inAppVideoStreamsJson') inAppVideoStreamsJson: string = '[]';
   @StorageLink('inAppVideoIsLive') inAppVideoIsLive: boolean = false;
+  @StorageLink('inAppVideoPreferWeb') inAppVideoPreferWeb: boolean = false;
   @State private safeBottom: number = 24;
   @State private safeTop: number = 36;
   @State private safeLeft: number = 0;
@@ -122,6 +124,7 @@ struct Index {
   @State private activeStreamIndex: number = 0;
   @State private videoStreams: StreamSource[] = [];
   @State private useWebFallback: boolean = false;
+  @State private webAuthCovering: boolean = false;
   @State private isLiveStream: boolean = false;
   @State private isPlayerFullscreen: boolean = false;
   @State private isPlayerMiniWindow: boolean = false;
@@ -164,6 +167,8 @@ struct Index {
   private hideOverlayTimer: number = -1;
   private hudTimer: number = -1;
   private prepareWatchdogTimer: number = -1;
+  private webCoverTimer: number = -1;
+  private webRevealPollTimer: number = -1;
   private dragStartX: number = 0;
   private dragStartY: number = 0;
   private tabsController: HdsTabsController = new HdsTabsController();
@@ -290,11 +295,10 @@ struct Index {
     // 参照 PiliPlus WindowState：非自由窗口模式下，播放横屏视频/全屏且未进入系统画中画时启用横向小窗，
     // 挂起为系统悬浮小窗后窗口自动横置铺满；进入系统画中画前须关闭以避免小窗进 PiP 黑屏。
     const shouldEnable = this.inAppVideoVisible
-      && !this.useWebFallback
       && !this.isSystemPipActive
       && !this.isPlayerMiniWindow
       && !this.isFreeWindowMode
-      && (this.isPlayerFullscreen || (this.isFloatingWindow && this.videoAspectRatio >= 1.05) || this.videoAspectRatio >= 1.15);
+      && (this.isPlayerFullscreen || (!this.useWebFallback && ((this.isFloatingWindow && this.videoAspectRatio >= 1.05) || this.videoAspectRatio >= 1.15)));
     this.setLandscapeMultiWindowEnabled(shouldEnable);
   }
 
@@ -433,15 +437,26 @@ struct Index {
     this.miniOffsetX = 0;
     this.miniOffsetY = 0;
     this.preConfigureWebCookies();
-    if (isDirectStreamUrl(this.inAppVideoUrl)) {
+    const shouldOpenWebDirectly = this.inAppVideoPreferWeb ||
+      (this.inAppVideoUrl.length > 0 && !isDirectStreamUrl(this.inAppVideoUrl));
+    if (shouldOpenWebDirectly && this.webFallbackTarget().length > 0) {
+      this.activeVideoUrl = this.webFallbackTarget();
+      this.useWebFallback = true;
+      this.videoLoading = false;
+      this.startWebAuthCover(9000);
+    } else if (isDirectStreamUrl(this.inAppVideoUrl)) {
       this.activeVideoUrl = this.inAppVideoUrl;
       this.useWebFallback = false;
+      this.webAuthCovering = false;
     } else if (parsed.length > 0) {
       this.activeVideoUrl = parsed[0].url;
       this.useWebFallback = false;
+      this.webAuthCovering = false;
     } else {
       this.activeVideoUrl = this.webFallbackTarget();
       this.useWebFallback = true;
+      this.videoLoading = false;
+      this.startWebAuthCover(9000);
     }
     const checkUrl = this.activeVideoUrl.length > 0 ? this.activeVideoUrl : this.inAppVideoUrl;
     this.isLiveStream = this.inAppVideoIsLive || this.inAppVideoTitle.includes('直播') || checkUrl.includes('/live/') || checkUrl.includes('.flv');
@@ -463,6 +478,92 @@ struct Index {
     }
   }
 
+  private clearWebAuthTimers(): void {
+    if (this.webCoverTimer !== -1) {
+      clearTimeout(this.webCoverTimer);
+      this.webCoverTimer = -1;
+    }
+    if (this.webRevealPollTimer !== -1) {
+      clearTimeout(this.webRevealPollTimer);
+      this.webRevealPollTimer = -1;
+    }
+  }
+
+  private isWebAuthUrl(rawUrl: string): boolean {
+    const lower = rawUrl.toLowerCase();
+    return lower.includes('zjuam.zju.edu.cn') ||
+      lower.includes('/cas/login') ||
+      lower.includes('r=auth/login') ||
+      lower.includes('auth/login') ||
+      lower.includes('oauth') ||
+      lower.includes('tgmedia.cmc.zju.edu.cn');
+  }
+
+  private startWebAuthCover(maxMs: number = 9000): void {
+    this.clearWebAuthTimers();
+    this.webAuthCovering = true;
+    this.webCoverTimer = setTimeout(() => {
+      this.webCoverTimer = -1;
+      this.webAuthCovering = false;
+    }, maxMs);
+  }
+
+  private scheduleWebRevealCheck(attempt: number = 0): void {
+    if (!this.useWebFallback || !this.inAppVideoVisible) {
+      this.clearWebAuthTimers();
+      this.webAuthCovering = false;
+      return;
+    }
+    if (this.webRevealPollTimer !== -1) {
+      clearTimeout(this.webRevealPollTimer);
+      this.webRevealPollTimer = -1;
+    }
+    if (attempt >= 16) {
+      this.clearWebAuthTimers();
+      this.webAuthCovering = false;
+      return;
+    }
+    this.webRevealPollTimer = setTimeout(() => {
+      this.webRevealPollTimer = -1;
+      if (!this.useWebFallback || !this.inAppVideoVisible) {
+        return;
+      }
+      this.injectWebTokenJs();
+      const checkJs = `(function(){try{` +
+        `var href=(location.href||'').toLowerCase();` +
+        `if(href.indexOf('zjuam.zju.edu.cn')>=0||href.indexOf('/cas/login')>=0||href.indexOf('auth/login')>=0||href.indexOf('oauth')>=0||href.indexOf('tgmedia.cmc.zju.edu.cn')>=0){return 'AUTH';}` +
+        `var modals=document.querySelectorAll('.el-message-box__wrapper,.el-dialog__wrapper,.ant-modal-wrap,.van-dialog,[role="dialog"]');` +
+        `for(var i=0;i<modals.length;i++){` +
+          `var m=modals[i];` +
+          `var st=window.getComputedStyle(m);` +
+          `if(st&&st.display!=='none'&&st.visibility!=='hidden'&&m.offsetHeight>0){` +
+            `var mt=(m.innerText||'');` +
+            `if(mt.indexOf('统一身份认证')>=0||mt.indexOf('通行证')>=0||mt.indexOf('未登录')>=0||mt.indexOf('请先登录')>=0||mt.indexOf('跳转')>=0){return 'MODAL';}` +
+          `}` +
+        `}` +
+        `if(document.querySelector('video')||document.querySelector('.cmc-player-container')||document.querySelector('#cmc_player_container')||document.querySelector('.prism-player')){return 'READY';}` +
+        `var bodyTxt=(document.body&&document.body.innerText||'');` +
+        `if(bodyTxt.indexOf('统一身份认证')>=0||bodyTxt.indexOf('登录浙大通行证')>=0||bodyTxt.indexOf('请先登录')>=0){return 'AUTH';}` +
+        `return bodyTxt.trim().length>20?'READY':'WAIT';` +
+      `}catch(e){return 'READY';}})();`;
+      try {
+        this.webController.runJavaScript(checkJs).then((res: string) => {
+          const clean = (res || '').replace(/"/g, '').trim();
+          if (clean === 'READY') {
+            this.clearWebAuthTimers();
+            this.webAuthCovering = false;
+          } else {
+            this.scheduleWebRevealCheck(attempt + 1);
+          }
+        }).catch((_: BusinessError) => {
+          this.scheduleWebRevealCheck(attempt + 1);
+        });
+      } catch (_) {
+        this.scheduleWebRevealCheck(attempt + 1);
+      }
+    }, attempt === 0 ? 350 : 260);
+  }
+
   private clearOverlayTimers(): void {
     if (this.hideOverlayTimer !== -1) {
       clearTimeout(this.hideOverlayTimer);
@@ -473,6 +574,8 @@ struct Index {
       this.hudTimer = -1;
     }
     this.clearPrepareWatchdog();
+    this.clearWebAuthTimers();
+    this.webAuthCovering = false;
   }
 
   private showHudMessage(msg: string): void {
@@ -1009,6 +1112,22 @@ struct Index {
     this.scheduleHideOverlay();
   }
 
+  private syncToLiveEdge(): void {
+    if (this.useWebFallback) {
+      return;
+    }
+    const target = this.activeVideoUrl.length > 0 ? this.activeVideoUrl : this.inAppVideoUrl;
+    if (target.length === 0) {
+      return;
+    }
+    this.lastManualPlayToggleMs = Date.now();
+    this.manualTargetPlaying = true;
+    this.isVideoPlaying = true;
+    this.showHudMessage('正在同步至最新直播进度...');
+    this.startAvPlayerPlayback(target);
+    this.scheduleHideOverlay();
+  }
+
   private buildPhpSerializedToken(token: string): string {
     const trimmed = token.trim();
     if (trimmed.length === 0) {
@@ -1018,24 +1137,35 @@ struct Index {
   }
 
   private preConfigureWebCookies(): void {
-    if (this.inAppVideoToken.length === 0) {
-      return;
-    }
     try {
-      const phpTk = this.buildPhpSerializedToken(this.inAppVideoToken);
       const rawTk = this.inAppVideoToken.trim();
-      const hosts = [
-        'https://classroom.zju.edu.cn',
-        'https://yjapi.cmc.zju.edu.cn',
-        'https://tgmedia.cmc.zju.edu.cn',
-        'https://livingroom.cmc.zju.edu.cn'
-      ];
-      for (let i = 0; i < hosts.length; i++) {
-        webview.WebCookieManager.configCookieSync(hosts[i], `_token=${phpTk}; Path=/`);
-        webview.WebCookieManager.configCookieSync(hosts[i], `_token=${phpTk}; Domain=.zju.edu.cn; Path=/`);
-        webview.WebCookieManager.configCookieSync(hosts[i], `_token=${phpTk}; Domain=classroom.zju.edu.cn; Path=/`);
-        webview.WebCookieManager.configCookieSync(hosts[i], `token=${rawTk}; Path=/`);
-        webview.WebCookieManager.configCookieSync(hosts[i], `token=${rawTk}; Domain=.zju.edu.cn; Path=/`);
+      if (rawTk.length > 0) {
+        const phpTk = this.buildPhpSerializedToken(rawTk);
+        const hosts = [
+          'https://classroom.zju.edu.cn',
+          'https://yjapi.cmc.zju.edu.cn',
+          'https://tgmedia.cmc.zju.edu.cn',
+          'https://livingroom.cmc.zju.edu.cn'
+        ];
+        for (let i = 0; i < hosts.length; i++) {
+          webview.WebCookieManager.configCookieSync(hosts[i], `_token=${phpTk}; Path=/`);
+          webview.WebCookieManager.configCookieSync(hosts[i], `_token=${phpTk}; Domain=.zju.edu.cn; Path=/`);
+          webview.WebCookieManager.configCookieSync(hosts[i], `_token=${phpTk}; Domain=classroom.zju.edu.cn; Path=/`);
+          webview.WebCookieManager.configCookieSync(hosts[i], `token=${rawTk}; Path=/`);
+          webview.WebCookieManager.configCookieSync(hosts[i], `token=${rawTk}; Domain=.zju.edu.cn; Path=/`);
+        }
+      }
+      const rawSso = this.inAppVideoSsoCookie.trim();
+      if (rawSso.length > 0) {
+        const ssoHosts = [
+          'https://zjuam.zju.edu.cn',
+          'https://classroom.zju.edu.cn',
+          'https://tgmedia.cmc.zju.edu.cn'
+        ];
+        for (let i = 0; i < ssoHosts.length; i++) {
+          webview.WebCookieManager.configCookieSync(ssoHosts[i], `iPlanetDirectoryPro=${rawSso}; Path=/; Secure`);
+          webview.WebCookieManager.configCookieSync(ssoHosts[i], `iPlanetDirectoryPro=${rawSso}; Domain=.zju.edu.cn; Path=/; Secure`);
+        }
       }
     } catch (err) {
       hilog.warn(DOMAIN, TAG, `preConfigureWebCookies failed: ${JSON.stringify(err)}`);
@@ -1050,6 +1180,7 @@ struct Index {
       .replace(/\n/g, '');
     const phpTk = this.buildPhpSerializedToken(rawTk);
     const js = `try{` +
+      `window.confirm=function(){return true;};window.alert=function(){};` +
       (safeTk.length > 0
         ? `localStorage.setItem('token','${safeTk}');localStorage.setItem('_token','${safeTk}');` +
           `document.cookie='_token=${phpTk};path=/;domain=.zju.edu.cn';` +
@@ -1057,7 +1188,7 @@ struct Index {
           `document.cookie='token=${safeTk};path=/;domain=.zju.edu.cn';` +
           `document.cookie='token=${safeTk};path=/';`
         : '') +
-      `if(!document.getElementById('celechron_zy_fullscreen_css')){` +
+      `if(location.hostname.indexOf('zjuam.zju.edu.cn')<0&&!document.getElementById('celechron_zy_fullscreen_css')){` +
         `var st=document.createElement('style');st.id='celechron_zy_fullscreen_css';` +
         `st.innerHTML='html,body,#app{background:#000 !important;margin:0 !important;padding:0 !important;overflow:hidden !important;width:100vw !important;height:100vh !important;}' +` +
         `'.header-wrapper,.living-header,.living-right,.right-wrapper,.nav-bar,.catalog-wrapper,.sidebar-wrapper,.chat-wrapper,.danmu-send-wrap{display:none !important;}' +` +
@@ -1065,26 +1196,62 @@ struct Index {
         `'video{width:100% !important;height:100% !important;object-fit:contain !important;background:#000 !important;}';` +
         `document.head.appendChild(st);` +
       `}` +
-      `function autoClickLogin(){` +
+      `function isVisible(el){try{if(!el)return false;var s=window.getComputedStyle(el);return s.display!=='none'&&s.visibility!=='hidden'&&el.offsetWidth>0&&el.offsetHeight>0;}catch(e){return false;}}` +
+      `function autoConfirmAuth(){` +
         `try{` +
-          `var b=document.querySelectorAll('button,a,.btn,[role="button"],span');` +
-          `for(var i=0;i<b.length;i++){` +
-            `var t=(b[i].innerText||b[i].textContent||'').trim();` +
-            `if(t==='登录浙大通行证'||t==='浙大通行证登录'||t.indexOf('通行证')>=0||t==='登录'){` +
-              `if(b[i].offsetParent!==null){b[i].click();return true;}` +
+          `var href=(location.href||'').toLowerCase();` +
+          `var onAuthHost=href.indexOf('zjuam.zju.edu.cn')>=0||href.indexOf('cas/login')>=0||href.indexOf('auth/login')>=0||href.indexOf('oauth')>=0;` +
+          `var modals=document.querySelectorAll('.el-message-box__wrapper,.el-dialog__wrapper,.ant-modal-wrap,.van-dialog,[role="dialog"],.modal,.dialog');` +
+          `for(var m=0;m<modals.length;m++){` +
+            `if(!isVisible(modals[m]))continue;` +
+            `var mt=(modals[m].innerText||'');` +
+            `if(mt.indexOf('统一身份认证')>=0||mt.indexOf('通行证')>=0||mt.indexOf('认证')>=0||mt.indexOf('登录')>=0||mt.indexOf('跳转')>=0||mt.indexOf('授权')>=0||mt.indexOf('确认')>=0){` +
+              `var pbtn=modals[m].querySelector('.el-message-box__btns .el-button--primary,.el-dialog__footer .el-button--primary,.ant-modal-confirm-btns .ant-btn-primary,.van-dialog__confirm');` +
+              `if(pbtn&&isVisible(pbtn)){pbtn.click();return true;}` +
+              `var mbs=modals[m].querySelectorAll('button,a,.btn,[role="button"],span');` +
+              `for(var k=0;k<mbs.length;k++){` +
+                `var kt=(mbs[k].innerText||mbs[k].textContent||'').trim();` +
+                `if(kt==='确定'||kt==='确认'||kt==='确认跳转'||kt==='去登录'||kt==='立即登录'||kt==='前往登录'||kt==='授权'||kt==='同意'||kt==='允许'||kt==='继续'||kt.indexOf('统一身份认证')>=0||kt.indexOf('通行证')>=0){` +
+                  `if(isVisible(mbs[k])){mbs[k].click();return true;}` +
+                `}` +
+              `}` +
             `}` +
           `}` +
-          `var l=document.querySelectorAll('a[href*="cas/login"],a[href*="auth/login"]');` +
-          `if(l.length>0){l[0].click();return true;}` +
+          `if(onAuthHost){` +
+            `var userInput=document.querySelector('input[name="username"],#username');` +
+            `var hasEmptyCred=userInput&&isVisible(userInput)&&(!userInput.value||userInput.value.trim()==='');` +
+            `if(!hasEmptyCred){` +
+              `var ab=document.querySelectorAll('button,a,input[type="submit"],input[type="button"],.btn');` +
+              `for(var j=0;j<ab.length;j++){` +
+                `var at=(ab[j].innerText||ab[j].value||ab[j].textContent||'').trim();` +
+                `if(at==='确定'||at==='确认'||at==='确认跳转'||at==='授权'||at==='同意'||at==='允许'||at==='继续'||at.indexOf('确认')>=0){` +
+                  `if(isVisible(ab[j])){ab[j].click();return true;}` +
+                `}` +
+              `}` +
+            `}` +
+          `}` +
+          `var vid=document.querySelector('video');` +
+          `if(!vid||vid.readyState<2){` +
+            `var b=document.querySelectorAll('button,a,.btn,[role="button"],span');` +
+            `for(var i=0;i<b.length;i++){` +
+              `var t=(b[i].innerText||b[i].textContent||'').trim();` +
+              `if(t==='登录浙大通行证'||t==='浙大通行证登录'||t.indexOf('通行证')>=0||t.indexOf('统一身份认证')>=0||t==='确认跳转'||t==='立即登录'||t==='去登录'||t==='前往登录'||t==='登录'){` +
+                `if(isVisible(b[i])){b[i].click();return true;}` +
+              `}` +
+            `}` +
+            `var l=document.querySelectorAll('a[href*="cas/login"],a[href*="auth/login"],a[href*="zjuam.zju.edu.cn"]');` +
+            `if(l.length>0&&isVisible(l[0])){l[0].click();return true;}` +
+          `}` +
         `}catch(e){}` +
         `return false;` +
       `};` +
-      `if(!autoClickLogin()){` +
+      `if(!autoConfirmAuth()&&!window.__celechronAuthPolling){` +
+        `window.__celechronAuthPolling=true;` +
         `var ckCnt=0;` +
         `var ckTimer=setInterval(function(){` +
           `ckCnt++;` +
-          `if(autoClickLogin()||ckCnt>25){clearInterval(ckTimer);}` +
-        `},200);` +
+          `if(autoConfirmAuth()||ckCnt>30){clearInterval(ckTimer);window.__celechronAuthPolling=false;}` +
+        `},180);` +
       `}` +
       `setTimeout(function(){try{window.dispatchEvent(new Event('resize'));var v=document.querySelector('video');if(v&&v.paused){v.play().catch(function(){});}}catch(e){}},600);` +
       `}catch(e){}`;
@@ -1130,6 +1297,7 @@ struct Index {
       this.useWebFallback = true;
       this.videoLoading = false;
       this.controlsVisible = true;
+      this.startWebAuthCover(9000);
       this.releaseSystemPip();
       this.releaseAvPlayer();
     }
@@ -1371,7 +1539,7 @@ struct Index {
       }
       .width('100%')
 
-      if (!this.useWebFallback) {
+      if (!this.useWebFallback && !this.isLiveStream) {
         Text('播放倍速')
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
@@ -1383,6 +1551,20 @@ struct Index {
           this.SpeedPresetChip('1.75x', media.PlaybackSpeed.SPEED_FORWARD_1_75_X)
           this.SpeedPresetChip('2.0x', media.PlaybackSpeed.SPEED_FORWARD_2_00_X)
         }
+      }
+
+      if (!this.useWebFallback && this.isLiveStream) {
+        Text('跟随直播进度')
+          .fontSize(13.5)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+          .borderRadius(10)
+          .backgroundColor('#CCFF6699')
+          .onClick(() => {
+            this.showMoreSheet = false;
+            this.syncToLiveEdge();
+          })
       }
 
       if (!this.useWebFallback && this.videoStreams.length > 1) {
@@ -1425,6 +1607,7 @@ struct Index {
               this.useWebFallback = true;
               this.showMoreSheet = false;
               this.controlsVisible = true;
+              this.startWebAuthCover(9000);
               this.releaseSystemPip();
               this.releaseAvPlayer();
             })
@@ -1565,6 +1748,8 @@ struct Index {
                       .backgroundColor('#CCFF6699')
                       .alignItems(VerticalAlign.Center)
                       .onClick(() => {
+                        this.clearWebAuthTimers();
+                        this.webAuthCovering = false;
                         this.useWebFallback = false;
                         this.showMoreSheet = false;
                         this.videoLoading = true;
@@ -1574,6 +1759,22 @@ struct Index {
                         }
                       })
                     }
+
+                    Row({ space: 5 }) {
+                      this.PlayerPipIcon(18, '#FFFFFF')
+                      Text('小窗')
+                        .fontSize(13)
+                        .fontWeight(FontWeight.Medium)
+                        .fontColor(Color.White)
+                    }
+                    .height(38)
+                    .padding({ left: 11, right: 11 })
+                    .borderRadius(19)
+                    .backgroundColor('#33FFFFFF')
+                    .alignItems(VerticalAlign.Center)
+                    .onClick(() => {
+                      this.triggerPipOrMiniWindow();
+                    })
 
                     Row({ space: 5 }) {
                       if (this.isPlayerFullscreen) {
@@ -1630,37 +1831,86 @@ struct Index {
                   .backgroundColor('#141418')
                 }
 
-                Web({ src: this.webFallbackTarget(), controller: this.webController })
-                  .width('100%')
-                  .layoutWeight(1)
-                  .backgroundColor(Color.Black)
-                  .javaScriptAccess(true)
-                  .domStorageAccess(true)
-                  .mediaPlayGestureAccess(false)
-                  .mixedMode(MixedMode.All)
-                  .onControllerAttached(() => {
-                    this.preConfigureWebCookies();
-                    try {
-                      this.webController.setCustomUserAgent(
-                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-                      );
-                    } catch (uaErr) {
-                      hilog.warn(DOMAIN, TAG, `setCustomUserAgent failed: ${JSON.stringify(uaErr)}`);
+                Stack({ alignContent: Alignment.Center }) {
+                  Web({ src: this.webFallbackTarget(), controller: this.webController })
+                    .width('100%')
+                    .height('100%')
+                    .backgroundColor(Color.Black)
+                    .javaScriptAccess(true)
+                    .domStorageAccess(true)
+                    .mediaPlayGestureAccess(false)
+                    .mixedMode(MixedMode.All)
+                    .onControllerAttached(() => {
+                      this.preConfigureWebCookies();
+                      try {
+                        this.webController.setCustomUserAgent(
+                          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+                        );
+                      } catch (uaErr) {
+                        hilog.warn(DOMAIN, TAG, `setCustomUserAgent failed: ${JSON.stringify(uaErr)}`);
+                      }
+                    })
+                    .onSslErrorEventReceive((event) => {
+                      try {
+                        event.handler.handleConfirm();
+                      } catch (sslErr) {
+                        hilog.warn(DOMAIN, TAG, `handleConfirm ssl failed: ${JSON.stringify(sslErr)}`);
+                      }
+                    })
+                    .onConfirm((event) => {
+                      try {
+                        if (event) {
+                          event.result.handleConfirm();
+                        }
+                      } catch (_) {
+                      }
+                      return true;
+                    })
+                    .onAlert((event) => {
+                      try {
+                        if (event) {
+                          event.result.handleConfirm();
+                        }
+                      } catch (_) {
+                      }
+                      return true;
+                    })
+                    .onPageBegin((event) => {
+                      const pageUrl = event?.url ?? '';
+                      if (this.isWebAuthUrl(pageUrl)) {
+                        this.startWebAuthCover(10000);
+                      }
+                      this.injectWebTokenJs();
+                    })
+                    .onPageEnd((event) => {
+                      const pageUrl = event?.url ?? '';
+                      this.injectWebTokenJs();
+                      if (this.isWebAuthUrl(pageUrl)) {
+                        this.startWebAuthCover(10000);
+                      } else {
+                        this.scheduleWebRevealCheck(0);
+                      }
+                    })
+
+                  if (this.webAuthCovering) {
+                    Column({ space: 12 }) {
+                      LoadingProgress()
+                        .width(46)
+                        .height(46)
+                        .color('#FF6699')
+                      Text('正在进入智云课堂...')
+                        .fontSize(13.5)
+                        .fontColor('#CCFFFFFF')
                     }
-                  })
-                  .onSslErrorEventReceive((event) => {
-                    try {
-                      event.handler.handleConfirm();
-                    } catch (sslErr) {
-                      hilog.warn(DOMAIN, TAG, `handleConfirm ssl failed: ${JSON.stringify(sslErr)}`);
-                    }
-                  })
-                  .onPageBegin(() => {
-                    this.injectWebTokenJs();
-                  })
-                  .onPageEnd(() => {
-                    this.injectWebTokenJs();
-                  })
+                    .width('100%')
+                    .height('100%')
+                    .backgroundColor(Color.Black)
+                    .justifyContent(FlexAlign.Center)
+                    .alignItems(HorizontalAlign.Center)
+                  }
+                }
+                .width('100%')
+                .layoutWeight(1)
               }
               .width('100%')
               .height('100%')
@@ -1694,9 +1944,9 @@ struct Index {
                         }
                         const tapX = event.fingerList.length > 0 ? event.fingerList[0].localX : 0;
                         const w = this.playerContainerW > 0 ? this.playerContainerW : 360;
-                        if (this.videoDuration > 0 && tapX > 0 && tapX < w * 0.32) {
+                        if (!this.isLiveStream && this.videoDuration > 0 && tapX > 0 && tapX < w * 0.32) {
                           this.seekRelativeSeconds(-10);
-                        } else if (this.videoDuration > 0 && tapX > w * 0.68) {
+                        } else if (!this.isLiveStream && this.videoDuration > 0 && tapX > w * 0.68) {
                           this.seekRelativeSeconds(10);
                         } else {
                           this.togglePlayPause();
@@ -1785,7 +2035,7 @@ struct Index {
 
               if (!this.useWebFallback && this.controlsVisible && !this.videoLoading) {
                 Row({ space: this.isCompactSmallWindow() ? 16 : 28 }) {
-                  if (this.videoDuration > 0) {
+                  if (!this.isLiveStream && this.videoDuration > 0) {
                     Stack() {
                       Text('-10s')
                         .fontSize(this.isCompactSmallWindow() ? 12 : 14)
@@ -1828,7 +2078,7 @@ struct Index {
                     this.togglePlayPause();
                   })
 
-                  if (this.videoDuration > 0) {
+                  if (!this.isLiveStream && this.videoDuration > 0) {
                     Stack() {
                       Text('+10s')
                         .fontSize(this.isCompactSmallWindow() ? 12 : 14)
@@ -1935,10 +2185,42 @@ struct Index {
 
                   Blank()
 
-                  // 底部双行渐变控制栏（Row 1: 进度条/直播状态；Row 2: 播放/网页版/线路/倍速/横竖屏/全屏）
+                  // 底部双行渐变控制栏（Row 1: 进度条/直播状态+跟随直播进度；Row 2: 播放/网页版/线路/倍速/横竖屏/全屏）
                   Column({ space: 8 }) {
-                    // 第一行：进度条或直播状态徽标
-                    if (this.videoDuration > 0) {
+                    // 第一行：直播状态栏（含一键“跟随直播进度”）或回放进度条
+                    if (this.isLiveStream) {
+                      Row({ space: 8 }) {
+                        Circle({ width: 8, height: 8 }).fill(this.isVideoPlaying ? '#FF4D79' : '#FFB020')
+                        Text(this.isVideoPlaying ? '正在直播 LIVE' : '直播已暂停')
+                          .fontSize(13.5)
+                          .fontWeight(FontWeight.Bold)
+                          .fontColor(this.isVideoPlaying ? '#FF6699' : '#FFD166')
+                        Blank()
+                        Row({ space: 5 }) {
+                          this.PlayerVectorIcon(
+                            'M4.9 8.7 C7.3 3.5 14.3 2.6 18.0 7.0 M18.2 3.4 L18.2 7.2 L14.4 7.0 M19.1 15.3 C16.7 20.5 9.7 21.4 6.0 17.0 M5.8 20.6 L5.8 16.8 L9.6 17.0',
+                            false,
+                            15,
+                            '#FFFFFF'
+                          )
+                          Text('跟随直播进度')
+                            .fontSize(12.5)
+                            .fontWeight(FontWeight.Bold)
+                            .fontColor(Color.White)
+                        }
+                        .height(32)
+                        .padding({ left: 12, right: 12 })
+                        .borderRadius(16)
+                        .backgroundColor('#CCFF6699')
+                        .alignItems(VerticalAlign.Center)
+                        .onClick(() => {
+                          this.syncToLiveEdge();
+                        })
+                      }
+                      .width('100%')
+                      .alignItems(VerticalAlign.Center)
+                      .padding({ left: 4, bottom: 2 })
+                    } else if (this.videoDuration > 0) {
                       Row({ space: 10 }) {
                         Text(formatVideoTime(this.videoCurrentTime))
                           .fontSize(13)
@@ -1979,17 +2261,6 @@ struct Index {
                           .fontColor('#D9FFFFFF')
                       }
                       .width('100%')
-                    } else if (this.isLiveStream) {
-                      Row({ space: 8 }) {
-                        Circle({ width: 8, height: 8 }).fill('#FF4D79')
-                        Text('正在直播 LIVE')
-                          .fontSize(13.5)
-                          .fontWeight(FontWeight.Bold)
-                          .fontColor('#FF6699')
-                        Blank()
-                      }
-                      .width('100%')
-                      .padding({ left: 4, bottom: 2 })
                     } else {
                       Row({ space: 10 }) {
                         Text('00:00')
@@ -2058,6 +2329,7 @@ struct Index {
                           this.useWebFallback = true;
                           this.showMoreSheet = false;
                           this.controlsVisible = true;
+                          this.startWebAuthCover(9000);
                           this.releaseSystemPip();
                           this.releaseAvPlayer();
                         })
@@ -2082,7 +2354,7 @@ struct Index {
                         })
                       }
 
-                      if (this.videoDuration > 0) {
+                      if (!this.isLiveStream && this.videoDuration > 0) {
                         Row() {
                           Text(this.videoSpeedLabel)
                             .fontSize(13.5)

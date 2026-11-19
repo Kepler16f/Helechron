@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:celechron/model/course.dart';
 import 'package:celechron/model/session.dart';
+import 'package:celechron/services/file_download_share_helper.dart';
 import 'package:celechron/services/zhiyun_service.dart';
 import 'package:hive/hive.dart';
 
@@ -901,6 +902,44 @@ void main() {
         equals(['past_replay_1', 'past_replay_2']),
       );
       expect(filtered.first['title'], equals('第1讲 已录播（最早）'));
+    });
+  });
+
+  group('FileDownloadShareHelper 文件命名、MIME 推断与目录展示测试', () {
+    test('sanitizeFileName 清理非法路径字符且保留空名回退', () {
+      expect(
+        FileDownloadShareHelper.sanitizeFileName('高等数学:第1讲/导数*?.txt'),
+        equals('高等数学_第1讲_导数__.txt'),
+      );
+      expect(
+        FileDownloadShareHelper.sanitizeFileName('  \r\n  '),
+        equals('helechron_export'),
+      );
+    });
+
+    test('inferMimeType 准确识别字幕、压缩包、文档与图片格式', () {
+      expect(FileDownloadShareHelper.inferMimeType('a.TXT'), equals('text/plain'));
+      expect(FileDownloadShareHelper.inferMimeType('ppt.zip'), equals('application/zip'));
+      expect(FileDownloadShareHelper.inferMimeType('handout.pdf'), equals('application/pdf'));
+      expect(FileDownloadShareHelper.inferMimeType('slide.JPG'), equals('image/jpeg'));
+      expect(FileDownloadShareHelper.inferMimeType('diagram.png'), equals('image/png'));
+      expect(
+        FileDownloadShareHelper.inferMimeType('unknown.bin'),
+        equals('application/octet-stream'),
+      );
+    });
+
+    test('formatDirShort 简化默认目录及长路径展示', () {
+      expect(FileDownloadShareHelper.formatDirShort(''), equals('默认课件目录'));
+      expect(
+        FileDownloadShareHelper.formatDirShort('/data/app/courseware'),
+        equals('默认课件目录 (courseware)'),
+      );
+      const longPath =
+          '/storage/Users/currentUser/Download/VeryLongCoursewareFolderName';
+      final shortened = FileDownloadShareHelper.formatDirShort(longPath);
+      expect(shortened.startsWith('...'), isTrue);
+      expect(shortened.length, equals(36));
     });
   });
 }

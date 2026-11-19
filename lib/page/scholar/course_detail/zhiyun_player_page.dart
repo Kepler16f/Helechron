@@ -6,15 +6,13 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/design/persistent_headers.dart';
 import 'package:celechron/design/round_rectangle_card.dart';
-import 'package:celechron/http/zjuServices/courses.dart';
 import 'package:celechron/http/zjuServices/network_defense.dart';
-import 'package:celechron/model/option.dart';
 import 'package:celechron/design/app_notification.dart';
+import 'package:celechron/services/file_download_share_helper.dart';
 import 'package:celechron/services/ohos_native_service.dart';
 import 'package:celechron/services/zhiyun_service.dart';
 
@@ -249,14 +247,21 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
       final launchUrl =
           streams.isNotEmpty ? streams.first.url : _currentLivingroomUrl;
       if (launchUrl.isNotEmpty) {
-        await _launchInAppPlayer(launchUrl);
+        await _launchInAppPlayer(launchUrl, preferWeb: streams.isEmpty);
       }
     }
   }
 
-  Future<void> _launchInAppPlayer(String url) async {
-    final token = await ZhiyunService.ensureValidToken() ??
-        ZhiyunService.getCachedZhiyunToken();
+  Future<void> _launchInAppPlayer(
+    String url, {
+    bool preferWeb = false,
+  }) async {
+    final authResults = await Future.wait<String?>([
+      ZhiyunService.ensureValidToken(),
+      ZhiyunService.ensureSsoCookieValue(),
+    ]);
+    final token = authResults[0] ?? ZhiyunService.getCachedZhiyunToken();
+    final ssoCookie = authResults[1];
     var effectiveLivingroom = _currentLivingroomUrl;
     if (widget.courseId.isNotEmpty) {
       effectiveLivingroom = ZhiyunService.buildCourseLivingroomUrl(
@@ -281,6 +286,14 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
         ? ZhiyunService.appendTokenToUrl(rawTargetUrl, token)
         : rawTargetUrl;
 
+    final lowerUrl = effectiveUrl.toLowerCase();
+    final isDirect = !lowerUrl.contains('livingroom') &&
+        (lowerUrl.contains('.mp4') ||
+            lowerUrl.contains('.m3u8') ||
+            lowerUrl.contains('.flv') ||
+            lowerUrl.contains('.ts'));
+    final openWebDirectly = preferWeb || !isDirect;
+
     final bool streamIsLive = _isLiveMode ||
         _streams.firstWhereOrNull((s) => s.url == url)?.isLive == true;
 
@@ -292,7 +305,9 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
           .toList(),
       livingroomUrl: effectiveLivingroom,
       token: token,
+      ssoCookie: ssoCookie,
       isLive: streamIsLive,
+      preferWeb: openWebDirectly,
     );
     if (!ok && mounted) {
       showCupertinoDialog(
@@ -319,49 +334,64 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
     }
   }
 
-  Future<void> _saveAndOpenSlide(ZhiyunPptSlide slide, int index) async {
+  Future<void> _downloadAndShareSlide(ZhiyunPptSlide slide, int index) async {
+    final safeCourse =
+        FileDownloadShareHelper.sanitizeFileName(widget.courseName);
+    final fileName = '${safeCourse}_PPT_${index + 1}_${slide.createdSec}s.jpg';
+    final saveDir = await FileDownloadShareHelper.chooseSaveDirectory(
+      context,
+      title: '下载并分享 PPT 截图',
+      fileLabel: fileName,
+    );
+    if (saveDir == null || saveDir.isEmpty) return;
+
     final client = HttpClient();
     applyZjuNetworkDefense(client);
+    final tempFile = File(
+      '${Directory.systemTemp.path}/temp_slide_${DateTime.now().millisecondsSinceEpoch}.jpg',
+    );
     try {
-      String saveDir = '';
-      if (Get.isRegistered<Option>(tag: 'option')) {
-        saveDir = Get.find<Option>(tag: 'option').downloadPath.value.trim();
-      }
-      if (saveDir.isEmpty) {
-        final docDir = await getApplicationDocumentsDirectory();
-        saveDir = '${docDir.path}/courseware';
-      }
-      final safeCourse =
-          widget.courseName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-      final fileName = '${safeCourse}_PPT_${index + 1}_${slide.createdSec}s.jpg';
       final req = await client
           .getUrl(Uri.parse(slide.imageUrl))
           .timeout(const Duration(seconds: 12));
       req.headers.set('Referer', 'https://classroom.zju.edu.cn/');
       final resp = await req.close().timeout(const Duration(seconds: 20));
       if (resp.statusCode == 200) {
-        final savedPath = await Courses.saveHttpResponseToDirectory(
-          resp,
-          saveDir: saveDir,
+        final sink = tempFile.openWrite();
+        await resp.pipe(sink);
+        await sink.flush();
+        await sink.close();
+
+        final res = await FileDownloadShareHelper.saveTempFileAndPrepareShare(
+          tempFile: tempFile,
+          targetDir: saveDir,
           fileName: fileName,
           mimeType: 'image/jpeg',
-          nativeCopyToDir: OhosNativeService.instance.copyFileToDirectory,
         );
-        if (savedPath != null && savedPath.isNotEmpty) {
-          await OhosNativeService.instance.openFileWithSystem(
-            savedPath,
-            mimeType: 'image/jpeg',
-            title: '选择打开方式',
-          );
+        if (res.isSuccess) {
+          AppNotification.success('已保存', 'PPT 第 ${index + 1} 页已保存，正在调起分享...');
+          if (res.shareFile != null) {
+            await FileDownloadShareHelper.shareFiles(
+              [res.shareFile!],
+              mimeTypes: [res.mimeType],
+              subject: fileName,
+            );
+          }
+        } else {
+          AppNotification.error('保存失败', '未能写入目标目录');
         }
       } else {
         await resp.drain();
+        AppNotification.error('下载失败', 'HTTP ${resp.statusCode}');
       }
     } catch (e) {
       if (mounted) {
         AppNotification.error('保存失败', '$e');
       }
     } finally {
+      try {
+        if (await tempFile.exists()) await tempFile.delete();
+      } catch (_) {}
       client.close(force: true);
     }
   }
@@ -372,15 +402,15 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
       return;
     }
     final safeCourse =
-        widget.courseName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    final safeTitle = _currentTitle.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+        FileDownloadShareHelper.sanitizeFileName(widget.courseName);
+    final safeTitle = FileDownloadShareHelper.sanitizeFileName(_currentTitle);
     final defaultFileName = '${safeCourse}_${safeTitle}_语音字幕.txt';
     final nameCtrl = TextEditingController(text: defaultFileName);
 
     await showCupertinoDialog<void>(
       context: context,
       builder: (dialogCtx) => CupertinoAlertDialog(
-        title: const Text('导出语音字幕'),
+        title: const Text('下载并分享语音字幕'),
         content: Padding(
           padding: const EdgeInsets.only(top: 10),
           child: Column(
@@ -388,7 +418,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '共 ${_transcript.length} 条语音字幕，将保存为 txt 文本。可自定义文件名：',
+                '共 ${_transcript.length} 条语音字幕，将保存为 txt 文本并在完成后调起原生分享。可自定义文件名：',
                 style: TextStyle(
                   fontSize: 13,
                   color: CupertinoColors.secondaryLabel.resolveFrom(dialogCtx),
@@ -428,7 +458,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                     targetDir: pickedDir);
               }
             },
-            child: const Text('选择目录保存'),
+            child: const Text('选择目录并分享'),
           ),
           CupertinoDialogAction(
             isDefaultAction: true,
@@ -436,7 +466,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
               Navigator.of(dialogCtx).pop();
               await _doSaveTranscriptFile(nameCtrl.text.trim());
             },
-            child: const Text('保存到默认目录'),
+            child: const Text('默认目录并分享'),
           ),
         ],
       ),
@@ -445,16 +475,11 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
 
   Future<void> _doSaveTranscriptFile(String fileName,
       {String? targetDir}) async {
-    final cleanName = fileName.trim();
+    final cleanName = FileDownloadShareHelper.sanitizeFileName(fileName);
     final finalName = cleanName.endsWith('.txt') ? cleanName : '$cleanName.txt';
-    String saveDir = targetDir ?? '';
-    if (saveDir.isEmpty && Get.isRegistered<Option>(tag: 'option')) {
-      saveDir = Get.find<Option>(tag: 'option').downloadPath.value.trim();
-    }
-    if (saveDir.isEmpty) {
-      final docDir = await getApplicationDocumentsDirectory();
-      saveDir = '${docDir.path}/courseware';
-    }
+    final saveDir = (targetDir != null && targetDir.isNotEmpty)
+        ? targetDir
+        : await FileDownloadShareHelper.resolveDefaultSaveDir();
 
     final buffer = StringBuffer();
     buffer.writeln('课程：${widget.courseName}');
@@ -466,44 +491,34 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
       buffer.writeln('[${seg.timeLabel}] ${seg.text}');
     }
 
+    final tempFile = File(
+        '${Directory.systemTemp.path}/temp_sub_${DateTime.now().millisecondsSinceEpoch}.txt');
     try {
-      final tempDir = Directory.systemTemp;
-      final tempFile = File(
-          '${tempDir.path}/temp_sub_${DateTime.now().millisecondsSinceEpoch}.txt');
       await tempFile.writeAsString(buffer.toString(), encoding: utf8);
-
-      String? savedPath;
-      final canDirect = await Courses.isDirectoryDirectlyWritable(saveDir);
-      if (canDirect) {
-        final destDir = Directory(saveDir);
-        if (!await destDir.exists()) await destDir.create(recursive: true);
-        final destFile = File('${destDir.path}/$finalName');
-        await tempFile.copy(destFile.path);
-        savedPath = destFile.path;
-      } else {
-        savedPath = await OhosNativeService.instance.copyFileToDirectory(
-          tempFile.path,
-          saveDir,
-          finalName,
-          mimeType: 'text/plain',
-        );
-      }
-      try {
-        if (await tempFile.exists()) await tempFile.delete();
-      } catch (_) {}
-
-      if (savedPath != null && savedPath.isNotEmpty) {
-        AppNotification.success('字幕已保存', '已成功导出至: $finalName');
-        await OhosNativeService.instance.openFileWithSystem(
-          savedPath,
-          mimeType: 'text/plain',
-          title: '选择打开方式',
-        );
+      final res = await FileDownloadShareHelper.saveTempFileAndPrepareShare(
+        tempFile: tempFile,
+        targetDir: saveDir,
+        fileName: finalName,
+        mimeType: 'text/plain',
+      );
+      if (res.isSuccess) {
+        AppNotification.success('字幕已保存', '已保存至：$finalName，正在调起分享...');
+        if (res.shareFile != null) {
+          await FileDownloadShareHelper.shareFiles(
+            [res.shareFile!],
+            mimeTypes: [res.mimeType],
+            subject: finalName,
+          );
+        }
       } else {
         AppNotification.error('保存失败', '未能将字幕文件写入目标目录');
       }
     } catch (e) {
       AppNotification.error('导出失败', '$e');
+    } finally {
+      try {
+        if (await tempFile.exists()) await tempFile.delete();
+      } catch (_) {}
     }
   }
 
@@ -513,15 +528,15 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
       return;
     }
     final safeCourse =
-        widget.courseName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    final safeTitle = _currentTitle.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+        FileDownloadShareHelper.sanitizeFileName(widget.courseName);
+    final safeTitle = FileDownloadShareHelper.sanitizeFileName(_currentTitle);
     final defaultFileName = '${safeCourse}_${safeTitle}_切片课件.zip';
     final nameCtrl = TextEditingController(text: defaultFileName);
 
     await showCupertinoDialog<void>(
       context: context,
       builder: (dialogCtx) => CupertinoAlertDialog(
-        title: const Text('打包下载切片课件'),
+        title: const Text('打包下载并分享切片课件'),
         content: Padding(
           padding: const EdgeInsets.only(top: 10),
           child: Column(
@@ -529,7 +544,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '共 ${_slides.length} 页 PPT 切片截图，将打包为 ZIP 压缩包保存。可自定义文件名：',
+                '共 ${_slides.length} 页 PPT 切片截图，将打包为 ZIP 压缩包保存并在完成后调起原生分享。可自定义文件名：',
                 style: TextStyle(
                   fontSize: 13,
                   color: CupertinoColors.secondaryLabel.resolveFrom(dialogCtx),
@@ -569,7 +584,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                     targetDir: pickedDir);
               }
             },
-            child: const Text('选择目录保存'),
+            child: const Text('选择目录并分享'),
           ),
           CupertinoDialogAction(
             isDefaultAction: true,
@@ -577,7 +592,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
               Navigator.of(dialogCtx).pop();
               await _doPackageSlidesZip(nameCtrl.text.trim());
             },
-            child: const Text('保存到默认目录'),
+            child: const Text('默认目录并分享'),
           ),
         ],
       ),
@@ -585,26 +600,23 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
   }
 
   Future<void> _doPackageSlidesZip(String fileName, {String? targetDir}) async {
-    final cleanName = fileName.trim();
+    final cleanName = FileDownloadShareHelper.sanitizeFileName(fileName);
     final finalName = cleanName.endsWith('.zip') ? cleanName : '$cleanName.zip';
-    String saveDir = targetDir ?? '';
-    if (saveDir.isEmpty && Get.isRegistered<Option>(tag: 'option')) {
-      saveDir = Get.find<Option>(tag: 'option').downloadPath.value.trim();
-    }
-    if (saveDir.isEmpty) {
-      final docDir = await getApplicationDocumentsDirectory();
-      saveDir = '${docDir.path}/courseware';
-    }
+    final saveDir = (targetDir != null && targetDir.isNotEmpty)
+        ? targetDir
+        : await FileDownloadShareHelper.resolveDefaultSaveDir();
 
     AppNotification.info('正在打包 PPT', '共 ${_slides.length} 页，正在下载切片并生成压缩包...');
 
     final client = HttpClient();
     applyZjuNetworkDefense(client);
+    final tempFile = File(
+        '${Directory.systemTemp.path}/temp_ppt_${DateTime.now().millisecondsSinceEpoch}.zip');
 
     try {
       final archive = Archive();
       var downloadedCount = 0;
-      final poolSize = 4;
+      const poolSize = 4;
       for (var i = 0; i < _slides.length; i += poolSize) {
         final end =
             (i + poolSize < _slides.length) ? i + poolSize : _slides.length;
@@ -647,44 +659,32 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
         return;
       }
 
-      final tempFile = File(
-          '${Directory.systemTemp.path}/temp_ppt_${DateTime.now().millisecondsSinceEpoch}.zip');
       await tempFile.writeAsBytes(zipData);
-
-      String? savedPath;
-      final canDirect = await Courses.isDirectoryDirectlyWritable(saveDir);
-      if (canDirect) {
-        final destDir = Directory(saveDir);
-        if (!await destDir.exists()) await destDir.create(recursive: true);
-        final destFile = File('${destDir.path}/$finalName');
-        await tempFile.copy(destFile.path);
-        savedPath = destFile.path;
-      } else {
-        savedPath = await OhosNativeService.instance.copyFileToDirectory(
-          tempFile.path,
-          saveDir,
-          finalName,
-          mimeType: 'application/zip',
-        );
-      }
-      try {
-        if (await tempFile.exists()) await tempFile.delete();
-      } catch (_) {}
-
-      if (savedPath != null && savedPath.isNotEmpty) {
+      final res = await FileDownloadShareHelper.saveTempFileAndPrepareShare(
+        tempFile: tempFile,
+        targetDir: saveDir,
+        fileName: finalName,
+        mimeType: 'application/zip',
+      );
+      if (res.isSuccess) {
         AppNotification.success(
-            '打包完成', '已成功打包 $downloadedCount 页 PPT 为 ZIP 压缩包');
-        await OhosNativeService.instance.openFileWithSystem(
-          savedPath,
-          mimeType: 'application/zip',
-          title: '选择打开方式',
-        );
+            '打包完成', '已保存 $downloadedCount 页 PPT 切片，正在调起分享...');
+        if (res.shareFile != null) {
+          await FileDownloadShareHelper.shareFiles(
+            [res.shareFile!],
+            mimeTypes: [res.mimeType],
+            subject: finalName,
+          );
+        }
       } else {
         AppNotification.error('保存失败', '未能将 ZIP 压缩包写入目标目录');
       }
     } catch (e) {
       AppNotification.error('打包异常', '$e');
     } finally {
+      try {
+        if (await tempFile.exists()) await tempFile.delete();
+      } catch (_) {}
       client.close(force: true);
     }
   }
@@ -698,7 +698,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
           initialIndex: index,
           courseName: widget.courseName,
           lessonTitle: _currentTitle,
-          onSave: (slide, i) => _saveAndOpenSlide(slide, i),
+          onSave: (slide, i) => _downloadAndShareSlide(slide, i),
         ),
       ),
     );
@@ -884,7 +884,10 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 color: CupertinoColors.activeBlue.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(12),
-                onPressed: () => _launchInAppPlayer(_currentLivingroomUrl),
+                onPressed: () => _launchInAppPlayer(
+                  _currentLivingroomUrl,
+                  preferWeb: true,
+                ),
                 child: const Text(
                   '打开网页播放器',
                   style: TextStyle(
@@ -946,7 +949,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                         size: 14, color: CupertinoColors.white),
                     SizedBox(width: 4),
                     Text(
-                      '打包全部 PPT',
+                      '下载并分享',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -987,13 +990,13 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 4),
                           minSize: 26,
-                          onPressed: () => _saveAndOpenSlide(slide, index),
+                          onPressed: () => _downloadAndShareSlide(slide, index),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(CupertinoIcons.arrow_down_to_line, size: 14),
+                              Icon(CupertinoIcons.share, size: 14),
                               SizedBox(width: 4),
-                              Text('保存并打开', style: TextStyle(fontSize: 12)),
+                              Text('下载并分享', style: TextStyle(fontSize: 12)),
                             ],
                           ),
                         ),
@@ -1121,11 +1124,11 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(CupertinoIcons.square_arrow_down,
+                      Icon(CupertinoIcons.share,
                           size: 14, color: CupertinoColors.white),
                       SizedBox(width: 4),
                       Text(
-                        '导出字幕',
+                        '下载并分享',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -1303,10 +1306,10 @@ class _FullscreenPptViewerState extends State<_FullscreenPptViewer> {
           child: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(CupertinoIcons.arrow_down_to_line,
-                  size: 16, color: CupertinoColors.white),
+              Icon(CupertinoIcons.share,
+                  size: 15, color: CupertinoColors.white),
               SizedBox(width: 4),
-              Text('保存',
+              Text('下载并分享',
                   style: TextStyle(color: CupertinoColors.white, fontSize: 13)),
             ],
           ),

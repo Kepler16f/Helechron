@@ -280,6 +280,34 @@ class ZhiyunService {
     }
   }
 
+  /// 获取当前可用的 ZJUAM 统一身份认证 Cookie 值（iPlanetDirectoryPro），
+  /// 用于在内置 WebView 播放智云页面前预注入，避免弹出统一身份认证登录/确认页。
+  static Future<String?> ensureSsoCookieValue() async {
+    String? u;
+    String? p;
+    try {
+      if (Get.isRegistered<DatabaseHelper>(tag: 'db')) {
+        final db = Get.find<DatabaseHelper>(tag: 'db');
+        final scholar = await db.getScholar();
+        u = scholar.username;
+        p = scholar.password;
+      }
+    } catch (_) {}
+    if (u == null || u.isEmpty || p == null || p.isEmpty) {
+      return null;
+    }
+    final client = createHttpClient();
+    try {
+      final ssoCookie = await ZjuAm.getSsoCookie(client, u, p);
+      final val = ssoCookie?.value.trim();
+      return (val != null && val.isNotEmpty) ? val : null;
+    } catch (_) {
+      return null;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
   static dynamic _rawStartAt(Map? item) {
     if (item == null) return null;
     return item['start_at'] ??

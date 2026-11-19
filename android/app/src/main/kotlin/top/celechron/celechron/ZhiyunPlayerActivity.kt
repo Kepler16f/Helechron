@@ -34,6 +34,7 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.webkit.CookieManager
+import android.webkit.JsResult
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -78,9 +79,11 @@ class ZhiyunPlayerActivity : Activity() {
         const val EXTRA_TITLE = "title"
         const val EXTRA_LIVINGROOM_URL = "livingroomUrl"
         const val EXTRA_TOKEN = "token"
+        const val EXTRA_SSO_COOKIE = "ssoCookie"
         const val EXTRA_STREAM_LABELS = "streamLabels"
         const val EXTRA_STREAM_URLS = "streamUrls"
         const val EXTRA_IS_LIVE = "isLive"
+        const val EXTRA_PREFER_WEB = "preferWeb"
 
         private val SAKURA_ACCENT = Color.parseColor("#FB7299")
 
@@ -251,7 +254,10 @@ class ZhiyunPlayerActivity : Activity() {
 
     private val streamCandidates = mutableListOf<Pair<String, String>>()
     private var webFallbackUrl: String = ""
+    private var rawInitialUrl: String = ""
     private var token: String = ""
+    private var ssoCookie: String = ""
+    private var preferWeb: Boolean = false
     private var titleText: String = "智云课堂"
 
     private lateinit var rootFrame: FrameLayout
@@ -274,11 +280,13 @@ class ZhiyunPlayerActivity : Activity() {
     private lateinit var timeDurationView: TextView
     private lateinit var seekBar: SeekBar
     private lateinit var liveSourcePill: TextView
+    private lateinit var followLivePill: TextView
     private lateinit var webFallbackPill: TextView
     private lateinit var speedPill: TextView
     private lateinit var orientPill: TextView
     private lateinit var fullscreenBtn: ImageView
     private lateinit var bufferingSpinner: ProgressBar
+    private lateinit var webAuthOverlay: LinearLayout
     private lateinit var hudPill: TextView
     private lateinit var webBarToggleBtn: ImageView
 
@@ -308,6 +316,8 @@ class ZhiyunPlayerActivity : Activity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val autoHideRunnable = Runnable { setControlsVisible(false) }
     private val hudHideRunnable = Runnable { hudPill.visibility = View.GONE }
+    private val webCoverTimeoutRunnable = Runnable { webAuthOverlay.visibility = View.GONE }
+    private var webRevealCheckRunnable: Runnable? = null
     private val prepareWatchdogRunnable = Runnable {
         if (activePlayer != null && activeWebView == null) {
             val state = activePlayer?.playbackState
@@ -359,9 +369,12 @@ class ZhiyunPlayerActivity : Activity() {
         streamCandidates.clear()
         val seenUrls = mutableSetOf<String>()
         val rawUrl = intent?.getStringExtra(EXTRA_URL) ?: ""
+        rawInitialUrl = rawUrl.trim()
         titleText = intent?.getStringExtra(EXTRA_TITLE)?.ifBlank { "智云课堂" } ?: "智云课堂"
         val rawLivingroom = intent?.getStringExtra(EXTRA_LIVINGROOM_URL) ?: ""
         token = intent?.getStringExtra(EXTRA_TOKEN) ?: ""
+        ssoCookie = intent?.getStringExtra(EXTRA_SSO_COOKIE) ?: ""
+        preferWeb = intent?.getBooleanExtra(EXTRA_PREFER_WEB, false) == true
         isLiveStream = intent?.getBooleanExtra(EXTRA_IS_LIVE, false) == true ||
             titleText.contains("直播") ||
             rawUrl.contains("/live/") ||
@@ -701,6 +714,11 @@ class ZhiyunPlayerActivity : Activity() {
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.parseColor("#DDFFFFFF"))
             setPadding(dp(8), 0, dp(4), 0)
+            setOnClickListener {
+                if (isLiveStream) {
+                    seekToLiveEdge()
+                }
+            }
         }
 
         progressRow.addView(timeCurrentView)
@@ -720,6 +738,19 @@ class ZhiyunPlayerActivity : Activity() {
 
         bottomPlayBtn = makeIconBtn(IconKind.PLAY, sizeDp = 46, padDp = 10) {
             togglePlayPause(showBanner = false)
+        }
+
+        followLivePill = makePillButton("跟随直播进度", bgColor = Color.parseColor("#CCFB7299")) {
+            seekToLiveEdge()
+        }.apply {
+            visibility = if (isLiveStream) View.VISIBLE else View.GONE
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                marginStart = dp(6)
+                marginEnd = dp(6)
+            }
         }
 
         val actionSpacer = View(this).apply {
@@ -779,6 +810,7 @@ class ZhiyunPlayerActivity : Activity() {
         }
 
         actionRow.addView(bottomPlayBtn)
+        actionRow.addView(followLivePill)
         actionRow.addView(actionSpacer)
         actionRow.addView(liveSourcePill)
         actionRow.addView(webFallbackPill)
@@ -797,6 +829,29 @@ class ZhiyunPlayerActivity : Activity() {
             indeterminateTintList = ColorStateList.valueOf(SAKURA_ACCENT)
             visibility = View.GONE
             layoutParams = FrameLayout.LayoutParams(dp(48), dp(48), Gravity.CENTER)
+        }
+
+        webAuthOverlay = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setBackgroundColor(Color.BLACK)
+            visibility = View.GONE
+            isClickable = true
+            isFocusable = true
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            addView(ProgressBar(this@ZhiyunPlayerActivity).apply {
+                indeterminateTintList = ColorStateList.valueOf(SAKURA_ACCENT)
+                layoutParams = LinearLayout.LayoutParams(dp(46), dp(46))
+            })
+            addView(TextView(this@ZhiyunPlayerActivity).apply {
+                text = "正在进入智云课堂..."
+                textSize = 13.5f
+                setTextColor(Color.parseColor("#CCFFFFFF"))
+                setPadding(0, dp(12), 0, 0)
+            })
         }
 
         webBarToggleBtn = ImageView(this).apply {
@@ -833,6 +888,7 @@ class ZhiyunPlayerActivity : Activity() {
         }
 
         rootFrame.addView(videoContainer)
+        rootFrame.addView(webAuthOverlay)
         rootFrame.addView(gestureLayer)
         rootFrame.addView(overlayRoot)
         rootFrame.addView(bufferingSpinner)
@@ -923,10 +979,11 @@ class ZhiyunPlayerActivity : Activity() {
         centerControlsRow.visibility = if (isWeb) View.GONE else View.VISIBLE
         webReturnNativePill.visibility = if (isWeb && streamCandidates.isNotEmpty()) View.VISIBLE else View.GONE
         webOrientPill.visibility = if (isWeb) View.VISIBLE else View.GONE
-        pipBtn.visibility = if (!isWeb && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) View.VISIBLE else View.GONE
+        pipBtn.visibility = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) View.VISIBLE else View.GONE
         webBarToggleBtn.visibility = if (isWebCustomFullscreen && !effectiveVisible) View.VISIBLE else View.GONE
 
         if (!isWeb) {
+            followLivePill.visibility = if (isLiveStream) View.VISIBLE else View.GONE
             liveSourcePill.visibility = if (streamCandidates.size > 1) View.VISIBLE else View.GONE
             webFallbackPill.visibility = if (webFallbackUrl.isNotEmpty()) View.VISIBLE else View.GONE
         }
@@ -970,6 +1027,91 @@ class ZhiyunPlayerActivity : Activity() {
         updatePlaybackProgress()
     }
 
+    private fun seekToLiveEdge() {
+        val player = activePlayer ?: return
+        if (activeWebView != null) return
+        if (player.isCurrentMediaItemDynamic) {
+            if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                player.prepare()
+            }
+            player.seekToDefaultPosition()
+            player.play()
+            showHud("已跟随最新直播进度")
+        } else {
+            showHud("正在同步最新直播进度...")
+            playStreamAt(currentStreamIndex)
+        }
+        updatePlayPauseIcons()
+        scheduleAutoHide()
+    }
+
+    private fun isWebAuthUrl(rawUrl: String?): Boolean {
+        val lower = rawUrl?.lowercase() ?: return false
+        return lower.contains("zjuam.zju.edu.cn") ||
+            lower.contains("/cas/login") ||
+            lower.contains("r=auth/login") ||
+            lower.contains("auth/login") ||
+            lower.contains("oauth") ||
+            lower.contains("tgmedia.cmc.zju.edu.cn")
+    }
+
+    private fun clearWebCoverTimers() {
+        mainHandler.removeCallbacks(webCoverTimeoutRunnable)
+        webRevealCheckRunnable?.let { mainHandler.removeCallbacks(it) }
+        webRevealCheckRunnable = null
+    }
+
+    private fun startWebAuthCover(maxMs: Long = 9000L) {
+        clearWebCoverTimers()
+        webAuthOverlay.visibility = View.VISIBLE
+        mainHandler.postDelayed(webCoverTimeoutRunnable, maxMs)
+    }
+
+    private fun scheduleWebRevealCheck(wv: WebView, injectJs: String, attempt: Int = 0) {
+        if (activeWebView !== wv) {
+            clearWebCoverTimers()
+            webAuthOverlay.visibility = View.GONE
+            return
+        }
+        webRevealCheckRunnable?.let { mainHandler.removeCallbacks(it) }
+        if (attempt >= 16) {
+            clearWebCoverTimers()
+            webAuthOverlay.visibility = View.GONE
+            return
+        }
+        val r = Runnable {
+            if (activeWebView !== wv) return@Runnable
+            wv.evaluateJavascript(injectJs, null)
+            val checkJs = "(function(){try{" +
+                "var href=(location.href||'').toLowerCase();" +
+                "if(href.indexOf('zjuam.zju.edu.cn')>=0||href.indexOf('/cas/login')>=0||href.indexOf('auth/login')>=0||href.indexOf('oauth')>=0||href.indexOf('tgmedia.cmc.zju.edu.cn')>=0){return 'AUTH';}" +
+                "var modals=document.querySelectorAll('.el-message-box__wrapper,.el-dialog__wrapper,.ant-modal-wrap,.van-dialog,[role=\"dialog\"]');" +
+                "for(var i=0;i<modals.length;i++){" +
+                "var m=modals[i];var st=window.getComputedStyle(m);" +
+                "if(st&&st.display!=='none'&&st.visibility!=='hidden'&&m.offsetHeight>0){" +
+                "var mt=(m.innerText||'');" +
+                "if(mt.indexOf('统一身份认证')>=0||mt.indexOf('通行证')>=0||mt.indexOf('未登录')>=0||mt.indexOf('请先登录')>=0||mt.indexOf('跳转')>=0){return 'MODAL';}" +
+                "}" +
+                "}" +
+                "if(document.querySelector('video')||document.querySelector('.cmc-player-container')||document.querySelector('#cmc_player_container')||document.querySelector('.prism-player')){return 'READY';}" +
+                "var bodyTxt=(document.body&&document.body.innerText||'');" +
+                "if(bodyTxt.indexOf('统一身份认证')>=0||bodyTxt.indexOf('登录浙大通行证')>=0||bodyTxt.indexOf('请先登录')>=0){return 'AUTH';}" +
+                "return bodyTxt.trim().length>20?'READY':'WAIT';" +
+                "}catch(e){return 'READY';}})();"
+            wv.evaluateJavascript(checkJs) { rawRes ->
+                val clean = rawRes?.replace("\"", "")?.trim() ?: ""
+                if (clean == "READY") {
+                    clearWebCoverTimers()
+                    webAuthOverlay.visibility = View.GONE
+                } else {
+                    scheduleWebRevealCheck(wv, injectJs, attempt + 1)
+                }
+            }
+        }
+        webRevealCheckRunnable = r
+        mainHandler.postDelayed(r, if (attempt == 0) 350L else 260L)
+    }
+
     private fun updatePlaybackProgress() {
         val player = activePlayer ?: return
         updatePlayPauseIcons()
@@ -982,6 +1124,7 @@ class ZhiyunPlayerActivity : Activity() {
         rewind10Btn.visibility = if (isExplicitLive) View.GONE else View.VISIBLE
         forward10Btn.visibility = if (isExplicitLive) View.GONE else View.VISIBLE
         speedPill.visibility = if (isExplicitLive) View.GONE else View.VISIBLE
+        followLivePill.visibility = if (isExplicitLive && activeWebView == null) View.VISIBLE else View.GONE
 
         if (isExplicitLive) {
             timeCurrentView.text = if (pos > 0) formatMs(pos) else "00:00"
@@ -1100,7 +1243,7 @@ class ZhiyunPlayerActivity : Activity() {
             val builder = PictureInPictureParams.Builder()
                 .setAspectRatio(Rational(16, 9))
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                builder.setAutoEnterEnabled(activePlayer != null)
+                builder.setAutoEnterEnabled(activePlayer != null || activeWebView != null)
                 builder.setSeamlessResizeEnabled(true)
             }
             setPictureInPictureParams(builder.build())
@@ -1113,7 +1256,7 @@ class ZhiyunPlayerActivity : Activity() {
             val builder = PictureInPictureParams.Builder()
                 .setAspectRatio(Rational(16, 9))
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                builder.setAutoEnterEnabled(activePlayer != null)
+                builder.setAutoEnterEnabled(activePlayer != null || activeWebView != null)
                 builder.setSeamlessResizeEnabled(true)
             }
             overlayRoot.visibility = View.GONE
@@ -1128,7 +1271,7 @@ class ZhiyunPlayerActivity : Activity() {
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         if (Build.VERSION.SDK_INT in Build.VERSION_CODES.O until Build.VERSION_CODES.S) {
-            if (activePlayer != null && !isInPictureInPictureMode) {
+            if ((activePlayer != null || activeWebView != null) && !isInPictureInPictureMode) {
                 enterPipMode()
             }
         }
@@ -1159,13 +1302,15 @@ class ZhiyunPlayerActivity : Activity() {
     }
 
     private fun startPlayback() {
-        if (streamCandidates.isNotEmpty()) {
+        val openWebDirectly = preferWeb ||
+            (rawInitialUrl.isNotEmpty() && !isDirectStreamUrl(rawInitialUrl))
+        val fallback = webFallbackUrl.ifEmpty { rawInitialUrl }
+        if (openWebDirectly && fallback.isNotEmpty()) {
+            attachWebView(fallback)
+        } else if (streamCandidates.isNotEmpty()) {
             playStreamAt(0)
-        } else {
-            val fallback = webFallbackUrl.ifEmpty { intent?.getStringExtra(EXTRA_URL) ?: "" }
-            if (fallback.isNotEmpty()) {
-                attachWebView(fallback)
-            }
+        } else if (fallback.isNotEmpty()) {
+            attachWebView(fallback)
         }
     }
 
@@ -1182,6 +1327,8 @@ class ZhiyunPlayerActivity : Activity() {
         val streamUrl = streamCandidates[index].second
         activeWebView?.destroy()
         activeWebView = null
+        clearWebCoverTimers()
+        webAuthOverlay.visibility = View.GONE
         customViewExitCallback = null
         exitWebFullscreen = null
         releasePlayer()
@@ -1318,7 +1465,8 @@ class ZhiyunPlayerActivity : Activity() {
         activeWebView?.destroy()
         videoContainer.removeAllViews()
         gestureLayer.visibility = View.GONE
-        bufferingSpinner.visibility = View.VISIBLE
+        bufferingSpinner.visibility = View.GONE
+        startWebAuthCover(9000L)
 
         val customViewHolder = FrameLayout(this).apply {
             visibility = View.GONE
@@ -1348,8 +1496,20 @@ class ZhiyunPlayerActivity : Activity() {
                 cookieManager.setCookie(h, "token=$token; Path=/")
                 cookieManager.setCookie(h, "token=$token; Domain=.zju.edu.cn; Path=/")
             }
-            cookieManager.flush()
         }
+        val cleanSso = ssoCookie.trim()
+        if (cleanSso.isNotEmpty()) {
+            val ssoHosts = listOf(
+                "https://zjuam.zju.edu.cn",
+                "https://classroom.zju.edu.cn",
+                "https://tgmedia.cmc.zju.edu.cn"
+            )
+            for (h in ssoHosts) {
+                cookieManager.setCookie(h, "iPlanetDirectoryPro=$cleanSso; Path=/; Secure")
+                cookieManager.setCookie(h, "iPlanetDirectoryPro=$cleanSso; Domain=.zju.edu.cn; Path=/; Secure")
+            }
+        }
+        cookieManager.flush()
 
         val escapedToken = token
             .replace("\\", "\\\\")
@@ -1361,6 +1521,7 @@ class ZhiyunPlayerActivity : Activity() {
             .replace("\n", "")
         val injectJs = buildString {
             append("(function(){try{")
+            append("window.confirm=function(){return true;};window.alert=function(){};")
             if (escapedToken.isNotEmpty()) {
                 append("localStorage.setItem('token','$escapedToken');")
                 append("localStorage.setItem('_token','$escapedToken');")
@@ -1371,32 +1532,71 @@ class ZhiyunPlayerActivity : Activity() {
                 append("document.cookie='token=$escapedToken;path=/';")
             }
             append(
-                "if(!document.getElementById('helechron-zy-fix')){" +
+                "if(location.hostname.indexOf('zjuam.zju.edu.cn')<0&&!document.getElementById('helechron-zy-fix')){" +
                     "var s=document.createElement('style');s.id='helechron-zy-fix';" +
-                    "s.innerHTML='html,body{background:#000!important;margin:0!important;padding:0!important;overflow-x:hidden!important;}" +
-                    ".player-wrapper,.prism-player,video{max-width:100vw!important;background:#000!important;}';" +
+                    "s.innerHTML='html,body,#app{background:#000!important;margin:0!important;padding:0!important;overflow:hidden!important;width:100vw!important;height:100vh!important;}" +
+                    ".header-wrapper,.living-header,.living-right,.right-wrapper,.nav-bar,.catalog-wrapper,.sidebar-wrapper,.chat-wrapper,.danmu-send-wrap{display:none!important;}" +
+                    ".living-room-wrapper,.living-content,.left-wrapper,.player-wrapper,.cmc-player-container,#cmc_player_container,.prism-player{position:fixed!important;left:0!important;top:0!important;right:0!important;bottom:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;margin:0!important;padding:0!important;z-index:9999!important;background:#000!important;}" +
+                    "video{width:100%!important;height:100%!important;object-fit:contain!important;background:#000!important;}';" +
                     "(document.head||document.documentElement).appendChild(s);" +
                     "};" +
-                    "function autoClickLogin(){try{" +
+                    "function isVisible(el){try{if(!el)return false;var st=window.getComputedStyle(el);return st.display!=='none'&&st.visibility!=='hidden'&&el.offsetWidth>0&&el.offsetHeight>0;}catch(e){return false;}}" +
+                    "function autoConfirmAuth(){try{" +
+                    "var href=(location.href||'').toLowerCase();" +
+                    "var onAuthHost=href.indexOf('zjuam.zju.edu.cn')>=0||href.indexOf('cas/login')>=0||href.indexOf('auth/login')>=0||href.indexOf('oauth')>=0;" +
+                    "var modals=document.querySelectorAll('.el-message-box__wrapper,.el-dialog__wrapper,.ant-modal-wrap,.van-dialog,[role=\"dialog\"],.modal,.dialog');" +
+                    "for(var m=0;m<modals.length;m++){" +
+                    "if(!isVisible(modals[m]))continue;" +
+                    "var mt=(modals[m].innerText||'');" +
+                    "if(mt.indexOf('统一身份认证')>=0||mt.indexOf('通行证')>=0||mt.indexOf('认证')>=0||mt.indexOf('登录')>=0||mt.indexOf('跳转')>=0||mt.indexOf('授权')>=0||mt.indexOf('确认')>=0){" +
+                    "var pbtn=modals[m].querySelector('.el-message-box__btns .el-button--primary,.el-dialog__footer .el-button--primary,.ant-modal-confirm-btns .ant-btn-primary,.van-dialog__confirm');" +
+                    "if(pbtn&&isVisible(pbtn)){pbtn.click();return true;}" +
+                    "var mbs=modals[m].querySelectorAll('button,a,.btn,[role=\"button\"],span');" +
+                    "for(var k=0;k<mbs.length;k++){" +
+                    "var kt=(mbs[k].innerText||mbs[k].textContent||'').trim();" +
+                    "if(kt==='确定'||kt==='确认'||kt==='确认跳转'||kt==='去登录'||kt==='立即登录'||kt==='前往登录'||kt==='授权'||kt==='同意'||kt==='允许'||kt==='继续'||kt.indexOf('统一身份认证')>=0||kt.indexOf('通行证')>=0){" +
+                    "if(isVisible(mbs[k])){mbs[k].click();return true;}" +
+                    "}" +
+                    "}" +
+                    "}" +
+                    "}" +
+                    "if(onAuthHost){" +
+                    "var userInput=document.querySelector('input[name=\"username\"],#username');" +
+                    "var hasEmptyCred=userInput&&isVisible(userInput)&&(!userInput.value||userInput.value.trim()==='');" +
+                    "if(!hasEmptyCred){" +
+                    "var ab=document.querySelectorAll('button,a,input[type=\"submit\"],input[type=\"button\"],.btn');" +
+                    "for(var j=0;j<ab.length;j++){" +
+                    "var at=(ab[j].innerText||ab[j].value||ab[j].textContent||'').trim();" +
+                    "if(at==='确定'||at==='确认'||at==='确认跳转'||at==='授权'||at==='同意'||at==='允许'||at==='继续'||at.indexOf('确认')>=0){" +
+                    "if(isVisible(ab[j])){ab[j].click();return true;}" +
+                    "}" +
+                    "}" +
+                    "}" +
+                    "}" +
+                    "var vid=document.querySelector('video');" +
+                    "if(!vid||vid.readyState<2){" +
                     "var b=document.querySelectorAll('button,a,.btn,[role=\"button\"],span');" +
                     "for(var i=0;i<b.length;i++){" +
                     "var t=(b[i].innerText||b[i].textContent||'').trim();" +
-                    "if(t==='登录浙大通行证'||t==='浙大通行证登录'||t.indexOf('通行证')>=0||t==='登录'){" +
-                    "if(b[i].offsetParent!==null){b[i].click();return true;}" +
+                    "if(t==='登录浙大通行证'||t==='浙大通行证登录'||t.indexOf('通行证')>=0||t.indexOf('统一身份认证')>=0||t==='确认跳转'||t==='立即登录'||t==='去登录'||t==='前往登录'||t==='登录'){" +
+                    "if(isVisible(b[i])){b[i].click();return true;}" +
                     "}" +
                     "}" +
-                    "var l=document.querySelectorAll('a[href*=\"cas/login\"],a[href*=\"auth/login\"]');" +
-                    "if(l.length>0){l[0].click();return true;}" +
+                    "var l=document.querySelectorAll('a[href*=\"cas/login\"],a[href*=\"auth/login\"],a[href*=\"zjuam.zju.edu.cn\"]');" +
+                    "if(l.length>0&&isVisible(l[0])){l[0].click();return true;}" +
+                    "}" +
                     "}catch(e){}" +
                     "return false;" +
                     "};" +
-                    "if(!autoClickLogin()){" +
+                    "if(!autoConfirmAuth()&&!window.__helechronAuthPolling){" +
+                    "window.__helechronAuthPolling=true;" +
                     "var ckCnt=0;" +
                     "var ckTimer=setInterval(function(){" +
                     "ckCnt++;" +
-                    "if(autoClickLogin()||ckCnt>25){clearInterval(ckTimer);}" +
-                    "},200);" +
-                    "}"
+                    "if(autoConfirmAuth()||ckCnt>30){clearInterval(ckTimer);window.__helechronAuthPolling=false;}" +
+                    "},180);" +
+                    "}" +
+                    "setTimeout(function(){try{window.dispatchEvent(new Event('resize'));var v=document.querySelector('video');if(v&&v.paused){v.play().catch(function(){});}}catch(e){}},600);"
             )
             append("}catch(e){}})();")
         }
@@ -1415,6 +1615,26 @@ class ZhiyunPlayerActivity : Activity() {
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
             cookieManager.setAcceptThirdPartyCookies(this, true)
             val chromeClient = object : WebChromeClient() {
+                override fun onJsConfirm(
+                    view: WebView?,
+                    url: String?,
+                    message: String?,
+                    result: JsResult?
+                ): Boolean {
+                    result?.confirm()
+                    return true
+                }
+
+                override fun onJsAlert(
+                    view: WebView?,
+                    url: String?,
+                    message: String?,
+                    result: JsResult?
+                ): Boolean {
+                    result?.confirm()
+                    return true
+                }
+
                 override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
                     if (view == null) return
                     fullscreenView?.let { customViewHolder.removeView(it) }
@@ -1453,6 +1673,9 @@ class ZhiyunPlayerActivity : Activity() {
             webViewClient = object : WebViewClient() {
                 override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                     super.onPageStarted(view, url, favicon)
+                    if (isWebAuthUrl(url)) {
+                        startWebAuthCover(10000L)
+                    }
                     view?.evaluateJavascript(injectJs, null)
                 }
 
@@ -1460,6 +1683,11 @@ class ZhiyunPlayerActivity : Activity() {
                     super.onPageFinished(view, url)
                     bufferingSpinner.visibility = View.GONE
                     view?.evaluateJavascript(injectJs, null)
+                    if (isWebAuthUrl(url)) {
+                        startWebAuthCover(10000L)
+                    } else if (view != null) {
+                        scheduleWebRevealCheck(view, injectJs, 0)
+                    }
                 }
 
                 override fun onReceivedSslError(
@@ -1512,7 +1740,10 @@ class ZhiyunPlayerActivity : Activity() {
         val options = mutableListOf<String>()
         val actions = mutableListOf<() -> Unit>()
 
-        if (activeWebView == null && !isLiveStream) {
+        if (activeWebView == null && isLiveStream) {
+            options.add("跟随直播进度")
+            actions.add { seekToLiveEdge() }
+        } else if (activeWebView == null && !isLiveStream) {
             options.add("倍速播放（当前 ${speeds[speedIndex]}x）")
             actions.add { showSpeedDialog() }
         }
@@ -1535,7 +1766,7 @@ class ZhiyunPlayerActivity : Activity() {
             }
         }
 
-        if (activeWebView == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             options.add("画中画小窗播放")
             actions.add { enterPipMode() }
         }

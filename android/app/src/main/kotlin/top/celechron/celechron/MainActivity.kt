@@ -112,8 +112,21 @@ class MainActivity : FlutterActivity() {
                     }
                     val livingroomUrl = call.argument<String>("livingroomUrl") ?: ""
                     val token = call.argument<String>("token") ?: ""
+                    val ssoCookie = call.argument<String>("ssoCookie") ?: ""
                     val isLive = call.argument<Boolean>("isLive") ?: false
-                    result.success(showInAppVideoDialog(url, title, streams, livingroomUrl, token, isLive))
+                    val preferWeb = call.argument<Boolean>("preferWeb") ?: false
+                    result.success(
+                        showInAppVideoDialog(
+                            url,
+                            title,
+                            streams,
+                            livingroomUrl,
+                            token,
+                            isLive,
+                            ssoCookie,
+                            preferWeb
+                        )
+                    )
                 }
                 "installApk" -> {
                     val filePath = call.argument<String>("filePath") ?: ""
@@ -393,7 +406,9 @@ class MainActivity : FlutterActivity() {
         streams: List<Pair<String, String>> = emptyList(),
         livingroomUrl: String = "",
         token: String = "",
-        isLive: Boolean = false
+        isLive: Boolean = false,
+        ssoCookie: String = "",
+        preferWeb: Boolean = false
     ): Boolean {
         if (url.isEmpty() && livingroomUrl.isEmpty() && streams.isEmpty()) return false
         return try {
@@ -404,7 +419,9 @@ class MainActivity : FlutterActivity() {
                 putExtra(ZhiyunPlayerActivity.EXTRA_TITLE, title)
                 putExtra(ZhiyunPlayerActivity.EXTRA_LIVINGROOM_URL, livingroomUrl)
                 putExtra(ZhiyunPlayerActivity.EXTRA_TOKEN, token)
+                putExtra(ZhiyunPlayerActivity.EXTRA_SSO_COOKIE, ssoCookie)
                 putExtra(ZhiyunPlayerActivity.EXTRA_IS_LIVE, isLive)
+                putExtra(ZhiyunPlayerActivity.EXTRA_PREFER_WEB, preferWeb)
                 putStringArrayListExtra(ZhiyunPlayerActivity.EXTRA_STREAM_LABELS, labels)
                 putStringArrayListExtra(ZhiyunPlayerActivity.EXTRA_STREAM_URLS, urls)
             }

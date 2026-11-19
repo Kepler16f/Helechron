@@ -604,7 +604,9 @@ class OhosNativeService {
     List<Map<String, String>> streams = const [],
     String? livingroomUrl,
     String? token,
+    String? ssoCookie,
     bool isLive = false,
+    bool preferWeb = false,
   }) async {
     if (PlatformFeatures.usesFlutterPlugins) {
       return MobileNativeService.instance.openInAppVideoPlayer(
@@ -613,7 +615,9 @@ class OhosNativeService {
         streams: streams,
         livingroomUrl: livingroomUrl,
         token: token,
+        ssoCookie: ssoCookie,
         isLive: isLive,
+        preferWeb: preferWeb,
       );
     }
     try {
@@ -624,9 +628,11 @@ class OhosNativeService {
         'streams': streams,
         'streamsJson': jsonEncode(streams),
         'isLive': isLive,
+        'preferWeb': preferWeb,
         if (livingroomUrl != null && livingroomUrl.isNotEmpty)
           'livingroomUrl': livingroomUrl,
         if (token != null && token.isNotEmpty) 'token': token,
+        if (ssoCookie != null && ssoCookie.isNotEmpty) 'ssoCookie': ssoCookie,
       });
       return result ?? false;
     } on PlatformException catch (e) {

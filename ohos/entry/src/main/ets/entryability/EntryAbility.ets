@@ -615,7 +615,12 @@ export default class EntryAbility extends FlutterAbility {
         result.success(false);
         return;
       }
-      const uri = filePath.indexOf('file://') === 0 ? filePath : fileUri.getUriFromPath(filePath);
+      let uri = filePath;
+      if (filePath.indexOf('file://') !== 0) {
+        uri = filePath.indexOf('/storage/Users/') === 0
+          ? `file://docs${filePath}`
+          : fileUri.getUriFromPath(filePath);
+      }
       const mimeType = rawMime.length > 0 ? rawMime : this.inferMimeType(filePath);
       const want: Want = {
         action: 'ohos.want.action.viewData',
@@ -664,18 +669,22 @@ export default class EntryAbility extends FlutterAbility {
       const title = (call.argument('title') as string) || '智云课堂';
       const livingroomUrl = (call.argument('livingroomUrl') as string) || '';
       const token = (call.argument('token') as string) || '';
+      const ssoCookie = (call.argument('ssoCookie') as string) || '';
       const streamsJsonArg = (call.argument('streamsJson') as string) || '[]';
       const isLiveArg = (call.argument('isLive') as boolean) || false;
+      const preferWebArg = (call.argument('preferWeb') as boolean) || false;
       if (url.length === 0 && livingroomUrl.length === 0) {
         result.success(false);
         return;
       }
-      AppStorage.setOrCreate('inAppVideoUrl', url.length > 0 ? url : livingroomUrl);
       AppStorage.setOrCreate('inAppVideoTitle', title);
       AppStorage.setOrCreate('inAppVideoLivingroomUrl', livingroomUrl);
       AppStorage.setOrCreate('inAppVideoToken', token);
+      AppStorage.setOrCreate('inAppVideoSsoCookie', ssoCookie);
       AppStorage.setOrCreate('inAppVideoStreamsJson', streamsJsonArg);
       AppStorage.setOrCreate('inAppVideoIsLive', isLiveArg);
+      AppStorage.setOrCreate('inAppVideoPreferWeb', preferWebArg);
+      AppStorage.setOrCreate('inAppVideoUrl', url.length > 0 ? url : livingroomUrl);
       AppStorage.setOrCreate('inAppVideoVisible', true);
       result.success(true);
     } catch (err) {
