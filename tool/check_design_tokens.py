@@ -26,6 +26,10 @@ ENFORCED_DIRS = [
 
 ENFORCED_FILES = [
     "lib/page/home_page.dart",
+    "lib/page/flow/exam_week_banner.dart",
+    "lib/page/flow/flow_view.dart",
+    "lib/page/calendar/calendar_view.dart",
+    "lib/page/calendar/schedule_view.dart",
     "lib/page/option/appearance_section.dart",
 ]
 

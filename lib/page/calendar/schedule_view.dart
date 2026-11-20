@@ -2,7 +2,9 @@ import 'dart:math';
 
 import 'package:celechron/utils/tuple.dart';
 import 'package:celechron/model/session.dart';
-import 'package:celechron/design/round_rectangle_card.dart';
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/page/scholar/course_schedule/course_card.dart';
 import 'package:celechron/page/calendar/calendar_controller.dart';
 import 'package:flutter/cupertino.dart';
@@ -14,6 +16,7 @@ class ScheduleView extends StatelessWidget {
   const ScheduleView({super.key, required this.controller});
 
   Widget _courseSchedule(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     const List<String> courseStartTime = [
       "08:00",
       "08:50",
@@ -27,193 +30,96 @@ class ScheduleView extends StatelessWidget {
       "17:05",
       "18:50",
       "19:40",
-      "20:30"
+      "20:30",
     ];
-    return RoundRectangleCard(
+    final weekdayStyle = TextStyle(
+      color: colors.textSecondary,
+      fontSize: 13.5,
+      fontWeight: FontWeight.w600,
+    );
+    return AelSectionCard(
+      padding: const EdgeInsets.fromLTRB(10, 14, 10, 12),
       child: Column(
         children: [
           Row(
             children: [
               const Spacer(flex: 1),
-              Expanded(
-                flex: 2,
-                child: Center(
-                  child: Text(
-                    '一',
-                    style:
-                        CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                              fontSize: 14,
-                            ),
-                  ),
+              for (final dayLabel in const ['一', '二', '三', '四', '五', '六', '日'])
+                Expanded(
+                  flex: 2,
+                  child: Center(child: Text(dayLabel, style: weekdayStyle)),
                 ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Center(
-                  child: Text(
-                    '二',
-                    style:
-                        CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                              fontSize: 14,
-                            ),
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Center(
-                  child: Text(
-                    '三',
-                    style:
-                        CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                              fontSize: 14,
-                            ),
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Center(
-                  child: Text(
-                    '四',
-                    style:
-                        CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                              fontSize: 14,
-                            ),
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Center(
-                  child: Text(
-                    '五',
-                    style:
-                        CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                              fontSize: 14,
-                            ),
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Center(
-                  child: Text(
-                    '六',
-                    style:
-                        CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                              fontSize: 14,
-                            ),
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Center(
-                  child: Text(
-                    '日',
-                    style:
-                        CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                              fontSize: 14,
-                            ),
-                  ),
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 4),
           SizedBox(
             height: 560,
-            child: Obx(
-              () {
-                final semester = controller.getCurrentSemester();
-                if (semester == null) {
-                  return Center(
-                    child: Text(
-                      '当前不在学期内',
-                      style: CupertinoTheme.of(context)
-                          .textTheme
-                          .textStyle
-                          .copyWith(fontSize: 16),
+            child: Obx(() {
+              final semester = controller.getCurrentSemester();
+              if (semester == null) {
+                return Center(
+                  child: Text(
+                    '当前不在学期内',
+                    style: TextStyle(
+                      color: colors.textSecondary,
+                      fontSize: 15.5,
                     ),
-                  );
-                }
+                  ),
+                );
+              }
 
-                final isFirstHalf = controller.isFirstHalfSemester(semester);
-                final preferredHalfTag = isFirstHalf
-                    ? (semester.name.contains('春夏') ? 'spring' : 'autumn')
-                    : (semester.name.contains('春夏') ? 'summer' : 'winter');
-                final sessionsByDayOfWeek = isFirstHalf
-                    ? semester.firstHalfTimetable
-                    : semester.secondHalfTimetable;
+              final isFirstHalf = controller.isFirstHalfSemester(semester);
+              final preferredHalfTag = isFirstHalf
+                  ? (semester.name.contains('春夏') ? 'spring' : 'autumn')
+                  : (semester.name.contains('春夏') ? 'summer' : 'winter');
+              final sessionsByDayOfWeek = isFirstHalf
+                  ? semester.firstHalfTimetable
+                  : semester.secondHalfTimetable;
 
-                return Row(
-                  children: [
-                    Expanded(
-                      flex: 1,
-                      child: Column(
-                        children: [
-                          for (var i = 1; i <= 13; i++)
-                            Expanded(
-                              child: Center(
-                                child: Column(
-                                  children: [
-                                    FittedBox(
-                                      fit: BoxFit.fitWidth,
-                                      child: Text(
-                                        courseStartTime[i - 1],
-                                        style: CupertinoTheme.of(context)
-                                            .textTheme
-                                            .textStyle
-                                            .copyWith(
-                                              fontSize: 10,
-                                            ),
+              return Row(
+                children: [
+                  Expanded(
+                    flex: 1,
+                    child: Column(
+                      children: [
+                        for (var i = 1; i <= 13; i++)
+                          Expanded(
+                            child: Center(
+                              child: Column(
+                                children: [
+                                  FittedBox(
+                                    fit: BoxFit.fitWidth,
+                                    child: Text(
+                                      courseStartTime[i - 1],
+                                      style: TextStyle(
+                                        color: colors.textTertiary,
+                                        fontSize: 10,
+                                        fontFeatures: const [
+                                          FontFeature.tabularFigures(),
+                                        ],
                                       ),
                                     ),
-                                    const SizedBox(
-                                      height: 2,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    i.toString(),
+                                    style: TextStyle(
+                                      color: colors.textPrimary,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13.5,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures(),
+                                      ],
                                     ),
-                                    Text(
-                                      i.toString(),
-                                      style: CupertinoTheme.of(context)
-                                          .textTheme
-                                          .textStyle
-                                          .copyWith(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
-                                          ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    for (var i = 1; i <= 6; i++)
-                      Expanded(
-                        flex: 2,
-                        child: LayoutBuilder(
-                          builder: (context, constraints) => Stack(
-                            children: [
-                              Column(
-                                children: [
-                                  for (var j = 1; j <= 12; j++)
-                                    Expanded(
-                                      child: Container(),
-                                    ),
-                                  Expanded(
-                                    child: Container(),
                                   ),
                                 ],
                               ),
-                              ..._buildCourseScheduleByDayOfWeek(
-                                  sessionsByDayOfWeek, i, constraints,
-                                  preferredHalfTag: preferredHalfTag)
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
+                      ],
+                    ),
+                  ),
+                  for (var i = 1; i <= 6; i++)
                     Expanded(
                       flex: 2,
                       child: LayoutBuilder(
@@ -222,23 +128,45 @@ class ScheduleView extends StatelessWidget {
                             Column(
                               children: [
                                 for (var j = 1; j <= 12; j++)
-                                  Expanded(
-                                    child: Container(),
-                                  ),
-                                Expanded(child: Container())
+                                  Expanded(child: Container()),
+                                Expanded(child: Container()),
                               ],
                             ),
                             ..._buildCourseScheduleByDayOfWeek(
-                                sessionsByDayOfWeek, 7, constraints,
-                                preferredHalfTag: preferredHalfTag)
+                              sessionsByDayOfWeek,
+                              i,
+                              constraints,
+                              preferredHalfTag: preferredHalfTag,
+                            ),
                           ],
                         ),
                       ),
-                    )
-                  ],
-                );
-              },
-            ),
+                    ),
+                  Expanded(
+                    flex: 2,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => Stack(
+                        children: [
+                          Column(
+                            children: [
+                              for (var j = 1; j <= 12; j++)
+                                Expanded(child: Container()),
+                              Expanded(child: Container()),
+                            ],
+                          ),
+                          ..._buildCourseScheduleByDayOfWeek(
+                            sessionsByDayOfWeek,
+                            7,
+                            constraints,
+                            preferredHalfTag: preferredHalfTag,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }),
           ),
         ],
       ),
@@ -246,10 +174,11 @@ class ScheduleView extends StatelessWidget {
   }
 
   List<Widget> _buildCourseScheduleByDayOfWeek(
-      List<List<Session>> sessionsByDayOfWeek,
-      int day,
-      BoxConstraints constraints,
-      {String? preferredHalfTag}) {
+    List<List<Session>> sessionsByDayOfWeek,
+    int day,
+    BoxConstraints constraints, {
+    String? preferredHalfTag,
+  }) {
     List<Tuple<int, int>> period = [];
     for (var i = 1; i <= 13; i++) {
       period.add(Tuple(i, i));
@@ -320,7 +249,12 @@ class ScheduleView extends StatelessWidget {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        padding: EdgeInsets.fromLTRB(
+          AelSpacing.pageHorizontal,
+          AelSpacing.xs,
+          AelSpacing.pageHorizontal,
+          MediaQuery.paddingOf(context).bottom + 20,
+        ),
         child: _courseSchedule(context),
       ),
     );

@@ -1,8 +1,10 @@
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 
-import 'package:celechron/design/round_rectangle_card.dart';
-import 'package:celechron/design/sub_title.dart';
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/icons/ael_icons.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/model/exam.dart';
 import 'package:celechron/model/scholar.dart';
 
@@ -23,13 +25,16 @@ class ExamWeekBanner extends StatelessWidget {
   /// 取 [at] 时刻起未结束、且开考时间在 [lookAheadDays] 天内的考试，按开考时间排序。
   static List<Exam> upcomingExams(Iterable<Exam> all, DateTime at) {
     final horizon = at.add(const Duration(days: lookAheadDays));
-    final list = all
-        .where((e) =>
-            e.time.length >= 2 &&
-            e.time[1].isAfter(at) &&
-            e.time[0].isBefore(horizon))
-        .toList()
-      ..sort((a, b) => a.time[0].compareTo(b.time[0]));
+    final list =
+        all
+            .where(
+              (e) =>
+                  e.time.length >= 2 &&
+                  e.time[1].isAfter(at) &&
+                  e.time[0].isBefore(horizon),
+            )
+            .toList()
+          ..sort((a, b) => a.time[0].compareTo(b.time[0]));
     return list;
   }
 
@@ -53,131 +58,127 @@ class ExamWeekBanner extends StatelessWidget {
     return Obx(() {
       final at = now.value;
       final exams = upcomingExams(
-          scholar.value.semesters.expand((s) => s.exams), at);
+        scholar.value.semesters.expand((s) => s.exams),
+        at,
+      );
       if (exams.isEmpty) return const SizedBox.shrink();
       return _buildBanner(context, exams, at);
     });
   }
 
   Widget _buildBanner(BuildContext context, List<Exam> exams, DateTime at) {
+    final colors = AelTheme.colorsOf(context);
     final next = exams.first;
     final inProgress = !next.time[0].isAfter(at);
-    final accent =
-        inProgress ? CupertinoColors.systemRed : CupertinoColors.systemOrange;
-    final textStyle = CupertinoTheme.of(context).textTheme.textStyle;
-    final secondary =
-        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+    final accent = inProgress ? colors.error : colors.warning;
     final others = exams.skip(1).take(_maxListed).toList();
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 5),
-      child: Column(
-        children: [
-          SubtitleRow(subtitle: '考试周'),
-          RoundRectangleCard(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+      padding: const EdgeInsets.fromLTRB(
+        AelSpacing.pageHorizontal,
+        0,
+        AelSpacing.pageHorizontal,
+        AelSpacing.sectionGap,
+      ),
+      child: AelSectionCard(
+        icon: AelIcons.exam,
+        title: '考试周',
+        trailing: AelChip(
+          label: next.type == ExamType.finalExam ? '期末' : '期中',
+          tone: inProgress ? AelChipTone.error : AelChipTone.warning,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                AelIconBadge(
+                  icon: AelIcons.award,
+                  style: AelIconBadgeStyle.cookie,
+                  backgroundColor: inProgress
+                      ? colors.errorContainer
+                      : colors.warningContainer,
+                  iconColor: inProgress
+                      ? colors.onErrorContainer
+                      : colors.onWarningContainer,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: accent,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          next.type == ExamType.finalExam ? '期末' : '期中',
-                          style: const TextStyle(
-                              fontSize: 12,
-                              color: CupertinoColors.white,
-                              fontWeight: FontWeight.w600),
+                      Text(
+                        next.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: colors.textPrimary,
+                          fontSize: 16.5,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          next.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: textStyle.copyWith(
-                              fontSize: 17, fontWeight: FontWeight.bold),
+                      const SizedBox(height: 3),
+                      Text(
+                        countdownText(next, at),
+                        style: TextStyle(
+                          color: accent,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    countdownText(next, at),
-                    style: textStyle.copyWith(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: accent),
-                  ),
-                  const SizedBox(height: 8),
-                  _infoRow(context, CupertinoIcons.clock, next.chineseTime),
-                  const SizedBox(height: 4),
-                  _infoRow(context, CupertinoIcons.location_solid,
-                      next.location?.isNotEmpty == true ? next.location! : '考场未知'),
-                  const SizedBox(height: 4),
-                  _infoRow(context, CupertinoIcons.square_grid_2x2,
-                      '座位 ${next.seat?.isNotEmpty == true ? next.seat! : '未分配'}'),
-                  const SizedBox(height: 8),
-                  Text('带好：身份证 · 校园卡 · 文具 · 计算器（按考试要求）',
-                      style: TextStyle(fontSize: 12, color: secondary)),
-                  if (others.isNotEmpty) ...[
-                    Container(
-                      height: 0.5,
-                      margin: const EdgeInsets.symmetric(vertical: 10),
-                      color: CupertinoDynamicColor.resolve(
-                          CupertinoColors.separator, context),
-                    ),
-                    for (final e in others)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 3),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(e.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: textStyle.copyWith(fontSize: 14)),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(e.chineseDate,
-                                style:
-                                    TextStyle(fontSize: 13, color: secondary)),
-                          ],
-                        ),
-                      ),
-                  ],
-                ],
-              ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _infoRow(BuildContext context, IconData icon, String text) {
-    final color =
-        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
-    return Row(
-      children: [
-        Icon(icon, size: 14, color: color),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(text,
-              style: CupertinoTheme.of(context)
-                  .textTheme
-                  .textStyle
-                  .copyWith(fontSize: 14)),
+            const SizedBox(height: AelSpacing.md),
+            Row(
+              children: [
+                Expanded(
+                  child: AelStatTile(
+                    icon: AelIcons.location,
+                    iconColor: accent,
+                    label: '考场',
+                    value: next.location?.isNotEmpty == true
+                        ? next.location!
+                        : '待公布',
+                    subtitle: next.chineseTime,
+                  ),
+                ),
+                const SizedBox(width: AelSpacing.sm),
+                Expanded(
+                  child: AelStatTile(
+                    icon: AelIcons.exam,
+                    iconColor: accent,
+                    label: '座位号',
+                    value: next.seat?.isNotEmpty == true ? next.seat! : '未分配',
+                    subtitle: '携带证件与文具',
+                  ),
+                ),
+              ],
+            ),
+            if (others.isNotEmpty) ...[
+              const SizedBox(height: AelSpacing.md),
+              for (int i = 0; i < others.length; i++) ...[
+                if (i > 0) const SizedBox(height: 6),
+                AelListRow(
+                  title: others[i].name,
+                  trailing: Text(
+                    others[i].chineseDate,
+                    style: TextStyle(
+                      color: colors.textSecondary,
+                      fontSize: 12.5,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  showChevron: false,
+                ),
+              ],
+            ],
+          ],
         ),
-      ],
+      ),
     );
   }
 }
