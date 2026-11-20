@@ -360,16 +360,19 @@ class OhosNativeService {
 
   /// 设置底部 Tab 栏样式（鸿蒙原生 ArkTS 接口）
   /// [materialLevel] 沉浸光感强度档位：10=跟随系统 0=精致 1=柔和 2=流畅
+  /// [primaryColorHex] 可选主色十六进制（如 `#007AFF`），同步原生底栏选中色
   Future<void> setBottomBarStyle({
     required bool floating,
     required bool immersiveLight,
     int materialLevel = 10,
+    String? primaryColorHex,
   }) async {
     try {
       await _channel.invokeMethod('setBottomBarStyle', {
         'floating': floating,
         'immersiveLight': immersiveLight,
         'materialLevel': materialLevel,
+        if (primaryColorHex != null) 'primaryColorHex': primaryColorHex,
       });
     } on PlatformException catch (e) {
       debugPrint('setBottomBarStyle failed: $e');

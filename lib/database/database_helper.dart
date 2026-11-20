@@ -7,6 +7,8 @@ import 'package:celechron/worker/fuse.dart';
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/model/period.dart';
 import 'package:celechron/model/option.dart';
+import 'package:celechron/design/theme/ael_theme_config.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'adapters/duration_adapter.dart';
 import 'adapters/scholar_adapter.dart';
 import 'adapters/deadline_adapter.dart';
@@ -64,6 +66,10 @@ class DatabaseHelper {
   final String kPushOnExamReminder = 'pushOnExamReminder';
   final String kEcardLowBalanceThreshold = 'ecardLowBalanceThreshold';
   final String kDownloadPath = 'downloadPath';
+  final String kThemeColorSource = 'themeColorSource';
+  final String kThemeSeedColorValue = 'themeSeedColorValue';
+  final String kThemePaletteStyle = 'themePaletteStyle';
+  final String kThemeContrastLevel = 'themeContrastLevel';
 
   Option getOption() {
     return Option(
@@ -84,6 +90,10 @@ class DatabaseHelper {
       pushOnExamReminder: getPushOnExamReminder().obs,
       ecardLowBalanceThreshold: getEcardLowBalanceThreshold().obs,
       downloadPath: getDownloadPath().obs,
+      themeColorSource: getThemeColorSource().obs,
+      themeSeedColorValue: getThemeSeedColorValue().obs,
+      themePaletteStyle: getThemePaletteStyle().obs,
+      themeContrastLevel: getThemeContrastLevel().obs,
     );
   }
 
@@ -233,6 +243,52 @@ class DatabaseHelper {
 
   Future<void> setBottomBarMaterialLevel(int level) async {
     await optionsBox.put(kBottomBarMaterialLevel, level);
+  }
+
+  ThemeColorSource getThemeColorSource() {
+    final raw = optionsBox.get(kThemeColorSource);
+    if (raw is int && raw >= 0 && raw < ThemeColorSource.values.length) {
+      return ThemeColorSource.values[raw];
+    }
+    return ThemeColorSource.defaultBlue;
+  }
+
+  Future<void> setThemeColorSource(ThemeColorSource source) async {
+    await optionsBox.put(kThemeColorSource, source.index);
+  }
+
+  int getThemeSeedColorValue() {
+    final raw = optionsBox.get(kThemeSeedColorValue);
+    if (raw is int) return raw;
+    return AelPalettePresets.defaultBlueValue;
+  }
+
+  Future<void> setThemeSeedColorValue(int value) async {
+    await optionsBox.put(kThemeSeedColorValue, value);
+  }
+
+  ThemePaletteStyle getThemePaletteStyle() {
+    final raw = optionsBox.get(kThemePaletteStyle);
+    if (raw is int && raw >= 0 && raw < ThemePaletteStyle.values.length) {
+      return ThemePaletteStyle.values[raw];
+    }
+    return ThemePaletteStyle.tonalSpot;
+  }
+
+  Future<void> setThemePaletteStyle(ThemePaletteStyle style) async {
+    await optionsBox.put(kThemePaletteStyle, style.index);
+  }
+
+  ThemeContrastLevel getThemeContrastLevel() {
+    final raw = optionsBox.get(kThemeContrastLevel);
+    if (raw is int && raw >= 0 && raw < ThemeContrastLevel.values.length) {
+      return ThemeContrastLevel.values[raw];
+    }
+    return ThemeContrastLevel.standard;
+  }
+
+  Future<void> setThemeContrastLevel(ThemeContrastLevel level) async {
+    await optionsBox.put(kThemeContrastLevel, level.index);
   }
 
   bool getPushOnExamReminder() {

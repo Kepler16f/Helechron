@@ -10,6 +10,7 @@ import 'package:celechron/model/option.dart';
 import 'package:celechron/design/cupertino_async_switch.dart';
 
 import 'allow_time_edit_page.dart';
+import 'appearance_section.dart';
 import 'course_id_mapping_edit_page.dart';
 import 'credits_page.dart';
 import 'diagnostic_log_page.dart';
@@ -561,6 +562,14 @@ class OptionPage extends StatelessWidget {
                         },
                       ),
                     ])),
+                // 外观：主题色 / 莫奈取色 / 配色风格 / 对比度
+                SliverToBoxAdapter(
+                  child: AppearanceSection(
+                    headerStyle: headerFooterTextStyle,
+                    trailingStyle: trailingTextStyle,
+                    margin: _defaultMargin,
+                  ),
+                ),
                 // 工具 → 显示
                 SliverToBoxAdapter(
                     child: CupertinoListSection.insetGrouped(

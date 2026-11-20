@@ -1,5 +1,8 @@
 import 'package:get/get.dart';
 
+import 'package:celechron/design/theme/ael_theme_config.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
+
 enum BrightnessMode { system, light, dark }
 
 enum GpaStrategy { best, first }
@@ -45,6 +48,10 @@ class Option {
   RxBool pushOnExamReminder;
   RxDouble ecardLowBalanceThreshold;
   RxString downloadPath;
+  Rx<ThemeColorSource> themeColorSource;
+  RxInt themeSeedColorValue;
+  Rx<ThemePaletteStyle> themePaletteStyle;
+  Rx<ThemeContrastLevel> themeContrastLevel;
 
   Option({
     required this.workTime,
@@ -64,7 +71,19 @@ class Option {
     RxBool? pushOnExamReminder,
     RxDouble? ecardLowBalanceThreshold,
     RxString? downloadPath,
+    Rx<ThemeColorSource>? themeColorSource,
+    RxInt? themeSeedColorValue,
+    Rx<ThemePaletteStyle>? themePaletteStyle,
+    Rx<ThemeContrastLevel>? themeContrastLevel,
   })  : pushOnExamReminder = pushOnExamReminder ?? true.obs,
         ecardLowBalanceThreshold = ecardLowBalanceThreshold ?? 15.0.obs,
-        downloadPath = downloadPath ?? ''.obs;
+        downloadPath = downloadPath ?? ''.obs,
+        themeColorSource =
+            themeColorSource ?? ThemeColorSource.defaultBlue.obs,
+        themeSeedColorValue =
+            themeSeedColorValue ?? AelPalettePresets.defaultBlueValue.obs,
+        themePaletteStyle =
+            themePaletteStyle ?? ThemePaletteStyle.tonalSpot.obs,
+        themeContrastLevel =
+            themeContrastLevel ?? ThemeContrastLevel.standard.obs;
 }

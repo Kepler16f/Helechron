@@ -103,12 +103,15 @@ export default class EntryAbility extends FlutterAbility {
       const floatingRaw = (await prefs.get('bottomBarFloating', '0')) as string;
       const immersiveRaw = (await prefs.get('bottomBarImmersiveLight', '0')) as string;
       const levelRaw = (await prefs.get('bottomBarMaterialLevel', 10)) as number;
+      const primaryHexRaw = (await prefs.get('themePrimaryHex', '')) as string;
       const floating = floatingRaw === '1';
       const immersiveLight = immersiveRaw === '1' && floating;
       const materialLevel = typeof levelRaw === 'number' ? levelRaw : 10;
+      const themePrimaryHex = typeof primaryHexRaw === 'string' ? primaryHexRaw : '';
       AppStorage.setOrCreate('bottomBarFloating', floating);
       AppStorage.setOrCreate('bottomBarImmersiveLight', immersiveLight);
       AppStorage.setOrCreate('bottomBarMaterialLevel', materialLevel);
+      AppStorage.setOrCreate('themePrimaryHex', themePrimaryHex);
       AppStorage.setOrCreate('bottomBarCurrentTab', 0);
       AppStorage.setOrCreate('bottomBarHidden', false);
       AppStorage.setOrCreate('inAppVideoVisible', false);
@@ -120,6 +123,7 @@ export default class EntryAbility extends FlutterAbility {
       AppStorage.setOrCreate('bottomBarFloating', false);
       AppStorage.setOrCreate('bottomBarImmersiveLight', false);
       AppStorage.setOrCreate('bottomBarMaterialLevel', 10);
+      AppStorage.setOrCreate('themePrimaryHex', '');
       AppStorage.setOrCreate('bottomBarCurrentTab', 0);
       AppStorage.setOrCreate('bottomBarHidden', false);
       AppStorage.setOrCreate('inAppVideoVisible', false);
@@ -1515,10 +1519,15 @@ export default class EntryAbility extends FlutterAbility {
       const immersiveLight = call.argument('immersiveLight') === true;
       const levelArg = call.argument('materialLevel') as number;
       const materialLevel = typeof levelArg === 'number' ? levelArg : 10;
+      const primaryHexArg = call.argument('primaryColorHex') as string | undefined;
       const prefs = await this.getWidgetPrefs();
       await prefs.put('bottomBarFloating', floating ? '1' : '0');
       await prefs.put('bottomBarImmersiveLight', immersiveLight ? '1' : '0');
       await prefs.put('bottomBarMaterialLevel', materialLevel);
+      if (typeof primaryHexArg === 'string' && primaryHexArg.length > 0) {
+        await prefs.put('themePrimaryHex', primaryHexArg);
+        AppStorage.setOrCreate('themePrimaryHex', primaryHexArg);
+      }
       await prefs.flush();
       AppStorage.setOrCreate('bottomBarFloating', floating);
       AppStorage.setOrCreate('bottomBarImmersiveLight', immersiveLight && floating);

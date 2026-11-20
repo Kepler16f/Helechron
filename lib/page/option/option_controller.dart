@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:get/get.dart';
 import 'package:flutter/cupertino.dart';
 
+import 'package:celechron/design/theme/ael_theme_config.dart';
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/model/option.dart';
 import 'package:celechron/database/database_helper.dart';
@@ -171,6 +172,34 @@ class OptionController extends GetxController {
   set brightnessMode(BrightnessMode value) {
     _option.brightnessMode.value = value;
     _db.setBrightnessMode(value);
+  }
+
+  ThemeColorSource get themeColorSource => _option.themeColorSource.value;
+
+  set themeColorSource(ThemeColorSource value) {
+    _option.themeColorSource.value = value;
+    _db.setThemeColorSource(value);
+  }
+
+  int get themeSeedColorValue => _option.themeSeedColorValue.value;
+
+  set themeSeedColorValue(int value) {
+    _option.themeSeedColorValue.value = value;
+    _db.setThemeSeedColorValue(value);
+  }
+
+  ThemePaletteStyle get themePaletteStyle => _option.themePaletteStyle.value;
+
+  set themePaletteStyle(ThemePaletteStyle value) {
+    _option.themePaletteStyle.value = value;
+    _db.setThemePaletteStyle(value);
+  }
+
+  ThemeContrastLevel get themeContrastLevel => _option.themeContrastLevel.value;
+
+  set themeContrastLevel(ThemeContrastLevel value) {
+    _option.themeContrastLevel.value = value;
+    _db.setThemeContrastLevel(value);
   }
 
   bool get bottomBarFloating => _option.bottomBarFloating.value;

@@ -1,13 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Theme, ThemeData;
+import 'package:flutter/material.dart' show Theme;
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_miuix/miuix.dart' show MiuixTheme;
 import 'package:get/get.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:app_links/app_links.dart';
 
+import 'package:celechron/design/theme/ael_theme_controller.dart';
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/model/option.dart';
 import 'package:celechron/page/consent_page.dart';
@@ -70,6 +72,7 @@ Future<void> _bootstrap() async {
   Get.put(db.getFlowList().obs, tag: 'flowList');
   Get.put(db.getFlowListUpdateTime().obs, tag: 'flowListLastUpdate');
   Get.put(db.getOption(), tag: 'option');
+  Get.put(AelThemeController(), tag: 'themeController');
 
   // 将底栏样式同步到原生
   final option = Get.find<Option>(tag: 'option');
@@ -369,77 +372,63 @@ class _CelechronAppState extends State<CelechronApp>
 
   @override
   Widget build(BuildContext context) {
-    var brightnessMode = Get.find<Option>(tag: 'option').brightnessMode;
-    return Obx(() => GetCupertinoApp(
-          theme: CupertinoThemeData(
-            brightness: brightnessMode.value == BrightnessMode.system
-                ? null
-                : brightnessMode.value == BrightnessMode.dark
-                    ? Brightness.dark
-                    : Brightness.light,
-            primaryColor: CupertinoColors.activeBlue,
-            scaffoldBackgroundColor: CupertinoColors.systemBackground,
-            barBackgroundColor: CupertinoColors.systemBackground,
-            textTheme: const CupertinoTextThemeData(
-              textStyle: TextStyle(
-                color: CupertinoColors.label,
-                fontSize: 17.0,
-                letterSpacing: -0.41,
-              ),
-              actionTextStyle: TextStyle(
-                color: CupertinoColors.activeBlue,
-                fontSize: 17.0,
-                letterSpacing: -0.41,
-              ),
-              navTitleTextStyle: TextStyle(
-                color: CupertinoColors.label,
-                fontSize: 17.0,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.41,
-              ),
-              navLargeTitleTextStyle: TextStyle(
-                color: CupertinoColors.label,
-                fontSize: 34.0,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.41,
-              ),
-            ),
-          ),
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-          ],
-          supportedLocales: const [
-            Locale('zh'),
-            Locale('en'),
-          ],
-          locale: const Locale('zh'),
-          builder: (context, child) {
-            final isDark = brightnessMode.value == BrightnessMode.system
-                ? (MediaQuery.platformBrightnessOf(context) == Brightness.dark)
-                : (brightnessMode.value == BrightnessMode.dark);
-            return Theme(
-              data: ThemeData(
-                brightness: isDark ? Brightness.dark : Brightness.light,
-                useMaterial3: true,
-              ),
+    final option = Get.find<Option>(tag: 'option');
+    final themeController = Get.find<AelThemeController>(tag: 'themeController');
+    return Obx(() {
+      final platformBrightness =
+          WidgetsBinding.instance.platformDispatcher.platformBrightness;
+      final bundle = themeController.resolveForOption(
+        option,
+        platformBrightness: platformBrightness,
+      );
+      themeController.syncNativeAccent(option, bundle);
+
+      return GetCupertinoApp(
+        theme: bundle.cupertinoTheme,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('zh'),
+          Locale('en'),
+        ],
+        locale: const Locale('zh'),
+        builder: (context, child) {
+          final resolvedPlatformBrightness =
+              MediaQuery.platformBrightnessOf(context);
+          final effectiveBundle =
+              resolvedPlatformBrightness == platformBrightness
+                  ? bundle
+                  : themeController.resolveForOption(
+                      option,
+                      platformBrightness: resolvedPlatformBrightness,
+                    );
+          themeController.syncNativeAccent(option, effectiveBundle);
+          return MiuixTheme(
+            data: effectiveBundle.miuixTheme,
+            child: Theme(
+              data: effectiveBundle.materialTheme,
               child: MediaQuery(
-                data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                data: MediaQuery.of(context)
+                    .copyWith(alwaysUse24HourFormat: true),
                 child: child!,
               ),
-            );
-          },
-          title: 'Helechron',
-          home: const HomePage(title: 'Helechron'),
-          initialRoute: '/',
-          routes: {
-            '/ecardpaypage': (context) => const ECardPayPage(),
-          },
-          debugShowCheckedModeBanner: false,
-          navigatorKey: navigatorKey,
-          navigatorObservers: [_nativeBarVisibilityObserver],
-        ));
+            ),
+          );
+        },
+        title: 'Helechron',
+        home: const HomePage(title: 'Helechron'),
+        initialRoute: '/',
+        routes: {
+          '/ecardpaypage': (context) => const ECardPayPage(),
+        },
+        debugShowCheckedModeBanner: false,
+        navigatorKey: navigatorKey,
+        navigatorObservers: [_nativeBarVisibilityObserver],
+      );
+    });
   }
 
   void _initAppLinks() {

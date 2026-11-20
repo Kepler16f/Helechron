@@ -101,6 +101,8 @@ struct Index {
   @StorageLink('bottomBarImmersiveLight') bottomBarImmersiveLight: boolean = false;
   /// 沉浸光感强度档位：10=跟随系统 0=精致 1=柔和 2=流畅
   @StorageLink('bottomBarMaterialLevel') bottomBarMaterialLevel: number = 10;
+  /// 跟随 Flutter 主题引擎的主色（十六进制如 #007AFF；空字符串时回退系统强调色）
+  @StorageLink('themePrimaryHex') themePrimaryHex: string = '';
   /// 弹出 Flutter 模态窗口时隐藏原生底栏，避免遮挡弹窗
   @StorageLink('bottomBarHidden') bottomBarHidden: boolean = false;
   @StorageLink('bottomBarCurrentTab') @Watch('onCurrentTabChanged') bottomBarCurrentTab: number = 0;
@@ -1353,6 +1355,12 @@ struct Index {
     return Math.round(360 / this.videoAspectRatio);
   }
 
+  private activeTabColor(): ResourceColor {
+    return this.themePrimaryHex.length > 0
+      ? this.themePrimaryHex
+      : $r('sys.color.ohos_id_color_emphasize');
+  }
+
   /// 自绘底栏单元（低版本回退 / 非沉浸模式）
   @Builder
   BottomBarItem(index: number) {
@@ -1360,13 +1368,13 @@ struct Index {
       SymbolGlyph(barSymbol(index))
         .fontSize(this.bottomBarFloating ? 20 : 22)
         .fontColor([this.bottomBarCurrentTab === index
-          ? $r('sys.color.ohos_id_color_emphasize')
+          ? this.activeTabColor()
           : $r('sys.color.ohos_id_color_text_secondary')])
       Text(barTitle(index))
         .fontSize(this.bottomBarFloating ? 9 : 10)
         .margin({ top: this.bottomBarFloating ? 1 : 2 })
         .fontColor(this.bottomBarCurrentTab === index
-          ? $r('sys.color.ohos_id_color_emphasize')
+          ? this.activeTabColor()
           : $r('sys.color.ohos_id_color_text_secondary'))
     }
     .layoutWeight(1)
@@ -1384,14 +1392,14 @@ struct Index {
       SymbolGlyph(barSymbol(index))
         .fontSize(22)
         .fontColor([this.bottomBarCurrentTab === index
-          ? $r('sys.color.ohos_id_color_emphasize')
+          ? this.activeTabColor()
           : $r('sys.color.ohos_id_color_text_secondary')])
       Text(barTitle(index))
         .fontSize(10.5)
         .fontWeight(this.bottomBarCurrentTab === index ? FontWeight.Bold : FontWeight.Normal)
         .margin({ top: 2 })
         .fontColor(this.bottomBarCurrentTab === index
-          ? $r('sys.color.ohos_id_color_emphasize')
+          ? this.activeTabColor()
           : $r('sys.color.ohos_id_color_text_secondary'))
     }
     .width('100%')
