@@ -97,8 +97,11 @@ class AelColorTokens {
       primary: Color.lerp(a.primary, b.primary, t)!,
       onPrimary: Color.lerp(a.onPrimary, b.onPrimary, t)!,
       primaryContainer: Color.lerp(a.primaryContainer, b.primaryContainer, t)!,
-      onPrimaryContainer:
-          Color.lerp(a.onPrimaryContainer, b.onPrimaryContainer, t)!,
+      onPrimaryContainer: Color.lerp(
+        a.onPrimaryContainer,
+        b.onPrimaryContainer,
+        t,
+      )!,
       textPrimary: Color.lerp(a.textPrimary, b.textPrimary, t)!,
       textSecondary: Color.lerp(a.textSecondary, b.textSecondary, t)!,
       textTertiary: Color.lerp(a.textTertiary, b.textTertiary, t)!,
@@ -108,12 +111,18 @@ class AelColorTokens {
       onNeutralChip: Color.lerp(a.onNeutralChip, b.onNeutralChip, t)!,
       success: Color.lerp(a.success, b.success, t)!,
       successContainer: Color.lerp(a.successContainer, b.successContainer, t)!,
-      onSuccessContainer:
-          Color.lerp(a.onSuccessContainer, b.onSuccessContainer, t)!,
+      onSuccessContainer: Color.lerp(
+        a.onSuccessContainer,
+        b.onSuccessContainer,
+        t,
+      )!,
       warning: Color.lerp(a.warning, b.warning, t)!,
       warningContainer: Color.lerp(a.warningContainer, b.warningContainer, t)!,
-      onWarningContainer:
-          Color.lerp(a.onWarningContainer, b.onWarningContainer, t)!,
+      onWarningContainer: Color.lerp(
+        a.onWarningContainer,
+        b.onWarningContainer,
+        t,
+      )!,
       error: Color.lerp(a.error, b.error, t)!,
       errorContainer: Color.lerp(a.errorContainer, b.errorContainer, t)!,
       onErrorContainer: Color.lerp(a.onErrorContainer, b.onErrorContainer, t)!,
@@ -245,14 +254,15 @@ final class AelThemeEngine {
 
     // 默认蓝且标准柔和风格时保留更接近参考图的明快主色；
     // 高对比度时采用 Material 高对比 Scheme 的主色与前景色。
-    final Color primary = contrastLevel == ThemeContrastLevel.standard &&
+    final Color primary =
+        contrastLevel == ThemeContrastLevel.standard &&
             source == ThemeColorSource.defaultBlue &&
             paletteStyle == ThemePaletteStyle.tonalSpot &&
             !isDark
         ? AelPalettePresets.defaultBlue
         : (contrastLevel != ThemeContrastLevel.standard
-            ? colorScheme.primary
-            : miuixColors.primary);
+              ? colorScheme.primary
+              : miuixColors.primary);
 
     final Color onPrimary = contrastLevel != ThemeContrastLevel.standard
         ? colorScheme.onPrimary
@@ -260,29 +270,38 @@ final class AelThemeEngine {
 
     // 中/高对比度时把主色写回 MiuixColors，使 Miuix 组件同样受对比度设置控制
     if (primary != miuixColors.primary || onPrimary != miuixColors.onPrimary) {
-      miuixColors = miuixColors.copy(
-        primary: primary,
-        onPrimary: onPrimary,
-      );
+      miuixColors = miuixColors.copy(primary: primary, onPrimary: onPrimary);
     }
 
     // 页面三层 tonal 表面：在莫奈/自定义模式下轻微混入主题色调，保证参考图的层次感
-    final basePageBg =
-        isDark ? AelSemanticPalette.pageBgDark : AelSemanticPalette.pageBgLight;
-    final baseCardBg =
-        isDark ? AelSemanticPalette.cardBgDark : AelSemanticPalette.cardBgLight;
+    final basePageBg = isDark
+        ? AelSemanticPalette.pageBgDark
+        : AelSemanticPalette.pageBgLight;
+    final baseCardBg = isDark
+        ? AelSemanticPalette.cardBgDark
+        : AelSemanticPalette.cardBgLight;
     final baseTileBg = isDark
         ? AelSemanticPalette.tonalTileBgDark
         : AelSemanticPalette.tonalTileBgLight;
 
-    final double surfaceTintWeight =
-        source == ThemeColorSource.defaultBlue ? 0.0 : (isDark ? 0.05 : 0.035);
-    final pageBg = Color.lerp(basePageBg, colorScheme.surfaceContainerLow,
-        surfaceTintWeight == 0 ? 0 : 0.55)!;
+    final double surfaceTintWeight = source == ThemeColorSource.defaultBlue
+        ? 0.0
+        : (isDark ? 0.05 : 0.035);
+    final pageBg = Color.lerp(
+      basePageBg,
+      colorScheme.surfaceContainerLow,
+      surfaceTintWeight == 0 ? 0 : 0.55,
+    )!;
     final cardBg = Color.lerp(
-        baseCardBg, colorScheme.surfaceContainerLowest, surfaceTintWeight)!;
-    final tonalTileBg = Color.lerp(baseTileBg, colorScheme.surfaceContainerHigh,
-        surfaceTintWeight == 0 ? 0 : 0.45)!;
+      baseCardBg,
+      colorScheme.surfaceContainerLowest,
+      surfaceTintWeight,
+    )!;
+    final tonalTileBg = Color.lerp(
+      baseTileBg,
+      colorScheme.surfaceContainerHigh,
+      surfaceTintWeight == 0 ? 0 : 0.45,
+    )!;
 
     final tokens = AelColorTokens(
       brightness: brightness,
@@ -331,8 +350,7 @@ final class AelThemeEngine {
       error: colorScheme.error,
       errorContainer: colorScheme.errorContainer,
       onErrorContainer: colorScheme.onErrorContainer,
-      info:
-          isDark ? AelSemanticPalette.infoDark : AelSemanticPalette.infoLight,
+      info: isDark ? AelSemanticPalette.infoDark : AelSemanticPalette.infoLight,
       infoContainer: isDark
           ? AelSemanticPalette.infoContainerDark
           : AelSemanticPalette.infoContainerLight,
@@ -356,10 +374,7 @@ final class AelThemeEngine {
     final materialTheme = ThemeData(
       useMaterial3: true,
       brightness: brightness,
-      colorScheme: colorScheme.copyWith(
-        primary: primary,
-        onPrimary: onPrimary,
-      ),
+      colorScheme: colorScheme.copyWith(primary: primary, onPrimary: onPrimary),
       scaffoldBackgroundColor: pageBg,
       dividerColor: tokens.divider,
       extensions: <ThemeExtension<dynamic>>[aelTheme],

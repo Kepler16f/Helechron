@@ -53,21 +53,27 @@ class CelechronHeader extends SliverPersistentHeaderDelegate {
 
   @override
   Widget build(
-      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
     return ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(
-            sigmaX: shrinkOffset > 12 ? 10 : shrinkOffset / 1.2,
-            sigmaY: shrinkOffset > 12 ? 10 : shrinkOffset / 1.2),
+          sigmaX: shrinkOffset > 12 ? 10 : shrinkOffset / 1.2,
+          sigmaY: shrinkOffset > 12 ? 10 : shrinkOffset / 1.2,
+        ),
         child: Container(
           padding: EdgeInsets.only(top: padding),
           color: shrinkOffset > 12
               ? CupertinoDynamicColor.resolve(
-                      CupertinoColors.systemBackground, context)
-                  .withValues(alpha: 0.5)
+                  CupertinoColors.systemBackground,
+                  context,
+                ).withValues(alpha: 0.5)
               : CupertinoDynamicColor.resolve(
-                      CupertinoColors.systemBackground, context)
-                  .withValues(alpha: shrinkOffset / 24),
+                  CupertinoColors.systemBackground,
+                  context,
+                ).withValues(alpha: shrinkOffset / 24),
           child: Column(
             children: [
               Stack(
@@ -84,7 +90,9 @@ class CelechronHeader extends SliverPersistentHeaderDelegate {
                         child: Icon(
                           CupertinoIcons.back,
                           color: CupertinoDynamicColor.resolve(
-                              CupertinoColors.label, context),
+                            CupertinoColors.label,
+                            context,
+                          ),
                         ),
                       ),
                     ),
@@ -92,9 +100,7 @@ class CelechronHeader extends SliverPersistentHeaderDelegate {
                   Positioned.fill(
                     child: Padding(
                       padding: EdgeInsets.symmetric(
-                        horizontal: right != null
-                            ? 98
-                            : (firstPage ? 16 : 48),
+                        horizontal: right != null ? 98 : (firstPage ? 16 : 48),
                       ),
                       child: Center(
                         child: Container(
@@ -115,7 +121,8 @@ class CelechronHeader extends SliverPersistentHeaderDelegate {
                                         .textTheme
                                         .navTitleTextStyle
                                         .copyWith(
-                                          fontSize: fontSize -
+                                          fontSize:
+                                              fontSize -
                                               (bottom == null ? 0 : 2),
                                         ),
                                   ),

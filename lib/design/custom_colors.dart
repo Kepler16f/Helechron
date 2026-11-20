@@ -5,11 +5,11 @@ class UidColors {
   static Color colorFromUid(String? uid) {
     int value = (uid ?? '').hashCode;
     return HSLColor.fromAHSL(
-            1.0,
-            (20 + (value * 19 + 133) % 310),
-            (80 + (value * 17 + 155) % 20) / 100.00,
-            (60 + (value * 13 + 494) % 20) / 100.00)
-        .toColor();
+      1.0,
+      (20 + (value * 19 + 133) % 310),
+      (80 + (value * 17 + 155) % 20) / 100.00,
+      (60 + (value * 13 + 494) % 20) / 100.00,
+    ).toColor();
   }
 }
 
@@ -58,92 +58,92 @@ class TimeColors {
 class CustomCupertinoDynamicColors {
   static const CupertinoDynamicColor spring =
       CupertinoDynamicColor.withBrightness(
-    color: Color.fromRGBO(230, 255, 226, 1.0),
-    darkColor: Color.fromRGBO(147, 251, 56, 1.0),
-  );
+        color: Color.fromRGBO(230, 255, 226, 1.0),
+        darkColor: Color.fromRGBO(147, 251, 56, 1.0),
+      );
 
   static const CupertinoDynamicColor summer =
       CupertinoDynamicColor.withBrightness(
-    color: Color.fromRGBO(255, 218, 238, 1.0),
-    darkColor: Color.fromRGBO(255, 25, 69, 1.0),
-  );
+        color: Color.fromRGBO(255, 218, 238, 1.0),
+        darkColor: Color.fromRGBO(255, 25, 69, 1.0),
+      );
 
   static const CupertinoDynamicColor autumn =
       CupertinoDynamicColor.withBrightness(
-    color: Color.fromRGBO(255, 234, 230, 1.0),
-    darkColor: Color.fromRGBO(255, 101, 56, 1.0),
-  );
+        color: Color.fromRGBO(255, 234, 230, 1.0),
+        darkColor: Color.fromRGBO(255, 101, 56, 1.0),
+      );
 
   static const CupertinoDynamicColor winter =
       CupertinoDynamicColor.withBrightness(
-    color: Color.fromRGBO(226, 239, 255, 1.0),
-    darkColor: Color.fromRGBO(0, 183, 251, 1.0),
-  );
+        color: Color.fromRGBO(226, 239, 255, 1.0),
+        darkColor: Color.fromRGBO(0, 183, 251, 1.0),
+      );
 
   static const CupertinoDynamicColor violet =
       CupertinoDynamicColor.withBrightness(
-    color: Color.fromRGBO(230, 229, 255, 1.0),
-    darkColor: Color.fromRGBO(151, 131, 216, 1.0),
-  );
+        color: Color.fromRGBO(230, 229, 255, 1.0),
+        darkColor: Color.fromRGBO(151, 131, 216, 1.0),
+      );
 
   static const CupertinoDynamicColor sakura =
       CupertinoDynamicColor.withBrightness(
-    color: Color.fromRGBO(255, 226, 255, 1.0),
-    darkColor: Color.fromRGBO(218, 130, 217, 1.0),
-  );
+        color: Color.fromRGBO(255, 226, 255, 1.0),
+        darkColor: Color.fromRGBO(218, 130, 217, 1.0),
+      );
 
   static const CupertinoDynamicColor sand =
       CupertinoDynamicColor.withBrightness(
-    color: Color.fromRGBO(255, 246, 211, 1.0),
-    darkColor: Color.fromRGBO(252, 222, 59, 1.0),
-  );
+        color: Color.fromRGBO(255, 246, 211, 1.0),
+        darkColor: Color.fromRGBO(252, 222, 59, 1.0),
+      );
 
   static const CupertinoDynamicColor cyan =
       CupertinoDynamicColor.withBrightness(
-    color: Color.fromRGBO(218, 234, 255, 1.0),
-    darkColor: Color.fromRGBO(0, 140, 255, 1.0),
-  );
+        color: Color.fromRGBO(218, 234, 255, 1.0),
+        darkColor: Color.fromRGBO(0, 140, 255, 1.0),
+      );
 
   static const CupertinoDynamicColor magenta =
       CupertinoDynamicColor.withBrightness(
-    color: Color.fromRGBO(230, 229, 255, 1.0),
-    darkColor: Color.fromRGBO(238, 55, 161, 1.0),
-  );
+        color: Color.fromRGBO(230, 229, 255, 1.0),
+        darkColor: Color.fromRGBO(238, 55, 161, 1.0),
+      );
 
   static const CupertinoDynamicColor peach =
       CupertinoDynamicColor.withBrightness(
-    color: Color.fromRGBO(255, 235, 226, 1.0),
-    darkColor: Color.fromRGBO(233, 114, 70, 1.0),
-  );
+        color: Color.fromRGBO(255, 235, 226, 1.0),
+        darkColor: Color.fromRGBO(233, 114, 70, 1.0),
+      );
 
   static const CupertinoDynamicColor okGreen =
       CupertinoDynamicColor.withBrightness(
-    color: Color.fromRGBO(230, 255, 226, 1.0),
-    darkColor: Color.fromRGBO(63, 222, 23, 1.0),
-  );
+        color: Color.fromRGBO(230, 255, 226, 1.0),
+        darkColor: Color.fromRGBO(63, 222, 23, 1.0),
+      );
 
   // High-contrast semantic foreground colors for light & dark surfaces
   static const CupertinoDynamicColor sakuraInk =
       CupertinoDynamicColor.withBrightness(
-    color: Color(0xFFB01E68),
-    darkColor: Color(0xFFF48FB1),
-  );
+        color: Color(0xFFB01E68),
+        darkColor: Color(0xFFF48FB1),
+      );
 
   static const CupertinoDynamicColor springInk =
       CupertinoDynamicColor.withBrightness(
-    color: Color(0xFF2E7D32),
-    darkColor: Color(0xFF66BB6A),
-  );
+        color: Color(0xFF2E7D32),
+        darkColor: Color(0xFF66BB6A),
+      );
 
   static const CupertinoDynamicColor cyanInk =
       CupertinoDynamicColor.withBrightness(
-    color: Color(0xFF1565C0),
-    darkColor: Color(0xFF64B5F6),
-  );
+        color: Color(0xFF1565C0),
+        darkColor: Color(0xFF64B5F6),
+      );
 
   static const CupertinoDynamicColor peachInk =
       CupertinoDynamicColor.withBrightness(
-    color: Color(0xFFC65102),
-    darkColor: Color(0xFFFFB74D),
-  );
+        color: Color(0xFFC65102),
+        darkColor: Color(0xFFFFB74D),
+      );
 }

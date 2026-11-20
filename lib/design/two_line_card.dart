@@ -50,10 +50,7 @@ class _TwoLineCardState extends State<TwoLineCard>
         reverseDuration: const Duration(milliseconds: 400),
       );
       _scaleAnimation = Tween<double>(begin: 1, end: 0.95).animate(
-        CurvedAnimation(
-          parent: _animationController,
-          curve: Curves.easeInOut,
-        ),
+        CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
       );
     }
   }
@@ -70,7 +67,8 @@ class _TwoLineCardState extends State<TwoLineCard>
   Widget build(BuildContext context) {
     var isDown = false;
     var isCancel = false;
-    var brightness = CupertinoTheme.of(context).brightness ??
+    var brightness =
+        CupertinoTheme.of(context).brightness ??
         MediaQuery.of(context).platformBrightness;
 
     if (widget.transparent) {
@@ -82,32 +80,32 @@ class _TwoLineCardState extends State<TwoLineCard>
           crossAxisAlignment: CrossAxisAlignment.start,
           // add a colored edge
           children: [
-            Text(widget.title,
-                style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                      color: const Color.fromRGBO(0, 0, 0, 0),
-                      fontSize: 14,
-                      fontWeight: FontWeight.normal,
-                    )),
+            Text(
+              widget.title,
+              style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                color: const Color.fromRGBO(0, 0, 0, 0),
+                fontSize: 14,
+                fontWeight: FontWeight.normal,
+              ),
+            ),
             const SizedBox(height: 8),
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
                   widget.content,
-                  style:
-                      CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            fontFeatures: [const FontFeature.tabularFigures()],
-                            color: const Color.fromRGBO(0, 0, 0, 0),
-                          ),
+                  style: CupertinoTheme.of(context).textTheme.textStyle
+                      .copyWith(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        fontFeatures: [const FontFeature.tabularFigures()],
+                        color: const Color.fromRGBO(0, 0, 0, 0),
+                      ),
                 ),
                 if (widget.extraContent != null)
                   Text(
                     ' / ${widget.extraContent}',
-                    style: CupertinoTheme.of(context)
-                        .textTheme
-                        .textStyle
+                    style: CupertinoTheme.of(context).textTheme.textStyle
                         .copyWith(
                           fontSize: 12,
                           fontFeatures: [const FontFeature.tabularFigures()],
@@ -149,14 +147,12 @@ class _TwoLineCardState extends State<TwoLineCard>
             child: Text(
               widget.title,
               style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                    color: CupertinoTheme.of(context)
-                        .textTheme
-                        .textStyle
-                        .color!
-                        .withValues(alpha: 0.5),
-                    fontSize: 14,
-                    fontWeight: FontWeight.normal,
-                  ),
+                color: CupertinoTheme.of(
+                  context,
+                ).textTheme.textStyle.color!.withValues(alpha: 0.5),
+                fontSize: 14,
+                fontWeight: FontWeight.normal,
+              ),
             ),
           ),
           const SizedBox(height: 2),
@@ -167,7 +163,9 @@ class _TwoLineCardState extends State<TwoLineCard>
                   child: Container(
                     decoration: BoxDecoration(
                       color: CupertinoDynamicColor.resolve(
-                          widget.backgroundColor, context),
+                        widget.backgroundColor,
+                        context,
+                      ),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -181,35 +179,39 @@ class _TwoLineCardState extends State<TwoLineCard>
               children: [
                 Text(
                   widget.content,
-                  style:
-                      CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: (widget.withColoredFont &&
-                                    brightness == Brightness.dark)
-                                ? CupertinoDynamicColor.resolve(
-                                    widget.backgroundColor, context)
-                                : CupertinoTheme.of(context)
-                                    .textTheme
-                                    .textStyle
-                                    .color,
-                          ),
+                  style: CupertinoTheme.of(context).textTheme.textStyle
+                      .copyWith(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color:
+                            (widget.withColoredFont &&
+                                brightness == Brightness.dark)
+                            ? CupertinoDynamicColor.resolve(
+                                widget.backgroundColor,
+                                context,
+                              )
+                            : CupertinoTheme.of(
+                                context,
+                              ).textTheme.textStyle.color,
+                      ),
                 ),
                 if (widget.extraContent != null)
                   Text(
                     ' / ${widget.extraContent}',
-                    style:
-                        CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                              fontSize: 12,
-                              color: (widget.withColoredFont &&
-                                      brightness == Brightness.dark)
-                                  ? CupertinoDynamicColor.resolve(
-                                      widget.backgroundColor, context)
-                                  : CupertinoTheme.of(context)
-                                      .textTheme
-                                      .textStyle
-                                      .color,
-                            ),
+                    style: CupertinoTheme.of(context).textTheme.textStyle
+                        .copyWith(
+                          fontSize: 12,
+                          color:
+                              (widget.withColoredFont &&
+                                  brightness == Brightness.dark)
+                              ? CupertinoDynamicColor.resolve(
+                                  widget.backgroundColor,
+                                  context,
+                                )
+                              : CupertinoTheme.of(
+                                  context,
+                                ).textTheme.textStyle.color,
+                        ),
                   ),
               ],
             ),
@@ -241,11 +243,11 @@ class _TwoLineCardState extends State<TwoLineCard>
             child: ScaleTransition(scale: _scaleAnimation, child: core),
           )
         : (widget.onTap == null && widget.onLongPress == null)
-            ? core
-            : GestureDetector(
-                onTap: widget.onTap != null ? () => widget.onTap!.call() : null,
-                onLongPress: widget.onLongPress,
-                child: core,
-              );
+        ? core
+        : GestureDetector(
+            onTap: widget.onTap != null ? () => widget.onTap!.call() : null,
+            onLongPress: widget.onLongPress,
+            child: core,
+          );
   }
 }

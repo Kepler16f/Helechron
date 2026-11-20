@@ -46,10 +46,7 @@ class _RoundRectangleCardState extends State<RoundRectangleCard>
         reverseDuration: const Duration(milliseconds: 400),
       );
       _scaleAnimation = Tween<double>(begin: 1, end: 0.95).animate(
-        CurvedAnimation(
-          parent: _animationController,
-          curve: Curves.easeInOut,
-        ),
+        CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
       );
     }
   }
@@ -64,36 +61,40 @@ class _RoundRectangleCardState extends State<RoundRectangleCard>
 
   @override
   Widget build(BuildContext context) {
-    final brightness = CupertinoTheme.of(context).brightness ??
+    final brightness =
+        CupertinoTheme.of(context).brightness ??
         MediaQuery.of(context).platformBrightness;
     var isDown = false;
     var isCancel = false;
     var core = Container(
-        padding: widget.padding,
-        // decoration: BoxDecoration(
-        //     borderRadius: BorderRadius.circular(12),
-        //     // In light mode, color is white; in dark mode, color is black
-        //     color: SchedulerBinding
-        //                 .instance.platformDispatcher.platformBrightness ==
-        //             Brightness.dark
-        //         ? CupertinoDynamicColor.resolve(
-        //             CupertinoColors.secondarySystemBackground, context)
-        //         : CupertinoDynamicColor.resolve(CupertinoColors.white, context),
-        //     boxShadow: SchedulerBinding
-        //                 .instance.platformDispatcher.platformBrightness ==
-        //             Brightness.dark
-        //         ? null
-        //         : widget.boxShadow),
-        // 修改了颜色控制逻辑，应该跟随应用设置而非系统设置
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: brightness == Brightness.dark ? null : widget.boxShadow,
-          color: brightness == Brightness.dark
-              ? CupertinoDynamicColor.resolve(
-                  CupertinoColors.secondarySystemBackground, context)
-              : CupertinoDynamicColor.resolve(CupertinoColors.white, context),
-        ),
-        child: widget.child);
+      padding: widget.padding,
+      // decoration: BoxDecoration(
+      //     borderRadius: BorderRadius.circular(12),
+      //     // In light mode, color is white; in dark mode, color is black
+      //     color: SchedulerBinding
+      //                 .instance.platformDispatcher.platformBrightness ==
+      //             Brightness.dark
+      //         ? CupertinoDynamicColor.resolve(
+      //             CupertinoColors.secondarySystemBackground, context)
+      //         : CupertinoDynamicColor.resolve(CupertinoColors.white, context),
+      //     boxShadow: SchedulerBinding
+      //                 .instance.platformDispatcher.platformBrightness ==
+      //             Brightness.dark
+      //         ? null
+      //         : widget.boxShadow),
+      // 修改了颜色控制逻辑，应该跟随应用设置而非系统设置
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: brightness == Brightness.dark ? null : widget.boxShadow,
+        color: brightness == Brightness.dark
+            ? CupertinoDynamicColor.resolve(
+                CupertinoColors.secondarySystemBackground,
+                context,
+              )
+            : CupertinoDynamicColor.resolve(CupertinoColors.white, context),
+      ),
+      child: widget.child,
+    );
     return widget.animate
         ? GestureDetector(
             onLongPress: widget.onLongPress != null
@@ -154,14 +155,16 @@ class RoundRectangleCardWithForehead extends StatelessWidget {
     return Stack(
       children: [
         Positioned.fill(
-            child: SizedBox(
-                child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            color: CupertinoDynamicColor.resolve(foreheadColor, context),
-            boxShadow: const [],
+          child: SizedBox(
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color: CupertinoDynamicColor.resolve(foreheadColor, context),
+                boxShadow: const [],
+              ),
+            ),
           ),
-        ))),
+        ),
         SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -177,7 +180,7 @@ class RoundRectangleCardWithForehead extends StatelessWidget {
               ),
             ],
           ),
-        )
+        ),
       ],
     );
   }

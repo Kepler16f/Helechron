@@ -29,7 +29,8 @@ class NativeBottomBarSpacer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Obx(
       () => SizedBox(
-        height: MediaQuery.paddingOf(context).bottom +
+        height:
+            MediaQuery.paddingOf(context).bottom +
             nativeBottomBarInset() +
             extra,
       ),

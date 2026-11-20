@@ -18,10 +18,10 @@ class ArrowPainter extends BoxPainter {
   final Color color;
 
   ArrowPainter(this.decoration, this.color)
-      : painter = Paint()
-          ..color = color
-          ..strokeWidth = 1
-          ..style = PaintingStyle.stroke;
+    : painter = Paint()
+        ..color = color
+        ..strokeWidth = 1
+        ..style = PaintingStyle.stroke;
 
   @override
   void paint(Canvas canvas, Offset offset, ImageConfiguration configuration) {
@@ -49,8 +49,10 @@ class ArrowPainter extends BoxPainter {
 
 enum DecorationShape { circle, rectangle, arrow }
 
-Decoration customDecoration(
-    {required Color color, required DecorationShape shape}) {
+Decoration customDecoration({
+  required Color color,
+  required DecorationShape shape,
+}) {
   if (shape == DecorationShape.circle || shape == DecorationShape.rectangle) {
     return BoxDecoration(
       color: color,

@@ -4,7 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Theme;
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_miuix/miuix.dart' show MiuixTheme;
+import 'package:flutter_miuix/miuix.dart' show MiuixGlassRendering, MiuixTheme;
 import 'package:get/get.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:app_links/app_links.dart';
@@ -74,6 +74,12 @@ Future<void> _bootstrap() async {
   Get.put(db.getOption(), tag: 'option');
   Get.put(AelThemeController(), tag: 'themeController');
 
+  // Android / iOS：预加载 HyperOS 4 液态玻璃 shader（失败时自动降级为高斯模糊）；
+  // 鸿蒙端保留 ArkTS 原生沉浸底栏，不加载此 shader。
+  if (!PlatformFeatures.isOhos) {
+    unawaited(MiuixGlassRendering.load());
+  }
+
   // 将底栏样式同步到原生
   final option = Get.find<Option>(tag: 'option');
   OhosNativeService.instance.setBottomBarStyle(
@@ -94,17 +100,15 @@ Future<void> _bootstrap() async {
   // 50 次/天配额，因此用 5 秒高频推送让倒计时尽量平滑；应用不在时由
   // 原生侧 updateDuration(30min) + 边界预调度兜底。
   ScholarWidgetSync.sync();
-  Timer.periodic(
-    const Duration(seconds: 5),
-    (_) => ScholarWidgetSync.sync(),
-  );
+  Timer.periodic(const Duration(seconds: 5), (_) => ScholarWidgetSync.sync());
 
   // 启动时立即将校园卡凭据（含学号密码）同步至原生 Preferences 并刷新一次付款码，
   // 不必等待教务/学在浙大爬虫完成，保证随时切后台或被杀后小组件放大页均可独立刷码。
   unawaited(ECardWidgetMessenger.syncCredentialsToNative());
   unawaited(
-    ECardWidgetMessenger.update()
-        .whenComplete(ECardWidgetMessenger.updatePaymentCode),
+    ECardWidgetMessenger.update().whenComplete(
+      ECardWidgetMessenger.updatePaymentCode,
+    ),
   );
 
   var scholar = Get.find<Rx<Scholar>>(tag: 'scholar');
@@ -186,8 +190,9 @@ Future<void> _consumePendingWidgetRoute() async {
   if (target == null) {
     return;
   }
-  WidgetsBinding.instance
-      .addPostFrameCallback((_) => _handleWidgetRoute(target));
+  WidgetsBinding.instance.addPostFrameCallback(
+    (_) => _handleWidgetRoute(target),
+  );
 }
 
 Future<void> _refreshRestoredScholar(Rx<Scholar> scholar) async {
@@ -229,7 +234,8 @@ class _NativeBarVisibilityObserver extends NavigatorObserver {
   void _sync() {
     // 只有在根页面（只有1个页面路由且无非首屏路由）且没有任何PopupRoute（弹窗/选择器/对话框）且无底层通知时，才显示原生底栏
     final bool hasSubRoute = _pageRoutes.any((r) => !r.isFirst);
-    final bool shouldShow = !hasSubRoute &&
+    final bool shouldShow =
+        !hasSubRoute &&
         _pageRoutes.length <= 1 &&
         _popupRoutes.isEmpty &&
         !_isSnackbarActive;
@@ -373,7 +379,9 @@ class _CelechronAppState extends State<CelechronApp>
   @override
   Widget build(BuildContext context) {
     final option = Get.find<Option>(tag: 'option');
-    final themeController = Get.find<AelThemeController>(tag: 'themeController');
+    final themeController = Get.find<AelThemeController>(
+      tag: 'themeController',
+    );
     return Obx(() {
       final platformBrightness =
           WidgetsBinding.instance.platformDispatcher.platformBrightness;
@@ -390,29 +398,28 @@ class _CelechronAppState extends State<CelechronApp>
           GlobalCupertinoLocalizations.delegate,
           GlobalWidgetsLocalizations.delegate,
         ],
-        supportedLocales: const [
-          Locale('zh'),
-          Locale('en'),
-        ],
+        supportedLocales: const [Locale('zh'), Locale('en')],
         locale: const Locale('zh'),
         builder: (context, child) {
-          final resolvedPlatformBrightness =
-              MediaQuery.platformBrightnessOf(context);
+          final resolvedPlatformBrightness = MediaQuery.platformBrightnessOf(
+            context,
+          );
           final effectiveBundle =
               resolvedPlatformBrightness == platformBrightness
-                  ? bundle
-                  : themeController.resolveForOption(
-                      option,
-                      platformBrightness: resolvedPlatformBrightness,
-                    );
+              ? bundle
+              : themeController.resolveForOption(
+                  option,
+                  platformBrightness: resolvedPlatformBrightness,
+                );
           themeController.syncNativeAccent(option, effectiveBundle);
           return MiuixTheme(
             data: effectiveBundle.miuixTheme,
             child: Theme(
               data: effectiveBundle.materialTheme,
               child: MediaQuery(
-                data: MediaQuery.of(context)
-                    .copyWith(alwaysUse24HourFormat: true),
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(alwaysUse24HourFormat: true),
                 child: child!,
               ),
             ),
@@ -421,9 +428,7 @@ class _CelechronAppState extends State<CelechronApp>
         title: 'Helechron',
         home: const HomePage(title: 'Helechron'),
         initialRoute: '/',
-        routes: {
-          '/ecardpaypage': (context) => const ECardPayPage(),
-        },
+        routes: {'/ecardpaypage': (context) => const ECardPayPage()},
         debugShowCheckedModeBanner: false,
         navigatorKey: navigatorKey,
         navigatorObservers: [_nativeBarVisibilityObserver],
@@ -435,8 +440,9 @@ class _CelechronAppState extends State<CelechronApp>
     final appLinks = AppLinks();
     appLinks.uriLinkStream.listen((uri) {
       if (uri.toString() == 'celechron://ecardpaypage') {
-        navigator?.popUntil((route) =>
-            !(route.settings.name?.endsWith('ecardpaypage') ?? false));
+        navigator?.popUntil(
+          (route) => !(route.settings.name?.endsWith('ecardpaypage') ?? false),
+        );
         navigator?.pushNamed('/ecardpaypage');
       }
     });

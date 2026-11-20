@@ -38,8 +38,10 @@ class _RollingShimmerTextState extends State<RollingShimmerText>
   @override
   Widget build(BuildContext context) {
     // 底色取与转圈同族的浅灰；流光为白色，深浅色模式下都比底色亮
-    final base =
-        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+    final base = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondaryLabel,
+      context,
+    );
     const highlight = Color(0xFFFFFFFF);
     return RepaintBoundary(
       child: AnimatedBuilder(

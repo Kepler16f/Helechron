@@ -40,14 +40,18 @@ class AppNotification {
   }) {
     final bool dark = isDark;
 
-    final Color bgColor =
-        dark ? const Color(0xF22C2C2E) : const Color(0xF2FFFFFF);
-    final Color titleColor =
-        dark ? const Color(0xFFF2F2F7) : const Color(0xFF1C1C1E);
-    final Color messageColor =
-        dark ? const Color(0xD9EBEBF5) : const Color(0x993C3C43);
-    final Color borderColor =
-        dark ? const Color(0x33FFFFFF) : const Color(0x1F000000);
+    final Color bgColor = dark
+        ? const Color(0xF22C2C2E)
+        : const Color(0xF2FFFFFF);
+    final Color titleColor = dark
+        ? const Color(0xFFF2F2F7)
+        : const Color(0xFF1C1C1E);
+    final Color messageColor = dark
+        ? const Color(0xD9EBEBF5)
+        : const Color(0x993C3C43);
+    final Color borderColor = dark
+        ? const Color(0x33FFFFFF)
+        : const Color(0x1F000000);
 
     Get.showSnackbar(
       GetSnackBar(
@@ -62,11 +66,7 @@ class AppNotification {
         ),
         messageText: Text(
           message,
-          style: TextStyle(
-            fontSize: 13.5,
-            color: messageColor,
-            height: 1.35,
-          ),
+          style: TextStyle(fontSize: 13.5, color: messageColor, height: 1.35),
         ),
         icon: icon != null
             ? Padding(

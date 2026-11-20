@@ -25,6 +25,7 @@ ENFORCED_DIRS = [
 ]
 
 ENFORCED_FILES = [
+    "lib/page/home_page.dart",
     "lib/page/option/appearance_section.dart",
 ]
 

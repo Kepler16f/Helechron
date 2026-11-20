@@ -42,7 +42,9 @@ class _RefreshStatusIndicatorState extends State<RefreshStatusIndicator> {
         return Opacity(
           opacity: opacityCurve.transform(percentageComplete),
           child: CupertinoActivityIndicator.partiallyRevealed(
-              radius: _radius, progress: percentageComplete),
+            radius: _radius,
+            progress: percentageComplete,
+          ),
         );
       case RefreshIndicatorMode.armed:
       case RefreshIndicatorMode.refresh:
@@ -68,7 +70,8 @@ class _RefreshStatusIndicatorState extends State<RefreshStatusIndicator> {
     } else if (widget.message != null) {
       _lastShown = widget.message;
     }
-    final showText = _lastShown != null &&
+    final showText =
+        _lastShown != null &&
         (widget.refreshState == RefreshIndicatorMode.armed ||
             widget.refreshState == RefreshIndicatorMode.refresh ||
             widget.refreshState == RefreshIndicatorMode.done);
@@ -76,8 +79,8 @@ class _RefreshStatusIndicatorState extends State<RefreshStatusIndicator> {
     // refreshIndicatorExtent，以其为分母，淡出起点正好是 1.0
     final textOpacity = widget.refreshState == RefreshIndicatorMode.done
         ? (widget.pulledExtent / widget.refreshIndicatorExtent)
-            .clamp(0.0, 1.0)
-            .toDouble()
+              .clamp(0.0, 1.0)
+              .toDouble()
         : 1.0;
 
     return Center(

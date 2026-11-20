@@ -30,10 +30,7 @@ class _AnimateButtonState extends State<AnimateButton>
       reverseDuration: const Duration(milliseconds: 400),
     );
     _scaleAnimation = Tween<double>(begin: 1, end: 0.95).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeInOut,
-      ),
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
   }
 
@@ -47,7 +44,8 @@ class _AnimateButtonState extends State<AnimateButton>
   Widget build(BuildContext context) {
     var isDown = false;
     var isCancel = false;
-    var brightness = CupertinoTheme.of(context).brightness ??
+    var brightness =
+        CupertinoTheme.of(context).brightness ??
         MediaQuery.of(context).platformBrightness;
 
     return GestureDetector(
@@ -78,7 +76,9 @@ class _AnimateButtonState extends State<AnimateButton>
             color: brightness == Brightness.dark
                 ? CupertinoColors.secondarySystemFill
                 : CupertinoDynamicColor.resolve(
-                    widget.backgroundColor, context),
+                    widget.backgroundColor,
+                    context,
+                  ),
             // boxShadow
             boxShadow: const [
               BoxShadow(
@@ -96,16 +96,15 @@ class _AnimateButtonState extends State<AnimateButton>
               Text(
                 widget.text,
                 style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: brightness == Brightness.dark
-                          ? CupertinoDynamicColor.resolve(
-                              widget.backgroundColor, context)
-                          : CupertinoTheme.of(context)
-                              .textTheme
-                              .textStyle
-                              .color,
-                    ),
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: brightness == Brightness.dark
+                      ? CupertinoDynamicColor.resolve(
+                          widget.backgroundColor,
+                          context,
+                        )
+                      : CupertinoTheme.of(context).textTheme.textStyle.color,
+                ),
               ),
             ],
           ),

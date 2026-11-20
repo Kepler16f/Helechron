@@ -32,10 +32,7 @@ class MultipleColumns extends StatelessWidget {
     }
     children.removeLast();
 
-    return SizedBox(
-        child: Row(
-      children: children,
-    ));
+    return SizedBox(child: Row(children: children));
   }
 }
 
@@ -55,17 +52,23 @@ class _ColumnWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Expanded(
-        child: GestureDetector(
-            onTap: onTap,
-            behavior: HitTestBehavior.opaque,
-            child: Column(
-              children: [
-                content,
-                Text(title,
-                    style: const TextStyle(
-                        color: CupertinoColors.systemGrey, fontSize: 14)),
-              ],
-            )));
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Column(
+          children: [
+            content,
+            Text(
+              title,
+              style: const TextStyle(
+                color: CupertinoColors.systemGrey,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -76,10 +79,6 @@ class _VerticalLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      height: 18,
-      color: color,
-    );
+    return Container(width: 1, height: 18, color: color);
   }
 }
