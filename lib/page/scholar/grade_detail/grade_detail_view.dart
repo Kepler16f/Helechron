@@ -1,19 +1,24 @@
-import 'package:celechron/design/custom_colors.dart';
-import 'package:celechron/utils/tuple.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter_miuix/miuix.dart'
+    show MiuixPressFeedbackType, MiuixPressable;
+import 'package:get/get.dart';
+
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/icons/ael_icons.dart';
+import 'package:celechron/design/native_bar_spacer.dart';
+import 'package:celechron/design/persistent_headers.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/model/grade.dart';
 import 'package:celechron/model/semester.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:get/get.dart';
-import 'package:celechron/design/round_rectangle_card.dart';
-import 'package:celechron/design/two_line_card.dart';
-import 'package:celechron/design/persistent_headers.dart';
+import 'package:celechron/utils/gpa_helper.dart';
+import 'package:celechron/utils/tuple.dart';
+
+import 'gpa_simulator_view.dart';
 import 'grade_card.dart';
 import 'grade_detail_controller.dart';
-import 'package:celechron/utils/gpa_helper.dart';
-import 'weighted_gpa_view.dart';
-import 'gpa_simulator_view.dart';
 import 'semester_gpa_trend_card.dart';
-import 'package:celechron/design/native_bar_spacer.dart';
+import 'weighted_gpa_view.dart';
 
 class GradeDetailPage extends StatelessWidget {
   final _gradeDetailController = Get.put(GradeDetailController());
@@ -23,13 +28,17 @@ class GradeDetailPage extends StatelessWidget {
   }
 
   int getPairedSemesterIndex(int idx) {
-    for (var i = 0;
-        i < _gradeDetailController.semestersWithGrades.length;
-        i++) {
+    for (
+      var i = 0;
+      i < _gradeDetailController.semestersWithGrades.length;
+      i++
+    ) {
       if (i != idx &&
           _gradeDetailController.semestersWithGrades[i].name.substring(2, 5) ==
-              _gradeDetailController.semestersWithGrades[idx].name
-                  .substring(2, 5)) {
+              _gradeDetailController.semestersWithGrades[idx].name.substring(
+                2,
+                5,
+              )) {
         return i;
       }
     }
@@ -48,213 +57,167 @@ class GradeDetailPage extends StatelessWidget {
       return Tuple([0, 0, 0], 0);
     }
     return Tuple(
-        List.generate(
-            3,
-            (int i) =>
-                (s1.credits * s1.gpa[i] + s2.credits * s2.gpa[i]) / credits),
-        credits);
+      List.generate(
+        3,
+        (int i) => (s1.credits * s1.gpa[i] + s2.credits * s2.gpa[i]) / credits,
+      ),
+      credits,
+    );
   }
 
   Widget _buildGradeBrief(BuildContext context) {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Hero(
-                tag: 'gradeBrief',
-                child: RoundRectangleCard(
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Obx(() => TwoLineCard(
-                                title: '学年学分',
-                                content: getYearStats(_gradeDetailController
-                                        .semesterIndex.value)
-                                    .item2
-                                    .toStringAsFixed(1),
-                                backgroundColor:
-                                    CustomCupertinoDynamicColors.sand)),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Obx(() => TwoLineCard(
-                                title: '学年均绩',
-                                content: getYearStats(_gradeDetailController
-                                        .semesterIndex.value)
-                                    .item1[0]
-                                    .toStringAsFixed(2),
-                                backgroundColor:
-                                    CustomCupertinoDynamicColors.sakura)),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Obx(() => TwoLineCard(
-                                title: '学年四分制',
-                                content: getYearStats(_gradeDetailController
-                                        .semesterIndex.value)
-                                    .item1[1]
-                                    .toStringAsFixed(2),
-                                extraContent: getYearStats(
-                                        _gradeDetailController
-                                            .semesterIndex.value)
-                                    .item1[2]
-                                    .toStringAsFixed(2),
-                                backgroundColor:
-                                    CustomCupertinoDynamicColors.magenta)),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Obx(() => TwoLineCard(
-                                title: '学年主修学分',
-                                content: _gradeDetailController
-                                    .getYearMajorGpa(_gradeDetailController
-                                        .semesterIndex.value)
-                                    .item2
-                                    .toStringAsFixed(1),
-                                backgroundColor:
-                                    CustomCupertinoDynamicColors.peach)),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Obx(() => TwoLineCard(
-                                title: '学年主修均绩',
-                                content: _gradeDetailController
-                                    .getYearMajorGpa(_gradeDetailController
-                                        .semesterIndex.value)
-                                    .item1[0]
-                                    .toStringAsFixed(2),
-                                backgroundColor:
-                                    CustomCupertinoDynamicColors.cyan)),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Obx(() => TwoLineCard(
-                                title: '学年主修四分制',
-                                content: _gradeDetailController
-                                    .getYearMajorGpa(_gradeDetailController
-                                        .semesterIndex.value)
-                                    .item1[1]
-                                    .toStringAsFixed(2),
-                                extraContent: _gradeDetailController
-                                    .getYearMajorGpa(_gradeDetailController
-                                        .semesterIndex.value)
-                                    .item1[2]
-                                    .toStringAsFixed(2),
-                                backgroundColor:
-                                    CustomCupertinoDynamicColors.spring)),
-                          ),
-                        ],
-                      ),
-                    ],
+    final colors = AelTheme.colorsOf(context);
+    return Hero(
+      tag: 'gradeBrief',
+      child: AelSectionCard(
+        title: '学年成绩概览',
+        icon: AelIcons.award,
+        child: Obx(() {
+          final idx = _gradeDetailController.semesterIndex.value;
+          final yearStats = getYearStats(idx);
+          final majorStats = _gradeDetailController.getYearMajorGpa(idx);
+          return Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: AelStatTile(
+                      label: '学年学分',
+                      value: yearStats.item2.toStringAsFixed(1),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: AelSpacing.sm),
+                  Expanded(
+                    child: AelStatTile(
+                      label: '学年均绩',
+                      value: yearStats.item1[0].toStringAsFixed(2),
+                      backgroundColor: colors.primaryContainer,
+                      valueColor: colors.onPrimaryContainer,
+                    ),
+                  ),
+                  const SizedBox(width: AelSpacing.sm),
+                  Expanded(
+                    child: AelStatTile(
+                      label: '学年四分制',
+                      value: yearStats.item1[1].toStringAsFixed(2),
+                      subtitle: '均绩 ${yearStats.item1[2].toStringAsFixed(2)}',
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-      ],
+              const SizedBox(height: AelSpacing.sm),
+              Row(
+                children: [
+                  Expanded(
+                    child: AelStatTile(
+                      label: '学年主修学分',
+                      value: majorStats.item2.toStringAsFixed(1),
+                    ),
+                  ),
+                  const SizedBox(width: AelSpacing.sm),
+                  Expanded(
+                    child: AelStatTile(
+                      label: '学年主修均绩',
+                      value: majorStats.item1[0].toStringAsFixed(2),
+                    ),
+                  ),
+                  const SizedBox(width: AelSpacing.sm),
+                  Expanded(
+                    child: AelStatTile(
+                      label: '学年主修四分制',
+                      value: majorStats.item1[1].toStringAsFixed(2),
+                      subtitle: '均绩 ${majorStats.item1[2].toStringAsFixed(2)}',
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        }),
+      ),
     );
   }
 
   Widget _buildCustomGpaBrief(BuildContext context) {
-    List<Grade> inSelected = [], notSelected = [];
-    for (var semester in _gradeDetailController.semestersWithGrades) {
-      for (var grade in semester.grades) {
-        if (_gradeDetailController.customGpaSelected[grade.id] ?? false) {
-          inSelected.add(grade);
-        } else {
-          notSelected.add(grade);
-        }
-      }
-    }
-    var inGpa = GpaHelper.calculateGpa(inSelected);
-    var notGpa = GpaHelper.calculateGpa(notSelected);
+    final colors = AelTheme.colorsOf(context);
+    return Hero(
+      tag: 'gradeBrief',
+      child: AelSectionCard(
+        title: '自选 GPA 计算',
+        icon: AelIcons.filter,
+        child: Obx(() {
+          List<Grade> inSelected = [], notSelected = [];
+          for (var semester in _gradeDetailController.semestersWithGrades) {
+            for (var grade in semester.grades) {
+              if (_gradeDetailController.customGpaSelected[grade.id] ?? false) {
+                inSelected.add(grade);
+              } else {
+                notSelected.add(grade);
+              }
+            }
+          }
+          var inGpa = GpaHelper.calculateGpa(inSelected);
+          var notGpa = GpaHelper.calculateGpa(notSelected);
 
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Hero(
-                tag: 'gradeBrief',
-                child: RoundRectangleCard(
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Obx(() => TwoLineCard(
-                                title: '已选学分',
-                                content: inGpa.item2.toStringAsFixed(1),
-                                backgroundColor:
-                                    CustomCupertinoDynamicColors.sand)),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Obx(() => TwoLineCard(
-                                title: '已选五分制',
-                                content: inGpa.item1[0].toStringAsFixed(2),
-                                backgroundColor:
-                                    CustomCupertinoDynamicColors.sakura)),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Obx(() => TwoLineCard(
-                                title: '已选四分制',
-                                content: inGpa.item1[1].toStringAsFixed(2),
-                                extraContent: inGpa.item1[2].toStringAsFixed(2),
-                                backgroundColor:
-                                    CustomCupertinoDynamicColors.magenta)),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Obx(() => TwoLineCard(
-                                title: '已选百分制',
-                                content: inGpa.item1[3].toStringAsFixed(2),
-                                backgroundColor:
-                                    CustomCupertinoDynamicColors.peach)),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Obx(() => TwoLineCard(
-                                title: '未选五分制',
-                                content: notGpa.item1[0].toStringAsFixed(2),
-                                backgroundColor:
-                                    CustomCupertinoDynamicColors.cyan)),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Obx(() => TwoLineCard(
-                                title: '未选四分制',
-                                content: notGpa.item1[1].toStringAsFixed(2),
-                                extraContent:
-                                    notGpa.item1[2].toStringAsFixed(2),
-                                backgroundColor:
-                                    CustomCupertinoDynamicColors.spring)),
-                          ),
-                        ],
-                      ),
-                    ],
+          return Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: AelStatTile(
+                      label: '已选学分',
+                      value: inGpa.item2.toStringAsFixed(1),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: AelSpacing.sm),
+                  Expanded(
+                    child: AelStatTile(
+                      label: '已选五分制',
+                      value: inGpa.item1[0].toStringAsFixed(2),
+                      backgroundColor: colors.primaryContainer,
+                      valueColor: colors.onPrimaryContainer,
+                    ),
+                  ),
+                  const SizedBox(width: AelSpacing.sm),
+                  Expanded(
+                    child: AelStatTile(
+                      label: '已选四分制',
+                      value: inGpa.item1[1].toStringAsFixed(2),
+                      subtitle: '均绩 ${inGpa.item1[2].toStringAsFixed(2)}',
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-      ],
+              const SizedBox(height: AelSpacing.sm),
+              Row(
+                children: [
+                  Expanded(
+                    child: AelStatTile(
+                      label: '已选百分制',
+                      value: inGpa.item1[3].toStringAsFixed(2),
+                    ),
+                  ),
+                  const SizedBox(width: AelSpacing.sm),
+                  Expanded(
+                    child: AelStatTile(
+                      label: '未选五分制',
+                      value: notGpa.item1[0].toStringAsFixed(2),
+                    ),
+                  ),
+                  const SizedBox(width: AelSpacing.sm),
+                  Expanded(
+                    child: AelStatTile(
+                      label: '未选四分制',
+                      value: notGpa.item1[1].toStringAsFixed(2),
+                      subtitle: '均绩 ${notGpa.item1[2].toStringAsFixed(2)}',
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        }),
+      ),
     );
   }
 
@@ -269,87 +232,101 @@ class GradeDetailPage extends StatelessWidget {
   }
 
   Widget _buildHistory(BuildContext context) {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: RoundRectangleCard(
-                animate: false,
-                child: Column(
-                  children: [
-                    // Horizontal scrollable list to list all semesters
-                    SizedBox(
-                      height: 81,
-                      child: Obx(
-                        () => ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount:
-                              _gradeDetailController.semestersWithGrades.length,
-                          itemBuilder: (context, index) {
-                            final semester = _gradeDetailController
-                                .semestersWithGrades[index];
-
-                            return Obx(
-                              () => Row(
-                                children: [
-                                  Obx(
-                                    () => TwoLineCard(
-                                      animate: true,
-                                      withColoredFont: true,
-                                      width: 120,
-                                      title:
-                                          '${semester.name.substring(2, 5)}${semester.name.substring(7, 11)}',
-                                      content: _gradeDetailController
-                                              .customGpaMode.value
-                                          ? '${getSelectedGradeCount(semester)} / ${semester.grades.length}'
-                                          : '${semester.gpa[0].toStringAsFixed(2)}/${semester.credits.toStringAsFixed(1)}',
-                                      onTap: () {
-                                        _gradeDetailController
-                                            .semesterIndex.value = index;
-                                        _gradeDetailController.semesterIndex
-                                            .refresh();
-                                      },
-                                      onLongPress: _gradeDetailController
-                                              .customGpaMode.value
-                                          ? () {
-                                              _gradeDetailController
-                                                  .semesterIndex.value = index;
-                                              _gradeDetailController
-                                                  .semesterIndex
-                                                  .refresh();
-                                              _gradeDetailController
-                                                  .toggleSemesterSelection(
-                                                      index);
-                                            }
-                                          : null,
-                                      backgroundColor: _gradeDetailController
-                                                  .semesterIndex.value ==
-                                              index
-                                          ? CustomCupertinoDynamicColors.cyan
-                                          : CupertinoColors.systemFill,
-                                    ),
-                                  ),
-                                  if (index !=
-                                      _gradeDetailController
-                                              .semestersWithGrades.length -
-                                          1)
-                                    const SizedBox(width: 6),
-                                ],
-                              ),
+    final colors = AelTheme.colorsOf(context);
+    return AelSectionCard(
+      title: '学期记录',
+      icon: AelIcons.tabCalendar,
+      child: SizedBox(
+        height: 78,
+        child: Obx(
+          () => ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _gradeDetailController.semestersWithGrades.length,
+            separatorBuilder: (context, index) =>
+                const SizedBox(width: AelSpacing.sm),
+            itemBuilder: (context, index) {
+              final semester =
+                  _gradeDetailController.semestersWithGrades[index];
+              return Obx(() {
+                final selected =
+                    _gradeDetailController.semesterIndex.value == index;
+                final customMode = _gradeDetailController.customGpaMode.value;
+                return SizedBox(
+                  width: 122,
+                  child: MiuixPressable(
+                    feedbackType: MiuixPressFeedbackType.sink,
+                    onPressed: () {
+                      _gradeDetailController.semesterIndex.value = index;
+                      _gradeDetailController.semesterIndex.refresh();
+                    },
+                    onLongPress: customMode
+                        ? () {
+                            _gradeDetailController.semesterIndex.value = index;
+                            _gradeDetailController.semesterIndex.refresh();
+                            _gradeDetailController.toggleSemesterSelection(
+                              index,
                             );
-                          },
-                        ),
+                          }
+                        : null,
+                    child: AnimatedContainer(
+                      duration: AelDurations.fast,
+                      curve: Curves.easeOutCubic,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: ShapeDecoration(
+                        color: selected
+                            ? colors.primaryContainer
+                            : colors.tonalTileBg,
+                        shape: AelShapes.squircle(AelRadius.tile),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            '${semester.name.substring(2, 5)}${semester.name.substring(7, 11)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: selected
+                                  ? colors.onPrimaryContainer.withValues(
+                                      alpha: 0.78,
+                                    )
+                                  : colors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            customMode
+                                ? '${getSelectedGradeCount(semester)} / ${semester.grades.length}'
+                                : '${semester.gpa[0].toStringAsFixed(2)}/${semester.credits.toStringAsFixed(1)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                              color: selected
+                                  ? colors.onPrimaryContainer
+                                  : colors.textPrimary,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+                  ),
+                );
+              });
+            },
+          ),
         ),
-        const SizedBox(height: 20),
-      ],
+      ),
     );
   }
 
@@ -363,48 +340,45 @@ class GradeDetailPage extends StatelessWidget {
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(CupertinoIcons.chart_bar_alt_fill, size: 20),
+                Icon(AelIcons.activity, size: 20),
                 SizedBox(width: 8),
                 Text('加权成绩分析'),
               ],
             ),
             onPressed: () {
               Navigator.of(sheetCtx).pop();
-              Navigator.of(context).push(
-                CupertinoPageRoute(builder: (_) => WeightedGpaPage()),
-              );
+              Navigator.of(
+                context,
+              ).push(CupertinoPageRoute(builder: (_) => WeightedGpaPage()));
             },
           ),
           CupertinoActionSheetAction(
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(CupertinoIcons.slider_horizontal_3, size: 20),
+                Icon(AelIcons.filter, size: 20),
                 SizedBox(width: 8),
                 Text('GPA 模拟器'),
               ],
             ),
             onPressed: () {
               Navigator.of(sheetCtx).pop();
-              Navigator.of(context).push(
-                CupertinoPageRoute(builder: (_) => GpaSimulatorPage()),
-              );
+              Navigator.of(
+                context,
+              ).push(CupertinoPageRoute(builder: (_) => GpaSimulatorPage()));
             },
           ),
           CupertinoActionSheetAction(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
+                const Icon(AelIcons.sparkles, size: 20),
+                const SizedBox(width: 8),
+                Text(
                   _gradeDetailController.showTrendChart.value
-                      ? CupertinoIcons.graph_circle_fill
-                      : CupertinoIcons.graph_circle,
-                  size: 20,
+                      ? '隐藏学期走势折线图'
+                      : '展示学期走势折线图',
                 ),
-                SizedBox(width: 8),
-                Text(_gradeDetailController.showTrendChart.value
-                    ? '隐藏学期走势折线图'
-                    : '展示学期走势折线图'),
               ],
             ),
             onPressed: () {
@@ -424,56 +398,53 @@ class GradeDetailPage extends StatelessWidget {
   }
 
   Widget _buildQuickActionRow(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildQuickActionButton(
+    final colors = AelTheme.colorsOf(context);
+    return Row(
+      children: [
+        Expanded(
+          child: _buildQuickActionButton(
+            context: context,
+            icon: AelIcons.activity,
+            label: '加权成绩',
+            accentColor: colors.primary,
+            onTap: () {
+              Navigator.of(
+                context,
+              ).push(CupertinoPageRoute(builder: (_) => WeightedGpaPage()));
+            },
+          ),
+        ),
+        const SizedBox(width: AelSpacing.sm),
+        Expanded(
+          child: _buildQuickActionButton(
+            context: context,
+            icon: AelIcons.filter,
+            label: 'GPA模拟器',
+            accentColor: colors.warning,
+            onTap: () {
+              Navigator.of(
+                context,
+              ).push(CupertinoPageRoute(builder: (_) => GpaSimulatorPage()));
+            },
+          ),
+        ),
+        const SizedBox(width: AelSpacing.sm),
+        Expanded(
+          child: Obx(() {
+            final active = _gradeDetailController.showTrendChart.value;
+            return _buildQuickActionButton(
               context: context,
-              icon: CupertinoIcons.chart_bar_alt_fill,
-              label: '加权成绩',
-              color: CustomCupertinoDynamicColors.cyan,
+              icon: AelIcons.sparkles,
+              label: '学期走势',
+              accentColor: active ? colors.primary : colors.textSecondary,
+              selected: active,
               onTap: () {
-                Navigator.of(context).push(
-                  CupertinoPageRoute(builder: (_) => WeightedGpaPage()),
-                );
+                _gradeDetailController.showTrendChart.value = !active;
               },
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _buildQuickActionButton(
-              context: context,
-              icon: CupertinoIcons.slider_horizontal_3,
-              label: 'GPA模拟器',
-              color: CustomCupertinoDynamicColors.peach,
-              onTap: () {
-                Navigator.of(context).push(
-                  CupertinoPageRoute(builder: (_) => GpaSimulatorPage()),
-                );
-              },
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Obx(
-              () => _buildQuickActionButton(
-                context: context,
-                icon: _gradeDetailController.showTrendChart.value
-                    ? CupertinoIcons.graph_circle_fill
-                    : CupertinoIcons.graph_circle,
-                label: '学期走势',
-                color: CustomCupertinoDynamicColors.sakura,
-                onTap: () {
-                  _gradeDetailController.showTrendChart.value =
-                      !_gradeDetailController.showTrendChart.value;
-                },
-              ),
-            ),
-          ),
-        ],
-      ),
+            );
+          }),
+        ),
+      ],
     );
   }
 
@@ -481,41 +452,56 @@ class GradeDetailPage extends StatelessWidget {
     required BuildContext context,
     required IconData icon,
     required String label,
-    required CupertinoDynamicColor color,
+    required Color accentColor,
     required VoidCallback onTap,
+    bool selected = false,
   }) {
-    return RoundRectangleCard(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-      animate: true,
-      onTap: onTap,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            icon,
-            size: 16,
-            color: CupertinoDynamicColor.resolve(color, context),
+    final colors = AelTheme.colorsOf(context);
+    return MiuixPressable(
+      feedbackType: MiuixPressFeedbackType.sink,
+      onPressed: onTap,
+      child: DecoratedBox(
+        decoration: ShapeDecoration(
+          color: selected ? colors.primaryContainer : colors.cardBg,
+          shape: AelShapes.squircle(AelRadius.tile),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: selected ? colors.onPrimaryContainer : accentColor,
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: selected
+                        ? colors.onPrimaryContainer
+                        : colors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color:
-                  CupertinoDynamicColor.resolve(CupertinoColors.label, context),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoDynamicColor.resolve(
-          CupertinoColors.systemGroupedBackground, context),
+      backgroundColor: colors.pageBg,
       child: CustomScrollView(
         slivers: [
           CelechronSliverTextHeader(
@@ -530,127 +516,130 @@ class GradeDetailPage extends StatelessWidget {
                   children: [
                     if (_gradeDetailController.customGpaMode.value) ...[
                       GestureDetector(
-                        child: CupertinoButton(
-                          padding: EdgeInsets.zero,
-                          child: const Text('长按清空'),
-                          onPressed: () {},
-                        ),
                         onLongPress: () {
                           _gradeDetailController.customGpaSelected.value = {};
                           _gradeDetailController.refreshCustomGpa();
                         },
+                        child: CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          onPressed: () {},
+                          child: Text(
+                            '长按清空',
+                            style: TextStyle(
+                              color: colors.error,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 8),
                     ] else ...[
                       // 更多工具入口（收纳加权、模拟、看板，彻底解决标题遮挡冲突）
                       CupertinoButton(
                         padding: EdgeInsets.zero,
-                        child: const Icon(
-                          CupertinoIcons.ellipsis_circle,
+                        onPressed: () => _showMoreActions(context),
+                        child: Icon(
+                          AelIcons.more,
+                          color: colors.primary,
                           semanticLabel: 'More Tools',
                         ),
-                        onPressed: () => _showMoreActions(context),
                       ),
                       const SizedBox(width: 6),
                     ],
                     // 自定义 GPA 开关
                     CupertinoButton(
                       padding: EdgeInsets.zero,
-                      child: Icon(
-                        _gradeDetailController.customGpaMode.value
-                            ? CupertinoIcons
-                                .square_fill_line_vertical_square_fill
-                            : CupertinoIcons.square_line_vertical_square,
-                        semanticLabel: 'Custom GPA',
-                      ),
                       onPressed: () {
                         _gradeDetailController.customGpaMode.value =
                             !_gradeDetailController.customGpaMode.value;
                       },
+                      child: Icon(
+                        _gradeDetailController.customGpaMode.value
+                            ? AelIcons.check
+                            : AelIcons.filter,
+                        color: colors.primary,
+                        semanticLabel: 'Custom GPA',
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
           ),
-          SliverToBoxAdapter(
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    const SizedBox(width: 18),
-                    Expanded(
-                      child: Column(
-                        children: [
-                          Obx(() => _gradeDetailController.customGpaMode.value
-                              ? _buildCustomGpaBrief(context)
-                              : _buildGradeBrief(context)),
-                          Obx(() => !_gradeDetailController.customGpaMode.value
-                              ? _buildQuickActionRow(context)
-                              : const SizedBox.shrink()),
-                          Obx(() {
-                            if (!_gradeDetailController.customGpaMode.value &&
-                                _gradeDetailController.showTrendChart.value &&
-                                _gradeDetailController
-                                        .semestersWithGrades.length >=
-                                    2) {
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 16),
-                                child: SemesterGpaTrendCard(
-                                  semesters: _gradeDetailController
-                                      .semestersWithGrades,
-                                  selectedIndex: _gradeDetailController
-                                      .semesterIndex.value,
-                                  onSemesterSelected: (idx) {
-                                    _gradeDetailController.semesterIndex.value =
-                                        idx;
-                                    _gradeDetailController.semesterIndex
-                                        .refresh();
-                                  },
-                                ),
-                              );
-                            }
-                            return const SizedBox.shrink();
-                          }),
-                          _buildHistory(context),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 18),
-                  ],
-                )
-              ],
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              AelSpacing.pageHorizontal,
+              AelSpacing.sm,
+              AelSpacing.pageHorizontal,
+              AelSpacing.md,
+            ),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                children: [
+                  Obx(
+                    () => _gradeDetailController.customGpaMode.value
+                        ? _buildCustomGpaBrief(context)
+                        : _buildGradeBrief(context),
+                  ),
+                  Obx(() {
+                    if (_gradeDetailController.customGpaMode.value) {
+                      return const SizedBox.shrink();
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(top: AelSpacing.md),
+                      child: _buildQuickActionRow(context),
+                    );
+                  }),
+                  Obx(() {
+                    if (!_gradeDetailController.customGpaMode.value &&
+                        _gradeDetailController.showTrendChart.value &&
+                        _gradeDetailController.semestersWithGrades.length >=
+                            2) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: AelSpacing.md),
+                        child: SemesterGpaTrendCard(
+                          semesters: _gradeDetailController.semestersWithGrades,
+                          selectedIndex:
+                              _gradeDetailController.semesterIndex.value,
+                          onSemesterSelected: (idx) {
+                            _gradeDetailController.semesterIndex.value = idx;
+                            _gradeDetailController.semesterIndex.refresh();
+                          },
+                        ),
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  }),
+                  const SizedBox(height: AelSpacing.sectionGap),
+                  _buildHistory(context),
+                ],
+              ),
             ),
           ),
           Obx(
-            () => SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  return Column(
-                    children: [
-                      Row(
-                        children: [
-                          const SizedBox(width: 18),
-                          Expanded(
-                            child: GradeCard(
-                              grade: _gradeDetailController
-                                  .semestersWithGrades[_gradeDetailController
-                                      .semesterIndex.value]
-                                  .grades[index],
-                            ),
-                          ),
-                          const SizedBox(width: 18),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                  );
-                },
-                childCount: _gradeDetailController
-                    .semestersWithGrades[
-                        _gradeDetailController.semesterIndex.value]
+            () => SliverPadding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AelSpacing.pageHorizontal,
+              ),
+              sliver: SliverList.separated(
+                itemCount: _gradeDetailController
+                    .semestersWithGrades[_gradeDetailController
+                        .semesterIndex
+                        .value]
                     .grades
                     .length,
+                separatorBuilder: (context, index) =>
+                    const SizedBox(height: AelSpacing.sm),
+                itemBuilder: (context, index) {
+                  return GradeCard(
+                    grade: _gradeDetailController
+                        .semestersWithGrades[_gradeDetailController
+                            .semesterIndex
+                            .value]
+                        .grades[index],
+                  );
+                },
               ),
             ),
           ),
