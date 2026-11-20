@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FLUTTER_OHOS_REPO: https://gitcode.com/openharmony-tpc/flutter_flutter.git
-      FLUTTER_OHOS_REF: 3.27.5-ohos-1.0.8
+      FLUTTER_OHOS_REF: oh-3.47.9-dev
       PUB_HOSTED_URL: https://pub.flutter-io.cn
       FLUTTER_STORAGE_BASE_URL: https://storage.flutter-io.cn
 
@@ -48,6 +48,8 @@ jobs:
           git clone --branch "$FLUTTER_OHOS_REF" --depth 1 "$FLUTTER_OHOS_REPO" "$FLUTTER_OHOS_DIR"
           cd "$FLUTTER_OHOS_DIR"
           git fetch --tags --force || true
+          # 开发分支无版本 tag，补一个让 flutter --version 与 pub 约束可识别（与 zju-TuXueJieDa-next 一致）
+          git tag -f 3.47.9 HEAD || true
           git config --global --add safe.directory "$FLUTTER_OHOS_DIR"
           echo "$FLUTTER_OHOS_DIR/bin" >> "$GITHUB_PATH"
           echo "FLUTTER_ROOT=$FLUTTER_OHOS_DIR" >> "$GITHUB_ENV"
@@ -64,14 +66,11 @@ jobs:
           dart --version
           flutter doctor -v || true
 
-      - name: Switch to HarmonyOS dependency set
-        # 主 pubspec.yaml 面向 Android/iOS（pub.dev 标准依赖）；鸿蒙构建使用 openharmony-sig 依赖，
-        # 并用桩文件替换仅 Android/iOS 可用的插件封装。
+      - name: Apply HarmonyOS plugin overrides
+        # 主 pubspec.yaml 为三端统一依赖；鸿蒙仅通过 pubspec_overrides.yaml 切换有 ohos 适配的插件。
         run: |
-          cp tool/pubspec_ohos.yaml pubspec.yaml
           rm -f pubspec.lock
-          cp tool/ohos_stubs/mobile_native_service.dart lib/services/mobile_native_service.dart
-          cp tool/ohos_stubs/mobile_background.dart lib/worker/mobile_background.dart
+          cp tool/ohos/pubspec_overrides.yaml pubspec_overrides.yaml
 
       - name: Get Flutter dependencies
         run: |

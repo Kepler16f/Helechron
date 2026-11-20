@@ -1,0 +1,17 @@
+# 鸿蒙构建专用：把 Android/iOS 通用的主 pubspec.yaml 中，有 OpenHarmony SIG 适配的插件切到 ohos 版本。
+# CI 内复制为仓库根目录的 pubspec_overrides.yaml（不提交到根目录，避免影响 Android/iOS 构建）。
+# 没有 ohos 适配的插件（device_calendar / flutter_local_notifications / workmanager / file_picker）
+# 在鸿蒙上不会被注册，Dart 侧仍可编译，对应能力由 OhosNativeService 的 ArkTS 通道提供。
+dependency_overrides:
+  path_provider:
+    git:
+      url: "https://gitee.com/openharmony-sig/flutter_packages.git"
+      path: "packages/path_provider/path_provider"
+  url_launcher:
+    git:
+      url: "https://gitee.com/openharmony-sig/flutter_packages.git"
+      path: "packages/url_launcher/url_launcher"
+  share_plus:
+    git:
+      url: "https://gitee.com/openharmony-sig/flutter_plus_plugins.git"
+      path: "packages/share_plus/share_plus"
