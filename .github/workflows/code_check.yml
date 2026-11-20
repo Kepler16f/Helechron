@@ -6,11 +6,13 @@ on:
       - main
       - master
       - dev
+      - neo
   pull_request:
     branches:
       - main
       - master
       - dev
+      - neo
   workflow_dispatch:
 
 jobs:

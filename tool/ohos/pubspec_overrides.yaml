@@ -2,6 +2,9 @@
 # CI 内复制为仓库根目录的 pubspec_overrides.yaml（不提交到根目录，避免影响 Android/iOS 构建）。
 # 没有 ohos 适配的插件（device_calendar / flutter_local_notifications / workmanager / file_picker）
 # 在鸿蒙上不会被注册，Dart 侧仍可编译，对应能力由 OhosNativeService 的 ArkTS 通道提供。
+#
+# windows_file_picker 替换为无 win32 依赖的空桩：file_picker 13.x 传递依赖 windows_file_picker -> win32 ^6.3.0，
+# 而 openharmony-sig 的 share_plus 需要 win32 <6.0.0；鸿蒙端永远不会运行 Windows 插件，此覆盖让三端统一使用 file_picker 13.x。
 dependency_overrides:
   path_provider:
     git:
@@ -15,3 +18,5 @@ dependency_overrides:
     git:
       url: "https://gitee.com/openharmony-sig/flutter_plus_plugins.git"
       path: "packages/share_plus/share_plus"
+  windows_file_picker:
+    path: tool/ohos/windows_file_picker_noop

@@ -29,7 +29,7 @@ dependencies:
   url_launcher:
   app_links: ^6.4.0
   # Android / iOS native plugins (HarmonyOS uses ArkTS channel, see lib/services/mobile_native_service.dart)
-  file_picker:
+  file_picker: ^13.1.0
   device_calendar: ^4.3.3
   flutter_local_notifications:
   workmanager:

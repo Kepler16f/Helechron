@@ -1,0 +1,18 @@
+name: windows_file_picker
+description: No-op Windows stub for HarmonyOS CI builds to avoid win32 ^6.3.0 conflict with openharmony-sig share_plus.
+version: 2.0.2
+publish_to: none
+
+environment:
+  sdk: ">=3.10.0 <4.0.0"
+
+flutter:
+  plugin:
+    implements: file_picker
+    platforms:
+      windows:
+        dartPluginClass: FilePickerWindows
+
+dependencies:
+  flutter:
+    sdk: flutter

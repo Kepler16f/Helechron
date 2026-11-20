@@ -2,9 +2,9 @@ name: Build Helechron (Android & iOS)
 
 on:
   push:
-    branches: [main, master, dev]
+    branches: [main, master, dev, neo]
   pull_request:
-    branches: [main, master, dev]
+    branches: [main, master, dev, neo]
   workflow_dispatch:
 
 jobs:
