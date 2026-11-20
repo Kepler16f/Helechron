@@ -1,5 +1,8 @@
-import 'package:celechron/design/multiple_columns.dart';
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/icons/ael_icons.dart';
 import 'package:celechron/design/native_bar_spacer.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/model/practice_score_item.dart';
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/utils/practice_target_helper.dart';
@@ -12,14 +15,7 @@ class PracticeScoreColumns extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget score(int categoryId, double value) => Text(
-          value.toStringAsFixed(2),
-          key: ValueKey('practice-score-category-$categoryId'),
-          style: CupertinoTheme.of(context)
-              .textTheme
-              .navTitleTextStyle
-              .copyWith(fontSize: 18, fontWeight: FontWeight.bold),
-        );
+    final colors = AelTheme.colorsOf(context);
 
     void open(int categoryId) {
       Navigator.of(context).push(
@@ -41,55 +37,56 @@ class PracticeScoreColumns extends StatelessWidget {
 
     return Column(
       children: [
-        MultipleColumns(
-          contents: [
-            score(1, scholar.pt2),
-            score(2, scholar.pt3),
-            score(3, scholar.pt4),
-          ],
-          titles: const ['二课记点', '三课记点', '四课记点'],
-          onTaps: [
-            () => open(1),
-            () => open(2),
-            () => open(3),
-          ],
-        ),
-        const SizedBox(height: 8),
         Row(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (passed.isNotEmpty)
-              Text(
-                passed.join(' · '),
-                key: const ValueKey('practice-passed-status'),
-                style: TextStyle(
-                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                  fontSize: 13,
-                ),
+            Expanded(
+              child: AelStatTile(
+                key: const ValueKey('practice-score-category-1'),
+                label: '二课记点',
+                value: scholar.pt2.toStringAsFixed(2),
+                onTap: () => open(1),
               ),
-            if (passed.isNotEmpty) const SizedBox(width: 12),
-            GestureDetector(
-              onTap: () => open(0),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '素拓看板',
-                    style: TextStyle(
-                      color: CupertinoColors.activeBlue.resolveFrom(context),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  Icon(
-                    CupertinoIcons.chevron_forward,
-                    size: 13,
-                    color: CupertinoColors.activeBlue.resolveFrom(context),
-                  ),
-                ],
+            ),
+            const SizedBox(width: AelSpacing.sm),
+            Expanded(
+              child: AelStatTile(
+                key: const ValueKey('practice-score-category-2'),
+                label: '三课记点',
+                value: scholar.pt3.toStringAsFixed(2),
+                onTap: () => open(2),
+              ),
+            ),
+            const SizedBox(width: AelSpacing.sm),
+            Expanded(
+              child: AelStatTile(
+                key: const ValueKey('practice-score-category-3'),
+                label: '四课记点',
+                value: scholar.pt4.toStringAsFixed(2),
+                onTap: () => open(3),
               ),
             ),
           ],
+        ),
+        if (passed.isNotEmpty) ...[
+          const SizedBox(height: AelSpacing.sm),
+          Text(
+            passed.join(' · '),
+            key: const ValueKey('practice-passed-status'),
+            style: TextStyle(
+              color: colors.textSecondary,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+        const SizedBox(height: AelSpacing.sm),
+        AelListRow(
+          title: '素拓看板',
+          subtitle: '查看二三四课堂实践记点详情',
+          icon: AelIcons.sparkles,
+          iconBgColor: colors.primaryContainer,
+          iconColor: colors.onPrimaryContainer,
+          onTap: () => open(0),
         ),
       ],
     );
@@ -121,19 +118,19 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
   }
 
   String _getCategoryTitle(int catId) => switch (catId) {
-        0 => '全部看板',
-        1 => '第二课堂',
-        2 => '第三课堂',
-        3 => '第四课堂',
-        _ => '素拓课堂',
-      };
+    0 => '全部看板',
+    1 => '第二课堂',
+    2 => '第三课堂',
+    3 => '第四课堂',
+    _ => '素拓课堂',
+  };
 
   double _getCategoryScore(int catId) => switch (catId) {
-        1 => widget.scholar.pt2,
-        2 => widget.scholar.pt3,
-        3 => widget.scholar.pt4,
-        _ => widget.scholar.pt2 + widget.scholar.pt3 + widget.scholar.pt4,
-      };
+    1 => widget.scholar.pt2,
+    2 => widget.scholar.pt3,
+    3 => widget.scholar.pt4,
+    _ => widget.scholar.pt2 + widget.scholar.pt3 + widget.scholar.pt4,
+  };
 
   void _showSetTargetDialog(int catId) {
     final currentTarget = PracticeTargetHelper.getTarget(catId);
@@ -153,16 +150,19 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
             placeholder: '如: 4.0',
             autofocus: true,
             style: TextStyle(
-              color: CupertinoDynamicColor.resolve(
-                  CupertinoColors.label, ctx),
+              color: CupertinoDynamicColor.resolve(CupertinoColors.label, ctx),
             ),
             placeholderStyle: TextStyle(
               color: CupertinoDynamicColor.resolve(
-                  CupertinoColors.placeholderText, ctx),
+                CupertinoColors.placeholderText,
+                ctx,
+              ),
             ),
             decoration: BoxDecoration(
               color: CupertinoDynamicColor.resolve(
-                  CupertinoColors.tertiarySystemFill, ctx),
+                CupertinoColors.tertiarySystemFill,
+                ctx,
+              ),
               borderRadius: BorderRadius.circular(8),
             ),
           ),
@@ -320,30 +320,32 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: (!hasTarget
-                          ? CupertinoColors.inactiveGray
-                          : (isPassed
-                              ? CupertinoColors.systemGreen
-                              : CupertinoColors.systemOrange))
-                      .resolveFrom(context)
-                      .withValues(alpha: 0.15),
+                  color:
+                      (!hasTarget
+                              ? CupertinoColors.inactiveGray
+                              : (isPassed
+                                    ? CupertinoColors.systemGreen
+                                    : CupertinoColors.systemOrange))
+                          .resolveFrom(context)
+                          .withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   !hasTarget
                       ? '无目标'
                       : (isPassed
-                          ? '已达标'
-                          : '未达标 (差 ${(target - current).toStringAsFixed(2)})'),
+                            ? '已达标'
+                            : '未达标 (差 ${(target - current).toStringAsFixed(2)})'),
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: (!hasTarget
-                            ? CupertinoColors.secondaryLabel
-                            : (isPassed
-                                ? CupertinoColors.systemGreen
-                                : CupertinoColors.systemOrange))
-                        .resolveFrom(context),
+                    color:
+                        (!hasTarget
+                                ? CupertinoColors.secondaryLabel
+                                : (isPassed
+                                      ? CupertinoColors.systemGreen
+                                      : CupertinoColors.systemOrange))
+                            .resolveFrom(context),
                   ),
                 ),
               ),
@@ -403,8 +405,10 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
               runSpacing: 8,
               children: breakdown.entries.map((entry) {
                 return Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: CupertinoColors.systemFill.resolveFrom(context),
                     borderRadius: BorderRadius.circular(8),
@@ -425,8 +429,9 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
-                          color:
-                              CupertinoColors.activeBlue.resolveFrom(context),
+                          color: CupertinoColors.activeBlue.resolveFrom(
+                            context,
+                          ),
                         ),
                       ),
                     ],
@@ -457,14 +462,18 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
         .where((item) => item.countsTowardTotal)
         .toList(growable: false);
     final inReview = filteredItems
-        .where((item) =>
-            !item.countsTowardTotal &&
-            (item.statusValue == 2 || item.statusLabel.contains('审核')))
+        .where(
+          (item) =>
+              !item.countsTowardTotal &&
+              (item.statusValue == 2 || item.statusLabel.contains('审核')),
+        )
         .toList(growable: false);
     final otherExcluded = filteredItems
-        .where((item) =>
-            !item.countsTowardTotal &&
-            (item.statusValue != 2 && !item.statusLabel.contains('审核')))
+        .where(
+          (item) =>
+              !item.countsTowardTotal &&
+              (item.statusValue != 2 && !item.statusLabel.contains('审核')),
+        )
         .toList(growable: false);
 
     return CupertinoPageScaffold(
@@ -505,12 +514,11 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
         bottom: false,
         child: ListView(
           padding: EdgeInsets.fromLTRB(
-              16,
-              12,
-              16,
-              MediaQuery.paddingOf(context).bottom +
-                  nativeBottomBarInset() +
-                  16),
+            16,
+            12,
+            16,
+            MediaQuery.paddingOf(context).bottom + nativeBottomBarInset() + 16,
+          ),
           children: [
             _buildCategorySegment(),
             if (_selectedCategoryId == 0) ...[
@@ -619,12 +627,11 @@ class PracticeScoreDetailPage extends StatelessWidget {
         bottom: false,
         child: ListView(
           padding: EdgeInsets.fromLTRB(
-              16,
-              16,
-              16,
-              MediaQuery.paddingOf(context).bottom +
-                  nativeBottomBarInset() +
-                  16),
+            16,
+            16,
+            16,
+            MediaQuery.paddingOf(context).bottom + nativeBottomBarInset() + 16,
+          ),
           children: [
             _Card(
               child: Column(
@@ -772,7 +779,8 @@ class _NoDetailsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final zdbkOnly = source == PracticeDataSource.zdbkLive ||
+    final zdbkOnly =
+        source == PracticeDataSource.zdbkLive ||
         source == PracticeDataSource.zdbkCache;
     return _Card(
       child: Text(
@@ -826,14 +834,18 @@ class _PracticeItemCard extends StatelessWidget {
                       counted
                           ? item.statusLabel
                           : (isInReview
-                              ? '${item.statusLabel}（审核中）'
-                              : '${item.statusLabel} · 未计入总分'),
+                                ? '${item.statusLabel}（审核中）'
+                                : '${item.statusLabel} · 未计入总分'),
                       style: TextStyle(
                         color: counted
                             ? CupertinoColors.systemGreen.resolveFrom(context)
                             : (isInReview
-                                ? CupertinoColors.systemOrange.resolveFrom(context)
-                                : CupertinoColors.secondaryLabel.resolveFrom(context)),
+                                  ? CupertinoColors.systemOrange.resolveFrom(
+                                      context,
+                                    )
+                                  : CupertinoColors.secondaryLabel.resolveFrom(
+                                      context,
+                                    )),
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                       ),
@@ -842,7 +854,9 @@ class _PracticeItemCard extends StatelessWidget {
                     Text(
                       '${item.projectType} · ${item.qualityType}',
                       style: TextStyle(
-                        color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                        color: CupertinoColors.secondaryLabel.resolveFrom(
+                          context,
+                        ),
                         fontSize: 13,
                       ),
                     ),
@@ -850,7 +864,9 @@ class _PracticeItemCard extends StatelessWidget {
                     Text(
                       '更新于 ${_dateTime(item.updatedAt)}',
                       style: TextStyle(
-                        color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+                        color: CupertinoColors.tertiaryLabel.resolveFrom(
+                          context,
+                        ),
                         fontSize: 12,
                       ),
                     ),
@@ -890,16 +906,16 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(4, 4, 4, 10),
-        child: Text(
-          '$title（$count）',
-          style: TextStyle(
-            color: CupertinoColors.secondaryLabel.resolveFrom(context),
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.fromLTRB(4, 4, 4, 10),
+    child: Text(
+      '$title（$count）',
+      style: TextStyle(
+        color: CupertinoColors.secondaryLabel.resolveFrom(context),
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
 }
 
 class _EmptyGroup extends StatelessWidget {
@@ -909,14 +925,14 @@ class _EmptyGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(4, 8, 4, 18),
-        child: Text(
-          text,
-          style: TextStyle(
-            color: CupertinoColors.secondaryLabel.resolveFrom(context),
-          ),
-        ),
-      );
+    padding: const EdgeInsets.fromLTRB(4, 8, 4, 18),
+    child: Text(
+      text,
+      style: TextStyle(
+        color: CupertinoColors.secondaryLabel.resolveFrom(context),
+      ),
+    ),
+  );
 }
 
 class _Card extends StatelessWidget {
@@ -926,26 +942,23 @@ class _Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: CupertinoDynamicColor.resolve(
-            CupertinoColors.secondarySystemGroupedBackground,
-            context,
-          ),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: DefaultTextStyle(
-          style: TextStyle(
-            color: CupertinoDynamicColor.resolve(
-              CupertinoColors.label,
-              context,
-            ),
-            fontSize: 15,
-          ),
-          child: child,
-        ),
-      );
+    width: double.infinity,
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: CupertinoDynamicColor.resolve(
+        CupertinoColors.secondarySystemGroupedBackground,
+        context,
+      ),
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: DefaultTextStyle(
+      style: TextStyle(
+        color: CupertinoDynamicColor.resolve(CupertinoColors.label, context),
+        fontSize: 15,
+      ),
+      child: child,
+    ),
+  );
 }
 
 class _DetailRow extends StatelessWidget {
@@ -956,31 +969,29 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 112,
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                ),
-              ),
+    padding: const EdgeInsets.symmetric(vertical: 12),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 112,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
             ),
-            Expanded(
-              child: Text(
-                value,
-                textAlign: TextAlign.right,
-                style: TextStyle(
-                  color: CupertinoColors.label.resolveFrom(context),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
-      );
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: TextStyle(color: CupertinoColors.label.resolveFrom(context)),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _Divider extends StatelessWidget {
@@ -988,12 +999,9 @@ class _Divider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        height: 0.5,
-        color: CupertinoDynamicColor.resolve(
-          CupertinoColors.separator,
-          context,
-        ),
-      );
+    height: 0.5,
+    color: CupertinoDynamicColor.resolve(CupertinoColors.separator, context),
+  );
 }
 
 String _score(PracticeScoreItem item) => item.score.isFinite && item.score >= 0

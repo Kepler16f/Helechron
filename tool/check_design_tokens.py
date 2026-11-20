@@ -32,6 +32,7 @@ ENFORCED_FILES = [
     "lib/page/calendar/schedule_view.dart",
     "lib/page/task/task_view.dart",
     "lib/page/scholar/scholar_view.dart",
+    "lib/page/scholar/todo/todo_card.dart",
     "lib/page/option/appearance_section.dart",
     "lib/page/option/option_view.dart",
 ]

@@ -1,12 +1,17 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher_string.dart';
+
+import 'package:celechron/design/components/ael_components.dart';
 import 'package:celechron/design/custom_decoration.dart';
+import 'package:celechron/design/icons/ael_icons.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/model/period.dart';
 import 'package:celechron/model/todo.dart';
 import 'package:celechron/page/task/homework_submission_page.dart';
 import 'package:celechron/services/todo_task_sync.dart';
 import 'package:celechron/utils/utils.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher_string.dart';
 
 class HomeworkBadgeStyle {
   final Color background;
@@ -24,6 +29,7 @@ class HomeworkBadgeStyle {
 
 /// 统一计算作业/小测状态标签的配色、图标与文案，供任务页、课程详情页与待办卡片共用。
 HomeworkBadgeStyle resolveHomeworkBadgeStyle({
+  AelColorTokens? colors,
   required bool isQuiz,
   required bool isSubmitted,
   required bool isGraded,
@@ -31,48 +37,52 @@ HomeworkBadgeStyle resolveHomeworkBadgeStyle({
   DateTime? endTime,
   String? customOverdueText,
 }) {
+  final resolvedColors = colors ?? AelTheme.fallback(Brightness.light);
   final isOverdue =
-      !isSubmitted && !isGraded && endTime != null && endTime.isBefore(DateTime.now());
+      !isSubmitted &&
+      !isGraded &&
+      endTime != null &&
+      endTime.isBefore(DateTime.now());
 
   if (isGraded && score != null) {
     final scoreText = score == score.roundToDouble()
         ? score.toInt().toString()
         : score.toStringAsFixed(1);
     return HomeworkBadgeStyle(
-      background: CupertinoColors.systemOrange.withValues(alpha: 0.15),
-      foreground: CupertinoColors.systemOrange,
-      icon: CupertinoIcons.star_fill,
+      background: resolvedColors.warningContainer,
+      foreground: resolvedColors.onWarningContainer,
+      icon: AelIcons.award,
       text: '已批改 · $scoreText分',
     );
   }
   if (isGraded || isSubmitted) {
     return HomeworkBadgeStyle(
-      background: CupertinoColors.systemGreen.withValues(alpha: 0.15),
-      foreground: CupertinoColors.systemGreen,
-      icon: CupertinoIcons.checkmark_circle_fill,
+      background: resolvedColors.successContainer,
+      foreground: resolvedColors.onSuccessContainer,
+      icon: AelIcons.success,
       text: isGraded ? '已批改' : (isQuiz ? '已作答' : '已提交'),
     );
   }
   if (isOverdue) {
     return HomeworkBadgeStyle(
-      background: CupertinoColors.systemRed.withValues(alpha: 0.12),
-      foreground: CupertinoColors.systemRed,
-      icon: CupertinoIcons.exclamationmark_circle_fill,
+      background: resolvedColors.errorContainer,
+      foreground: resolvedColors.onErrorContainer,
+      icon: AelIcons.warning,
       text: customOverdueText ?? '逾期',
     );
   }
   if (isQuiz) {
     return HomeworkBadgeStyle(
-      background: CupertinoColors.systemPurple.withValues(alpha: 0.15),
-      foreground: CupertinoColors.systemPurple,
-      icon: CupertinoIcons.pencil_ellipsis_rectangle,
+      background: resolvedColors.infoContainer,
+      foreground: resolvedColors.onInfoContainer,
+      icon: AelIcons.edit,
       text: '待作答',
     );
   }
   return HomeworkBadgeStyle(
-    background: CupertinoColors.activeBlue.withValues(alpha: 0.12),
-    foreground: CupertinoColors.activeBlue,
-    icon: CupertinoIcons.clock,
+    background: resolvedColors.primaryContainer,
+    foreground: resolvedColors.onPrimaryContainer,
+    icon: AelIcons.homework,
     text: '待提交',
   );
 }
@@ -87,37 +97,39 @@ class HomeworkStatusPill extends StatelessWidget {
     super.key,
     required this.style,
     this.onPressed,
-    this.borderRadius = 8,
-    this.padding = const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+    this.borderRadius = AelRadius.pill,
+    this.padding = const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
   });
 
   @override
   Widget build(BuildContext context) {
-    final badgeBody = Container(
-      padding: padding,
-      decoration: BoxDecoration(
+    final badgeBody = DecoratedBox(
+      decoration: ShapeDecoration(
         color: style.background,
-        borderRadius: BorderRadius.circular(borderRadius),
+        shape: AelShapes.squircle(borderRadius),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(style.icon, size: 11, color: style.foreground),
-          const SizedBox(width: 3),
-          Text(
-            style.text,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: style.foreground,
+      child: Padding(
+        padding: padding,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(style.icon, size: 11, color: style.foreground),
+            const SizedBox(width: 3),
+            Text(
+              style.text,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: style.foreground,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
     if (onPressed == null) return badgeBody;
     return CupertinoButton(
-      minSize: 0,
+      minimumSize: Size.zero,
       padding: EdgeInsets.zero,
       onPressed: onPressed,
       child: badgeBody,
@@ -149,16 +161,16 @@ class HomeworkTaskItemContent extends StatelessWidget {
     required this.isSubmitted,
     required this.isGraded,
     this.score,
-    this.titleFontSize = 18,
+    this.titleFontSize = 16.5,
     this.onOpenSubmission,
   });
 
   @override
   Widget build(BuildContext context) {
-    final textStyle = CupertinoTheme.of(context).textTheme.textStyle;
-    final baseTextColor = textStyle.color ?? CupertinoColors.label;
+    final colors = AelTheme.colorsOf(context);
     final isDone = isSubmitted || isGraded;
     final badgeStyle = resolveHomeworkBadgeStyle(
+      colors: colors,
       isQuiz: isQuiz,
       isSubmitted: isSubmitted,
       isGraded: isGraded,
@@ -167,8 +179,8 @@ class HomeworkTaskItemContent extends StatelessWidget {
     );
     final overdueSuffix =
         !isDone && endTime != null && endTime!.isBefore(DateTime.now())
-            ? ' - 已过期'
-            : '';
+        ? ' - 已过期'
+        : '';
     final deadlineLabel = endTime != null
         ? ' 截止于：${toStringHumanReadable(endTime!)}$overdueSuffix'
         : ' 截止于：无截止时间';
@@ -179,8 +191,8 @@ class HomeworkTaskItemContent extends StatelessWidget {
         Row(
           children: [
             Container(
-              width: 12.0,
-              height: 12.0,
+              width: 10.0,
+              height: 10.0,
               decoration: customDecoration(
                 color: indicatorColor,
                 shape: periodTypeShape[PeriodType.user]!,
@@ -190,60 +202,51 @@ class HomeworkTaskItemContent extends StatelessWidget {
             Expanded(
               child: Text(
                 title,
-                style: textStyle.copyWith(
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: colors.textPrimary,
                   fontSize: titleFontSize,
-                  fontWeight: FontWeight.bold,
-                  overflow: TextOverflow.ellipsis,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
             const SizedBox(width: 8.0),
-            HomeworkStatusPill(
-              style: badgeStyle,
-              onPressed: onOpenSubmission,
-            ),
+            HomeworkStatusPill(style: badgeStyle, onPressed: onOpenSubmission),
           ],
         ),
         const SizedBox(height: 8.0),
         Row(
           children: [
-            Icon(
-              CupertinoIcons.book,
-              size: 14,
-              color: baseTextColor.withValues(alpha: 0.5),
-            ),
-            const SizedBox(width: 4.0),
+            Icon(AelIcons.book, size: 13.5, color: colors.textTertiary),
+            const SizedBox(width: 5.0),
             Expanded(
               child: Text(
                 courseName,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.normal,
-                  color: baseTextColor.withValues(alpha: 0.75),
-                  overflow: TextOverflow.ellipsis,
-                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 13.5, color: colors.textSecondary),
               ),
             ),
             if (onOpenSubmission != null) ...[
               const SizedBox(width: 6.0),
               CupertinoButton(
-                minSize: 0,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 color: isDone
-                    ? CupertinoColors.activeGreen.withValues(alpha: 0.12)
-                    : CupertinoColors.activeBlue.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
+                    ? colors.successContainer
+                    : colors.primaryContainer,
+                borderRadius: BorderRadius.circular(AelRadius.pill),
                 onPressed: onOpenSubmission,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      CupertinoIcons.arrow_up_right_square,
+                      AelIcons.externalLink,
                       size: 12,
                       color: isDone
-                          ? CupertinoColors.activeGreen
-                          : CupertinoColors.activeBlue,
+                          ? colors.onSuccessContainer
+                          : colors.onPrimaryContainer,
                     ),
                     const SizedBox(width: 3),
                     Text(
@@ -252,8 +255,8 @@ class HomeworkTaskItemContent extends StatelessWidget {
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                         color: isDone
-                            ? CupertinoColors.activeGreen
-                            : CupertinoColors.activeBlue,
+                            ? colors.onSuccessContainer
+                            : colors.onPrimaryContainer,
                       ),
                     ),
                   ],
@@ -265,20 +268,13 @@ class HomeworkTaskItemContent extends StatelessWidget {
         const SizedBox(height: 4.0),
         Row(
           children: [
-            Icon(
-              CupertinoIcons.time_solid,
-              size: 14,
-              color: baseTextColor.withValues(alpha: 0.5),
-            ),
+            Icon(AelIcons.activity, size: 13.5, color: colors.textTertiary),
             Expanded(
               child: Text(
                 deadlineLabel,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.normal,
-                  color: baseTextColor.withValues(alpha: 0.75),
-                  overflow: TextOverflow.ellipsis,
-                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 13.5, color: colors.textSecondary),
               ),
             ),
           ],
@@ -289,13 +285,19 @@ class HomeworkTaskItemContent extends StatelessWidget {
 }
 
 /// 学在浙大作业提交链接操作面板（打开 / 复制 / 探测提交状态），供作业卡片与任务详情复用。
-void showTodoSubmitSheet(BuildContext context, String url,
-    {String? title, String? courseId, String? activityId}) {
+void showTodoSubmitSheet(
+  BuildContext context,
+  String url, {
+  String? title,
+  String? courseId,
+  String? activityId,
+}) {
   String? cid = courseId;
   String? aid = activityId;
   if (cid == null || aid == null) {
-    final match =
-        RegExp(r'/course/(\d+)/learning-activity#/(\d+)').firstMatch(url);
+    final match = RegExp(
+      r'/course/(\d+)/learning-activity#/(\d+)',
+    ).firstMatch(url);
     if (match != null) {
       cid ??= match.group(1);
       aid ??= match.group(2);
@@ -326,7 +328,7 @@ void showTodoSubmitSheet(BuildContext context, String url,
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(CupertinoIcons.pencil_ellipsis_rectangle, size: 18),
+                Icon(AelIcons.edit, size: 18),
                 SizedBox(width: 6),
                 Text('应用内查看与提交'),
               ],
@@ -346,7 +348,7 @@ void showTodoSubmitSheet(BuildContext context, String url,
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(CupertinoIcons.search, size: 18),
+                Icon(AelIcons.search, size: 18),
                 SizedBox(width: 6),
                 Text('探测作业提交状态'),
               ],
@@ -405,7 +407,9 @@ class TodoCard extends StatelessWidget {
   }
 
   Widget _buildStatusBadge(BuildContext context, Todo todo) {
+    final colors = AelTheme.colorsOf(context);
     final style = resolveHomeworkBadgeStyle(
+      colors: colors,
       isQuiz: todo.isQuiz,
       isSubmitted: todo.isSubmitted,
       isGraded: todo.isGraded,
@@ -415,104 +419,85 @@ class TodoCard extends StatelessWidget {
     );
     return HomeworkStatusPill(
       style: style,
-      borderRadius: 10,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
     );
   }
 
   Widget _buildCard(BuildContext context) {
-    var brightness = CupertinoTheme.of(context).brightness ??
-        MediaQuery.of(context).platformBrightness;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        color: brightness == Brightness.dark
-            ? CupertinoColors.secondarySystemFill
-            : CupertinoColors.systemGroupedBackground,
-        // boxShadow
-        boxShadow: const [
-          BoxShadow(
-            color: Color.fromRGBO(0, 0, 0, 0.05),
-            offset: Offset(0, 2),
-            blurRadius: 4,
-          ),
-        ],
+    final colors = AelTheme.colorsOf(context);
+    return DecoratedBox(
+      decoration: ShapeDecoration(
+        color: colors.tonalTileBg,
+        shape: AelShapes.squircle(AelRadius.tile),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        // add a colored edge
-        children: [
-          Row(
-            children: [
-              if (todo.isQuiz)
-                Container(
-                  margin: const EdgeInsets.only(right: 6),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.systemPurple.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Row(
+              children: [
+                if (todo.isQuiz)
+                  Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 1.5,
+                    ),
+                    decoration: ShapeDecoration(
+                      color: colors.infoContainer,
+                      shape: AelShapes.squircle(4),
+                    ),
+                    child: Text(
+                      '测验',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: colors.onInfoContainer,
+                      ),
+                    ),
                   ),
-                  child: const Text(
-                    '测验',
+                Expanded(
+                  child: Text(
+                    todo.course,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: CupertinoColors.systemPurple,
+                      color: colors.textSecondary,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
-              Expanded(
-                child: Text(
-                  todo.course,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  strutStyle:
-                      const StrutStyle(leading: 0.5, forceStrutHeight: true),
-                  style:
-                      CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                            color: CupertinoTheme.of(context)
-                                .textTheme
-                                .textStyle
-                                .color!
-                                .withValues(alpha: 0.5),
-                            fontSize: 14,
-                            fontWeight: FontWeight.normal,
-                          ),
-                ),
+                const SizedBox(width: 6),
+                _buildStatusBadge(context, todo),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              todo.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 15.5,
+                fontWeight: FontWeight.w700,
+                color: colors.textPrimary,
               ),
-              const SizedBox(width: 6),
-              _buildStatusBadge(context, todo),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            todo.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            strutStyle: const StrutStyle(leading: 0.5, forceStrutHeight: true),
-            style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: brightness == Brightness.dark
-                      ? CupertinoColors.systemBackground
-                      : CupertinoTheme.of(context).textTheme.textStyle.color,
-                ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            todo.endTime != null ? toStringHumanReadable(todo.endTime!) : "无",
-            style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: brightness == Brightness.dark
-                      ? CupertinoColors.systemBackground
-                      : CupertinoTheme.of(context).textTheme.textStyle.color,
-                ),
-          ),
-        ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              todo.endTime != null ? toStringHumanReadable(todo.endTime!) : '无',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: colors.textSecondary,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

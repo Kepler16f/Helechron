@@ -174,6 +174,16 @@ class AelThemeData extends ThemeExtension<AelThemeData> {
 final class AelTheme {
   const AelTheme._();
 
+  static AelColorTokens fallback([Brightness brightness = Brightness.light]) {
+    return AelThemeEngine.resolve(
+      brightness: brightness,
+      source: ThemeColorSource.defaultBlue,
+      customSeed: AelPalettePresets.defaultBlue,
+      paletteStyle: ThemePaletteStyle.tonalSpot,
+      contrastLevel: ThemeContrastLevel.standard,
+    ).aelTheme.colors;
+  }
+
   static AelThemeData of(BuildContext context) {
     final ext = Theme.of(context).extension<AelThemeData>();
     if (ext != null) return ext;
