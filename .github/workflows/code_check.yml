@@ -38,3 +38,6 @@ jobs:
 
       - name: Analyze code
         run: flutter analyze --no-fatal-infos
+
+      - name: Check design token rules
+        run: python3 tool/check_design_tokens.py

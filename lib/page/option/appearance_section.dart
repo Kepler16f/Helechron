@@ -38,6 +38,7 @@ class AppearanceSection extends StatelessWidget {
       final seedValue = _controller.themeSeedColorValue;
       final monetSupported = _themeController.supportsPlatformMonet;
       final activeSeed = AelTheme.of(context).seedColor;
+      final colors = AelTheme.colorsOf(context);
 
       final footerText = switch (source) {
         ThemeColorSource.monet => monetSupported
@@ -63,7 +64,10 @@ class AppearanceSection extends StatelessWidget {
             leading: _leadingIcon(AelIcons.palette, activeSeed),
             title: const Text('主题色'),
             subtitle: Text(source.subtitle),
-            trailing: _chevronRow(Text(source.label, style: trailingStyle)),
+            trailing: _chevronRow(
+              Text(source.label, style: trailingStyle),
+              colors.textTertiary,
+            ),
             onTap: () => _showSourcePicker(context, monetSupported),
           ),
           if (source == ThemeColorSource.custom)
@@ -79,14 +83,20 @@ class AppearanceSection extends StatelessWidget {
             leading: _leadingIcon(AelIcons.sparkles, activeSeed),
             title: const Text('配色风格'),
             subtitle: const Text('决定莫奈/主题色生成整套配色的方式'),
-            trailing: _chevronRow(Text(style.label, style: trailingStyle)),
+            trailing: _chevronRow(
+              Text(style.label, style: trailingStyle),
+              colors.textTertiary,
+            ),
             onTap: () => _showStylePicker(context),
           ),
           CupertinoListTile(
             leading: _leadingIcon(AelIcons.contrast, activeSeed),
             title: const Text('对比度'),
             subtitle: const Text('提高文字与背景对比，便于阅读'),
-            trailing: _chevronRow(Text(contrast.label, style: trailingStyle)),
+            trailing: _chevronRow(
+              Text(contrast.label, style: trailingStyle),
+              colors.textTertiary,
+            ),
             onTap: () => _showContrastPicker(context),
           ),
         ],
@@ -98,14 +108,13 @@ class AppearanceSection extends StatelessWidget {
     return Icon(icon, size: 22, color: color);
   }
 
-  Widget _chevronRow(Widget child) {
+  Widget _chevronRow(Widget child, Color chevronColor) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         child,
         const SizedBox(width: 4),
-        const Icon(AelIcons.chevronRight,
-            size: 18, color: CupertinoColors.systemGrey),
+        Icon(AelIcons.chevronRight, size: 18, color: chevronColor),
       ],
     );
   }
@@ -221,8 +230,8 @@ class AppearanceSection extends StatelessWidget {
                         padding: const EdgeInsets.only(top: 8),
                         child: Text(
                           error!,
-                          style: const TextStyle(
-                            color: CupertinoColors.systemRed,
+                          style: TextStyle(
+                            color: AelTheme.colorsOf(context).error,
                             fontSize: 13,
                           ),
                         ),
@@ -315,8 +324,9 @@ class _Swatch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final onColor =
-        color.computeLuminance() > 0.5 ? CupertinoColors.black : CupertinoColors.white;
+    final onColor = color.computeLuminance() > 0.5
+        ? AelSemanticPalette.pureBlack
+        : AelSemanticPalette.pureWhite;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -332,7 +342,9 @@ class _Swatch extends StatelessWidget {
                 color: color,
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: selected ? onColor.withValues(alpha: 0.9) : const Color(0x00000000),
+                  color: selected
+                      ? onColor.withValues(alpha: 0.9)
+                      : AelSemanticPalette.transparent,
                   width: 2.5,
                 ),
                 boxShadow: selected

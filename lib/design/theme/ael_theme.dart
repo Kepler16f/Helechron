@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_miuix/miuix.dart'
-    show\n        MiuixColors,\n        MiuixThemeData,\n        defaultTextStyles,\n        miuixColorsFromSeed;
+    show MiuixColors, MiuixThemeData, defaultTextStyles, miuixColorsFromSeed;
 
 import 'package:celechron/design/theme/ael_theme_config.dart';
 import 'package:celechron/design/tokens/ael_tokens.dart';

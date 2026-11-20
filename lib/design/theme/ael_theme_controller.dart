@@ -1,12 +1,10 @@
 import 'dart:async';
 
 import 'package:dynamic_color/dynamic_color.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 
 import 'package:celechron/design/theme/ael_theme.dart';
-import 'package:celechron/design/theme/ael_theme_config.dart';
 import 'package:celechron/model/option.dart';
 import 'package:celechron/services/ohos_native_service.dart';
 import 'package:celechron/utils/platform_features.dart';

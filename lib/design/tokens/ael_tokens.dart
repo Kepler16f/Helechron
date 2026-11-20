@@ -132,4 +132,9 @@ final class AelSemanticPalette {
   static const Color pageBgDark = Color(0xFF0E1014);
   static const Color cardBgDark = Color(0xFF191C22);
   static const Color tonalTileBgDark = Color(0xFF232730);
+
+  // Base contrast primitives for swatch checkmarks & transparent borders
+  static const Color transparent = Color(0x00000000);
+  static const Color pureWhite = Color(0xFFFFFFFF);
+  static const Color pureBlack = Color(0xFF000000);
 }
