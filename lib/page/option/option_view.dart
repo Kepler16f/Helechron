@@ -1,778 +1,875 @@
-import 'package:celechron/utils/platform_features.dart';
-import 'package:celechron/utils/legal_links.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
-
+import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
-import 'package:celechron/utils/utils.dart';
-import 'package:celechron/model/option.dart';
+import 'package:celechron/design/components/ael_components.dart';
 import 'package:celechron/design/cupertino_async_switch.dart';
+import 'package:celechron/design/icons/ael_icons.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
+import 'package:celechron/model/option.dart';
+import 'package:celechron/page/legal_page.dart';
+import 'package:celechron/services/ohos_native_service.dart';
+import 'package:celechron/utils/legal_links.dart';
+import 'package:celechron/utils/platform_features.dart';
+import 'package:celechron/utils/utils.dart';
 
 import 'allow_time_edit_page.dart';
 import 'appearance_section.dart';
 import 'course_id_mapping_edit_page.dart';
 import 'credits_page.dart';
+import 'custom_license_page.dart';
 import 'diagnostic_log_page.dart';
 import 'ecard_bill_page.dart';
-import 'package:get/get.dart';
-import 'custom_license_page.dart';
-import 'package:celechron/page/legal_page.dart';
-import 'package:celechron/services/ohos_native_service.dart';
 import 'login_page.dart';
 import 'network_proxy_page.dart';
 import 'option_controller.dart';
 
-const Color _kHeaderFooterColor = CupertinoDynamicColor(
-  color: Color.fromRGBO(108, 108, 108, 1.0),
-  darkColor: Color.fromRGBO(142, 142, 146, 1.0),
-  highContrastColor: Color.fromRGBO(74, 74, 77, 1.0),
-  darkHighContrastColor: Color.fromRGBO(176, 176, 183, 1.0),
-  elevatedColor: Color.fromRGBO(108, 108, 108, 1.0),
-  darkElevatedColor: Color.fromRGBO(142, 142, 146, 1.0),
-  highContrastElevatedColor: Color.fromRGBO(108, 108, 108, 1.0),
-  darkHighContrastElevatedColor: Color.fromRGBO(142, 142, 146, 1.0),
-);
-
 class OptionPage extends StatelessWidget {
-  final _optionController =
-      Get.put(OptionController(), tag: 'optionController');
+  final _optionController = Get.put(
+    OptionController(),
+    tag: 'optionController',
+  );
 
   OptionPage({super.key});
 
+  Text _trailingText(BuildContext context, String text, {Color? color}) {
+    final colors = AelTheme.colorsOf(context);
+    return Text(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: color ?? colors.textSecondary,
+        fontSize: 13.5,
+        fontWeight: FontWeight.w500,
+      ),
+    );
+  }
+
+  Widget _footerNote(BuildContext context, String text) {
+    final colors = AelTheme.colorsOf(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: AelSpacing.sm, left: 4, right: 4),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: colors.textTertiary,
+          fontSize: 12.5,
+          height: 1.4,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    var trailingTextStyle = TextStyle(
-        color: CupertinoDynamicColor.resolve(
-            CupertinoColors.secondaryLabel, context),
-        fontSize: 16);
-
-    var headerFooterTextStyle = CupertinoTheme.of(context)
-        .textTheme
-        .textStyle
-        .merge(TextStyle(
-            fontSize: 13.0,
-            color:
-                CupertinoDynamicColor.resolve(_kHeaderFooterColor, context)));
+    final colors = AelTheme.colorsOf(context);
 
     return CupertinoPageScaffold(
-        backgroundColor: CupertinoDynamicColor.resolve(
-            CupertinoColors.systemGroupedBackground, context),
-        child: SafeArea(
-            bottom: false,
-            child: CustomScrollView(
-              slivers: [
-                CupertinoSliverNavigationBar(
-                  largeTitle: const Text('设置'),
-                  backgroundColor: CupertinoDynamicColor.resolve(
-                      CupertinoColors.systemGroupedBackground, context),
-                  border: null,
-                ),
-                // 教务
-                Obx(() => SliverToBoxAdapter(
-                      child: CupertinoListSection.insetGrouped(
-                        margin: _defaultMargin,
-                        additionalDividerMargin: 2,
-                        header: Container(
-                            padding: const EdgeInsets.only(left: 16),
-                            child: Text('教务', style: headerFooterTextStyle)),
-                        footer: (_optionController.pushOnGradeChange ||
-                                    _optionController.pushOnDdlReminder ||
-                                    _optionController.pushOnExamReminder) &&
-                                _optionController.scholar.value.isLogan
-                            ? Padding(
-                                padding: const EdgeInsets.only(left: 16),
-                                child: Text(
-                                    'Helechron 将不定期自动运行以刷新数据。请开启通知权限，且不要将 Helechron 从后台中移除。',
-                                    style: headerFooterTextStyle))
-                            : null,
-                        children: <CupertinoListTile>[
-                          if (_optionController.scholar.value.isLogan) ...{
-                            CupertinoListTile(
-                                title: Text(
-                                    '已登录: ${_optionController.scholar.value.username}'),
-                                trailing: BackChervonRow(
-                                    child: Text('退出',
-                                        style: TextStyle(
-                                            color:
-                                                CupertinoDynamicColor.resolve(
-                                                    CupertinoColors
-                                                        .secondaryLabel,
-                                                    context),
-                                            fontSize: 16))),
-                                onTap: () async {
-                                  await showCupertinoDialog(
-                                      context: context,
-                                      builder: (BuildContext dialogContext) {
-                                        return CupertinoAlertDialog(
-                                          title: const Text('退出登录'),
-                                          content: const Text('确定要退出当前账号吗？'),
-                                          actions: [
-                                            CupertinoDialogAction(
-                                              child: const Text('取消'),
-                                              onPressed: () {
-                                                Navigator.of(dialogContext)
-                                                    .pop();
-                                              },
-                                            ),
-                                            CupertinoDialogAction(
-                                              isDestructiveAction: true,
-                                              child: const Text('退出'),
-                                              onPressed: () async {
-                                                Navigator.of(dialogContext)
-                                                    .pop();
-                                                await _optionController
-                                                    .logout();
-                                              },
-                                            ),
-                                          ],
-                                        );
-                                      });
-                                }),
-                            CupertinoListTile(
-                              title: const Text('重修绩点计算'),
-                              trailing: CupertinoSlidingSegmentedControl(
-                                children: {
-                                  GpaStrategy.first: Text('取首次',
-                                      style: CupertinoTheme.of(context)
-                                          .textTheme
-                                          .textStyle
-                                          .copyWith(fontSize: 16)),
-                                  GpaStrategy.best: Text('取最高',
-                                      style: CupertinoTheme.of(context)
-                                          .textTheme
-                                          .textStyle
-                                          .copyWith(fontSize: 16)),
-                                },
-                                groupValue: _optionController.gpaStrategy,
-                                onValueChanged: (value) {
-                                  _optionController.gpaStrategy = value!;
-                                },
-                              ),
-                            ),
-                            CupertinoListTile(
-                                title: const Text('隐藏绩点'),
-                                trailing: Obx(() => CupertinoSwitch(
-                                      value: _optionController.hideHomeGpa,
-                                      onChanged: (value) async {
-                                        _optionController.hideHomeGpa = value;
-                                      },
-                                    ))),
-                            CupertinoListTile(
-                              title: const Text('自定义课程代码映射'),
-                              trailing: const BackChervonRow(),
-                              onTap: () async {
-                                Navigator.of(context, rootNavigator: true).push(
-                                    CupertinoPageRoute(
-                                        builder: (context) =>
-                                            CourseIdMappingEditPage()));
-                              },
-                            ),
-                            CupertinoListTile(
-                                title: const Text('异步刷新'),
-                                trailing: Obx(() => CupertinoSwitch(
-                                      value: _optionController.asyncRefresh,
-                                      onChanged: (value) async {
-                                        _optionController.asyncRefresh = value;
-                                      },
-                                    ))),
-                            CupertinoListTile(
-                                title: const Text('推送成绩变动'),
-                                trailing: CupertinoSwitch(
-                                  value: _optionController.pushOnGradeChange,
-                                  onChanged: PlatformFeatures
-                                          .hasBackgroundRefresh
-                                      ? (value) async {
-                                          _optionController.pushOnGradeChange =
-                                              value;
-                                        }
-                                      : null,
-                                )),
-                            CupertinoListTile(
-                                title: const Text('推送作业截止提醒'),
-                                trailing: CupertinoSwitch(
-                                  value: _optionController.pushOnDdlReminder,
-                                  onChanged: PlatformFeatures
-                                          .hasBackgroundRefresh
-                                      ? (value) async {
-                                          _optionController.pushOnDdlReminder =
-                                              value;
-                                        }
-                                      : null,
-                                )),
-                            CupertinoListTile(
-                                title: const Text('推送考前 1 小时提醒'),
-                                subtitle: const Text('考试开始前 1 小时发送座位号与物品清单通知'),
-                                trailing: CupertinoSwitch(
-                                  value: _optionController.pushOnExamReminder,
-                                  onChanged: PlatformFeatures
-                                          .hasBackgroundRefresh
-                                      ? (value) async {
-                                          _optionController.pushOnExamReminder =
-                                              value;
-                                        }
-                                      : null,
-                                )),
-                          } else ...{
-                            CupertinoListTile(
-                              title: const Text('点击登录',
-                                  style: TextStyle(
-                                      color: CupertinoColors.activeBlue)),
-                              trailing: const BackChervonRow(
-                                child: Text(''),
-                              ),
-                              onTap: () async {
-                                // Pop up a login widget from the bottom of the screen
-                                showCupertinoModalPopup(
-                                    context: context,
-                                    builder: (BuildContext context) {
-                                      return LoginForm();
-                                    });
-                              },
-                            ),
-                          },
-                        ],
-                      ),
-                    )),
-                // 时间规划
-                SliverToBoxAdapter(
-                    child: CupertinoListSection.insetGrouped(
-                        additionalDividerMargin: 2,
-                        margin: _defaultMargin,
-                        header: Container(
-                            padding: const EdgeInsets.only(left: 16),
-                            child: Text('时间规划', style: headerFooterTextStyle)),
-                        children: <CupertinoListTile>[
-                      CupertinoListTile(
-                        title: const Text('工作段时间长度'),
-                        trailing: BackChervonRow(
-                            child: Obx(() => Text(
-                                durationToString(_optionController.workTime),
-                                style: TextStyle(
-                                    color: CupertinoDynamicColor.resolve(
-                                        CupertinoColors.secondaryLabel,
-                                        context),
-                                    fontSize: 16)))),
-                        onTap: () async {
-                          Duration newWorkTime = _optionController.workTime;
-                          await showCupertinoDialog(
-                              context: context,
-                              builder: (BuildContext context) {
-                                return CupertinoAlertDialog(
-                                  title: const Text(
-                                    '工作段时间长度',
-                                  ),
-                                  content: SizedBox(
-                                    width: double.maxFinite,
-                                    height: 200,
-                                    child: Column(
-                                      children: [
-                                        Expanded(
-                                          child: CupertinoTimerPicker(
-                                            mode: CupertinoTimerPickerMode.hm,
-                                            minuteInterval: 5,
-                                            initialTimerDuration: newWorkTime,
-                                            onTimerDurationChanged: (value) {
-                                              if (value >=
-                                                  const Duration(minutes: 5)) {
-                                                newWorkTime = value;
-                                              } else {
-                                                newWorkTime =
-                                                    const Duration(minutes: 5);
-                                              }
-                                            },
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  actions: [
-                                    CupertinoDialogAction(
-                                      child: const Text('确定'),
-                                      onPressed: () async {
-                                        Navigator.of(context).pop();
-                                      },
-                                    )
-                                  ],
-                                );
-                              });
-                          _optionController.workTime = newWorkTime;
-                        },
-                      ),
-                      CupertinoListTile(
-                        title: const Text('休息段时间长度'),
-                        trailing: BackChervonRow(
-                            child: Obx(() => Text(
-                                durationToString(_optionController.restTime),
-                                style: trailingTextStyle))),
-                        onTap: () async {
-                          Duration newRestTime = _optionController.restTime;
-                          await showCupertinoDialog(
-                              context: context,
-                              builder: (BuildContext context) {
-                                return CupertinoAlertDialog(
-                                  title: const Text(
-                                    '休息段时间长度',
-                                  ),
-                                  content: SizedBox(
-                                    width: double.maxFinite,
-                                    height: 200,
-                                    child: Column(
-                                      children: [
-                                        Expanded(
-                                          child: CupertinoTimerPicker(
-                                            mode: CupertinoTimerPickerMode.hm,
-                                            initialTimerDuration: newRestTime,
-                                            onTimerDurationChanged: (value) {
-                                              newRestTime = value;
-                                            },
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  actions: [
-                                    CupertinoDialogAction(
-                                      child: const Text('确定'),
-                                      onPressed: () async {
-                                        Navigator.of(context).pop();
-                                      },
-                                    )
-                                  ],
-                                );
-                              });
-                          _optionController.restTime = newRestTime;
-                        },
-                      ),
-                      CupertinoListTile(
-                        title: const Text('可用的工作时段'),
-                        trailing: BackChervonRow(
-                            child: Obx(() => Text(
-                                '${_optionController.allowTimeLength} 个时段',
-                                style: trailingTextStyle))),
-                        onTap: () async {
-                          await Navigator.of(context, rootNavigator: true)
-                              .push(CupertinoPageRoute(
-                            builder: (context) => const AllowTimeEditPage(),
-                          ));
-                        },
-                      ),
-                    ])),
-                // 日程
-                Obx(() => SliverToBoxAdapter(
-                        child: CupertinoListSection.insetGrouped(
-                            additionalDividerMargin: 2,
-                            margin: _defaultMargin,
-                            header: Container(
-                                padding: const EdgeInsets.only(left: 16),
-                                child:
-                                    Text('日程', style: headerFooterTextStyle)),
-                            children: [
-                          CupertinoListTile(
-                            title: const Text('同步到系统日历'),
-                            trailing: CupertinoAsyncSwitch(
-                              value: _optionController
-                                      .calendarSyncEnabled.value &&
-                                  _optionController.hasCalendarPermission.value,
-                              onChanged: (value) async {
-                                await _optionController.toggleCalendarSync(
-                                    context, value);
-                              },
-                            ),
-                          ),
-                          CupertinoListTile(
-                            title: Text(
-                              '提醒方式',
-                              style: TextStyle(
-                                color:
-                                    _optionController.calendarSyncEnabled.value
-                                        ? null
-                                        : CupertinoDynamicColor.resolve(
-                                            CupertinoColors.quaternaryLabel,
-                                            context),
-                              ),
-                            ),
-                            trailing: CupertinoSlidingSegmentedControl<
-                                CalendarReminderMode>(
-                              children: const {
-                                CalendarReminderMode.notification: Text('通知提醒'),
-                                CalendarReminderMode.alarm: Text('闹钟提醒'),
-                              },
-                              groupValue:
-                                  _optionController.calendarReminderMode,
-                              onValueChanged: (value) {
-                                if (value != null) {
-                                  _optionController
-                                      .setCalendarReminderMode(value);
-                                }
-                              },
-                            ),
-                          ),
-                          CupertinoListTile(
-                            title: Text(
-                              '课表同步选项',
-                              style: TextStyle(
-                                color:
-                                    _optionController.calendarSyncEnabled.value
-                                        ? null
-                                        : CupertinoDynamicColor.resolve(
-                                            CupertinoColors.quaternaryLabel,
-                                            context),
-                              ),
-                            ),
-                            trailing: BackChervonRow(
-                                child: Text('选择学期',
-                                    style: TextStyle(
-                                        color: CupertinoDynamicColor.resolve(
-                                            CupertinoColors.secondaryLabel,
-                                            context),
-                                        fontSize: 16))),
-                            onTap: _optionController.calendarSyncEnabled.value
-                                ? () {
-                                    _optionController
-                                        .showCalendarSyncDialog(context);
-                                  }
-                                : null,
-                          ),
-                          CupertinoListTile(
-                            title: const Text('导出为iCal文件'),
-                            trailing: const BackChervonRow(),
-                            onTap: () =>
-                                _optionController.showExportDialog(context),
-                          ),
-                          CupertinoListTile(
-                            key: ValueKey(
-                                'import_ics_${_optionController.icsImportKey.value}'),
-                            title: const Text('导入日程文件'),
-                            subtitle: const Text('从 .ics 日历文件导入日程与 DDL'),
-                            trailing: const BackChervonRow(),
-                            onTap: () => _optionController.importIcs(),
-                          ),
-                        ]))),
-                // 备份与恢复
-                Obx(() => SliverToBoxAdapter(
-                        child: CupertinoListSection.insetGrouped(
-                            additionalDividerMargin: 2,
-                            margin: _defaultMargin,
-                            header: Container(
-                                padding: const EdgeInsets.only(left: 16),
-                                child: Text('备份与恢复',
-                                    style: headerFooterTextStyle)),
-                            footer: Container(
-                                padding: const EdgeInsets.only(left: 16),
-                                child: Text(
-                                    '备份包含学业数据、任务列表、课程号映射与提醒时段等配置，不含账号密码。',
-                                    style: headerFooterTextStyle)),
-                            children: <Widget>[
-                          CupertinoListTile(
-                            key: ValueKey(
-                                'export_backup_${_optionController.backupActionKey.value}'),
-                            title: const Text('导出备份'),
-                            subtitle: const Text('生成 JSON 备份文件并分享保存'),
-                            trailing: const BackChervonRow(),
-                            onTap: () => _optionController.exportBackup(),
-                          ),
-                          CupertinoListTile(
-                            key: ValueKey(
-                                'import_backup_${_optionController.backupActionKey.value}'),
-                            title: const Text('导入备份'),
-                            subtitle: const Text('从备份文件恢复，将覆盖当前数据'),
-                            trailing: const BackChervonRow(),
-                            onTap: () => _optionController.importBackup(),
-                          ),
-                        ]))),
-                // 工具
-                SliverToBoxAdapter(
-                    child: CupertinoListSection.insetGrouped(
-                        additionalDividerMargin: 2,
-                        margin: _defaultMargin,
-                        header: Container(
-                            padding: const EdgeInsets.only(left: 16),
-                            child: Text('工具', style: headerFooterTextStyle)),
-                        children: <Widget>[
-                      CupertinoListTile(
-                        title: const Text('付款码'),
-                        trailing: const BackChervonRow(),
-                        onTap: () async {
-                          Navigator.of(context, rootNavigator: true)
-                              .pushNamed('/ecardpaypage');
-                        },
-                      ),
-                      CupertinoListTile(
-                        title: const Text('校园卡账单与消费统计'),
-                        subtitle: const Text('按月查看流水、餐饮/商超/水电分类消费占比'),
-                        trailing: const BackChervonRow(),
-                        onTap: () {
-                          Navigator.of(context, rootNavigator: true).push(
-                            CupertinoPageRoute(
-                              builder: (context) => const ECardBillPage(),
-                            ),
-                          );
-                        },
-                      ),
-                      Obx(() {
-                        final threshold =
-                            _optionController.ecardLowBalanceThreshold;
-                        final label = threshold <= 0
-                            ? '已关闭'
-                            : '¥${threshold.toStringAsFixed(threshold == threshold.roundToDouble() ? 0 : 1)}';
-                        return CupertinoListTile(
-                          title: const Text('付款码低余额预警阈值'),
-                          subtitle: const Text('付款码页与桌面大码低于该值时提醒充值'),
-                          trailing: BackChervonRow(
-                            child: Text(label, style: trailingTextStyle),
-                          ),
-                          onTap: () => _showLowBalanceThresholdPicker(context),
-                        );
-                      }),
-                      Obx(() {
-                        final path = _optionController.downloadPath;
-                        final displayPath = path.isEmpty ? '应用默认目录' : path;
-                        return CupertinoListTile(
-                          title: const Text('课件下载保存路径'),
-                          subtitle: Text(
-                            displayPath,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: const BackChervonRow(),
-                          onTap: () => _showDownloadPathPicker(context),
-                        );
-                      }),
-                    ])),
-                // 网络与环境
-                SliverToBoxAdapter(
-                    child: CupertinoListSection.insetGrouped(
-                        additionalDividerMargin: 2,
-                        margin: _defaultMargin,
-                        header: Container(
-                            padding: const EdgeInsets.only(left: 16),
-                            child: Text('网络与环境', style: headerFooterTextStyle)),
-                        children: <Widget>[
-                      CupertinoListTile(
-                        title: const Text('网络代理与校内直连'),
-                        subtitle: const Text('解决挂节点无法访问浙大、分流规则与连通性体检'),
-                        trailing: const BackChervonRow(),
-                        onTap: () async {
-                          Navigator.of(context, rootNavigator: true).push(
-                            CupertinoPageRoute(
-                              builder: (context) => const NetworkProxyPage(),
-                            ),
-                          );
-                        },
-                      ),
-                    ])),
-                // 外观：主题色 / 莫奈取色 / 配色风格 / 对比度
-                SliverToBoxAdapter(
-                  child: AppearanceSection(
-                    headerStyle: headerFooterTextStyle,
-                    trailingStyle: trailingTextStyle,
-                    margin: _defaultMargin,
+      backgroundColor: colors.pageBg,
+      child: SafeArea(
+        bottom: false,
+        child: CustomScrollView(
+          slivers: [
+            const SliverToBoxAdapter(
+              child: AelLargeTitleBar(title: '设置', subtitle: '账号、外观、同步与工具配置'),
+            ),
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                AelSpacing.pageHorizontal,
+                AelSpacing.sm,
+                AelSpacing.pageHorizontal,
+                MediaQuery.paddingOf(context).bottom + 24,
+              ),
+              sliver: SliverList.list(
+                children: [
+                  _buildScholarSection(context),
+                  const SizedBox(height: AelSpacing.sectionGap),
+                  _buildPlannerSection(context),
+                  const SizedBox(height: AelSpacing.sectionGap),
+                  _buildCalendarSection(context),
+                  const SizedBox(height: AelSpacing.sectionGap),
+                  _buildBackupSection(context),
+                  const SizedBox(height: AelSpacing.sectionGap),
+                  _buildToolsSection(context),
+                  const SizedBox(height: AelSpacing.sectionGap),
+                  _buildNetworkSection(context),
+                  const SizedBox(height: AelSpacing.sectionGap),
+                  const AppearanceSection(),
+                  const SizedBox(height: AelSpacing.sectionGap),
+                  _buildDisplaySection(context),
+                  const SizedBox(height: AelSpacing.sectionGap),
+                  _buildDiagnosticsSection(context),
+                  const SizedBox(height: AelSpacing.sectionGap),
+                  _buildAboutSection(context),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScholarSection(BuildContext context) {
+    return Obx(() {
+      final colors = AelTheme.colorsOf(context);
+      final isLoggedIn = _optionController.scholar.value.isLogan;
+      final hasPush =
+          (_optionController.pushOnGradeChange ||
+              _optionController.pushOnDdlReminder ||
+              _optionController.pushOnExamReminder) &&
+          isLoggedIn;
+
+      return AelSectionCard(
+        title: '教务',
+        icon: AelIcons.award,
+        trailing: AelChip(
+          label: isLoggedIn ? '已登录' : '未登录',
+          tone: isLoggedIn ? AelChipTone.success : AelChipTone.neutral,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (isLoggedIn) ...[
+              AelListRow(
+                title: '已登录: ${_optionController.scholar.value.username}',
+                icon: AelIcons.shield,
+                iconBgColor: colors.primaryContainer,
+                iconColor: colors.onPrimaryContainer,
+                trailing: Text(
+                  '退出',
+                  style: TextStyle(
+                    color: colors.error,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                // 工具 → 显示
-                SliverToBoxAdapter(
-                    child: CupertinoListSection.insetGrouped(
-                        additionalDividerMargin: 2,
-                        margin: _defaultMargin,
-                        header: Container(
-                            padding: const EdgeInsets.only(left: 16),
-                            child: Text('显示', style: headerFooterTextStyle)),
-                        footer: Container(
-                            padding: const EdgeInsets.only(left: 16),
-                            child: Text(
-                                '悬浮底栏遵循鸿蒙原生设计规范，液态玻璃沉浸光感需要 HarmonyOS 6 及以上版本。',
-                                style: headerFooterTextStyle)),
-                        children: <Widget>[
-                      CupertinoListTile(
-                        title: const Text('暗色模式'),
-                        trailing: BackChervonRow(
-                            child: Obx(() => Text(
-                                  _optionController.brightnessMode ==
-                                          BrightnessMode.system
-                                      ? "跟随系统设置"
-                                      : _optionController.brightnessMode ==
-                                              BrightnessMode.light
-                                          ? "亮色模式"
-                                          : "暗色模式",
-                                  style: trailingTextStyle,
-                                ))),
-                        onTap: () => _showBrightnessPicker(context),
-                      ),
-                      CupertinoListTile(
-                        title: const Text('悬浮底栏'),
-                        subtitle: const Text('底部 Tab 栏悬停显示，胶囊形悬浮'),
-                        trailing: Obx(() => CupertinoSwitch(
-                              value: _optionController.bottomBarFloating,
-                              onChanged: (value) {
-                                _optionController.bottomBarFloating = value;
-                              },
-                            )),
-                      ),
-                      Obx(() => CupertinoListTile(
-                            title: const Text('沉浸光感'),
-                            subtitle: const Text('悬浮底栏背景液态玻璃光感效果'),
-                            trailing: CupertinoSwitch(
-                              value: _optionController.bottomBarImmersiveLight,
-                              onChanged: _optionController.bottomBarFloating
-                                  ? (value) {
-                                      _optionController
-                                          .bottomBarImmersiveLight = value;
-                                    }
-                                  : null,
-                            ),
-                          )),
-                      Obx(() => CupertinoListTile(
-                            title: const Text('光感强度'),
-                            subtitle: const Text('跟随系统策略，或手动指定材质精细度'),
-                            trailing: BackChervonRow(
-                                child: Text(
-                                    _materialLevelName(_optionController
-                                        .bottomBarMaterialLevel),
-                                    style: trailingTextStyle)),
-                            onTap: _optionController.bottomBarImmersiveLight
-                                ? () => _showMaterialLevelPicker(context)
-                                : null,
-                          )),
-                    ])),
-                // 关于
-                SliverToBoxAdapter(
-                  child: CupertinoListSection.insetGrouped(
-                    additionalDividerMargin: 2,
-                    margin: _defaultMargin,
-                    header: Container(
-                      padding: const EdgeInsets.only(left: 16),
-                      child: Text('诊断与测试', style: headerFooterTextStyle),
-                    ),
+                onTap: () => _confirmLogout(context),
+              ),
+              const SizedBox(height: AelSpacing.sm),
+              DecoratedBox(
+                decoration: ShapeDecoration(
+                  color: colors.tonalTileBg,
+                  shape: AelShapes.squircle(AelRadius.tile),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      CupertinoListTile(
-                        title: const Text('测试日志'),
-                        subtitle: const Text('查看、复制或导出脱敏 TXT'),
-                        trailing: const BackChervonRow(),
-                        onTap: () {
-                          Navigator.of(context, rootNavigator: true).push(
-                            CupertinoPageRoute(
-                              builder: (context) => DiagnosticLogPage(
-                                version: _optionController.celechronVersion,
-                              ),
-                            ),
-                          );
+                      Text(
+                        '重修绩点计算',
+                        style: TextStyle(
+                          color: colors.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      AelSegmented<GpaStrategy>(
+                        stackedIcon: false,
+                        items: const [
+                          AelSegmentItem(
+                            value: GpaStrategy.first,
+                            label: '取首次',
+                          ),
+                          AelSegmentItem(value: GpaStrategy.best, label: '取最高'),
+                        ],
+                        value: _optionController.gpaStrategy,
+                        onChanged: (value) {
+                          _optionController.gpaStrategy = value;
                         },
                       ),
                     ],
                   ),
                 ),
-                // 关于
-                SliverToBoxAdapter(
-                  child: CupertinoListSection.insetGrouped(
-                      additionalDividerMargin: 2,
-                      margin: _defaultMargin,
-                      header: Container(
-                          padding: const EdgeInsets.only(left: 16),
-                          child: Text('关于', style: headerFooterTextStyle)),
-                      children: <CupertinoListTile>[
-                        if (PlatformFeatures.isAndroid) ...[
-                          CupertinoListTile(
-                            title: const Text('检查更新'),
-                            subtitle: const Text('支持应用内下载并自动调起安装'),
-                            trailing: BackChervonRow(
-                              child: Text(
-                                'v${_optionController.celechronVersion}',
-                                style: trailingTextStyle,
-                              ),
-                            ),
-                            onTap: () =>
-                                _optionController.manualCheckUpdate(context),
-                          ),
-                          CupertinoListTile(
-                            title: const Text('启动时自动检查更新'),
-                            trailing: Obx(
-                              () => CupertinoSwitch(
-                                value: _optionController.autoCheckUpdate.value,
-                                onChanged: (value) => _optionController
-                                    .toggleAutoCheckUpdate(value),
-                              ),
-                            ),
-                          ),
-                        ],
-                        CupertinoListTile(
-                          title: const Text('关于 Helechron'),
-                          trailing: BackChervonRow(
-                            child: Text(_optionController.celechronVersion,
-                                style: trailingTextStyle),
-                          ),
-                          onTap: () async {
-                            Navigator.of(context, rootNavigator: true).push(
-                                CupertinoPageRoute(
-                                    builder: (context) => CreditsPage(
-                                        version: _optionController
-                                            .celechronVersion)));
-                          },
-                        ),
-                        CupertinoListTile(
-                          title: const Text('隐私政策'),
-                          trailing: const BackChervonRow(),
-                          onTap: () async {
-                            Navigator.of(context, rootNavigator: true)
-                                .push(CupertinoPageRoute(
-                                    builder: (context) => LegalDocumentPage(
-                                          title: '隐私政策',
-                                          assetPath:
-                                              'assets/legal/privacy_policy.txt',
-                                          onlineUrl: privacyPolicyUrl,
-                                        )));
-                          },
-                        ),
-                        CupertinoListTile(
-                          title: const Text('用户协议'),
-                          trailing: const BackChervonRow(),
-                          onTap: () async {
-                            Navigator.of(context, rootNavigator: true)
-                                .push(CupertinoPageRoute(
-                                    builder: (context) => LegalDocumentPage(
-                                          title: '用户协议',
-                                          assetPath:
-                                              'assets/legal/user_agreement.txt',
-                                          onlineUrl: userAgreementUrl,
-                                        )));
-                          },
-                        ),
-                        CupertinoListTile(
-                          title: const Text('ICP 备案号'),
-                          trailing: BackChervonRow(
-                            child:
-                                Text(icpFilingNumber, style: trailingTextStyle),
-                          ),
-                        ),
-                        CupertinoListTile(
-                          title: const Text('开源许可证'),
-                          trailing: const BackChervonRow(),
-                          onTap: () async {
-                            Navigator.of(context, rootNavigator: true).push(
-                                CupertinoPageRoute(
-                                    builder: (context) =>
-                                        const CustomLicensePage()));
-                          },
-                        ),
-                        CupertinoListTile(
-                          title: const Text('Helechron项目网站'),
-                          trailing: const BackChervonRow(),
-                          onTap: () async {
-                            await launchUrlString(
-                              projectUrl,
-                              mode: LaunchMode.externalApplication,
-                            );
-                          },
-                        ),
-                      ]),
+              ),
+              const SizedBox(height: AelSpacing.sm),
+              Obx(
+                () => AelSwitchTile(
+                  title: '隐藏绩点',
+                  icon: AelIcons.shield,
+                  useTonalContainer: true,
+                  value: _optionController.hideHomeGpa,
+                  onChanged: (value) {
+                    _optionController.hideHomeGpa = value;
+                  },
                 ),
-                SliverToBoxAdapter(
-                  child: SizedBox(
-                    height: MediaQuery.paddingOf(context).bottom + 16,
+              ),
+              const SizedBox(height: AelSpacing.sm),
+              AelListRow(
+                title: '自定义课程代码映射',
+                icon: AelIcons.edit,
+                onTap: () async {
+                  Navigator.of(context, rootNavigator: true).push(
+                    CupertinoPageRoute(
+                      builder: (context) => CourseIdMappingEditPage(),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: AelSpacing.sm),
+              Obx(
+                () => AelSwitchTile(
+                  title: '异步刷新',
+                  icon: AelIcons.refresh,
+                  useTonalContainer: true,
+                  value: _optionController.asyncRefresh,
+                  onChanged: (value) {
+                    _optionController.asyncRefresh = value;
+                  },
+                ),
+              ),
+              const SizedBox(height: AelSpacing.sm),
+              AelSwitchTile(
+                title: '推送成绩变动',
+                icon: AelIcons.bell,
+                useTonalContainer: true,
+                value: _optionController.pushOnGradeChange,
+                onChanged: PlatformFeatures.hasBackgroundRefresh
+                    ? (value) {
+                        _optionController.pushOnGradeChange = value;
+                      }
+                    : null,
+              ),
+              const SizedBox(height: AelSpacing.sm),
+              AelSwitchTile(
+                title: '推送作业截止提醒',
+                icon: AelIcons.homework,
+                useTonalContainer: true,
+                value: _optionController.pushOnDdlReminder,
+                onChanged: PlatformFeatures.hasBackgroundRefresh
+                    ? (value) {
+                        _optionController.pushOnDdlReminder = value;
+                      }
+                    : null,
+              ),
+              const SizedBox(height: AelSpacing.sm),
+              AelSwitchTile(
+                title: '推送考前 1 小时提醒',
+                subtitle: '考试开始前 1 小时发送座位号与物品清单通知',
+                icon: AelIcons.exam,
+                useTonalContainer: true,
+                value: _optionController.pushOnExamReminder,
+                onChanged: PlatformFeatures.hasBackgroundRefresh
+                    ? (value) {
+                        _optionController.pushOnExamReminder = value;
+                      }
+                    : null,
+              ),
+              if (hasPush)
+                _footerNote(
+                  context,
+                  'Helechron 将不定期自动运行以刷新数据。请开启通知权限，且不要将 Helechron 从后台中移除。',
+                ),
+            ] else ...[
+              AelListRow(
+                title: '点击登录',
+                subtitle: '绑定浙大通行证以同步课表、成绩与作业',
+                icon: AelIcons.shield,
+                iconBgColor: colors.primaryContainer,
+                iconColor: colors.onPrimaryContainer,
+                onTap: () {
+                  // Pop up a login widget from the bottom of the screen
+                  showCupertinoModalPopup(
+                    context: context,
+                    builder: (BuildContext context) => LoginForm(),
+                  );
+                },
+              ),
+            ],
+          ],
+        ),
+      );
+    });
+  }
+
+  Widget _buildPlannerSection(BuildContext context) {
+    return AelSectionCard(
+      title: '时间规划',
+      icon: AelIcons.activity,
+      child: Column(
+        children: [
+          AelListRow(
+            title: '工作段时间长度',
+            icon: AelIcons.activity,
+            trailing: Obx(
+              () => _trailingText(
+                context,
+                durationToString(_optionController.workTime),
+              ),
+            ),
+            onTap: () => _showWorkTimePicker(context),
+          ),
+          const SizedBox(height: AelSpacing.sm),
+          AelListRow(
+            title: '休息段时间长度',
+            icon: AelIcons.sun,
+            trailing: Obx(
+              () => _trailingText(
+                context,
+                durationToString(_optionController.restTime),
+              ),
+            ),
+            onTap: () => _showRestTimePicker(context),
+          ),
+          const SizedBox(height: AelSpacing.sm),
+          AelListRow(
+            title: '可用的工作时段',
+            icon: AelIcons.tabFlow,
+            trailing: Obx(
+              () => _trailingText(
+                context,
+                '${_optionController.allowTimeLength} 个时段',
+              ),
+            ),
+            onTap: () async {
+              await Navigator.of(context, rootNavigator: true).push(
+                CupertinoPageRoute(
+                  builder: (context) => const AllowTimeEditPage(),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCalendarSection(BuildContext context) {
+    return Obx(() {
+      final colors = AelTheme.colorsOf(context);
+      final syncEnabled = _optionController.calendarSyncEnabled.value;
+
+      return AelSectionCard(
+        title: '日程',
+        icon: AelIcons.tabCalendar,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AelListRow(
+              title: '同步到系统日历',
+              icon: AelIcons.tabCalendar,
+              showChevron: false,
+              trailing: CupertinoAsyncSwitch(
+                value:
+                    syncEnabled &&
+                    _optionController.hasCalendarPermission.value,
+                onChanged: (value) async {
+                  await _optionController.toggleCalendarSync(context, value);
+                },
+              ),
+            ),
+            const SizedBox(height: AelSpacing.sm),
+            DecoratedBox(
+              decoration: ShapeDecoration(
+                color: colors.tonalTileBg,
+                shape: AelShapes.squircle(AelRadius.tile),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '提醒方式',
+                      style: TextStyle(
+                        color: syncEnabled
+                            ? colors.textPrimary
+                            : colors.textTertiary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    IgnorePointer(
+                      ignoring: !syncEnabled,
+                      child: Opacity(
+                        opacity: syncEnabled ? 1 : 0.45,
+                        child: AelSegmented<CalendarReminderMode>(
+                          stackedIcon: false,
+                          items: const [
+                            AelSegmentItem(
+                              value: CalendarReminderMode.notification,
+                              label: '通知提醒',
+                            ),
+                            AelSegmentItem(
+                              value: CalendarReminderMode.alarm,
+                              label: '闹钟提醒',
+                            ),
+                          ],
+                          value: _optionController.calendarReminderMode,
+                          onChanged: (value) {
+                            _optionController.setCalendarReminderMode(value);
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: AelSpacing.sm),
+            Opacity(
+              opacity: syncEnabled ? 1 : 0.5,
+              child: AelListRow(
+                title: '课表同步选项',
+                icon: AelIcons.filter,
+                trailing: _trailingText(context, '选择学期'),
+                onTap: syncEnabled
+                    ? () {
+                        _optionController.showCalendarSyncDialog(context);
+                      }
+                    : null,
+              ),
+            ),
+            const SizedBox(height: AelSpacing.sm),
+            AelListRow(
+              title: '导出为iCal文件',
+              icon: AelIcons.share,
+              onTap: () => _optionController.showExportDialog(context),
+            ),
+            const SizedBox(height: AelSpacing.sm),
+            AelListRow(
+              key: ValueKey(
+                'import_ics_${_optionController.icsImportKey.value}',
+              ),
+              title: '导入日程文件',
+              subtitle: '从 .ics 日历文件导入日程与 DDL',
+              icon: AelIcons.upload,
+              onTap: () => _optionController.importIcs(),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  Widget _buildBackupSection(BuildContext context) {
+    return Obx(
+      () => AelSectionCard(
+        title: '备份与恢复',
+        icon: AelIcons.layers,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AelListRow(
+              key: ValueKey(
+                'export_backup_${_optionController.backupActionKey.value}',
+              ),
+              title: '导出备份',
+              subtitle: '生成 JSON 备份文件并分享保存',
+              icon: AelIcons.share,
+              onTap: () => _optionController.exportBackup(),
+            ),
+            const SizedBox(height: AelSpacing.sm),
+            AelListRow(
+              key: ValueKey(
+                'import_backup_${_optionController.backupActionKey.value}',
+              ),
+              title: '导入备份',
+              subtitle: '从备份文件恢复，将覆盖当前数据',
+              icon: AelIcons.download,
+              onTap: () => _optionController.importBackup(),
+            ),
+            _footerNote(context, '备份包含学业数据、任务列表、课程号映射与提醒时段等配置，不含账号密码。'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildToolsSection(BuildContext context) {
+    return AelSectionCard(
+      title: '工具',
+      icon: AelIcons.qrCode,
+      child: Column(
+        children: [
+          AelListRow(
+            title: '付款码',
+            icon: AelIcons.qrCode,
+            onTap: () async {
+              Navigator.of(
+                context,
+                rootNavigator: true,
+              ).pushNamed('/ecardpaypage');
+            },
+          ),
+          const SizedBox(height: AelSpacing.sm),
+          AelListRow(
+            title: '校园卡账单与消费统计',
+            subtitle: '按月查看流水、餐饮/商超/水电分类消费占比',
+            icon: AelIcons.wallet,
+            onTap: () {
+              Navigator.of(context, rootNavigator: true).push(
+                CupertinoPageRoute(builder: (context) => const ECardBillPage()),
+              );
+            },
+          ),
+          const SizedBox(height: AelSpacing.sm),
+          Obx(() {
+            final threshold = _optionController.ecardLowBalanceThreshold;
+            final label = threshold <= 0
+                ? '已关闭'
+                : '¥${threshold.toStringAsFixed(threshold == threshold.roundToDouble() ? 0 : 1)}';
+            return AelListRow(
+              title: '付款码低余额预警阈值',
+              subtitle: '付款码页与桌面大码低于该值时提醒充值',
+              icon: AelIcons.warning,
+              trailing: _trailingText(context, label),
+              onTap: () => _showLowBalanceThresholdPicker(context),
+            );
+          }),
+          const SizedBox(height: AelSpacing.sm),
+          Obx(() {
+            final path = _optionController.downloadPath;
+            final displayPath = path.isEmpty ? '应用默认目录' : path;
+            return AelListRow(
+              title: '课件下载保存路径',
+              subtitle: displayPath,
+              icon: AelIcons.folder,
+              onTap: () => _showDownloadPathPicker(context),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNetworkSection(BuildContext context) {
+    return AelSectionCard(
+      title: '网络与环境',
+      icon: AelIcons.wifi,
+      child: AelListRow(
+        title: '网络代理与校内直连',
+        subtitle: '解决挂节点无法访问浙大、分流规则与连通性体检',
+        icon: AelIcons.globe,
+        onTap: () async {
+          Navigator.of(context, rootNavigator: true).push(
+            CupertinoPageRoute(builder: (context) => const NetworkProxyPage()),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDisplaySection(BuildContext context) {
+    return AelSectionCard(
+      title: '显示',
+      icon: AelIcons.smartphone,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AelListRow(
+            title: '暗色模式',
+            icon: AelIcons.moon,
+            trailing: Obx(
+              () => _trailingText(
+                context,
+                _optionController.brightnessMode == BrightnessMode.system
+                    ? '跟随系统设置'
+                    : _optionController.brightnessMode == BrightnessMode.light
+                    ? '亮色模式'
+                    : '暗色模式',
+              ),
+            ),
+            onTap: () => _showBrightnessPicker(context),
+          ),
+          const SizedBox(height: AelSpacing.sm),
+          Obx(
+            () => AelSwitchTile(
+              title: '悬浮底栏',
+              subtitle: '底部 Tab 栏悬停显示，胶囊形悬浮',
+              icon: AelIcons.layers,
+              useTonalContainer: true,
+              value: _optionController.bottomBarFloating,
+              onChanged: (value) {
+                _optionController.bottomBarFloating = value;
+              },
+            ),
+          ),
+          const SizedBox(height: AelSpacing.sm),
+          Obx(
+            () => AelSwitchTile(
+              title: '沉浸光感',
+              subtitle: '悬浮底栏背景液态玻璃光感效果',
+              icon: AelIcons.sparkles,
+              useTonalContainer: true,
+              value: _optionController.bottomBarImmersiveLight,
+              onChanged: _optionController.bottomBarFloating
+                  ? (value) {
+                      _optionController.bottomBarImmersiveLight = value;
+                    }
+                  : null,
+            ),
+          ),
+          const SizedBox(height: AelSpacing.sm),
+          Obx(
+            () => Opacity(
+              opacity: _optionController.bottomBarImmersiveLight ? 1 : 0.5,
+              child: AelListRow(
+                title: '光感强度',
+                subtitle: '跟随系统策略，或手动指定材质精细度',
+                icon: AelIcons.contrast,
+                trailing: _trailingText(
+                  context,
+                  _materialLevelName(_optionController.bottomBarMaterialLevel),
+                ),
+                onTap: _optionController.bottomBarImmersiveLight
+                    ? () => _showMaterialLevelPicker(context)
+                    : null,
+              ),
+            ),
+          ),
+          _footerNote(context, '悬浮底栏遵循鸿蒙原生设计规范，液态玻璃沉浸光感需要 HarmonyOS 6 及以上版本。'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDiagnosticsSection(BuildContext context) {
+    return AelSectionCard(
+      title: '诊断与测试',
+      icon: AelIcons.info,
+      child: AelListRow(
+        title: '测试日志',
+        subtitle: '查看、复制或导出脱敏 TXT',
+        icon: AelIcons.file,
+        onTap: () {
+          Navigator.of(context, rootNavigator: true).push(
+            CupertinoPageRoute(
+              builder: (context) => DiagnosticLogPage(
+                version: _optionController.celechronVersion,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildAboutSection(BuildContext context) {
+    return AelSectionCard(
+      title: '关于',
+      icon: AelIcons.info,
+      child: Column(
+        children: [
+          if (PlatformFeatures.isAndroid) ...[
+            AelListRow(
+              title: '检查更新',
+              subtitle: '支持应用内下载并自动调起安装',
+              icon: AelIcons.download,
+              trailing: _trailingText(
+                context,
+                'v${_optionController.celechronVersion}',
+              ),
+              onTap: () => _optionController.manualCheckUpdate(context),
+            ),
+            const SizedBox(height: AelSpacing.sm),
+            Obx(
+              () => AelSwitchTile(
+                title: '启动时自动检查更新',
+                icon: AelIcons.refresh,
+                useTonalContainer: true,
+                value: _optionController.autoCheckUpdate.value,
+                onChanged: (value) =>
+                    _optionController.toggleAutoCheckUpdate(value),
+              ),
+            ),
+            const SizedBox(height: AelSpacing.sm),
+          ],
+          AelListRow(
+            title: '关于 Helechron',
+            icon: AelIcons.info,
+            trailing: _trailingText(
+              context,
+              _optionController.celechronVersion,
+            ),
+            onTap: () async {
+              Navigator.of(context, rootNavigator: true).push(
+                CupertinoPageRoute(
+                  builder: (context) =>
+                      CreditsPage(version: _optionController.celechronVersion),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: AelSpacing.sm),
+          AelListRow(
+            title: '隐私政策',
+            icon: AelIcons.shield,
+            onTap: () async {
+              Navigator.of(context, rootNavigator: true).push(
+                CupertinoPageRoute(
+                  builder: (context) => const LegalDocumentPage(
+                    title: '隐私政策',
+                    assetPath: 'assets/legal/privacy_policy.txt',
+                    onlineUrl: privacyPolicyUrl,
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: AelSpacing.sm),
+          AelListRow(
+            title: '用户协议',
+            icon: AelIcons.file,
+            onTap: () async {
+              Navigator.of(context, rootNavigator: true).push(
+                CupertinoPageRoute(
+                  builder: (context) => const LegalDocumentPage(
+                    title: '用户协议',
+                    assetPath: 'assets/legal/user_agreement.txt',
+                    onlineUrl: userAgreementUrl,
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: AelSpacing.sm),
+          AelListRow(
+            title: 'ICP 备案号',
+            icon: AelIcons.globe,
+            showChevron: false,
+            trailing: _trailingText(context, icpFilingNumber),
+          ),
+          const SizedBox(height: AelSpacing.sm),
+          AelListRow(
+            title: '开源许可证',
+            icon: AelIcons.book,
+            onTap: () async {
+              Navigator.of(context, rootNavigator: true).push(
+                CupertinoPageRoute(
+                  builder: (context) => const CustomLicensePage(),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: AelSpacing.sm),
+          AelListRow(
+            title: 'Helechron项目网站',
+            icon: AelIcons.externalLink,
+            onTap: () async {
+              await launchUrlString(
+                projectUrl,
+                mode: LaunchMode.externalApplication,
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmLogout(BuildContext context) async {
+    await showCupertinoDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return CupertinoAlertDialog(
+          title: const Text('退出登录'),
+          content: const Text('确定要退出当前账号吗？'),
+          actions: [
+            CupertinoDialogAction(
+              child: const Text('取消'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+            ),
+            CupertinoDialogAction(
+              isDestructiveAction: true,
+              child: const Text('退出'),
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                await _optionController.logout();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showWorkTimePicker(BuildContext context) async {
+    Duration newWorkTime = _optionController.workTime;
+    await showCupertinoDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return CupertinoAlertDialog(
+          title: const Text('工作段时间长度'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 200,
+            child: Column(
+              children: [
+                Expanded(
+                  child: CupertinoTimerPicker(
+                    mode: CupertinoTimerPickerMode.hm,
+                    minuteInterval: 5,
+                    initialTimerDuration: newWorkTime,
+                    onTimerDurationChanged: (value) {
+                      if (value >= const Duration(minutes: 5)) {
+                        newWorkTime = value;
+                      } else {
+                        newWorkTime = const Duration(minutes: 5);
+                      }
+                    },
                   ),
                 ),
               ],
-            )));
+            ),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              child: const Text('确定'),
+              onPressed: () async {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+    _optionController.workTime = newWorkTime;
+  }
+
+  Future<void> _showRestTimePicker(BuildContext context) async {
+    Duration newRestTime = _optionController.restTime;
+    await showCupertinoDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return CupertinoAlertDialog(
+          title: const Text('休息段时间长度'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 200,
+            child: Column(
+              children: [
+                Expanded(
+                  child: CupertinoTimerPicker(
+                    mode: CupertinoTimerPickerMode.hm,
+                    initialTimerDuration: newRestTime,
+                    onTimerDurationChanged: (value) {
+                      newRestTime = value;
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              child: const Text('确定'),
+              onPressed: () async {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+    _optionController.restTime = newRestTime;
   }
 
   String _materialLevelName(int level) {
@@ -789,24 +886,21 @@ class OptionPage extends StatelessWidget {
   }
 
   void _showMaterialLevelPicker(BuildContext context) {
-    const levels = <int, String>{
-      10: '跟随系统',
-      0: '精致',
-      1: '柔和',
-      2: '流畅',
-    };
+    const levels = <int, String>{10: '跟随系统', 0: '精致', 1: '柔和', 2: '流畅'};
     showCupertinoModalPopup(
       context: context,
       builder: (BuildContext context) {
         return CupertinoActionSheet(
           actions: levels.entries
-              .map((entry) => CupertinoActionSheetAction(
-                    onPressed: () {
-                      _optionController.bottomBarMaterialLevel = entry.key;
-                      Navigator.pop(context);
-                    },
-                    child: Text(entry.value),
-                  ))
+              .map(
+                (entry) => CupertinoActionSheetAction(
+                  onPressed: () {
+                    _optionController.bottomBarMaterialLevel = entry.key;
+                    Navigator.pop(context);
+                  },
+                  child: Text(entry.value),
+                ),
+              )
               .toList(),
           cancelButton: CupertinoActionSheetAction(
             onPressed: () => Navigator.pop(context),
@@ -870,13 +964,15 @@ class OptionPage extends StatelessWidget {
           title: const Text('付款码低余额预警阈值'),
           message: const Text('当校园卡余额低于设定金额时，在付款码页及桌面大码页显示充值提醒'),
           actions: [
-            ...presets.entries.map((entry) => CupertinoActionSheetAction(
-                  onPressed: () {
-                    _optionController.ecardLowBalanceThreshold = entry.key;
-                    Navigator.pop(sheetContext);
-                  },
-                  child: Text(entry.value),
-                )),
+            ...presets.entries.map(
+              (entry) => CupertinoActionSheetAction(
+                onPressed: () {
+                  _optionController.ecardLowBalanceThreshold = entry.key;
+                  Navigator.pop(sheetContext);
+                },
+                child: Text(entry.value),
+              ),
+            ),
             CupertinoActionSheetAction(
               onPressed: () {
                 Navigator.pop(sheetContext);
@@ -903,27 +999,22 @@ class OptionPage extends StatelessWidget {
     showCupertinoDialog(
       context: context,
       builder: (dialogContext) {
+        final colors = AelTheme.colorsOf(dialogContext);
         return CupertinoAlertDialog(
           title: const Text('自定义低余额预警阈值（元）'),
           content: Padding(
             padding: const EdgeInsets.only(top: 12),
             child: CupertinoTextField(
               controller: controller,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               placeholder: '输入金额（0 表示关闭）',
               autofocus: true,
-              style: TextStyle(
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.label, dialogContext),
-              ),
-              placeholderStyle: TextStyle(
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.placeholderText, dialogContext),
-              ),
+              style: TextStyle(color: colors.textPrimary),
+              placeholderStyle: TextStyle(color: colors.textTertiary),
               decoration: BoxDecoration(
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.tertiarySystemFill, dialogContext),
+                color: colors.tonalTileBg,
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
@@ -947,7 +1038,7 @@ class OptionPage extends StatelessWidget {
           ],
         );
       },
-    );
+    ).then((_) => controller.dispose());
   }
 
   void _showDownloadPathPicker(BuildContext context) {
@@ -956,17 +1047,18 @@ class OptionPage extends StatelessWidget {
       builder: (sheetContext) {
         return CupertinoActionSheet(
           title: const Text('课件下载保存路径'),
-          message: Text(_optionController.downloadPath.isEmpty
-              ? '当前：应用默认课件目录（支持直接唤起系统“打开方式”）'
-              : '当前：${_optionController.downloadPath}'),
+          message: Text(
+            _optionController.downloadPath.isEmpty
+                ? '当前：应用默认课件目录（支持直接唤起系统“打开方式”）'
+                : '当前：${_optionController.downloadPath}',
+          ),
           actions: [
             CupertinoActionSheetAction(
               onPressed: () async {
                 Navigator.pop(sheetContext);
                 // 等待底部弹窗收起动画完成，避免 iOS/HarmonyOS 原生选择器弹出时机冲突
                 await Future<void>.delayed(const Duration(milliseconds: 220));
-                final picked =
-                    await OhosNativeService.instance.pickDirectory();
+                final picked = await OhosNativeService.instance.pickDirectory();
                 if (picked != null && picked.isNotEmpty) {
                   _optionController.downloadPath = picked;
                   return;
@@ -1017,11 +1109,13 @@ class OptionPage extends StatelessWidget {
   }
 
   void _showCustomDownloadPathDialog(BuildContext context) {
-    final controller =
-        TextEditingController(text: _optionController.downloadPath);
+    final controller = TextEditingController(
+      text: _optionController.downloadPath,
+    );
     showCupertinoDialog(
       context: context,
       builder: (dialogContext) {
+        final colors = AelTheme.colorsOf(dialogContext);
         return CupertinoAlertDialog(
           title: const Text('设置课件下载目录'),
           content: Padding(
@@ -1030,17 +1124,10 @@ class OptionPage extends StatelessWidget {
               controller: controller,
               placeholder: '留空使用应用默认目录',
               autofocus: true,
-              style: TextStyle(
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.label, dialogContext),
-              ),
-              placeholderStyle: TextStyle(
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.placeholderText, dialogContext),
-              ),
+              style: TextStyle(color: colors.textPrimary),
+              placeholderStyle: TextStyle(color: colors.textTertiary),
               decoration: BoxDecoration(
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.tertiarySystemFill, dialogContext),
+                color: colors.tonalTileBg,
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
@@ -1052,7 +1139,7 @@ class OptionPage extends StatelessWidget {
             ),
             CupertinoDialogAction(
               isDefaultAction: true,
-              child: const Text('保存'),
+              child: const Text('确定'),
               onPressed: () {
                 _optionController.downloadPath = controller.text.trim();
                 Navigator.pop(dialogContext);
@@ -1061,27 +1148,6 @@ class OptionPage extends StatelessWidget {
           ],
         );
       },
-    );
-  }
-
-  static const _defaultMargin =
-      EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 10.0);
-}
-
-class BackChervonRow extends StatelessWidget {
-  final Widget? child;
-
-  const BackChervonRow({super.key, this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(children: [
-      if (child != null) child!,
-      const SizedBox(width: 4),
-      Icon(Icons.arrow_forward_ios,
-          color: CupertinoDynamicColor.resolve(
-              CupertinoColors.tertiaryLabel, context),
-          size: 16)
-    ]);
+    ).then((_) => controller.dispose());
   }
 }
