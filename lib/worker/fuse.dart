@@ -8,8 +8,8 @@ class Fuse {
   late DateTime lastUpdateTime;
 
   final bool isBeta = false;
-  final version = [0, 1, 8];
-  final build = 115;
+  final version = [0, 2, 0];
+  final build = 116;
   List<int>? remoteVersion;
   int? remoteBuild;
   bool hasNewVersion = false;
@@ -18,7 +18,7 @@ class Fuse {
   final DatabaseHelper _db = Get.find<DatabaseHelper>(tag: 'db');
 
   // 应用内展示文本（关于页/诊断日志/版权页均取此值）。
-  String get displayVersion => '0.1.8';
+  String get displayVersion => '0.2.0';
 
   Fuse() {
     lastUpdateTime = DateTime(2001, 1, 1);
@@ -26,8 +26,9 @@ class Fuse {
 
   Future<String?> checkUpdate() async {
     try {
-      if (lastUpdateTime
-          .isAfter(DateTime.now().subtract(const Duration(days: 1)))) {
+      if (lastUpdateTime.isAfter(
+        DateTime.now().subtract(const Duration(days: 1)),
+      )) {
         return null;
       }
 
@@ -39,15 +40,18 @@ class Fuse {
           .getUrl(Uri.parse(checkUpdateUrl))
           .timeout(const Duration(seconds: 8));
       request.headers.set(HttpHeaders.userAgentHeader, 'Helechron');
-      request.headers
-          .set(HttpHeaders.acceptHeader, 'application/vnd.github+json');
+      request.headers.set(
+        HttpHeaders.acceptHeader,
+        'application/vnd.github+json',
+      );
       var response = await request.close().timeout(const Duration(seconds: 8));
       var html = await response.transform(utf8.decoder).join();
       if (response.statusCode != HttpStatus.ok) return null;
       final release = jsonDecode(html) as Map<String, dynamic>;
       final tag = release['tag_name']?.toString() ?? '';
-      final match =
-          RegExp(r'^v?(\d+)\.(\d+)\.(\d+)(?:\+(\d+))?$').firstMatch(tag);
+      final match = RegExp(
+        r'^v?(\d+)\.(\d+)\.(\d+)(?:\+(\d+))?$',
+      ).firstMatch(tag);
       if (match == null || release['draft'] == true) return null;
       remoteVersion = [for (var i = 1; i <= 3; i++) int.parse(match.group(i)!)];
       remoteBuild = int.tryParse(match.group(4) ?? '') ?? 0;
@@ -92,8 +96,8 @@ class Fuse {
   }
 
   Map<String, dynamic> toJson() => {
-        'lastUpdateTime': lastUpdateTime.toIso8601String(),
-      };
+    'lastUpdateTime': lastUpdateTime.toIso8601String(),
+  };
 
   Fuse.fromJson(Map<String, dynamic> json) {
     lastUpdateTime = DateTime.parse(json['lastUpdateTime']);
