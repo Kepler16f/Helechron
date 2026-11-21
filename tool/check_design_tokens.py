@@ -34,6 +34,7 @@ ENFORCED_FILES = [
     "lib/page/scholar/scholar_view.dart",
     "lib/page/scholar/grade_detail/grade_detail_view.dart",
     "lib/page/scholar/grade_detail/grade_card.dart",
+    "lib/page/scholar/practice_score/practice_score_page.dart",
     "lib/page/scholar/todo/todo_card.dart",
     "lib/page/option/appearance_section.dart",
     "lib/page/option/option_view.dart",

@@ -1,3 +1,16 @@
+import 'package:flutter/cupertino.dart'
+    show
+        CupertinoAlertDialog,
+        CupertinoButton,
+        CupertinoDialogAction,
+        CupertinoNavigationBar,
+        CupertinoPageScaffold,
+        CupertinoPageRoute,
+        CupertinoTextField,
+        showCupertinoDialog;
+import 'package:flutter/material.dart' show Divider;
+import 'package:flutter/widgets.dart';
+
 import 'package:celechron/design/components/ael_components.dart';
 import 'package:celechron/design/icons/ael_icons.dart';
 import 'package:celechron/design/native_bar_spacer.dart';
@@ -6,7 +19,6 @@ import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/model/practice_score_item.dart';
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/utils/practice_target_helper.dart';
-import 'package:flutter/cupertino.dart';
 
 class PracticeScoreColumns extends StatelessWidget {
   final Scholar scholar;
@@ -133,6 +145,7 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
   };
 
   void _showSetTargetDialog(int catId) {
+    final colors = AelTheme.colorsOf(context);
     final currentTarget = PracticeTargetHelper.getTarget(catId);
     final textController = TextEditingController(
       text: currentTarget > 0 ? currentTarget.toStringAsFixed(2) : '',
@@ -149,20 +162,10 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             placeholder: '如: 4.0',
             autofocus: true,
-            style: TextStyle(
-              color: CupertinoDynamicColor.resolve(CupertinoColors.label, ctx),
-            ),
-            placeholderStyle: TextStyle(
-              color: CupertinoDynamicColor.resolve(
-                CupertinoColors.placeholderText,
-                ctx,
-              ),
-            ),
+            style: TextStyle(color: colors.textPrimary),
+            placeholderStyle: TextStyle(color: colors.textTertiary),
             decoration: BoxDecoration(
-              color: CupertinoDynamicColor.resolve(
-                CupertinoColors.tertiarySystemFill,
-                ctx,
-              ),
+              color: colors.tonalTileBg,
               borderRadius: BorderRadius.circular(8),
             ),
           ),
@@ -201,65 +204,31 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
   Widget _buildCategorySegment() {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: CupertinoSlidingSegmentedControl<int>(
-        groupValue: _selectedCategoryId,
-        children: {
-          0: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Text(
-              '总览',
-              style: TextStyle(
-                fontSize: 13,
-                color: CupertinoColors.label.resolveFrom(context),
-              ),
-            ),
-          ),
-          1: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Text(
-              '二课',
-              style: TextStyle(
-                fontSize: 13,
-                color: CupertinoColors.label.resolveFrom(context),
-              ),
-            ),
-          ),
-          2: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Text(
-              '三课',
-              style: TextStyle(
-                fontSize: 13,
-                color: CupertinoColors.label.resolveFrom(context),
-              ),
-            ),
-          ),
-          3: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Text(
-              '四课',
-              style: TextStyle(
-                fontSize: 13,
-                color: CupertinoColors.label.resolveFrom(context),
-              ),
-            ),
-          ),
-        },
-        onValueChanged: (val) {
-          if (val != null) setState(() => _selectedCategoryId = val);
-        },
+      child: AelSegmented<int>(
+        value: _selectedCategoryId,
+        stackedIcon: false,
+        onChanged: (val) => setState(() => _selectedCategoryId = val),
+        items: const [
+          AelSegmentItem(value: 0, label: '总览'),
+          AelSegmentItem(value: 1, label: '二课'),
+          AelSegmentItem(value: 2, label: '三课'),
+          AelSegmentItem(value: 3, label: '四课'),
+        ],
       ),
     );
   }
 
   Widget _buildTargetCard(int catId) {
+    final colors = AelTheme.colorsOf(context);
     final current = _getCategoryScore(catId);
     final target = PracticeTargetHelper.getTarget(catId);
     final hasTarget = target > 0;
     final isPassed = hasTarget && current >= target;
     final progress = hasTarget ? (current / target).clamp(0.0, 1.0) : 0.0;
 
-    return _Card(
+    return AelSectionCard(
+      padding: const EdgeInsets.all(16),
+      cornerRadius: AelRadius.tile,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -271,25 +240,27 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
-                  color: CupertinoColors.label.resolveFrom(context),
+                  color: colors.textPrimary,
                 ),
               ),
-              CupertinoButton(
-                padding: EdgeInsets.zero,
-                onPressed: () => _showSetTargetDialog(catId),
+              GestureDetector(
+                onTap: () => _showSetTargetDialog(catId),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       hasTarget ? '修改目标' : '设置目标',
                       style: TextStyle(
                         fontSize: 13,
-                        color: CupertinoColors.activeBlue.resolveFrom(context),
+                        color: colors.primary,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
+                    const SizedBox(width: 2),
                     Icon(
-                      CupertinoIcons.chevron_forward,
+                      AelIcons.chevronRight,
                       size: 13,
-                      color: CupertinoColors.activeBlue.resolveFrom(context),
+                      color: colors.primary,
                     ),
                   ],
                 ),
@@ -304,50 +275,25 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: CupertinoColors.label.resolveFrom(context),
+                  color: colors.textPrimary,
                 ),
               ),
               if (hasTarget) ...[
                 Text(
                   ' / ${target.toStringAsFixed(2)}',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                  ),
+                  style: TextStyle(fontSize: 16, color: colors.textSecondary),
                 ),
               ],
               const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color:
-                      (!hasTarget
-                              ? CupertinoColors.inactiveGray
-                              : (isPassed
-                                    ? CupertinoColors.systemGreen
-                                    : CupertinoColors.systemOrange))
-                          .resolveFrom(context)
-                          .withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  !hasTarget
-                      ? '无目标'
-                      : (isPassed
-                            ? '已达标'
-                            : '未达标 (差 ${(target - current).toStringAsFixed(2)})'),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color:
-                        (!hasTarget
-                                ? CupertinoColors.secondaryLabel
-                                : (isPassed
-                                      ? CupertinoColors.systemGreen
-                                      : CupertinoColors.systemOrange))
-                            .resolveFrom(context),
-                  ),
-                ),
+              AelChip(
+                label: !hasTarget
+                    ? '无目标'
+                    : (isPassed
+                          ? '已达标'
+                          : '未达标(差${(target - current).toStringAsFixed(2)})'),
+                tone: !hasTarget
+                    ? AelChipTone.neutral
+                    : (isPassed ? AelChipTone.success : AelChipTone.warning),
               ),
             ],
           ),
@@ -357,14 +303,12 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
               borderRadius: BorderRadius.circular(4),
               child: Container(
                 height: 6,
-                color: CupertinoColors.systemFill.resolveFrom(context),
+                color: colors.tonalTileBg,
                 alignment: Alignment.centerLeft,
                 child: FractionallySizedBox(
                   widthFactor: progress,
                   child: Container(
-                    color: isPassed
-                        ? CupertinoColors.systemGreen.resolveFrom(context)
-                        : CupertinoColors.systemOrange.resolveFrom(context),
+                    color: isPassed ? colors.success : colors.warning,
                   ),
                 ),
               ),
@@ -376,6 +320,7 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
   }
 
   Widget _buildQualityBreakdown(List<PracticeScoreItem> items) {
+    final colors = AelTheme.colorsOf(context);
     final breakdown = <String, double>{};
     for (final item in items) {
       if (item.countsTowardTotal) {
@@ -387,7 +332,9 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
 
     return Padding(
       padding: const EdgeInsets.only(top: 12),
-      child: _Card(
+      child: AelSectionCard(
+        padding: const EdgeInsets.all(16),
+        cornerRadius: AelRadius.tile,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -396,7 +343,7 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 15,
-                color: CupertinoColors.label.resolveFrom(context),
+                color: colors.textPrimary,
               ),
             ),
             const SizedBox(height: 10),
@@ -410,7 +357,7 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: CupertinoColors.systemFill.resolveFrom(context),
+                    color: colors.tonalTileBg,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
@@ -420,7 +367,7 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
                         entry.key,
                         style: TextStyle(
                           fontSize: 13,
-                          color: CupertinoColors.label.resolveFrom(context),
+                          color: colors.textPrimary,
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -429,9 +376,7 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
-                          color: CupertinoColors.activeBlue.resolveFrom(
-                            context,
-                          ),
+                          color: colors.primary,
                         ),
                       ),
                     ],
@@ -447,6 +392,7 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     final allItems = widget.scholar.practiceScoreItems;
     final filteredItems = _selectedCategoryId == 0
         ? List<PracticeScoreItem>.from(allItems)
@@ -465,14 +411,15 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
         .where(
           (item) =>
               !item.countsTowardTotal &&
-              (item.statusValue == 2 || item.statusLabel.contains('审核')),
+              (item.statusValue == 2 || item.statusLabel == '审核中'),
         )
         .toList(growable: false);
     final otherExcluded = filteredItems
         .where(
           (item) =>
               !item.countsTowardTotal &&
-              (item.statusValue != 2 && !item.statusLabel.contains('审核')),
+              item.statusValue != 2 &&
+              item.statusLabel != '审核中',
         )
         .toList(growable: false);
 
@@ -487,29 +434,17 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                _sortAscending
-                    ? CupertinoIcons.sort_up
-                    : CupertinoIcons.sort_down,
-                size: 16,
-                color: CupertinoColors.activeBlue.resolveFrom(context),
-              ),
+              Icon(AelIcons.filter, size: 16, color: colors.primary),
               const SizedBox(width: 2),
               Text(
                 _sortAscending ? '正序' : '倒序',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: CupertinoColors.activeBlue.resolveFrom(context),
-                ),
+                style: TextStyle(fontSize: 13, color: colors.primary),
               ),
             ],
           ),
         ),
       ),
-      backgroundColor: CupertinoDynamicColor.resolve(
-        CupertinoColors.systemGroupedBackground,
-        context,
-      ),
+      backgroundColor: colors.pageBg,
       child: SafeArea(
         bottom: false,
         child: ListView(
@@ -532,7 +467,9 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
             ],
             const SizedBox(height: 12),
             _SummaryCard(
-              categoryName: _getCategoryTitle(_selectedCategoryId),
+              categoryName: _selectedCategoryId == 0
+                  ? '全部看板'
+                  : '${_getCategoryTitle(_selectedCategoryId)}项目',
               total: _getCategoryScore(_selectedCategoryId),
               includedCount: included.length,
               excludedCount: inReview.length + otherExcluded.length,
@@ -604,6 +541,7 @@ class PracticeScoreDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     final rows = <(String, String)>[
       ('项目名称', item.projectName),
       ('获得记点', _score(item)),
@@ -619,10 +557,7 @@ class PracticeScoreDetailPage extends StatelessWidget {
     ];
     return CupertinoPageScaffold(
       navigationBar: const CupertinoNavigationBar(middle: Text('实践项目详情')),
-      backgroundColor: CupertinoDynamicColor.resolve(
-        CupertinoColors.systemGroupedBackground,
-        context,
-      ),
+      backgroundColor: colors.pageBg,
       child: SafeArea(
         bottom: false,
         child: ListView(
@@ -633,12 +568,15 @@ class PracticeScoreDetailPage extends StatelessWidget {
             MediaQuery.paddingOf(context).bottom + nativeBottomBarInset() + 16,
           ),
           children: [
-            _Card(
+            AelSectionCard(
+              padding: const EdgeInsets.all(16),
+              cornerRadius: AelRadius.tile,
               child: Column(
                 children: [
                   for (var index = 0; index < rows.length; index++) ...[
                     _DetailRow(label: rows[index].$1, value: rows[index].$2),
-                    if (index != rows.length - 1) const _Divider(),
+                    if (index != rows.length - 1)
+                      Divider(height: 1, color: colors.divider),
                   ],
                 ],
               ),
@@ -647,10 +585,7 @@ class PracticeScoreDetailPage extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 '该项目当前未计入总分。',
-                style: TextStyle(
-                  color: CupertinoColors.systemOrange.resolveFrom(context),
-                  fontSize: 14,
-                ),
+                style: TextStyle(color: colors.warning, fontSize: 14),
               ),
             ],
           ],
@@ -685,7 +620,11 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _Card(
+    final colors = AelTheme.colorsOf(context);
+
+    return AelSectionCard(
+      padding: const EdgeInsets.all(16),
+      cornerRadius: AelRadius.tile,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -694,16 +633,13 @@ class _SummaryCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: CupertinoColors.label.resolveFrom(context),
+              color: colors.textPrimary,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             '正式汇总记点',
-            style: TextStyle(
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
-              fontSize: 13,
-            ),
+            style: TextStyle(color: colors.textSecondary, fontSize: 13),
           ),
           const SizedBox(height: 2),
           Text(
@@ -711,59 +647,41 @@ class _SummaryCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 30,
               fontWeight: FontWeight.bold,
-              color: CupertinoColors.label.resolveFrom(context),
+              color: colors.textPrimary,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             '已计入 $includedCount 项 · 审核中/未计入 $excludedCount 项',
-            style: TextStyle(
-              fontSize: 13,
-              color: CupertinoColors.label.resolveFrom(context),
-            ),
+            style: TextStyle(fontSize: 13, color: colors.textPrimary),
           ),
           const SizedBox(height: 4),
           Text(
             '记点来源：${source.label}',
-            style: TextStyle(
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
-              fontSize: 12,
-            ),
+            style: TextStyle(color: colors.textSecondary, fontSize: 12),
           ),
           const SizedBox(height: 2),
           Text(
             '项目明细来源：${detailSource.label}',
-            style: TextStyle(
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
-              fontSize: 12,
-            ),
+            style: TextStyle(color: colors.textSecondary, fontSize: 12),
           ),
           const SizedBox(height: 2),
           Text(
             '更新时间：${_dateTime(updatedAt)}',
-            style: TextStyle(
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
-              fontSize: 12,
-            ),
+            style: TextStyle(color: colors.textSecondary, fontSize: 12),
           ),
           if (stale) ...[
             const SizedBox(height: 8),
             Text(
               '当前记点使用缓存或项目合计，请在网络恢复后刷新。',
-              style: TextStyle(
-                color: CupertinoColors.systemOrange.resolveFrom(context),
-                fontSize: 12,
-              ),
+              style: TextStyle(color: colors.warning, fontSize: 12),
             ),
           ],
           if (detailsStale) ...[
             const SizedBox(height: 4),
             Text(
               '项目明细为缓存或上一次结果。',
-              style: TextStyle(
-                color: CupertinoColors.systemOrange.resolveFrom(context),
-                fontSize: 12,
-              ),
+              style: TextStyle(color: colors.warning, fontSize: 12),
             ),
           ],
         ],
@@ -779,17 +697,17 @@ class _NoDetailsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     final zdbkOnly =
         source == PracticeDataSource.zdbkLive ||
         source == PracticeDataSource.zdbkCache;
-    return _Card(
+    return AelSectionCard(
+      padding: const EdgeInsets.all(16),
+      cornerRadius: AelRadius.tile,
       child: Text(
         zdbkOnly ? '当前仅获取到旧实践汇总，暂无 getSqjl 项目明细。' : '当前 getSqjl 项目明细不可用，请稍后刷新。',
         key: const ValueKey('practice-no-details'),
-        style: TextStyle(
-          color: CupertinoColors.secondaryLabel.resolveFrom(context),
-          height: 1.5,
-        ),
+        style: TextStyle(color: colors.textSecondary, height: 1.5),
       ),
     );
   }
@@ -803,95 +721,75 @@ class _PracticeItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     final counted = item.countsTowardTotal;
     final isInReview =
-        !counted && (item.statusValue == 2 || item.statusLabel.contains('审核'));
+        !counted && (item.statusValue == 2 || item.statusLabel == '审核中');
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: CupertinoButton(
+      child: AelSectionCard(
         key: ValueKey('practice-item-${item.id}'),
-        padding: EdgeInsets.zero,
-        onPressed: onTap,
-        child: _Card(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.projectName,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: CupertinoColors.label.resolveFrom(context),
-                      ),
+        onTap: onTap,
+        padding: const EdgeInsets.all(16),
+        cornerRadius: AelRadius.tile,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.projectName,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: colors.textPrimary,
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      counted
-                          ? item.statusLabel
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    counted
+                        ? item.statusLabel
+                        : (isInReview
+                              ? '${item.statusLabel}（审核中）'
+                              : '${item.statusLabel} · 未计入总分'),
+                    style: TextStyle(
+                      color: counted
+                          ? colors.success
                           : (isInReview
-                                ? '${item.statusLabel}（审核中）'
-                                : '${item.statusLabel} · 未计入总分'),
-                      style: TextStyle(
-                        color: counted
-                            ? CupertinoColors.systemGreen.resolveFrom(context)
-                            : (isInReview
-                                  ? CupertinoColors.systemOrange.resolveFrom(
-                                      context,
-                                    )
-                                  : CupertinoColors.secondaryLabel.resolveFrom(
-                                      context,
-                                    )),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
+                                ? colors.warning
+                                : colors.textSecondary),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${item.projectType} · ${item.qualityType}',
-                      style: TextStyle(
-                        color: CupertinoColors.secondaryLabel.resolveFrom(
-                          context,
-                        ),
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '更新于 ${_dateTime(item.updatedAt)}',
-                      style: TextStyle(
-                        color: CupertinoColors.tertiaryLabel.resolveFrom(
-                          context,
-                        ),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${item.projectType} · ${item.qualityType}',
+                    style: TextStyle(color: colors.textSecondary, fontSize: 13),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '更新于 ${_dateTime(item.updatedAt)}',
+                    style: TextStyle(color: colors.textTertiary, fontSize: 12),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Text(
-                '${counted ? '+' : ''}${_score(item)}',
-                style: TextStyle(
-                  color: counted
-                      ? CupertinoColors.systemGreen.resolveFrom(context)
-                      : CupertinoColors.label.resolveFrom(context),
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              '${counted ? '+' : ''}${_score(item)}',
+              style: TextStyle(
+                color: counted ? colors.success : colors.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
-              const SizedBox(width: 4),
-              Icon(
-                CupertinoIcons.chevron_forward,
-                size: 14,
-                color: CupertinoColors.tertiaryLabel.resolveFrom(context),
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 4),
+            Icon(AelIcons.chevronRight, size: 14, color: colors.textTertiary),
+          ],
         ),
       ),
     );
@@ -905,17 +803,20 @@ class _SectionTitle extends StatelessWidget {
   const _SectionTitle({required this.title, required this.count});
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(4, 4, 4, 10),
-    child: Text(
-      '$title（$count）',
-      style: TextStyle(
-        color: CupertinoColors.secondaryLabel.resolveFrom(context),
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
+  Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 10),
+      child: Text(
+        '$title（$count）',
+        style: TextStyle(
+          color: colors.textSecondary,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _EmptyGroup extends StatelessWidget {
@@ -924,41 +825,13 @@ class _EmptyGroup extends StatelessWidget {
   const _EmptyGroup({required this.text});
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(4, 8, 4, 18),
-    child: Text(
-      text,
-      style: TextStyle(
-        color: CupertinoColors.secondaryLabel.resolveFrom(context),
-      ),
-    ),
-  );
-}
-
-class _Card extends StatelessWidget {
-  final Widget child;
-
-  const _Card({required this.child});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: CupertinoDynamicColor.resolve(
-        CupertinoColors.secondarySystemGroupedBackground,
-        context,
-      ),
-      borderRadius: BorderRadius.circular(14),
-    ),
-    child: DefaultTextStyle(
-      style: TextStyle(
-        color: CupertinoDynamicColor.resolve(CupertinoColors.label, context),
-        fontSize: 15,
-      ),
-      child: child,
-    ),
-  );
+  Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 8, 4, 18),
+      child: Text(text, style: TextStyle(color: colors.textSecondary)),
+    );
+  }
 }
 
 class _DetailRow extends StatelessWidget {
@@ -968,40 +841,28 @@ class _DetailRow extends StatelessWidget {
   const _DetailRow({required this.label, required this.value});
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 12),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 112,
-          child: Text(
-            label,
-            style: TextStyle(
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+  Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 112,
+            child: Text(label, style: TextStyle(color: colors.textSecondary)),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: TextStyle(color: colors.textPrimary),
             ),
           ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            textAlign: TextAlign.right,
-            style: TextStyle(color: CupertinoColors.label.resolveFrom(context)),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _Divider extends StatelessWidget {
-  const _Divider();
-
-  @override
-  Widget build(BuildContext context) => Container(
-    height: 0.5,
-    color: CupertinoDynamicColor.resolve(CupertinoColors.separator, context),
-  );
+        ],
+      ),
+    );
+  }
 }
 
 String _score(PracticeScoreItem item) => item.score.isFinite && item.score >= 0
