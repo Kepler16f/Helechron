@@ -1,11 +1,15 @@
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/cupertino.dart'
+    show CupertinoButton, CupertinoPageScaffold, CupertinoSlider;
 import 'package:flutter/material.dart' show Divider;
+import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
-import 'package:celechron/design/custom_colors.dart';
-import 'package:celechron/design/round_rectangle_card.dart';
-import 'package:celechron/design/two_line_card.dart';
-import 'package:celechron/design/persistent_headers.dart';
+
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/icons/ael_icons.dart';
 import 'package:celechron/design/native_bar_spacer.dart';
+import 'package:celechron/design/persistent_headers.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/model/grade.dart';
 import 'package:celechron/page/scholar/grade_detail/weighted_gpa_controller.dart';
 import 'semester_gpa_trend_card.dart';
@@ -17,7 +21,10 @@ class WeightedGpaPage extends StatelessWidget {
   WeightedGpaPage({super.key});
 
   Widget _buildWeightedGpaBrief(BuildContext context) {
-    return RoundRectangleCard(
+    final colors = AelTheme.colorsOf(context);
+    return AelSectionCard(
+      padding: const EdgeInsets.all(12),
+      cornerRadius: AelRadius.tile,
       child: Obx(() {
         final gpaResult = _controller.calculateCurrentSemesterWeightedGpa();
         final gpa = gpaResult.item1;
@@ -26,18 +33,18 @@ class WeightedGpaPage extends StatelessWidget {
         return Row(
           children: [
             Expanded(
-              child: TwoLineCard(
-                title: '加权学分',
-                content: credits.toStringAsFixed(1),
-                backgroundColor: CustomCupertinoDynamicColors.sand,
+              child: AelStatTile(
+                label: '加权学分',
+                value: credits.toStringAsFixed(1),
+                backgroundColor: colors.primaryContainer,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: AelSpacing.sm),
             Expanded(
-              child: TwoLineCard(
-                title: '加权五分制',
-                content: gpa[0].toStringAsFixed(2),
-                backgroundColor: CustomCupertinoDynamicColors.sakura,
+              child: AelStatTile(
+                label: '加权五分制',
+                value: gpa[0].toStringAsFixed(2),
+                backgroundColor: colors.infoContainer,
               ),
             ),
           ],
@@ -47,42 +54,45 @@ class WeightedGpaPage extends StatelessWidget {
   }
 
   Widget _buildSemesterPicker(BuildContext context) {
-    return RoundRectangleCard(
-      animate: false,
+    final colors = AelTheme.colorsOf(context);
+    return AelSectionCard(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      cornerRadius: AelRadius.tile,
       child: SizedBox(
         height: 84,
         child: Obx(
-          () => ListView.builder(
+          () => ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: _controller.semestersWithGrades.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 6),
             itemBuilder: (context, index) {
               final semester = _controller.semestersWithGrades[index];
 
-              return Obx(
-                () => Row(
-                  children: [
-                    TwoLineCard(
-                      animate: true,
-                      withColoredFont: true,
-                      width: 120,
-                      title:
-                          '${semester.name.substring(2, 5)}${semester.name.substring(7, 11)}',
-                      content:
-                          '${semester.gpa[0].toStringAsFixed(2)}/${semester.credits.toStringAsFixed(1)}',
-                      onTap: () {
-                        _controller.semesterIndex.value = index;
-                        _controller.semesterIndex.refresh();
-                      },
-                      backgroundColor: _controller.semesterIndex.value == index
-                          ? CustomCupertinoDynamicColors.cyan
-                          : CupertinoColors.systemFill,
-                    ),
-                    if (index != _controller.semestersWithGrades.length - 1)
-                      const SizedBox(width: 6),
-                  ],
-                ),
-              );
+              return Obx(() {
+                final selected = _controller.semesterIndex.value == index;
+                final label =
+                    '${semester.name.substring(2, 5)}${semester.name.substring(7, 11)}';
+                final value =
+                    '${semester.gpa[0].toStringAsFixed(2)}/${semester.credits.toStringAsFixed(1)}';
+
+                return SizedBox(
+                  width: 120,
+                  child: AelStatTile(
+                    label: label,
+                    value: value,
+                    backgroundColor: selected
+                        ? colors.primaryContainer
+                        : colors.tonalTileBg,
+                    valueColor: selected
+                        ? colors.onPrimaryContainer
+                        : colors.textPrimary,
+                    onTap: () {
+                      _controller.semesterIndex.value = index;
+                      _controller.semesterIndex.refresh();
+                    },
+                  ),
+                );
+              });
             },
           ),
         ),
@@ -91,39 +101,27 @@ class WeightedGpaPage extends StatelessWidget {
   }
 
   Widget _buildCourseWeightSliders(
-      BuildContext context, List<Grade> affectGpaGrades) {
+    BuildContext context,
+    List<Grade> affectGpaGrades,
+  ) {
+    final colors = AelTheme.colorsOf(context);
+
     if (affectGpaGrades.isEmpty) {
-      return RoundRectangleCard(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              Icon(
-                CupertinoIcons.tray,
-                size: 40,
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.secondaryLabel, context),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '暂无计入绩点的课程',
-                style: TextStyle(
-                  color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.secondaryLabel, context),
-                ),
-              ),
-            ],
-          ),
-        ),
+      return AelSectionCard(
+        padding: const EdgeInsets.all(24),
+        cornerRadius: AelRadius.tile,
+        child: AelEmptyState(icon: AelIcons.folder, title: '暂无计入绩点的课程'),
       );
     }
 
-    return RoundRectangleCard(
+    return AelSectionCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      cornerRadius: AelRadius.tile,
       child: Column(
         children: [
           for (int i = 0; i < affectGpaGrades.length; i++) ...[
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(vertical: 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -136,8 +134,7 @@ class WeightedGpaPage extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.label, context),
+                            color: colors.textPrimary,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -145,14 +142,14 @@ class WeightedGpaPage extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       Obx(() {
-                        final weight =
-                            _controller.getWeight(affectGpaGrades[i].id);
+                        final weight = _controller.getWeight(
+                          affectGpaGrades[i].id,
+                        );
                         return Text(
                           '${affectGpaGrades[i].fivePoint.toStringAsFixed(1)} (${affectGpaGrades[i].credit.toStringAsFixed(1)}学分) × ${weight.toStringAsFixed(2)}',
                           style: TextStyle(
                             fontSize: 13,
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.secondaryLabel, context),
+                            color: colors.textSecondary,
                           ),
                         );
                       }),
@@ -161,20 +158,29 @@ class WeightedGpaPage extends StatelessWidget {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Text('权重: ', style: TextStyle(fontSize: 12)),
+                      Text(
+                        '权重: ',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colors.textSecondary,
+                        ),
+                      ),
                       Expanded(
                         child: Obx(() {
-                          final currentWeight =
-                              _controller.getWeight(affectGpaGrades[i].id);
+                          final currentWeight = _controller.getWeight(
+                            affectGpaGrades[i].id,
+                          );
                           return CupertinoSlider(
                             value: currentWeight,
                             min: 0.0,
                             max: 2.0,
                             divisions: 20,
-                            activeColor: CustomCupertinoDynamicColors.sakura,
+                            activeColor: colors.primary,
                             onChanged: (val) {
-                              _controller.setWeight(affectGpaGrades[i].id,
-                                  double.parse(val.toStringAsFixed(2)));
+                              _controller.setWeight(
+                                affectGpaGrades[i].id,
+                                double.parse(val.toStringAsFixed(2)),
+                              );
                             },
                           );
                         }),
@@ -185,13 +191,7 @@ class WeightedGpaPage extends StatelessWidget {
               ),
             ),
             if (i != affectGpaGrades.length - 1)
-              Divider(
-                height: 1,
-                indent: 14,
-                endIndent: 14,
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.separator, context),
-              ),
+              Divider(height: 1, color: colors.divider),
           ],
         ],
       ),
@@ -200,15 +200,17 @@ class WeightedGpaPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
+
     return Obx(() {
       final semesterGrades = _controller.getCurrentSemesterGrades();
-      final affectGpaGrades =
-          semesterGrades.where((g) => g.gpaIncluded).toList();
+      final affectGpaGrades = semesterGrades
+          .where((g) => g.gpaIncluded)
+          .toList();
       affectGpaGrades.sort((a, b) => a.name.compareTo(b.name));
 
       return CupertinoPageScaffold(
-        backgroundColor: CupertinoDynamicColor.resolve(
-            CupertinoColors.systemGroupedBackground, context),
+        backgroundColor: colors.pageBg,
         child: CustomScrollView(
           slivers: [
             CelechronSliverTextHeader(
@@ -221,9 +223,9 @@ class WeightedGpaPage extends StatelessWidget {
                     children: [
                       CupertinoButton(
                         padding: EdgeInsets.zero,
-                        child: const Text(
+                        child: Text(
                           '重置',
-                          style: TextStyle(fontSize: 16),
+                          style: TextStyle(fontSize: 16, color: colors.primary),
                         ),
                         onPressed: () {
                           _controller.weightedMap.value = {};
@@ -235,7 +237,7 @@ class WeightedGpaPage extends StatelessWidget {
                         padding: EdgeInsets.zero,
                         child: Text(
                           _controller.showAllSemesters.value ? '按学期' : '全选',
-                          style: const TextStyle(fontSize: 16),
+                          style: TextStyle(fontSize: 16, color: colors.primary),
                         ),
                         onPressed: () {
                           _controller.showAllSemesters.value =
@@ -257,8 +259,11 @@ class WeightedGpaPage extends StatelessWidget {
                 _controller.semestersWithGrades.length >= 2)
               SliverToBoxAdapter(
                 child: Padding(
-                  padding:
-                      const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+                  padding: const EdgeInsets.only(
+                    left: 16,
+                    right: 16,
+                    bottom: 8,
+                  ),
                   child: SemesterGpaTrendCard(
                     semesters: _controller.semestersWithGrades,
                     selectedIndex: _controller.semesterIndex.value,
@@ -272,8 +277,11 @@ class WeightedGpaPage extends StatelessWidget {
             if (!_controller.showAllSemesters.value)
               SliverToBoxAdapter(
                 child: Padding(
-                  padding:
-                      const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+                  padding: const EdgeInsets.only(
+                    left: 16,
+                    right: 16,
+                    bottom: 8,
+                  ),
                   child: _buildSemesterPicker(context),
                 ),
               ),
@@ -283,9 +291,7 @@ class WeightedGpaPage extends StatelessWidget {
                 child: _buildCourseWeightSliders(context, affectGpaGrades),
               ),
             ),
-            const SliverToBoxAdapter(
-              child: NativeBottomBarSpacer(),
-            ),
+            const SliverToBoxAdapter(child: NativeBottomBarSpacer()),
           ],
         ),
       );
