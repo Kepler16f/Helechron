@@ -1,9 +1,13 @@
+import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/icons/ael_icons.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:get/get.dart';
-import 'package:celechron/design/custom_colors.dart';
+
 import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/design/persistent_headers.dart';
-import 'package:celechron/design/round_rectangle_card.dart';
+
 import 'package:celechron/model/curriculum_plan_models.dart';
 import 'package:celechron/page/scholar/practice_score/practice_score_page.dart';
 import 'package:celechron/services/plan_audit_engine.dart';
@@ -31,30 +35,24 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
   bool _showMoreSimilarPlans = false;
   bool _showObjectivesAndNotes = false;
 
-  Color _sakuraInk(BuildContext context) => CupertinoDynamicColor.resolve(
-      CustomCupertinoDynamicColors.sakuraInk, context);
+  Color _sakuraInk(BuildContext context) => AelTheme.colorsOf(context).info;
 
-  Color _springInk(BuildContext context) => CupertinoDynamicColor.resolve(
-      CustomCupertinoDynamicColors.springInk, context);
+  Color _springInk(BuildContext context) => AelTheme.colorsOf(context).success;
 
-  Color _cyanInk(BuildContext context) =>
-      CupertinoDynamicColor.resolve(CustomCupertinoDynamicColors.cyanInk, context);
+  Color _cyanInk(BuildContext context) => AelTheme.colorsOf(context).primary;
 
-  Color _peachInk(BuildContext context) => CupertinoDynamicColor.resolve(
-      CustomCupertinoDynamicColors.peachInk, context);
+  Color _peachInk(BuildContext context) => AelTheme.colorsOf(context).warning;
 
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoDynamicColor.resolve(
-          CupertinoColors.systemGroupedBackground, context),
+      backgroundColor: AelTheme.colorsOf(context).pageBg,
       child: CustomScrollView(
         slivers: [
           CelechronSliverTextHeader(
             subtitle: '培养方案查看',
             right: Obx(() {
-              final blue = CupertinoDynamicColor.resolve(
-                  CupertinoColors.activeBlue, context);
+              final blue = AelTheme.colorsOf(context).primary;
               return Padding(
                 padding: const EdgeInsets.only(right: 10),
                 child: Row(
@@ -62,14 +60,15 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                   children: [
                     CupertinoButton(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       minSize: 30,
                       onPressed: () => _showPlanSelector(context),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(CupertinoIcons.square_grid_2x2,
-                              size: 14, color: blue),
+                          Icon(AelIcons.layers, size: 14, color: blue),
                           const SizedBox(width: 3),
                           Text(
                             '全校',
@@ -84,15 +83,16 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                     ),
                     CupertinoButton(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 4),
+                        horizontal: 6,
+                        vertical: 4,
+                      ),
                       minSize: 30,
                       onPressed: _c.isSyncing.value
                           ? null
                           : () => _c.syncCatalog(silent: false),
                       child: _c.isSyncing.value
                           ? const CupertinoActivityIndicator(radius: 7)
-                          : Icon(CupertinoIcons.refresh,
-                              size: 16, color: blue),
+                          : Icon(AelIcons.refresh, size: 16, color: blue),
                     ),
                   ],
                 ),
@@ -142,8 +142,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
         ),
         child: Row(
           children: [
-            Icon(CupertinoIcons.exclamationmark_triangle_fill,
-                size: 16, color: warnColor),
+            Icon(AelIcons.warning, size: 16, color: warnColor),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -151,8 +150,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                 style: TextStyle(
                   fontSize: 12.5,
                   height: 1.35,
-                  color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.label, context),
+                  color: AelTheme.colorsOf(context).textPrimary,
                 ),
               ),
             ),
@@ -171,12 +169,12 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                         _c.downloadAndParsePdf();
                       }
                     },
-              child: const Text(
+              child: Text(
                 '重试',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: CupertinoColors.white,
+                  color: AelTheme.colorsOf(context).onPrimary,
                 ),
               ),
             ),
@@ -190,11 +188,12 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
     final plan = _c.selectedPlan.value;
     final match = _c.matchResult.value;
     final accent = _sakuraInk(context);
-    final secondary = CupertinoDynamicColor.resolve(
-        CupertinoColors.secondaryLabel, context);
-    final label = CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final colors = AelTheme.colorsOf(context);
+    final secondary = colors.textSecondary;
+    final label = colors.textPrimary;
 
-    return RoundRectangleCard(
+    return AelSectionCard(
+      cornerRadius: AelRadius.tile,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -206,11 +205,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                   color: accent.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(
-                  CupertinoIcons.doc_text_search,
-                  size: 18,
-                  color: accent,
-                ),
+                child: Icon(AelIcons.search, size: 18, color: accent),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -221,8 +216,8 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                       plan != null
                           ? '${plan.zymc} (${plan.synj}级)'
                           : (_c.isSyncing.value
-                              ? '正在从教务系统同步...'
-                              : '暂无本地培养方案缓存'),
+                                ? '正在从教务系统同步...'
+                                : '暂无本地培养方案缓存'),
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -238,8 +233,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                           _c.collegeName.value,
                         if (_c.studentGrade.value.isNotEmpty)
                           '${_c.studentGrade.value}级',
-                        if (_c.adminClass.value.isNotEmpty)
-                          _c.adminClass.value,
+                        if (_c.adminClass.value.isNotEmpty) _c.adminClass.value,
                       ].join(' · '),
                       style: TextStyle(fontSize: 12, color: secondary),
                       maxLines: 2,
@@ -250,11 +244,12 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
               ),
               if (_c.catalog.isNotEmpty)
                 CupertinoButton(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   minSize: 30,
-                  color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.secondarySystemFill, context),
+                  color: AelTheme.colorsOf(context).tonalTileBg,
                   borderRadius: BorderRadius.circular(10),
                   onPressed: () => _showPlanSelector(context),
                   child: Text(
@@ -262,8 +257,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                     style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w500,
-                      color: CupertinoDynamicColor.resolve(
-                          CupertinoColors.activeBlue, context),
+                      color: AelTheme.colorsOf(context).primary,
                     ),
                   ),
                 ),
@@ -282,10 +276,10 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                     : () => _c.syncCatalog(silent: false),
                 child: Text(
                   _c.isSyncing.value ? '正在拉取教务系统方案目录...' : '立即同步培养方案',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: CupertinoColors.white,
+                    color: AelTheme.colorsOf(context).onPrimary,
                   ),
                 ),
               ),
@@ -310,7 +304,9 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                 Expanded(
                   child: CupertinoButton(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 9),
+                      horizontal: 10,
+                      vertical: 9,
+                    ),
                     minSize: 36,
                     color: _c.pdfPath.value != null
                         ? _springInk(context).withValues(alpha: 0.14)
@@ -332,12 +328,12 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                             children: [
                               Icon(
                                 _c.pdfPath.value != null
-                                    ? CupertinoIcons.doc_fill
-                                    : CupertinoIcons.cloud_download,
+                                    ? AelIcons.file
+                                    : AelIcons.download,
                                 size: 15,
                                 color: _c.pdfPath.value != null
                                     ? _springInk(context)
-                                    : CupertinoColors.white,
+                                    : AelTheme.colorsOf(context).onPrimary,
                               ),
                               const SizedBox(width: 6),
                               Flexible(
@@ -352,7 +348,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                                     fontWeight: FontWeight.w600,
                                     color: _c.pdfPath.value != null
                                         ? _springInk(context)
-                                        : CupertinoColors.white,
+                                        : AelTheme.colorsOf(context).onPrimary,
                                   ),
                                 ),
                               ),
@@ -363,29 +359,29 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                 if (_c.pdfPath.value != null) ...[
                   const SizedBox(width: 8),
                   CupertinoButton(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 9,
+                    ),
                     minSize: 36,
-                    color: CupertinoDynamicColor.resolve(
-                        CupertinoColors.secondarySystemFill, context),
+                    color: AelTheme.colorsOf(context).tonalTileBg,
                     borderRadius: BorderRadius.circular(10),
                     onPressed: _c.isPdfLoading.value
                         ? null
                         : () => _c.downloadAndParsePdf(),
-                    child: Icon(
-                      CupertinoIcons.arrow_2_circlepath,
-                      size: 16,
-                      color: label,
-                    ),
+                    child: Icon(AelIcons.refresh, size: 16, color: label),
                   ),
                 ],
               ],
             ),
-            if (match != null && (match.ambiguous || match.notes.isNotEmpty)) ...[
+            if (match != null &&
+                (match.ambiguous || match.notes.isNotEmpty)) ...[
               const SizedBox(height: 10),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: _peachInk(context).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
@@ -406,111 +402,122 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                         ),
                       ),
                     if (match.candidates.length > 1) ...[
-                      Builder(builder: (ctx) {
-                        final targetGrade = _c.studentGrade.value.trim().isNotEmpty
-                            ? _c.studentGrade.value.trim()
-                            : match.candidates.first.plan.synj.trim();
-                        final sameGrade = match.candidates
-                            .where((c) =>
-                                c.plan.synj.trim() == targetGrade ||
-                                c.plan.id == plan.id)
-                            .toList();
-                        final primaryList = sameGrade.isNotEmpty
-                            ? sameGrade
-                            : match.candidates.take(4).toList();
-                        final primaryIds =
-                            primaryList.map((e) => e.plan.id).toSet();
-                        final otherGrade = match.candidates
-                            .where((c) => !primaryIds.contains(c.plan.id))
-                            .take(10)
-                            .toList();
+                      Builder(
+                        builder: (ctx) {
+                          final targetGrade =
+                              _c.studentGrade.value.trim().isNotEmpty
+                              ? _c.studentGrade.value.trim()
+                              : match.candidates.first.plan.synj.trim();
+                          final sameGrade = match.candidates
+                              .where(
+                                (c) =>
+                                    c.plan.synj.trim() == targetGrade ||
+                                    c.plan.id == plan.id,
+                              )
+                              .toList();
+                          final primaryList = sameGrade.isNotEmpty
+                              ? sameGrade
+                              : match.candidates.take(4).toList();
+                          final primaryIds = primaryList
+                              .map((e) => e.plan.id)
+                              .toSet();
+                          final otherGrade = match.candidates
+                              .where((c) => !primaryIds.contains(c.plan.id))
+                              .take(10)
+                              .toList();
 
-                        Widget buildCandidateChip(PlanCandidate c) {
-                          final isSelected = c.plan.id == plan.id;
-                          return GestureDetector(
-                            onTap: () => _c.selectPlan(c.plan),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? accent
-                                    : accent.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                '${c.plan.zymc} (${c.plan.synj})',
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  fontWeight: isSelected
-                                      ? FontWeight.w600
-                                      : FontWeight.normal,
+                          Widget buildCandidateChip(PlanCandidate c) {
+                            final isSelected = c.plan.id == plan.id;
+                            return GestureDetector(
+                              onTap: () => _c.selectPlan(c.plan),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
                                   color: isSelected
-                                      ? CupertinoColors.white
-                                      : label,
+                                      ? accent
+                                      : accent.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  '${c.plan.zymc} (${c.plan.synj})',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                    color: isSelected
+                                        ? AelTheme.colorsOf(context).onPrimary
+                                        : label,
+                                  ),
                                 ),
                               ),
-                            ),
-                          );
-                        }
+                            );
+                          }
 
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 6),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: primaryList
-                                  .take(6)
-                                  .map(buildCandidateChip)
-                                  .toList(),
-                            ),
-                            if (otherGrade.isNotEmpty) ...[
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               const SizedBox(height: 6),
-                              GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: () => setState(() =>
-                                    _showMoreSimilarPlans =
-                                        !_showMoreSimilarPlans),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      '更多类似方案 (${otherGrade.length})',
-                                      style: TextStyle(
-                                        fontSize: 11.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: CupertinoDynamicColor.resolve(
-                                            CupertinoColors.activeBlue,
-                                            context),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 2),
-                                    Icon(
-                                      _showMoreSimilarPlans
-                                          ? CupertinoIcons.chevron_up
-                                          : CupertinoIcons.chevron_down,
-                                      size: 11,
-                                      color: CupertinoDynamicColor.resolve(
-                                          CupertinoColors.activeBlue, context),
-                                    ),
-                                  ],
-                                ),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: primaryList
+                                    .take(6)
+                                    .map(buildCandidateChip)
+                                    .toList(),
                               ),
-                              if (_showMoreSimilarPlans) ...[
+                              if (otherGrade.isNotEmpty) ...[
                                 const SizedBox(height: 6),
-                                Wrap(
-                                  spacing: 6,
-                                  runSpacing: 6,
-                                  children:
-                                      otherGrade.map(buildCandidateChip).toList(),
+                                GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => setState(
+                                    () => _showMoreSimilarPlans =
+                                        !_showMoreSimilarPlans,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        '更多类似方案 (${otherGrade.length})',
+                                        style: TextStyle(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: AelTheme.colorsOf(
+                                            context,
+                                          ).primary,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 2),
+                                      Icon(
+                                        _showMoreSimilarPlans
+                                            ? AelIcons.chevronRight
+                                            : AelIcons.chevronRight,
+                                        size: 11,
+                                        color: AelTheme.colorsOf(
+                                          context,
+                                        ).primary,
+                                      ),
+                                    ],
+                                  ),
                                 ),
+                                if (_showMoreSimilarPlans) ...[
+                                  const SizedBox(height: 6),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: otherGrade
+                                        .map(buildCandidateChip)
+                                        .toList(),
+                                  ),
+                                ],
                               ],
                             ],
-                          ],
-                        );
-                      }),
+                          );
+                        },
+                      ),
                     ],
                   ],
                 ),
@@ -529,17 +536,17 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
     final gap = _c.creditGap;
     final rate = _c.completionRate;
 
-    final secondary = CupertinoDynamicColor.resolve(
-        CupertinoColors.secondaryLabel, context);
-    final label = CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final colors = AelTheme.colorsOf(context);
+    final secondary = colors.textSecondary;
+    final label = colors.textPrimary;
     final accent = _sakuraInk(context);
     final spring = _springInk(context);
     final cyan = _cyanInk(context);
     final peach = _peachInk(context);
-    final barBg = CupertinoDynamicColor.resolve(
-        CupertinoColors.secondarySystemFill, context);
+    final barBg = colors.tonalTileBg;
 
-    return RoundRectangleCard(
+    return AelSectionCard(
+      cornerRadius: AelRadius.tile,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -559,7 +566,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(CupertinoIcons.pencil, size: 13, color: accent),
+                    Icon(AelIcons.edit, size: 13, color: accent),
                     const SizedBox(width: 4),
                     Text(
                       '要求 ${total.toStringAsFixed(1)} 分',
@@ -602,20 +609,21 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
             child: Container(
               height: 10,
               color: barBg,
-              child: LayoutBuilder(builder: (ctx, box) {
-                final earnedW = box.maxWidth * rate;
-                final activeRatio = total > 0 ? (active / total) : 0.0;
-                final activeW = box.maxWidth *
-                    (rate + activeRatio > 1.0 ? 1.0 - rate : activeRatio);
-                return Row(
-                  children: [
-                    if (earnedW > 0)
-                      Container(width: earnedW, color: spring),
-                    if (activeW > 0)
-                      Container(width: activeW, color: cyan),
-                  ],
-                );
-              }),
+              child: LayoutBuilder(
+                builder: (ctx, box) {
+                  final earnedW = box.maxWidth * rate;
+                  final activeRatio = total > 0 ? (active / total) : 0.0;
+                  final activeW =
+                      box.maxWidth *
+                      (rate + activeRatio > 1.0 ? 1.0 - rate : activeRatio);
+                  return Row(
+                    children: [
+                      if (earnedW > 0) Container(width: earnedW, color: spring),
+                      if (activeW > 0) Container(width: activeW, color: cyan),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -638,8 +646,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.tertiarySystemFill, context),
+                color: AelTheme.colorsOf(context).tonalTileBg,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Column(
@@ -660,12 +667,13 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                       GestureDetector(
                         onTap: () =>
                             Navigator.of(context, rootNavigator: true).push(
-                          CupertinoPageRoute(
-                            builder: (_) =>
-                                PracticeScorePage(scholar: _c.scholar.value),
-                            title: '素拓记点明细',
-                          ),
-                        ),
+                              CupertinoPageRoute(
+                                builder: (_) => PracticeScorePage(
+                                  scholar: _c.scholar.value,
+                                ),
+                                title: '素拓记点明细',
+                              ),
+                            ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -674,15 +682,13 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                               style: TextStyle(
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.w600,
-                                color: CupertinoDynamicColor.resolve(
-                                    CupertinoColors.activeBlue, context),
+                                color: AelTheme.colorsOf(context).primary,
                               ),
                             ),
                             Icon(
-                              CupertinoIcons.chevron_forward,
+                              AelIcons.chevronRight,
                               size: 11,
-                              color: CupertinoDynamicColor.resolve(
-                                  CupertinoColors.activeBlue, context),
+                              color: AelTheme.colorsOf(context).primary,
                             ),
                           ],
                         ),
@@ -728,12 +734,12 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
 
     if (summary.isEmpty) return const SizedBox.shrink();
 
-    final label = CupertinoDynamicColor.resolve(CupertinoColors.label, context);
-    final secondary = CupertinoDynamicColor.resolve(
-        CupertinoColors.secondaryLabel, context);
+    final colors = AelTheme.colorsOf(context);
+    final label = colors.textPrimary;
+    final secondary = colors.textSecondary;
     final green = _springInk(context);
     final yellow = _peachInk(context);
-    final red = CupertinoDynamicColor.resolve(CupertinoColors.systemRed, context);
+    final red = colors.error;
 
     Color colorOf(String c) {
       if (c == 'green') return green;
@@ -747,7 +753,8 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
       return '进行中';
     }
 
-    return RoundRectangleCard(
+    return AelSectionCard(
+      cornerRadius: AelRadius.tile,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -769,18 +776,20 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                   Text(
                     '●$greenCount',
                     style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: green),
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: green,
+                    ),
                   ),
                 if (yellowCount > 0) ...[
                   const SizedBox(width: 4),
                   Text(
                     '●$yellowCount',
                     style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: yellow),
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: yellow,
+                    ),
                   ),
                 ],
                 if (redCount > 0) ...[
@@ -788,16 +797,17 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                   Text(
                     '●$redCount',
                     style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: red),
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: red,
+                    ),
                   ),
                 ],
                 const Spacer(),
                 Icon(
                   _showAuditDetails
-                      ? CupertinoIcons.chevron_up
-                      : CupertinoIcons.chevron_down,
+                      ? AelIcons.chevronRight
+                      : AelIcons.chevronRight,
                   size: 16,
                   color: secondary,
                 ),
@@ -807,167 +817,177 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
           if (_showAuditDetails) ...[
             const SizedBox(height: 10),
             for (final m in summary) ...[
-              Builder(builder: (ctx) {
-                final mid = '${m['module_id'] ?? m['title'] ?? ''}';
-                final title = '${m['module_path'] ?? m['title'] ?? '未命名模块'}';
-                final req = (m['required'] as num?)?.toDouble() ?? 0.0;
-                final got = (m['earned'] as num?)?.toDouble() ?? 0.0;
-                final gap = (m['gap'] as num?)?.toDouble() ?? 0.0;
-                final rawPracticePts =
-                    (m['practice_raw_points'] as num?)?.toDouble();
-                final selNoCredit =
-                    (m['selected_no_credit'] as num?)?.toInt() ?? 0;
-                final cStr = '${m['color'] ?? 'yellow'}';
-                final badgeColor = colorOf(cStr);
-                final expanded = _expandedAuditModules.contains(mid);
-                final planCourses = (m['plan_courses'] as List? ?? const [])
-                    .whereType<Map>()
-                    .map((e) => Map<String, dynamic>.from(e))
-                    .toList();
-                final isPractice = isPracticeModule(m);
-                final isForeign = isForeignLangModule(m);
-                if (isForeign) {
-                  final seenForeignNames = planCourses
-                      .map((pc) => '${pc['name'] ?? ''}'.trim())
-                      .where((n) => n.isNotEmpty)
-                      .toSet();
-                  for (final fc in _c.foreignCourses) {
-                    if (seenForeignNames.add(fc.name)) {
-                      planCourses.add(<String, dynamic>{
-                        'course_id': fc.courseId,
-                        'name': fc.name,
-                        'credits': fc.credits,
-                        'passed': fc.passed,
-                        'planned_only': fc.active,
-                      });
+              Builder(
+                builder: (ctx) {
+                  final mid = '${m['module_id'] ?? m['title'] ?? ''}';
+                  final title = '${m['module_path'] ?? m['title'] ?? '未命名模块'}';
+                  final req = (m['required'] as num?)?.toDouble() ?? 0.0;
+                  final got = (m['earned'] as num?)?.toDouble() ?? 0.0;
+                  final gap = (m['gap'] as num?)?.toDouble() ?? 0.0;
+                  final rawPracticePts = (m['practice_raw_points'] as num?)
+                      ?.toDouble();
+                  final selNoCredit =
+                      (m['selected_no_credit'] as num?)?.toInt() ?? 0;
+                  final cStr = '${m['color'] ?? 'yellow'}';
+                  final badgeColor = colorOf(cStr);
+                  final expanded = _expandedAuditModules.contains(mid);
+                  final planCourses = (m['plan_courses'] as List? ?? const [])
+                      .whereType<Map>()
+                      .map((e) => Map<String, dynamic>.from(e))
+                      .toList();
+                  final isPractice = isPracticeModule(m);
+                  final isForeign = isForeignLangModule(m);
+                  if (isForeign) {
+                    final seenForeignNames = planCourses
+                        .map((pc) => '${pc['name'] ?? ''}'.trim())
+                        .where((n) => n.isNotEmpty)
+                        .toSet();
+                    for (final fc in _c.foreignCourses) {
+                      if (seenForeignNames.add(fc.name)) {
+                        planCourses.add(<String, dynamic>{
+                          'course_id': fc.courseId,
+                          'name': fc.name,
+                          'credits': fc.credits,
+                          'passed': fc.passed,
+                          'planned_only': fc.active,
+                        });
+                      }
                     }
                   }
-                }
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: badgeColor.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: badgeColor.withValues(alpha: 0.25),
-                      width: 0.8,
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
                     ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () {
-                          setState(() {
-                            if (expanded) {
-                              _expandedAuditModules.remove(mid);
-                            } else {
-                              _expandedAuditModules.add(mid);
-                            }
-                          });
-                        },
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: badgeColor,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                colorLabel(cStr),
-                                style: const TextStyle(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: CupertinoColors.white,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                title,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: label,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              '${got.toStringAsFixed(1)}/${req.toStringAsFixed(1)}',
-                              style: TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w700,
-                                color: badgeColor,
-                              ),
-                            ),
-                            if (planCourses.isNotEmpty) ...[
-                              const SizedBox(width: 4),
-                              Icon(
-                                expanded
-                                    ? CupertinoIcons.chevron_up
-                                    : CupertinoIcons.chevron_down,
-                                size: 13,
-                                color: secondary,
-                              ),
-                            ],
-                          ],
-                        ),
+                    decoration: BoxDecoration(
+                      color: badgeColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: badgeColor.withValues(alpha: 0.25),
+                        width: 0.8,
                       ),
-                      if (gap > 0 ||
-                          selNoCredit > 0 ||
-                          m['choice_rule'] != null ||
-                          (isPractice && rawPracticePts != null))
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            [
-                              if (isPractice && rawPracticePts != null)
-                                '素拓实获 ${rawPracticePts.toStringAsFixed(1)} 分 · 有效计 ${got.toStringAsFixed(1)} 分',
-                              if (gap > 0) '缺口 ${gap.toStringAsFixed(1)} 分',
-                              if (selNoCredit > 0) '已选/重修未获 $selNoCredit 门',
-                              if (m['choice_rule'] is Map)
-                                '选课约束: ${(m['choice_rule'] as Map)['label'] ?? '选修组'}',
-                            ].join(' · '),
-                            style: TextStyle(fontSize: 11.5, color: secondary),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            setState(() {
+                              if (expanded) {
+                                _expandedAuditModules.remove(mid);
+                              } else {
+                                _expandedAuditModules.add(mid);
+                              }
+                            });
+                          },
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: badgeColor,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  colorLabel(cStr),
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: AelTheme.colorsOf(context).onPrimary,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  title,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: label,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                '${got.toStringAsFixed(1)}/${req.toStringAsFixed(1)}',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: badgeColor,
+                                ),
+                              ),
+                              if (planCourses.isNotEmpty) ...[
+                                const SizedBox(width: 4),
+                                Icon(
+                                  expanded
+                                      ? AelIcons.chevronRight
+                                      : AelIcons.chevronRight,
+                                  size: 13,
+                                  color: secondary,
+                                ),
+                              ],
+                            ],
                           ),
                         ),
-                      if (expanded && planCourses.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: planCourses.map((pc) {
-                            final name = '${pc['name'] ?? ''}'.trim();
-                            final passed = pc['passed'] == true;
-                            final planned = pc['planned_only'] == true ||
-                                pc['active'] == true;
-                            final cr = (pc['credits'] as num?)?.toDouble();
-                            final state = passed
-                                ? CompassCourseState.earned
-                                : planned
-                                    ? CompassCourseState.active
-                                    : (_c.courseStates[name] ??
+                        if (gap > 0 ||
+                            selNoCredit > 0 ||
+                            m['choice_rule'] != null ||
+                            (isPractice && rawPracticePts != null))
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              [
+                                if (isPractice && rawPracticePts != null)
+                                  '素拓实获 ${rawPracticePts.toStringAsFixed(1)} 分 · 有效计 ${got.toStringAsFixed(1)} 分',
+                                if (gap > 0) '缺口 ${gap.toStringAsFixed(1)} 分',
+                                if (selNoCredit > 0) '已选/重修未获 $selNoCredit 门',
+                                if (m['choice_rule'] is Map)
+                                  '选课约束: ${(m['choice_rule'] as Map)['label'] ?? '选修组'}',
+                              ].join(' · '),
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: secondary,
+                              ),
+                            ),
+                          ),
+                        if (expanded && planCourses.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: planCourses.map((pc) {
+                              final name = '${pc['name'] ?? ''}'.trim();
+                              final passed = pc['passed'] == true;
+                              final planned =
+                                  pc['planned_only'] == true ||
+                                  pc['active'] == true;
+                              final cr = (pc['credits'] as num?)?.toDouble();
+                              final state = passed
+                                  ? CompassCourseState.earned
+                                  : planned
+                                  ? CompassCourseState.active
+                                  : (_c.courseStates[name] ??
                                         CompassCourseState.unknown);
-                            return _buildCourseChip(
-                              context,
-                              name: name,
-                              credits: cr,
-                              state: state,
-                            );
-                          }).toList(),
-                        ),
+                              return _buildCourseChip(
+                                context,
+                                name: name,
+                                credits: cr,
+                                state: state,
+                              );
+                            }).toList(),
+                          ),
+                        ],
                       ],
-                    ],
-                  ),
-                );
-              }),
+                    ),
+                  );
+                },
+              ),
             ],
             if (warnings.isNotEmpty) ...[
               const SizedBox(height: 6),
@@ -992,10 +1012,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
             if (caliberNotes.isNotEmpty) ...[
               const SizedBox(height: 6),
               for (final note in caliberNotes.take(3))
-                Text(
-                  note,
-                  style: TextStyle(fontSize: 11, color: secondary),
-                ),
+                Text(note, style: TextStyle(fontSize: 11, color: secondary)),
             ],
           ],
         ],
@@ -1008,18 +1025,18 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
     final req = _c.effectiveForeignCredits;
     final level = _c.foreignLevel.value;
     final isExempt = isForeignExemptByGrade(gradeYear: gradeYear, level: level);
-    final gradeHint = foreignGradeHint(gradeYear: gradeYear) ??
-        '已按当前年级政策自动换算外语类学分口径';
+    final gradeHint =
+        foreignGradeHint(gradeYear: gradeYear) ?? '已按当前年级政策自动换算外语类学分口径';
 
-    final secondary = CupertinoDynamicColor.resolve(
-        CupertinoColors.secondaryLabel, context);
-    final label = CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final colors = AelTheme.colorsOf(context);
+    final secondary = colors.textSecondary;
+    final label = colors.textPrimary;
     final accent = _sakuraInk(context);
     final spring = _springInk(context);
-    final neutralBg = CupertinoDynamicColor.resolve(
-        CupertinoColors.secondarySystemFill, context);
+    final neutralBg = colors.tonalTileBg;
 
-    return RoundRectangleCard(
+    return AelSectionCard(
+      cornerRadius: AelRadius.tile,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1038,8 +1055,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                 onTap: () => _showEditForeignCreditsDialog(context),
                 child: Row(
                   children: [
-                    Icon(CupertinoIcons.slider_horizontal_3,
-                        size: 13, color: accent),
+                    Icon(AelIcons.filter, size: 13, color: accent),
                     const SizedBox(width: 4),
                     Text(
                       '自选学分',
@@ -1061,8 +1077,8 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
               final titleText = lv == 'L3'
                   ? foreignL3Label(gradeYear: gradeYear)
                   : lv == 'L1'
-                      ? 'L1 (6分)'
-                      : 'L2 (4.5分)';
+                  ? 'L1 (6分)'
+                  : 'L2 (4.5分)';
               return Expanded(
                 child: Padding(
                   padding: EdgeInsets.only(right: lv == 'L3' ? 0 : 8),
@@ -1082,9 +1098,12 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                         titleText,
                         style: TextStyle(
                           fontSize: 12.5,
-                          fontWeight:
-                              selected ? FontWeight.w700 : FontWeight.w500,
-                          color: selected ? CupertinoColors.white : label,
+                          fontWeight: selected
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          color: selected
+                              ? AelTheme.colorsOf(context).onPrimary
+                              : label,
                         ),
                       ),
                     ),
@@ -1108,7 +1127,11 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
               children: [
                 Text(
                   '当前生效外语应修：${req.toStringAsFixed(1)} 学分'
-                  '${_c.customForeignCredits.value != null ? '（已手动锁定）' : isExempt ? '（符合免修政策）' : ''}',
+                  '${_c.customForeignCredits.value != null
+                      ? '（已手动锁定）'
+                      : isExempt
+                      ? '（符合免修政策）'
+                      : ''}',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -1143,13 +1166,15 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
               spacing: 6,
               runSpacing: 6,
               children: _c.foreignCourses
-                  .map((fc) => _buildCourseChip(
-                        context,
-                        name: fc.name,
-                        credits: fc.credits,
-                        extra: fc.passed ? '已通过' : (fc.active ? '在修' : '未获学分'),
-                        state: fc.state,
-                      ))
+                  .map(
+                    (fc) => _buildCourseChip(
+                      context,
+                      name: fc.name,
+                      credits: fc.credits,
+                      extra: fc.passed ? '已通过' : (fc.active ? '在修' : '未获学分'),
+                      state: fc.state,
+                    ),
+                  )
                   .toList(),
             ),
         ],
@@ -1197,6 +1222,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
         walk(c);
       }
     }
+
     for (final r in roots) {
       walk(r);
     }
@@ -1217,6 +1243,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
             collect(c);
           }
         }
+
         collect(r);
       }
     }
@@ -1227,9 +1254,9 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
     final ps = _c.pdfSections.value;
     if (ps == null || ps.isEmpty) return const SizedBox.shrink();
 
-    final label = CupertinoDynamicColor.resolve(CupertinoColors.label, context);
-    final secondary = CupertinoDynamicColor.resolve(
-        CupertinoColors.secondaryLabel, context);
+    final colors = AelTheme.colorsOf(context);
+    final label = colors.textPrimary;
+    final secondary = colors.textSecondary;
     final accent = _sakuraInk(context);
     final cyan = _cyanInk(context);
     final green = _springInk(context);
@@ -1237,10 +1264,12 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
 
     final sections = _filteredCourseSections(ps);
     if (sections.isEmpty) return const SizedBox.shrink();
-    final visibleSections =
-        _showPdfModuleList ? sections : sections.take(0).toList();
+    final visibleSections = _showPdfModuleList
+        ? sections
+        : sections.take(0).toList();
 
-    return RoundRectangleCard(
+    return AelSectionCard(
+      cornerRadius: AelRadius.tile,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1263,235 +1292,275 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
           ),
           const SizedBox(height: 10),
           for (int i = 0; i < visibleSections.length; i++) ...[
-            Builder(builder: (ctx) {
-              final sec = visibleSections[i];
-              final secKey = '${i}_${sec.label}';
-              final indent = ((sec.level - 1) * 12.0).clamp(0.0, 36.0);
-              final isExpanded = !_collapsedSections.contains(secKey);
-              final isForeign = PlanAuditHelper.isForeignSection(sec);
-              final practiceIdx = PlanAuditHelper.practiceClassroomIndex(
-                  '${sec.title} ${sec.parentPath}');
+            Builder(
+              builder: (ctx) {
+                final sec = visibleSections[i];
+                final secKey = '${i}_${sec.label}';
+                final indent = ((sec.level - 1) * 12.0).clamp(0.0, 36.0);
+                final isExpanded = !_collapsedSections.contains(secKey);
+                final isForeign = PlanAuditHelper.isForeignSection(sec);
+                final practiceIdx = PlanAuditHelper.practiceClassroomIndex(
+                  '${sec.title} ${sec.parentPath}',
+                );
 
-              final mergedForeignExtras = <ForeignCourseEntry>[];
-              if (isForeign) {
-                final existingNames =
-                    sec.courses.map((c) => c.name.trim()).toSet();
-                for (final fc in _c.foreignCourses) {
-                  if (!existingNames.contains(fc.name)) {
-                    mergedForeignExtras.add(fc);
+                final mergedForeignExtras = <ForeignCourseEntry>[];
+                if (isForeign) {
+                  final existingNames = sec.courses
+                      .map((c) => c.name.trim())
+                      .toSet();
+                  for (final fc in _c.foreignCourses) {
+                    if (!existingNames.contains(fc.name)) {
+                      mergedForeignExtras.add(fc);
+                    }
                   }
                 }
-              }
 
-              final hasBody = sec.notes.isNotEmpty ||
-                  sec.courses.isNotEmpty ||
-                  mergedForeignExtras.isNotEmpty ||
-                  practiceIdx != null;
+                final hasBody =
+                    sec.notes.isNotEmpty ||
+                    sec.courses.isNotEmpty ||
+                    mergedForeignExtras.isNotEmpty ||
+                    practiceIdx != null;
 
-              String badgeText = '';
-              Color badgeColor = accent;
-              if (isForeign) {
-                badgeText =
-                    '要求 ${_c.effectiveForeignCredits.toStringAsFixed(1)}学分';
-              } else if (practiceIdx != null &&
-                  (practiceIdx == 2 || practiceIdx == 3 || practiceIdx == 4)) {
-                final reqP = practiceIdx == 2
-                    ? _c.pt2Required
-                    : practiceIdx == 3
-                        ? _c.pt3Required
-                        : _c.pt4Required;
-                final gotP = practiceIdx == 2
-                    ? _c.pt2Earned
-                    : practiceIdx == 3
-                        ? _c.pt3Earned
-                        : _c.pt4Earned;
-                final displayReq =
-                    reqP > 0 ? reqP : (double.tryParse(sec.creditsRaw) ?? 0.0);
-                badgeText = displayReq > 0
-                    ? '已获 ${gotP.toStringAsFixed(1)}/${displayReq.toStringAsFixed(1)}分'
-                    : '已获 ${gotP.toStringAsFixed(1)}分';
-                badgeColor =
-                    displayReq > 0 && gotP >= displayReq ? green : yellow;
-              } else if (practiceIdx == 0) {
-                badgeText =
-                    '已获 ${_c.practiceEffectiveEarned.toStringAsFixed(1)}/${_c.practiceRequiredTotal.toStringAsFixed(1)}分';
-                badgeColor = _c.practiceRequiredTotal > 0 &&
-                        _c.practiceEffectiveEarned >= _c.practiceRequiredTotal
-                    ? green
-                    : yellow;
-              } else if (sec.creditsRaw.isNotEmpty) {
-                badgeText = sec.isCountRule
-                    ? '规则:${sec.creditsRaw}门'
-                    : '${sec.creditsRaw}${sec.creditsUnit}';
-                badgeColor = sec.isCountRule ? cyan : accent;
-              }
+                String badgeText = '';
+                Color badgeColor = accent;
+                if (isForeign) {
+                  badgeText =
+                      '要求 ${_c.effectiveForeignCredits.toStringAsFixed(1)}学分';
+                } else if (practiceIdx != null &&
+                    (practiceIdx == 2 ||
+                        practiceIdx == 3 ||
+                        practiceIdx == 4)) {
+                  final reqP = practiceIdx == 2
+                      ? _c.pt2Required
+                      : practiceIdx == 3
+                      ? _c.pt3Required
+                      : _c.pt4Required;
+                  final gotP = practiceIdx == 2
+                      ? _c.pt2Earned
+                      : practiceIdx == 3
+                      ? _c.pt3Earned
+                      : _c.pt4Earned;
+                  final displayReq = reqP > 0
+                      ? reqP
+                      : (double.tryParse(sec.creditsRaw) ?? 0.0);
+                  badgeText = displayReq > 0
+                      ? '已获 ${gotP.toStringAsFixed(1)}/${displayReq.toStringAsFixed(1)}分'
+                      : '已获 ${gotP.toStringAsFixed(1)}分';
+                  badgeColor = displayReq > 0 && gotP >= displayReq
+                      ? green
+                      : yellow;
+                } else if (practiceIdx == 0) {
+                  badgeText =
+                      '已获 ${_c.practiceEffectiveEarned.toStringAsFixed(1)}/${_c.practiceRequiredTotal.toStringAsFixed(1)}分';
+                  badgeColor =
+                      _c.practiceRequiredTotal > 0 &&
+                          _c.practiceEffectiveEarned >= _c.practiceRequiredTotal
+                      ? green
+                      : yellow;
+                } else if (sec.creditsRaw.isNotEmpty) {
+                  badgeText = sec.isCountRule
+                      ? '规则:${sec.creditsRaw}门'
+                      : '${sec.creditsRaw}${sec.creditsUnit}';
+                  badgeColor = sec.isCountRule ? cyan : accent;
+                }
 
-              return Padding(
-                padding: EdgeInsets.only(left: indent, bottom: 6),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: hasBody
-                          ? () {
-                              setState(() {
-                                if (isExpanded) {
-                                  _collapsedSections.add(secKey);
-                                } else {
-                                  _collapsedSections.remove(secKey);
-                                }
-                              });
-                            }
-                          : null,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: sec.level == 1
-                              ? accent.withValues(alpha: 0.1)
-                              : CupertinoDynamicColor.resolve(
-                                  CupertinoColors.tertiarySystemFill, context),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                sec.title,
-                                style: TextStyle(
-                                  fontSize: sec.level <= 2 ? 13.5 : 12.5,
-                                  fontWeight: sec.level <= 2
-                                      ? FontWeight.w700
-                                      : FontWeight.w600,
-                                  color: sec.level == 1 ? accent : label,
-                                ),
-                              ),
-                            ),
-                            if (badgeText.isNotEmpty) ...[
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: badgeColor.withValues(alpha: 0.14),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  badgeText,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: badgeColor,
-                                  ),
-                                ),
-                              ),
-                            ],
-                            if (sec.courses.isNotEmpty ||
-                                mergedForeignExtras.isNotEmpty) ...[
-                              const SizedBox(width: 6),
-                              Text(
-                                '${sec.courses.length + mergedForeignExtras.length}门',
-                                style:
-                                    TextStyle(fontSize: 11, color: secondary),
-                              ),
-                            ],
-                            if (hasBody) ...[
-                              const SizedBox(width: 4),
-                              Icon(
-                                isExpanded
-                                    ? CupertinoIcons.chevron_up
-                                    : CupertinoIcons.chevron_down,
-                                size: 12,
-                                color: secondary,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (isExpanded) ...[
-                      if (practiceIdx != null)
-                        Padding(
-                          padding: const EdgeInsets.only(
-                              top: 6, left: 6, right: 6),
+                return Padding(
+                  padding: EdgeInsets.only(left: indent, bottom: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: hasBody
+                            ? () {
+                                setState(() {
+                                  if (isExpanded) {
+                                    _collapsedSections.add(secKey);
+                                  } else {
+                                    _collapsedSections.remove(secKey);
+                                  }
+                                });
+                              }
+                            : null,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 7,
+                          ),
+                          decoration: BoxDecoration(
+                            color: sec.level == 1
+                                ? accent.withValues(alpha: 0.1)
+                                : colors.tonalTileBg,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                           child: Row(
                             children: [
                               Expanded(
                                 child: Text(
-                                  practiceIdx == 0
-                                      ? '二课 ${_c.pt2Earned.toStringAsFixed(1)} · 三课 ${_c.pt3Earned.toStringAsFixed(1)} · 四课 ${_c.pt4Earned.toStringAsFixed(1)}（已与素拓看板实时同步）'
-                                      : '第${practiceIdx == 2 ? '二' : practiceIdx == 3 ? '三' : '四'}课堂实获 ${practiceIdx == 2 ? _c.pt2Earned.toStringAsFixed(1) : practiceIdx == 3 ? _c.pt3Earned.toStringAsFixed(1) : _c.pt4Earned.toStringAsFixed(1)} 分（已同步素拓看板）',
-                                  style:
-                                      TextStyle(fontSize: 11.5, color: secondary),
-                                ),
-                              ),
-                              CupertinoButton(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 3),
-                                minSize: 24,
-                                onPressed: () => Navigator.of(context,
-                                        rootNavigator: true)
-                                    .push(
-                                  CupertinoPageRoute(
-                                    builder: (_) => PracticeScorePage(
-                                        scholar: _c.scholar.value),
-                                    title: '素拓记点明细',
-                                  ),
-                                ),
-                                child: Text(
-                                  '查看明细',
+                                  sec.title,
                                   style: TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: CupertinoDynamicColor.resolve(
-                                        CupertinoColors.activeBlue, context),
+                                    fontSize: sec.level <= 2 ? 13.5 : 12.5,
+                                    fontWeight: sec.level <= 2
+                                        ? FontWeight.w700
+                                        : FontWeight.w600,
+                                    color: sec.level == 1 ? accent : label,
                                   ),
                                 ),
                               ),
+                              if (badgeText.isNotEmpty) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: badgeColor.withValues(alpha: 0.14),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    badgeText,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: badgeColor,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              if (sec.courses.isNotEmpty ||
+                                  mergedForeignExtras.isNotEmpty) ...[
+                                const SizedBox(width: 6),
+                                Text(
+                                  '${sec.courses.length + mergedForeignExtras.length}门',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: secondary,
+                                  ),
+                                ),
+                              ],
+                              if (hasBody) ...[
+                                const SizedBox(width: 4),
+                                Icon(
+                                  isExpanded
+                                      ? AelIcons.chevronRight
+                                      : AelIcons.chevronRight,
+                                  size: 12,
+                                  color: secondary,
+                                ),
+                              ],
                             ],
                           ),
                         ),
-                      if (sec.notes.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(
-                              top: 6, left: 6, right: 6),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: sec.notes
-                                .map((n) => Text(
+                      ),
+                      if (isExpanded) ...[
+                        if (practiceIdx != null)
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              top: 6,
+                              left: 6,
+                              right: 6,
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    practiceIdx == 0
+                                        ? '二课 ${_c.pt2Earned.toStringAsFixed(1)} · 三课 ${_c.pt3Earned.toStringAsFixed(1)} · 四课 ${_c.pt4Earned.toStringAsFixed(1)}（已与素拓看板实时同步）'
+                                        : '第${practiceIdx == 2
+                                              ? '二'
+                                              : practiceIdx == 3
+                                              ? '三'
+                                              : '四'}课堂实获 ${practiceIdx == 2
+                                              ? _c.pt2Earned.toStringAsFixed(1)
+                                              : practiceIdx == 3
+                                              ? _c.pt3Earned.toStringAsFixed(1)
+                                              : _c.pt4Earned.toStringAsFixed(1)} 分（已同步素拓看板）',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: secondary,
+                                    ),
+                                  ),
+                                ),
+                                CupertinoButton(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  minSize: 24,
+                                  onPressed: () =>
+                                      Navigator.of(
+                                        context,
+                                        rootNavigator: true,
+                                      ).push(
+                                        CupertinoPageRoute(
+                                          builder: (_) => PracticeScorePage(
+                                            scholar: _c.scholar.value,
+                                          ),
+                                          title: '素拓记点明细',
+                                        ),
+                                      ),
+                                  child: Text(
+                                    '查看明细',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: AelTheme.colorsOf(context).primary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (sec.notes.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              top: 6,
+                              left: 6,
+                              right: 6,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: sec.notes
+                                  .map(
+                                    (n) => Text(
                                       n,
                                       style: TextStyle(
                                         fontSize: 11.5,
                                         height: 1.4,
                                         color: secondary,
                                       ),
-                                    ))
-                                .toList(),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
                           ),
-                        ),
-                      if (sec.courses.isNotEmpty ||
-                          mergedForeignExtras.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6, left: 4),
-                          child: Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: [
-                              ...sec.courses.map((course) {
-                                final state = _c.courseStates[course.name] ??
-                                    CompassCourseState.unknown;
-                                final semLabel = PlanAuditHelper.prettySemester(
-                                    course.semester);
-                                return _buildCourseChip(
-                                  context,
-                                  name: course.name,
-                                  credits: course.credits,
-                                  extra: semLabel,
-                                  state: state,
-                                );
-                              }),
-                              ...mergedForeignExtras.map((fc) => _buildCourseChip(
+                        if (sec.courses.isNotEmpty ||
+                            mergedForeignExtras.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6, left: 4),
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                ...sec.courses.map((course) {
+                                  final state =
+                                      _c.courseStates[course.name] ??
+                                      CompassCourseState.unknown;
+                                  final semLabel =
+                                      PlanAuditHelper.prettySemester(
+                                        course.semester,
+                                      );
+                                  return _buildCourseChip(
+                                    context,
+                                    name: course.name,
+                                    credits: course.credits,
+                                    extra: semLabel,
+                                    state: state,
+                                  );
+                                }),
+                                ...mergedForeignExtras.map(
+                                  (fc) => _buildCourseChip(
                                     context,
                                     name: fc.name,
                                     credits: fc.credits,
@@ -1499,15 +1568,17 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                                         ? '已通过'
                                         : (fc.active ? '在修' : '未获学分'),
                                     state: fc.state,
-                                  )),
-                            ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
+                      ],
                     ],
-                  ],
-                ),
-              );
-            }),
+                  ),
+                );
+              },
+            ),
           ],
           CupertinoButton(
             padding: const EdgeInsets.symmetric(vertical: 6),
@@ -1518,9 +1589,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
               }
             }),
             child: Text(
-              _showPdfModuleList
-                  ? '收起模块列表'
-                  : '展开全部 ${sections.length} 个子模块',
+              _showPdfModuleList ? '收起模块列表' : '展开全部 ${sections.length} 个子模块',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -1539,9 +1608,9 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
     final honor = _c.honorCourses;
     final states = _c.courseStates;
 
-    final label = CupertinoDynamicColor.resolve(CupertinoColors.label, context);
-    final secondary = CupertinoDynamicColor.resolve(
-        CupertinoColors.secondaryLabel, context);
+    final colors = AelTheme.colorsOf(context);
+    final label = colors.textPrimary;
+    final secondary = colors.textSecondary;
     final spring = _springInk(context);
     final cyan = _cyanInk(context);
     final peach = _peachInk(context);
@@ -1573,7 +1642,8 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
       );
     }
 
-    return RoundRectangleCard(
+    return AelSectionCard(
+      cornerRadius: AelRadius.tile,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1619,9 +1689,9 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
     double? credits,
     String? extra,
   }) {
-    final label = CupertinoDynamicColor.resolve(CupertinoColors.label, context);
-    final secondary = CupertinoDynamicColor.resolve(
-        CupertinoColors.secondaryLabel, context);
+    final colors = AelTheme.colorsOf(context);
+    final label = colors.textPrimary;
+    final secondary = colors.textSecondary;
     Color bg;
     Color fg;
     switch (state) {
@@ -1638,8 +1708,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
         bg = fg.withValues(alpha: 0.14);
         break;
       case CompassCourseState.unknown:
-        bg = CupertinoDynamicColor.resolve(
-            CupertinoColors.tertiarySystemFill, context);
+        bg = AelTheme.colorsOf(context).tonalTileBg;
         fg = secondary;
         break;
     }
@@ -1670,13 +1739,12 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
           const SizedBox(width: 6),
           Flexible(
             child: Text(
-              suffixParts.isEmpty
-                  ? name
-                  : '$name (${suffixParts.join(' · ')})',
+              suffixParts.isEmpty ? name : '$name (${suffixParts.join(' · ')})',
               style: TextStyle(
                 fontSize: 12,
-                fontWeight:
-                    state.isUnknown ? FontWeight.normal : FontWeight.w600,
+                fontWeight: state.isUnknown
+                    ? FontWeight.normal
+                    : FontWeight.w600,
                 color: state.isUnknown ? label : fg,
               ),
             ),
@@ -1689,26 +1757,30 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
   Widget _buildObjectivesCard(BuildContext context) {
     final plan = _c.selectedPlan.value;
     final ps = _c.pdfSections.value;
-    final introSections =
-        ps != null && !ps.isEmpty ? _mergedIntroSections(ps) : const <PdfModuleSection>[];
-    final hasPlanText = plan != null &&
+    final introSections = ps != null && !ps.isEmpty
+        ? _mergedIntroSections(ps)
+        : const <PdfModuleSection>[];
+    final hasPlanText =
+        plan != null &&
         (plan.pymb.isNotEmpty || plan.pyyq.isNotEmpty || plan.bz.isNotEmpty);
     if (!hasPlanText && introSections.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    final secondary = CupertinoDynamicColor.resolve(
-        CupertinoColors.secondaryLabel, context);
-    final label = CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final colors = AelTheme.colorsOf(context);
+    final secondary = colors.textSecondary;
+    final label = colors.textPrimary;
 
-    return RoundRectangleCard(
+    return AelSectionCard(
+      cornerRadius: AelRadius.tile,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => setState(
-                () => _showObjectivesAndNotes = !_showObjectivesAndNotes),
+              () => _showObjectivesAndNotes = !_showObjectivesAndNotes,
+            ),
             child: Row(
               children: [
                 Text(
@@ -1722,8 +1794,8 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                 const Spacer(),
                 Icon(
                   _showObjectivesAndNotes
-                      ? CupertinoIcons.chevron_up
-                      : CupertinoIcons.chevron_down,
+                      ? AelIcons.chevronRight
+                      : AelIcons.chevronRight,
                   size: 16,
                   color: secondary,
                 ),
@@ -1733,36 +1805,62 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
           if (_showObjectivesAndNotes) ...[
             if (plan != null && plan.pymb.isNotEmpty) ...[
               const SizedBox(height: 10),
-              Text('【培养目标】',
-                  style: TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600, color: label)),
+              Text(
+                '【培养目标】',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: label,
+                ),
+              ),
               const SizedBox(height: 4),
-              Text(plan.pymb,
-                  style: TextStyle(fontSize: 13, color: secondary, height: 1.5)),
+              Text(
+                plan.pymb,
+                style: TextStyle(fontSize: 13, color: secondary, height: 1.5),
+              ),
             ],
             if (plan != null && plan.pyyq.isNotEmpty) ...[
               const SizedBox(height: 10),
-              Text('【毕业/培养要求】',
-                  style: TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600, color: label)),
+              Text(
+                '【毕业/培养要求】',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: label,
+                ),
+              ),
               const SizedBox(height: 4),
-              Text(plan.pyyq,
-                  style: TextStyle(fontSize: 13, color: secondary, height: 1.5)),
+              Text(
+                plan.pyyq,
+                style: TextStyle(fontSize: 13, color: secondary, height: 1.5),
+              ),
             ],
             if (plan != null && plan.bz.isNotEmpty) ...[
               const SizedBox(height: 10),
-              Text('【备注说明】',
-                  style: TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600, color: label)),
+              Text(
+                '【备注说明】',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: label,
+                ),
+              ),
               const SizedBox(height: 4),
-              Text(plan.bz,
-                  style: TextStyle(fontSize: 13, color: secondary, height: 1.5)),
+              Text(
+                plan.bz,
+                style: TextStyle(fontSize: 13, color: secondary, height: 1.5),
+              ),
             ],
             if (introSections.isNotEmpty) ...[
               const SizedBox(height: 10),
-              Text('【培养方案文字说明汇总】',
-                  style: TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600, color: label)),
+              Text(
+                '【培养方案文字说明汇总】',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: label,
+                ),
+              ),
               const SizedBox(height: 4),
               for (final sec in introSections)
                 Padding(
@@ -1801,10 +1899,8 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
   }
 
   Widget _metaChip(BuildContext context, String text) {
-    final bg = CupertinoDynamicColor.resolve(
-        CupertinoColors.tertiarySystemFill, context);
-    final fg = CupertinoDynamicColor.resolve(
-        CupertinoColors.secondaryLabel, context);
+    final bg = AelTheme.colorsOf(context).tonalTileBg;
+    final fg = AelTheme.colorsOf(context).textSecondary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
@@ -1815,10 +1911,8 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
     );
   }
 
-  Widget _statPill(
-      BuildContext context, String title, String value, Color fg) {
-    final secondary = CupertinoDynamicColor.resolve(
-        CupertinoColors.secondaryLabel, context);
+  Widget _statPill(BuildContext context, String title, String value, Color fg) {
+    final secondary = AelTheme.colorsOf(context).textSecondary;
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -1830,9 +1924,14 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
           children: [
             Text(title, style: TextStyle(fontSize: 11, color: secondary)),
             const SizedBox(height: 2),
-            Text(value,
-                style: TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w700, color: fg)),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: fg,
+              ),
+            ),
           ],
         ),
       ),
@@ -1840,8 +1939,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
   }
 
   Widget _legendItem(BuildContext context, String label, Color color) {
-    final textColor = CupertinoDynamicColor.resolve(
-        CupertinoColors.secondaryLabel, context);
+    final textColor = AelTheme.colorsOf(context).textSecondary;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1863,8 +1961,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
       builder: (modalCtx) => Container(
         height: MediaQuery.of(context).size.height * 0.72,
         decoration: BoxDecoration(
-          color: CupertinoDynamicColor.resolve(
-              CupertinoColors.systemBackground, context),
+          color: AelTheme.colorsOf(context).cardBg,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
         ),
         child: Column(
@@ -1909,12 +2006,10 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
               child: CupertinoSearchTextField(
                 placeholder: '搜索专业名称、学院、年级或计划号',
                 style: TextStyle(
-                  color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.label, modalCtx),
+                  color: AelTheme.colorsOf(modalCtx).textPrimary,
                 ),
                 placeholderStyle: TextStyle(
-                  color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.placeholderText, modalCtx),
+                  color: AelTheme.colorsOf(modalCtx).textTertiary,
                 ),
                 onChanged: (v) => _c.searchQuery.value = v,
               ),
@@ -1930,8 +2025,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                         Text(
                           _c.catalog.isEmpty ? '暂无培养方案缓存' : '未匹配到相关培养方案',
                           style: TextStyle(
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.secondaryLabel, context),
+                            color: AelTheme.colorsOf(context).textSecondary,
                           ),
                         ),
                         if (_c.catalog.isEmpty) ...[
@@ -1964,13 +2058,13 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                         decoration: BoxDecoration(
                           color: isCurrent
                               ? accent.withValues(alpha: 0.14)
-                              : CupertinoDynamicColor.resolve(
-                                  CupertinoColors.secondarySystemGroupedBackground,
-                                  context),
+                              : AelTheme.colorsOf(context).cardBg,
                           borderRadius: BorderRadius.circular(10),
                           border: isCurrent
                               ? Border.all(color: accent, width: 1)
@@ -1987,8 +2081,9 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                                     style: TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
-                                      color: CupertinoDynamicColor.resolve(
-                                          CupertinoColors.label, context),
+                                      color: AelTheme.colorsOf(
+                                        context,
+                                      ).textPrimary,
                                     ),
                                   ),
                                   const SizedBox(height: 2),
@@ -1996,17 +2091,16 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                                     '${item.xymc} · ${item.dlbsmc} · ${item.creditsLabel}',
                                     style: TextStyle(
                                       fontSize: 11.5,
-                                      color: CupertinoDynamicColor.resolve(
-                                          CupertinoColors.secondaryLabel,
-                                          context),
+                                      color: AelTheme.colorsOf(
+                                        context,
+                                      ).textSecondary,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
                             if (isCurrent)
-                              Icon(CupertinoIcons.checkmark_circle_fill,
-                                  size: 18, color: accent),
+                              Icon(AelIcons.check, size: 18, color: accent),
                           ],
                         ),
                       ),
@@ -2033,20 +2127,14 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
           padding: const EdgeInsets.only(top: 12),
           child: CupertinoTextField(
             controller: ctrl,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             placeholder: '例如 160 或 156.5',
-            style: TextStyle(
-              color: CupertinoDynamicColor.resolve(
-                  CupertinoColors.label, ctx),
-            ),
+            style: TextStyle(color: AelTheme.colorsOf(ctx).textPrimary),
             placeholderStyle: TextStyle(
-              color: CupertinoDynamicColor.resolve(
-                  CupertinoColors.placeholderText, ctx),
+              color: AelTheme.colorsOf(ctx).textTertiary,
             ),
             decoration: BoxDecoration(
-              color: CupertinoDynamicColor.resolve(
-                  CupertinoColors.tertiarySystemFill, ctx),
+              color: AelTheme.colorsOf(ctx).tonalTileBg,
               borderRadius: BorderRadius.circular(8),
             ),
           ),
@@ -2091,20 +2179,14 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
           padding: const EdgeInsets.only(top: 12),
           child: CupertinoTextField(
             controller: ctrl,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             placeholder: '0 表示免修',
-            style: TextStyle(
-              color: CupertinoDynamicColor.resolve(
-                  CupertinoColors.label, ctx),
-            ),
+            style: TextStyle(color: AelTheme.colorsOf(ctx).textPrimary),
             placeholderStyle: TextStyle(
-              color: CupertinoDynamicColor.resolve(
-                  CupertinoColors.placeholderText, ctx),
+              color: AelTheme.colorsOf(ctx).textTertiary,
             ),
             decoration: BoxDecoration(
-              color: CupertinoDynamicColor.resolve(
-                  CupertinoColors.tertiarySystemFill, ctx),
+              color: AelTheme.colorsOf(ctx).tonalTileBg,
               borderRadius: BorderRadius.circular(8),
             ),
           ),

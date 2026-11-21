@@ -34,6 +34,7 @@ ENFORCED_FILES = [
     "lib/page/scholar/scholar_view.dart",
     "lib/page/scholar/grade_detail/grade_detail_view.dart",
     "lib/page/scholar/grade_detail/grade_card.dart",
+    "lib/page/scholar/curriculum_plan/curriculum_plan_page.dart",
     "lib/page/scholar/grade_detail/weighted_gpa_view.dart",
     "lib/page/scholar/grade_detail/semester_gpa_trend_card.dart",
     "lib/page/scholar/grade_detail/gpa_simulator_view.dart",
