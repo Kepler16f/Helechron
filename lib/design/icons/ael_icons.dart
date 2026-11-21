@@ -18,6 +18,8 @@ final class AelIcons {
   // 通用操作与导航
   static const IconData back = LucideIcons.chevronLeft;
   static const IconData chevronRight = LucideIcons.chevronRight;
+  static const IconData chevronUp = LucideIcons.chevronUp;
+  static const IconData chevronDown = LucideIcons.chevronDown;
   static const IconData close = LucideIcons.x;
   static const IconData add = LucideIcons.plus;
   static const IconData edit = LucideIcons.pencil;
@@ -34,6 +36,7 @@ final class AelIcons {
   static const IconData upload = LucideIcons.upload;
   static const IconData folder = LucideIcons.folder;
   static const IconData file = LucideIcons.fileText;
+  static const IconData compass = LucideIcons.compass;
 
   // 主题与外观
   static const IconData palette = LucideIcons.palette;
@@ -66,4 +69,7 @@ final class AelIcons {
   static const IconData activity = LucideIcons.activity;
   static const IconData location = LucideIcons.mapPin;
   static const IconData teacher = LucideIcons.user;
+  static const IconData image = LucideIcons.image;
+  static const IconData audio = LucideIcons.audioWaveform;
+  static const IconData radio = LucideIcons.radio;
 }

@@ -5,7 +5,9 @@ import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/design/sub_title.dart';
 import 'package:celechron/design/custom_colors.dart';
 import 'package:celechron/design/persistent_headers.dart';
-import 'package:celechron/design/round_rectangle_card.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/icons/ael_icons.dart';
 import 'package:celechron/http/zjuServices/courses.dart';
 import 'package:celechron/http/zjuServices/network_defense.dart';
 import 'package:celechron/model/option.dart';
@@ -111,374 +113,202 @@ class CourseDetailPage extends StatelessWidget {
     return (null, null);
   }
 
-  Widget createSessionCard(context, List<Session> sessions) {
+  Widget createSessionCard(BuildContext context, List<Session> sessions) {
     sessions.sort((a, b) => a.time.first.compareTo(b.time.first));
+    final colors = AelTheme.colorsOf(context);
     return Column(
       children: [
         SubSubtitleRow(subtitle: '课时'),
-        RoundRectangleCard(
-            child: Padding(
-          padding: const EdgeInsets.only(left: 8, right: 8),
-          child: Column(children: [
-            Row(
-              children: [
-                Expanded(
-                    child: Column(
+        AelSectionCard(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Column(
+            children: [
+              for (var i = 0; i < sessions.length; i++) ...[
+                if (i > 0)
+                  Divider(
+                    height: 24,
+                    thickness: 1,
+                    indent: 0,
+                    endIndent: 0,
+                    color: colors.divider,
+                  ),
+                Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Column(
+                    Row(
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 12.0,
-                              height: 12.0,
-                              decoration: BoxDecoration(
-                                color: TimeColors.colorFromClass(
-                                    sessions[0].time.first),
-                                shape: BoxShape.circle,
-                              ),
+                        Container(
+                          width: 12.0,
+                          height: 12.0,
+                          decoration: BoxDecoration(
+                            color: TimeColors.colorFromClass(
+                              sessions[i].time.first,
                             ),
-                            const SizedBox(width: 8.0),
-                            Expanded(
-                                child: Text(sessions[0].chineseTime,
-                                    style: CupertinoTheme.of(context)
-                                        .textTheme
-                                        .textStyle
-                                        .copyWith(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                          overflow: TextOverflow.ellipsis,
-                                        ))),
-                          ],
-                        ),
-                        const SizedBox(height: 4.0),
-                        Row(children: [
-                          Icon(
-                            CupertinoIcons.location_solid,
-                            size: 14,
-                            color: CupertinoTheme.of(context)
-                                .textTheme
-                                .textStyle
-                                .color!
-                                .withValues(alpha: 0.5),
+                            shape: BoxShape.circle,
                           ),
-                          Expanded(
-                              child: Text(' 地点：${sessions[0].location ?? '未知'}',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.normal,
-                                    color: CupertinoTheme.of(context)
-                                        .textTheme
-                                        .textStyle
-                                        .color!
-                                        .withValues(alpha: 0.75),
-                                    overflow: TextOverflow.ellipsis,
-                                  )))
-                        ]),
+                        ),
+                        const SizedBox(width: 8.0),
+                        Expanded(
+                          child: Text(
+                            sessions[i].chineseTime,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: colors.textPrimary,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
-                    for (var i = 1; i < sessions.length; i++)
-                      Column(
-                        children: [
-                          Divider(
-                            height: 24,
-                            thickness: 1,
-                            indent: 0,
-                            endIndent: 0,
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.systemFill, context),
-                          ),
-                          Row(
-                            children: [
-                              Container(
-                                width: 12.0,
-                                height: 12.0,
-                                decoration: BoxDecoration(
-                                  color: TimeColors.colorFromClass(
-                                      sessions[i].time.first),
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 8.0),
-                              Expanded(
-                                  child: Text(sessions[i].chineseTime,
-                                      style: CupertinoTheme.of(context)
-                                          .textTheme
-                                          .textStyle
-                                          .copyWith(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            overflow: TextOverflow.ellipsis,
-                                          ))),
-                            ],
-                          ),
-                          const SizedBox(height: 4.0),
-                          Row(children: [
-                            Icon(
-                              CupertinoIcons.location_solid,
-                              size: 14,
-                              color: CupertinoTheme.of(context)
-                                  .textTheme
-                                  .textStyle
-                                  .color!
-                                  .withValues(alpha: 0.5),
+                    const SizedBox(height: 4.0),
+                    Row(
+                      children: [
+                        Icon(
+                          AelIcons.location,
+                          size: 14,
+                          color: colors.textTertiary,
+                        ),
+                        Expanded(
+                          child: Text(
+                            ' 地点：${sessions[i].location ?? '未知'}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.normal,
+                              color: colors.textSecondary,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            Expanded(
-                                child:
-                                    Text(' 地点：${sessions[i].location ?? '未知'}',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.normal,
-                                          color: CupertinoTheme.of(context)
-                                              .textTheme
-                                              .textStyle
-                                              .color!
-                                              .withValues(alpha: 0.75),
-                                          overflow: TextOverflow.ellipsis,
-                                        )))
-                          ]),
-                        ],
-                      )
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
-                )),
+                ),
               ],
-            ),
-          ]),
-        ))
+            ],
+          ),
+        ),
       ],
     );
   }
 
-  Widget createExamCard(context, List<Exam> exams) {
+  Widget createExamCard(BuildContext context, List<Exam> exams) {
+    final colors = AelTheme.colorsOf(context);
     return Column(
       children: [
         SubSubtitleRow(subtitle: '考试'),
-        RoundRectangleCard(
-            child: Padding(
-          padding: const EdgeInsets.only(left: 8, right: 8),
-          child: Column(children: [
-            Row(
-              children: [
-                Expanded(
-                    child: Column(
+        AelSectionCard(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Column(
+            children: [
+              for (var i = 0; i < exams.length; i++) ...[
+                if (i > 0)
+                  Divider(
+                    height: 16,
+                    thickness: 1,
+                    indent: 0,
+                    endIndent: 0,
+                    color: colors.divider,
+                  ),
+                Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Column(
+                    Row(
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 12.0,
-                              height: 12.0,
-                              decoration: BoxDecoration(
-                                color: CupertinoColors.systemPink,
-                                shape: exams[0].type == ExamType.midterm
-                                    ? BoxShape.circle
-                                    : BoxShape.rectangle,
-                              ),
-                            ),
-                            const SizedBox(width: 8.0),
-                            Expanded(
-                                child: Text(exams[0].chineseTime,
-                                    style: CupertinoTheme.of(context)
-                                        .textTheme
-                                        .textStyle
-                                        .copyWith(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                          overflow: TextOverflow.ellipsis,
-                                        ))),
-                          ],
+                        Container(
+                          width: 12.0,
+                          height: 12.0,
+                          decoration: BoxDecoration(
+                            color: exams[i].type == ExamType.midterm
+                                ? colors.warning
+                                : colors.error,
+                            shape: exams[i].type == ExamType.midterm
+                                ? BoxShape.circle
+                                : BoxShape.rectangle,
+                          ),
                         ),
-                        const SizedBox(height: 4.0),
-                        Row(children: [
-                          Icon(
-                            CupertinoIcons.location_solid,
-                            size: 14,
-                            color: CupertinoTheme.of(context)
-                                .textTheme
-                                .textStyle
-                                .color!
-                                .withValues(alpha: 0.5),
-                          ),
-                          Expanded(
-                              child: Text(' 地点：${exams[0].location ?? '未知'}',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.normal,
-                                    color: CupertinoTheme.of(context)
-                                        .textTheme
-                                        .textStyle
-                                        .color!
-                                        .withValues(alpha: 0.75),
-                                    overflow: TextOverflow.ellipsis,
-                                  )))
-                        ]),
-                        Row(children: [
-                          Icon(
-                            CupertinoIcons.map_pin_ellipse,
-                            size: 14,
-                            color: CupertinoTheme.of(context)
-                                .textTheme
-                                .textStyle
-                                .color!
-                                .withValues(alpha: 0.5),
-                          ),
-                          Expanded(
-                              child: Text(' 座位：${exams[0].seat ?? '未知'}',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.normal,
-                                    color: CupertinoTheme.of(context)
-                                        .textTheme
-                                        .textStyle
-                                        .color!
-                                        .withValues(alpha: 0.75),
-                                    overflow: TextOverflow.ellipsis,
-                                  )))
-                        ]),
-                        if (exams[0].type == ExamType.midterm)
-                          Row(children: [
-                            Icon(
-                              CupertinoIcons.doc_text,
-                              size: 14,
-                              color: CupertinoTheme.of(context)
-                                  .textTheme
-                                  .textStyle
-                                  .color!
-                                  .withValues(alpha: 0.5),
+                        const SizedBox(width: 8.0),
+                        Expanded(
+                          child: Text(
+                            exams[i].chineseTime,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: colors.textPrimary,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            Expanded(
-                                child: Text(' 类型：期中',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.normal,
-                                      color: CupertinoTheme.of(context)
-                                          .textTheme
-                                          .textStyle
-                                          .color!
-                                          .withValues(alpha: 0.75),
-                                      overflow: TextOverflow.ellipsis,
-                                    )))
-                          ]),
+                          ),
+                        ),
                       ],
                     ),
-                    for (var i = 1; i < exams.length; i++)
-                      Column(
+                    const SizedBox(height: 4.0),
+                    Row(
+                      children: [
+                        Icon(
+                          AelIcons.location,
+                          size: 14,
+                          color: colors.textTertiary,
+                        ),
+                        Expanded(
+                          child: Text(
+                            ' 地点：${exams[i].location ?? '未知'}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.normal,
+                              color: colors.textSecondary,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Icon(
+                          AelIcons.location,
+                          size: 14,
+                          color: colors.textTertiary,
+                        ),
+                        Expanded(
+                          child: Text(
+                            ' 座位：${exams[i].seat ?? '未知'}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.normal,
+                              color: colors.textSecondary,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (exams[i].type == ExamType.midterm)
+                      Row(
                         children: [
-                          Divider(
-                            height: 16,
-                            thickness: 1,
-                            indent: 0,
-                            endIndent: 0,
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.systemFill, context),
+                          Icon(
+                            AelIcons.file,
+                            size: 14,
+                            color: colors.textTertiary,
                           ),
-                          Row(
-                            children: [
-                              Container(
-                                width: 12.0,
-                                height: 12.0,
-                                decoration: BoxDecoration(
-                                  color: CupertinoColors.systemPink,
-                                  shape: exams[i].type == ExamType.midterm
-                                      ? BoxShape.circle
-                                      : BoxShape.rectangle,
-                                ),
+                          Expanded(
+                            child: Text(
+                              ' 类型：期中',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.normal,
+                                color: colors.textSecondary,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              const SizedBox(width: 8.0),
-                              Expanded(
-                                  child: Text(exams[i].chineseTime,
-                                      style: CupertinoTheme.of(context)
-                                          .textTheme
-                                          .textStyle
-                                          .copyWith(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            overflow: TextOverflow.ellipsis,
-                                          ))),
-                            ],
+                            ),
                           ),
-                          const SizedBox(height: 4.0),
-                          Row(children: [
-                            Icon(
-                              CupertinoIcons.location_solid,
-                              size: 14,
-                              color: CupertinoTheme.of(context)
-                                  .textTheme
-                                  .textStyle
-                                  .color!
-                                  .withValues(alpha: 0.5),
-                            ),
-                            Expanded(
-                                child: Text(' 地点：${exams[i].location ?? '未知'}',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.normal,
-                                      color: CupertinoTheme.of(context)
-                                          .textTheme
-                                          .textStyle
-                                          .color!
-                                          .withValues(alpha: 0.75),
-                                      overflow: TextOverflow.ellipsis,
-                                    )))
-                          ]),
-                          Row(children: [
-                            Icon(
-                              CupertinoIcons.map_pin_ellipse,
-                              size: 14,
-                              color: CupertinoTheme.of(context)
-                                  .textTheme
-                                  .textStyle
-                                  .color!
-                                  .withValues(alpha: 0.5),
-                            ),
-                            Expanded(
-                                child: Text(' 座位：${exams[i].seat ?? '未知'}',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.normal,
-                                      color: CupertinoTheme.of(context)
-                                          .textTheme
-                                          .textStyle
-                                          .color!
-                                          .withValues(alpha: 0.75),
-                                      overflow: TextOverflow.ellipsis,
-                                    )))
-                          ]),
-                          if (exams[i].type == ExamType.midterm)
-                            Row(children: [
-                              Icon(
-                                CupertinoIcons.doc_text,
-                                size: 14,
-                                color: CupertinoTheme.of(context)
-                                    .textTheme
-                                    .textStyle
-                                    .color!
-                                    .withValues(alpha: 0.5),
-                              ),
-                              Expanded(
-                                  child: Text(' 类型：期中',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.normal,
-                                        color: CupertinoTheme.of(context)
-                                            .textTheme
-                                            .textStyle
-                                            .color!
-                                            .withValues(alpha: 0.75),
-                                        overflow: TextOverflow.ellipsis,
-                                      )))
-                            ]),
                         ],
                       ),
                   ],
-                )),
+                ),
               ],
-            ),
-          ]),
-        ))
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -501,15 +331,18 @@ class CourseDetailPage extends StatelessWidget {
     try {
       if (Get.isRegistered<Rx<Scholar>>(tag: 'scholar')) {
         final scholar = Get.find<Rx<Scholar>>(tag: 'scholar').value;
-        final coursePeriods = scholar.periods.where((p) =>
-            p.type == PeriodType.classes &&
-            (p.fromUid == c.id ||
-                p.summary == c.name ||
-                c.sessions.any((s) => s.id != null && s.id == p.fromUid)));
+        final coursePeriods = scholar.periods.where(
+          (p) =>
+              p.type == PeriodType.classes &&
+              (p.fromUid == c.id ||
+                  p.summary == c.name ||
+                  c.sessions.any((s) => s.id != null && s.id == p.fromUid)),
+        );
 
         if (coursePeriods.isNotEmpty) {
-          final hasStartedAny =
-              coursePeriods.any((p) => !now.isBefore(p.startTime));
+          final hasStartedAny = coursePeriods.any(
+            (p) => !now.isBefore(p.startTime),
+          );
           if (!hasStartedAny) {
             return false;
           }
@@ -533,11 +366,11 @@ class CourseDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     final c = course;
     if (c == null) {
       return CupertinoPageScaffold(
-        backgroundColor: CupertinoDynamicColor.resolve(
-            CupertinoColors.systemGroupedBackground, context),
+        backgroundColor: colors.pageBg,
         child: CustomScrollView(
           slivers: [
             const CelechronSliverTextHeader(subtitle: '课程详情'),
@@ -546,11 +379,7 @@ class CourseDetailPage extends StatelessWidget {
               child: Center(
                 child: Text(
                   '未找到该课程的信息',
-                  style: TextStyle(
-                    color: CupertinoDynamicColor.resolve(
-                        CupertinoColors.secondaryLabel, context),
-                    fontSize: 15,
-                  ),
+                  style: TextStyle(color: colors.textSecondary, fontSize: 15),
                 ),
               ),
             ),
@@ -559,8 +388,7 @@ class CourseDetailPage extends StatelessWidget {
       );
     }
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoDynamicColor.resolve(
-          CupertinoColors.systemGroupedBackground, context),
+      backgroundColor: colors.pageBg,
       child: CustomScrollView(
         slivers: [
           const CelechronSliverTextHeader(subtitle: '课程详情'),
@@ -576,9 +404,7 @@ class CourseDetailPage extends StatelessWidget {
             ),
           ),
           if (_shouldShowZhiyun(c))
-            SliverToBoxAdapter(
-              child: createZhiyunCard(context, c),
-            ),
+            SliverToBoxAdapter(child: createZhiyunCard(context, c)),
           SliverToBoxAdapter(
             child: CoursewareDownloadCard(
               course: c,
@@ -586,28 +412,28 @@ class CourseDetailPage extends StatelessWidget {
               preferredHalfTag: preferredHalfTag,
             ),
           ),
-          SliverToBoxAdapter(
-            child: CourseHomeworkCard(course: c),
-          ),
+          SliverToBoxAdapter(child: CourseHomeworkCard(course: c)),
           if (c.sessions.isNotEmpty)
             SliverToBoxAdapter(
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 5,
+                ),
                 child: createSessionCard(context, c.sessions),
               ),
             ),
           if (c.exams.isNotEmpty)
             SliverToBoxAdapter(
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 5,
+                ),
                 child: createExamCard(context, c.exams),
               ),
             ),
-          const SliverToBoxAdapter(
-            child: NativeBottomBarSpacer(),
-          ),
+          const SliverToBoxAdapter(child: NativeBottomBarSpacer()),
         ],
       ),
     );
@@ -653,11 +479,11 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
   }
 
   String? get _semesterScopeKey => ZhiyunService.inferSemesterHint(
-        course: widget.course,
-        semesterName: widget.semesterName,
-        preferredHalfTag: widget.preferredHalfTag,
-        targetDate: widget.period?.startTime,
-      ).scopeKey;
+    course: widget.course,
+    semesterName: widget.semesterName,
+    preferredHalfTag: widget.preferredHalfTag,
+    targetDate: widget.period?.startTime,
+  ).scopeKey;
 
   void _load() {
     _future = ZhiyunService.getLessonReplay(
@@ -702,8 +528,10 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
         subId: subId,
       );
     }
-    effectiveLivingroom =
-        ZhiyunService.appendTokenToUrl(effectiveLivingroom, token);
+    effectiveLivingroom = ZhiyunService.appendTokenToUrl(
+      effectiveLivingroom,
+      token,
+    );
 
     final ok = await OhosNativeService.instance.openInAppVideoPlayer(
       url: effectiveLivingroom,
@@ -753,15 +581,21 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
           courseId != null &&
           courseId.isNotEmpty) {
         final now = DateTime.now();
-        targetSubId =
-            await ZhiyunService.fetchActiveSubIdForDate(courseId, now);
+        targetSubId = await ZhiyunService.fetchActiveSubIdForDate(
+          courseId,
+          now,
+        );
         if (targetSubId == null || targetSubId.isEmpty) {
-          final cat = await ZhiyunService.fetchCourseCatalogue(courseId,
-              forceRefresh: true);
-          final liveItem = cat.firstWhereOrNull((item) =>
-              ZhiyunService.checkIsLive(item: item) &&
-              (item['sub_id']?.toString().isNotEmpty == true ||
-                  item['id']?.toString().isNotEmpty == true));
+          final cat = await ZhiyunService.fetchCourseCatalogue(
+            courseId,
+            forceRefresh: true,
+          );
+          final liveItem = cat.firstWhereOrNull(
+            (item) =>
+                ZhiyunService.checkIsLive(item: item) &&
+                (item['sub_id']?.toString().isNotEmpty == true ||
+                    item['id']?.toString().isNotEmpty == true),
+          );
           targetSubId =
               liveItem?['sub_id']?.toString() ?? liveItem?['id']?.toString();
         }
@@ -786,20 +620,23 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
           subId: targetSubId,
         );
       }
-      effectiveLivingroom =
-          ZhiyunService.appendTokenToUrl(effectiveLivingroom, token);
+      effectiveLivingroom = ZhiyunService.appendTokenToUrl(
+        effectiveLivingroom,
+        token,
+      );
 
       final playUrl = liveStreams.isNotEmpty
           ? liveStreams.first.url
           : (effectiveLivingroom.contains('classroom.zju.edu.cn')
-              ? ZhiyunService.appendTokenToUrl(effectiveLivingroom, token)
-              : effectiveLivingroom);
+                ? ZhiyunService.appendTokenToUrl(effectiveLivingroom, token)
+                : effectiveLivingroom);
 
       final ok = await OhosNativeService.instance.openInAppVideoPlayer(
         url: playUrl,
         title: '${widget.course.name} · $title',
-        streams:
-            liveStreams.map((s) => {'label': s.label, 'url': s.url}).toList(),
+        streams: liveStreams
+            .map((s) => {'label': s.label, 'url': s.url})
+            .toList(),
         livingroomUrl: effectiveLivingroom,
         token: token,
         ssoCookie: ssoCookie,
@@ -840,10 +677,10 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
       );
       final replayList = <ZhiyunReplayInfo>[];
       for (final item in rawCat) {
-        final sid =
-            item['sub_id']?.toString() ?? item['id']?.toString() ?? '';
+        final sid = item['sub_id']?.toString() ?? item['id']?.toString() ?? '';
         if (sid.isEmpty) continue;
-        final t = item['title']?.toString() ??
+        final t =
+            item['title']?.toString() ??
             item['sub_title']?.toString() ??
             '课节 $sid';
         final isLive = ZhiyunService.checkIsLive(item: item);
@@ -851,18 +688,22 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
         final lessonDt = ZhiyunService.parseZhiyunTimestamp(
           item['start_at'] ?? item['class_begin'] ?? item['course_begin'],
         );
-        replayList.add(ZhiyunReplayInfo(
-          courseId: courseId,
-          subId: sid,
-          courseName: widget.course.name,
-          lessonTitle: t,
-          lessonDate: lessonDt,
-          hasReplay: hasReplay,
-          isLive: isLive,
-          isLessonSpecific: true,
-          livingroomUrl:
-              ZhiyunService.buildCourseLivingroomUrl(courseId, subId: sid),
-        ));
+        replayList.add(
+          ZhiyunReplayInfo(
+            courseId: courseId,
+            subId: sid,
+            courseName: widget.course.name,
+            lessonTitle: t,
+            lessonDate: lessonDt,
+            hasReplay: hasReplay,
+            isLive: isLive,
+            isLessonSpecific: true,
+            livingroomUrl: ZhiyunService.buildCourseLivingroomUrl(
+              courseId,
+              subId: sid,
+            ),
+          ),
+        );
       }
       if (!context.mounted) return;
       Navigator.of(context, rootNavigator: true).push(
@@ -923,8 +764,9 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
           context: context,
           builder: (dialogCtx) => CupertinoAlertDialog(
             title: const Text('同步提示'),
-            content:
-                const Text('未获取到课程更新，请确保已登录浙大统一身份认证或稍后重试。您亦可直接输入课程ID完成绑定。'),
+            content: const Text(
+              '未获取到课程更新，请确保已登录浙大统一身份认证或稍后重试。您亦可直接输入课程ID完成绑定。',
+            ),
             actions: [
               CupertinoDialogAction(
                 child: const Text('好'),
@@ -954,47 +796,63 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                 style: TextStyle(fontSize: 13),
               ),
               const SizedBox(height: 8),
-              CupertinoTextField(
-                controller: textController,
-                placeholder: '85940 或 粘贴课程网页链接',
-                autofocus: true,
-                clearButtonMode: OverlayVisibilityMode.editing,
-                style: TextStyle(
-                  color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.label, dialogCtx),
-                ),
-                placeholderStyle: TextStyle(
-                  color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.placeholderText, dialogCtx),
-                ),
-                decoration: BoxDecoration(
-                  color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.tertiarySystemFill, dialogCtx),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Center(
-                child: CupertinoButton(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.secondarySystemFill, context),
-                  borderRadius: BorderRadius.circular(8),
-                  minSize: 32,
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
+              Builder(
+                builder: (fieldCtx) {
+                  final dialogColors = AelTheme.colorsOf(fieldCtx);
+                  final colors = AelTheme.colorsOf(context);
+                  return Column(
                     children: [
-                      Icon(CupertinoIcons.arrow_2_circlepath, size: 14),
-                      SizedBox(width: 4),
-                      Text('从「我的课程」自动同步匹配', style: TextStyle(fontSize: 12)),
+                      CupertinoTextField(
+                        controller: textController,
+                        placeholder: '85940 或 粘贴课程网页链接',
+                        autofocus: true,
+                        clearButtonMode: OverlayVisibilityMode.editing,
+                        style: TextStyle(color: dialogColors.textPrimary),
+                        placeholderStyle: TextStyle(
+                          color: dialogColors.textTertiary,
+                        ),
+                        decoration: BoxDecoration(
+                          color: dialogColors.tonalTileBg,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Center(
+                        child: CupertinoButton(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          color: colors.tonalTileBg,
+                          borderRadius: BorderRadius.circular(8),
+                          minimumSize: const Size(32, 32),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                AelIcons.refresh,
+                                size: 14,
+                                color: colors.textPrimary,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '从「我的课程」自动同步匹配',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: colors.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          onPressed: () async {
+                            Navigator.of(dialogCtx).pop();
+                            await _handleSyncMyCourses(context);
+                          },
+                        ),
+                      ),
                     ],
-                  ),
-                  onPressed: () async {
-                    Navigator.of(dialogCtx).pop();
-                    await _handleSyncMyCourses(context);
-                  },
-                ),
+                  );
+                },
               ),
             ],
           ),
@@ -1057,187 +915,165 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
     required BuildContext context,
     required IconData icon,
     required Color iconColor,
-    Color iconForeground = CupertinoColors.white,
+    Color? iconForeground,
     required String title,
     required String tag,
     VoidCallback? onTagTap,
     required String subtitle,
     required List<Widget> buttons,
   }) {
+    final colors = AelTheme.colorsOf(context);
+    final effectiveIconFg = iconForeground ?? colors.onPrimary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       child: Column(
         children: [
           SubSubtitleRow(subtitle: '智云课堂'),
-          RoundRectangleCard(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color:
-                              CupertinoDynamicColor.resolve(iconColor, context),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          icon,
-                          size: 18,
-                          color: CupertinoDynamicColor.resolve(
-                              iconForeground, context),
-                        ),
+          AelSectionCard(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: iconColor,
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Text(
-                                  title,
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold,
-                                    color: CupertinoDynamicColor.resolve(
-                                        CupertinoColors.label, context),
-                                  ),
+                      child: Icon(icon, size: 18, color: effectiveIconFg),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                title,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: colors.textPrimary,
                                 ),
-                                const SizedBox(width: 6),
-                                GestureDetector(
-                                  onTap: onTagTap,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: CupertinoDynamicColor.resolve(
-                                          CupertinoColors.tertiarySystemFill,
-                                          context),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      tag,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                        color: CupertinoDynamicColor.resolve(
-                                            CupertinoColors.secondaryLabel,
-                                            context),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              subtitle,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: CupertinoDynamicColor.resolve(
-                                    CupertinoColors.secondaryLabel, context),
                               ),
+                              const SizedBox(width: 6),
+                              GestureDetector(
+                                onTap: onTagTap,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: colors.tonalTileBg,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    tag,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: colors.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: colors.textSecondary,
                             ),
-                            Builder(
-                              builder: (context) {
-                                final lastWatched =
-                                    ZhiyunService.getLastWatchedReplay(
-                                  courseName: widget.course.name,
-                                  courseCode: widget.course.id,
-                                  scopeKey: _semesterScopeKey,
-                                );
-                                if (lastWatched != null &&
-                                    lastWatched['lessonTitle'] != null) {
-                                  final title =
-                                      lastWatched['lessonTitle'].toString();
-                                  final url =
-                                      lastWatched['livingroomUrl']?.toString();
-                                  return Padding(
-                                    padding: const EdgeInsets.only(top: 6),
-                                    child: GestureDetector(
-                                      onTap: url != null && url.isNotEmpty
-                                          ? () => _openInAppPlayer(
-                                                context,
-                                                url: url,
-                                                title: title,
-                                                courseId: lastWatched['courseId']
-                                                        ?.toString() ??
-                                                    widget.course.id,
-                                                subId: lastWatched['subId']
-                                                    ?.toString(),
-                                              )
-                                          : null,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 7, vertical: 3),
-                                        decoration: BoxDecoration(
-                                          color: CupertinoDynamicColor.resolve(
-                                              CupertinoColors
-                                                  .tertiarySystemFill,
-                                              context),
-                                          borderRadius:
-                                              BorderRadius.circular(6),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              CupertinoIcons.clock_fill,
-                                              size: 11,
-                                              color:
-                                                  CupertinoDynamicColor.resolve(
-                                                      CustomCupertinoDynamicColors
-                                                          .sakuraInk,
-                                                      context),
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Flexible(
-                                              child: Text(
-                                                '上次播放: $title',
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: CupertinoDynamicColor
-                                                      .resolve(
-                                                          CupertinoColors
-                                                              .secondaryLabel,
-                                                          context),
-                                                ),
+                          ),
+                          Builder(
+                            builder: (context) {
+                              final lastWatched =
+                                  ZhiyunService.getLastWatchedReplay(
+                                    courseName: widget.course.name,
+                                    courseCode: widget.course.id,
+                                    scopeKey: _semesterScopeKey,
+                                  );
+                              if (lastWatched != null &&
+                                  lastWatched['lessonTitle'] != null) {
+                                final title = lastWatched['lessonTitle']
+                                    .toString();
+                                final url = lastWatched['livingroomUrl']
+                                    ?.toString();
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 6),
+                                  child: GestureDetector(
+                                    onTap: url != null && url.isNotEmpty
+                                        ? () => _openInAppPlayer(
+                                            context,
+                                            url: url,
+                                            title: title,
+                                            courseId:
+                                                lastWatched['courseId']
+                                                    ?.toString() ??
+                                                widget.course.id,
+                                            subId: lastWatched['subId']
+                                                ?.toString(),
+                                          )
+                                        : null,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 7,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: colors.tonalTileBg,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            AelIcons.tabFlow,
+                                            size: 11,
+                                            color: colors.primary,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Flexible(
+                                            child: Text(
+                                              '上次播放: $title',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: colors.textSecondary,
                                               ),
                                             ),
-                                            const SizedBox(width: 4),
-                                            const Icon(
-                                              CupertinoIcons.chevron_right,
-                                              size: 10,
-                                              color: CupertinoColors
-                                                  .secondaryLabel,
-                                            ),
-                                          ],
-                                        ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Icon(
+                                            AelIcons.chevronRight,
+                                            size: 10,
+                                            color: colors.textTertiary,
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                  );
-                                }
-                                return const SizedBox.shrink();
-                              },
-                            ),
-                          ],
-                        ),
+                                  ),
+                                );
+                              }
+                              return const SizedBox.shrink();
+                            },
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: buttons,
-                  ),
-                ],
-              ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(children: buttons),
+              ],
             ),
           ),
         ],
@@ -1245,14 +1081,10 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
     );
   }
 
-  static const _sakuraForeground = CupertinoDynamicColor.withBrightness(
-    color: Color(0xFF7A1C59),
-    darkColor: Color(0xFF28061E),
-  );
-
   @override
   Widget build(BuildContext context) {
     final c = widget.course;
+    final colors = AelTheme.colorsOf(context);
     return FutureBuilder<ZhiyunReplayInfo?>(
       future: _future,
       builder: (context, snapshot) {
@@ -1278,8 +1110,8 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
         if (info.isLive) {
           return _buildCard(
             context: context,
-            icon: CupertinoIcons.dot_radiowaves_left_right,
-            iconColor: CupertinoColors.systemRed,
+            icon: AelIcons.radio,
+            iconColor: colors.error,
             title: '智云实时直播',
             tag: '● 正在直播',
             onTagTap: () => _openAndRecord(
@@ -1293,25 +1125,26 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
             buttons: [
               Expanded(
                 child: CupertinoButton(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-                  color: CupertinoColors.systemRed,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 8,
+                  ),
+                  color: colors.error,
                   borderRadius: BorderRadius.circular(8),
-                  minSize: 36,
-                  child: const FittedBox(
+                  minimumSize: const Size(36, 36),
+                  child: FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(CupertinoIcons.play_arrow_solid,
-                            size: 16, color: CupertinoColors.white),
-                        SizedBox(width: 6),
+                        Icon(AelIcons.video, size: 16, color: colors.onPrimary),
+                        const SizedBox(width: 6),
                         Text(
                           '观看直播',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: CupertinoColors.white,
+                            color: colors.onPrimary,
                           ),
                         ),
                       ],
@@ -1330,11 +1163,14 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
               const SizedBox(width: 8),
               CupertinoButton(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.secondarySystemFill, context),
+                color: colors.tonalTileBg,
                 borderRadius: BorderRadius.circular(8),
-                minSize: 36,
-                child: const Icon(CupertinoIcons.compass, size: 16),
+                minimumSize: const Size(36, 36),
+                child: Icon(
+                  AelIcons.compass,
+                  size: 16,
+                  color: colors.textPrimary,
+                ),
                 onPressed: () => _openAndRecord(
                   info.livingroomUrl,
                   '实时直播',
@@ -1346,13 +1182,18 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
               if (info.courseId != null) ...[
                 const SizedBox(width: 8),
                 CupertinoButton(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                  color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.secondarySystemFill, context),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
+                  color: colors.tonalTileBg,
                   borderRadius: BorderRadius.circular(8),
-                  minSize: 36,
-                  child: const Icon(CupertinoIcons.pencil, size: 16),
+                  minimumSize: const Size(36, 36),
+                  child: Icon(
+                    AelIcons.edit,
+                    size: 16,
+                    color: colors.textPrimary,
+                  ),
                   onPressed: () => _showBindDialog(context, info.courseId!),
                 ),
               ],
@@ -1362,13 +1203,11 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
 
         // 状态一：本节课录播已就绪 (hasReplay && isLessonSpecific)
         if (info.isLessonSpecific && info.hasReplay) {
-          final sakuraFg =
-              CupertinoDynamicColor.resolve(_sakuraForeground, context);
           return _buildCard(
             context: context,
-            icon: CupertinoIcons.play_rectangle_fill,
-            iconColor: CustomCupertinoDynamicColors.sakura,
-            iconForeground: _sakuraForeground,
+            icon: AelIcons.video,
+            iconColor: colors.primary,
+            iconForeground: colors.onPrimary,
             title: '本节录播回放',
             tag: info.lessonTitle,
             onTagTap: info.courseId != null
@@ -1378,26 +1217,26 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
             buttons: [
               Expanded(
                 child: CupertinoButton(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-                  color: CupertinoDynamicColor.resolve(
-                      CustomCupertinoDynamicColors.sakura, context),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 8,
+                  ),
+                  color: colors.primary,
                   borderRadius: BorderRadius.circular(8),
-                  minSize: 36,
+                  minimumSize: const Size(36, 36),
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(CupertinoIcons.play_arrow_solid,
-                            size: 16, color: sakuraFg),
+                        Icon(AelIcons.video, size: 16, color: colors.onPrimary),
                         const SizedBox(width: 6),
                         Text(
                           '观看回放',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: sakuraFg,
+                            color: colors.onPrimary,
                           ),
                         ),
                       ],
@@ -1415,25 +1254,36 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
               const SizedBox(width: 8),
               CupertinoButton(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.secondarySystemFill, context),
+                color: colors.tonalTileBg,
                 borderRadius: BorderRadius.circular(8),
-                minSize: 36,
-                child: const Icon(CupertinoIcons.compass, size: 16),
+                minimumSize: const Size(36, 36),
+                child: Icon(
+                  AelIcons.compass,
+                  size: 16,
+                  color: colors.textPrimary,
+                ),
                 onPressed: () => _openAndRecord(
-                    info.livingroomUrl, info.lessonTitle,
-                    courseId: info.courseId, subId: info.subId),
+                  info.livingroomUrl,
+                  info.lessonTitle,
+                  courseId: info.courseId,
+                  subId: info.subId,
+                ),
               ),
               if (info.courseId != null) ...[
                 const SizedBox(width: 8),
                 CupertinoButton(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                  color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.secondarySystemFill, context),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
+                  color: colors.tonalTileBg,
                   borderRadius: BorderRadius.circular(8),
-                  minSize: 36,
-                  child: const Icon(CupertinoIcons.pencil, size: 16),
+                  minimumSize: const Size(36, 36),
+                  child: Icon(
+                    AelIcons.edit,
+                    size: 16,
+                    color: colors.textPrimary,
+                  ),
                   onPressed: () => _showBindDialog(context, info.courseId!),
                 ),
               ],
@@ -1443,13 +1293,11 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
 
         // 状态二：整门课程智云房间直达（已确认有回放，且非单节模式）
         if (info.courseId != null && info.hasReplay) {
-          final sakuraFg =
-              CupertinoDynamicColor.resolve(_sakuraForeground, context);
           return _buildCard(
             context: context,
-            icon: CupertinoIcons.play_rectangle_fill,
-            iconColor: CustomCupertinoDynamicColors.sakura,
-            iconForeground: _sakuraForeground,
+            icon: AelIcons.video,
+            iconColor: colors.primary,
+            iconForeground: colors.onPrimary,
             title: '智云课堂房间',
             tag: 'ID: ${info.courseId}',
             onTagTap: () => _showBindDialog(context, info.courseId!),
@@ -1457,21 +1305,22 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
             buttons: [
               Expanded(
                 child: CupertinoButton(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-                  color: CupertinoDynamicColor.resolve(
-                      CustomCupertinoDynamicColors.sakura, context),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 8,
+                  ),
+                  color: colors.primary,
                   borderRadius: BorderRadius.circular(8),
-                  minSize: 36,
+                  minimumSize: const Size(36, 36),
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          CupertinoIcons.arrow_up_right_square,
+                          AelIcons.externalLink,
                           size: 16,
-                          color: sakuraFg,
+                          color: colors.onPrimary,
                         ),
                         const SizedBox(width: 6),
                         Text(
@@ -1479,7 +1328,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: sakuraFg,
+                            color: colors.onPrimary,
                           ),
                         ),
                       ],
@@ -1496,22 +1345,27 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
               const SizedBox(width: 8),
               CupertinoButton(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.secondarySystemFill, context),
+                color: colors.tonalTileBg,
                 borderRadius: BorderRadius.circular(8),
-                minSize: 36,
-                child: const Icon(CupertinoIcons.compass, size: 16),
-                onPressed: () => _openAndRecord(info.livingroomUrl, '课程房间',
-                    courseId: info.courseId),
+                minimumSize: const Size(36, 36),
+                child: Icon(
+                  AelIcons.compass,
+                  size: 16,
+                  color: colors.textPrimary,
+                ),
+                onPressed: () => _openAndRecord(
+                  info.livingroomUrl,
+                  '课程房间',
+                  courseId: info.courseId,
+                ),
               ),
               const SizedBox(width: 8),
               CupertinoButton(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.secondarySystemFill, context),
+                color: colors.tonalTileBg,
                 borderRadius: BorderRadius.circular(8),
-                minSize: 36,
-                child: const Icon(CupertinoIcons.pencil, size: 16),
+                minimumSize: const Size(36, 36),
+                child: Icon(AelIcons.edit, size: 16, color: colors.textPrimary),
                 onPressed: () => _showBindDialog(context, info.courseId!),
               ),
             ],
@@ -1591,13 +1445,15 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
       if (zhiyunCid != null && zhiyunCid.isNotEmpty) {
         final zyFiles = await ZhiyunService.fetchZhiyunCourseware(zhiyunCid);
         for (final f in zyFiles) {
-          list.add(CoursewareItem(
-            name: f['name'] ?? '智云课件',
-            sectionTitle: f['sectionTitle'] ?? '智云课堂',
-            sizeBytes: 0,
-            directUrl: f['url'],
-            source: '智云课堂',
-          ));
+          list.add(
+            CoursewareItem(
+              name: f['name'] ?? '智云课件',
+              sectionTitle: f['sectionTitle'] ?? '智云课堂',
+              sizeBytes: 0,
+              directUrl: f['url'],
+              source: '智云课堂',
+            ),
+          );
         }
       }
 
@@ -1666,11 +1522,11 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
     try {
       final result =
           await FileDownloadShareHelper.downloadCoursewareAndPrepareShare(
-        client,
-        item: item,
-        saveDir: saveDir,
-        customFileName: target.fileName,
-      );
+            client,
+            item: item,
+            saveDir: saveDir,
+            customFileName: target.fileName,
+          );
       if (!mounted) return;
       setState(() {
         _downloadingKeys.remove(key);
@@ -1729,11 +1585,11 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
           }
           final result =
               await FileDownloadShareHelper.downloadCoursewareAndPrepareShare(
-            client,
-            item: item,
-            saveDir: dlDir.path,
-            customFileName: effectiveName,
-          );
+                client,
+                item: item,
+                saveDir: dlDir.path,
+                customFileName: effectiveName,
+              );
           return result.shareFile;
         } finally {
           client.close(force: true);
@@ -1744,462 +1600,453 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       child: Column(
         children: [
           SubSubtitleRow(subtitle: '资源'),
-          RoundRectangleCard(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: CupertinoColors.activeBlue,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(
-                          CupertinoIcons.folder_fill_badge_person_crop,
-                          size: 18,
-                          color: CupertinoColors.white,
+          AelSectionCard(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: colors.primary,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        AelIcons.folder,
+                        size: 18,
+                        color: colors.onPrimary,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          if (_expanded) {
+                            setState(() {
+                              _expanded = false;
+                            });
+                          } else if (_hasFetched) {
+                            setState(() {
+                              _expanded = true;
+                            });
+                          } else if (!_loading) {
+                            _fetchCourseware();
+                          }
+                        },
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '学在浙大课件下载',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: colors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _items.isNotEmpty
+                                  ? '已获取 ${_items.length} 个附件 · 点击${_expanded ? "收起" : "展开"}'
+                                  : _hasFetched
+                                  ? '暂无公开课件附件 · 点击${_expanded ? "收起" : "展开"}'
+                                  : '支持选择保存路径、下载课件并唤起原生分享',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () {
-                            if (_expanded) {
-                              setState(() {
-                                _expanded = false;
-                              });
-                            } else if (_hasFetched) {
-                              setState(() {
-                                _expanded = true;
-                              });
-                            } else if (!_loading) {
-                              _fetchCourseware();
-                            }
-                          },
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '学在浙大课件下载',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  color: CupertinoDynamicColor.resolve(
-                                      CupertinoColors.label, context),
-                                ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (!_hasFetched && !_expanded)
+                      CupertinoButton(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        minimumSize: const Size(32, 32),
+                        color: colors.primary,
+                        borderRadius: BorderRadius.circular(8),
+                        onPressed: _loading ? null : _fetchCourseware,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_loading)
+                              CupertinoActivityIndicator(
+                                radius: 7,
+                                color: colors.onPrimary,
+                              )
+                            else ...[
+                              Icon(
+                                AelIcons.download,
+                                size: 15,
+                                color: colors.onPrimary,
                               ),
-                              const SizedBox(height: 2),
+                              const SizedBox(width: 4),
                               Text(
-                                _items.isNotEmpty
-                                    ? '已获取 ${_items.length} 个附件 · 点击${_expanded ? "收起" : "展开"}'
-                                    : _hasFetched
-                                        ? '暂无公开课件附件 · 点击${_expanded ? "收起" : "展开"}'
-                                        : '支持选择保存路径、下载课件并唤起原生分享',
+                                '展开课件',
                                 style: TextStyle(
-                                  fontSize: 12,
-                                  color: CupertinoDynamicColor.resolve(
-                                      CupertinoColors.secondaryLabel, context),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: colors.onPrimary,
                                 ),
                               ),
                             ],
-                          ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      if (!_hasFetched && !_expanded)
-                        CupertinoButton(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
-                          minSize: 32,
-                          color: CupertinoColors.activeBlue,
-                          borderRadius: BorderRadius.circular(8),
-                          onPressed: _loading ? null : _fetchCourseware,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (_loading)
-                                const CupertinoActivityIndicator(
-                                    radius: 7, color: CupertinoColors.white)
-                              else ...[
-                                const Icon(
-                                    CupertinoIcons.arrow_down_circle_fill,
-                                    size: 15,
-                                    color: CupertinoColors.white),
+                      )
+                    else
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CupertinoButton(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 6,
+                            ),
+                            minimumSize: const Size(32, 32),
+                            color: colors.tonalTileBg,
+                            borderRadius: BorderRadius.circular(8),
+                            onPressed: _loading ? null : _fetchCourseware,
+                            child: _loading
+                                ? const CupertinoActivityIndicator(radius: 7)
+                                : Icon(
+                                    AelIcons.refresh,
+                                    size: 14,
+                                    color: colors.textPrimary,
+                                  ),
+                          ),
+                          const SizedBox(width: 6),
+                          CupertinoButton(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            minimumSize: const Size(32, 32),
+                            color: _expanded
+                                ? colors.tonalTileBg
+                                : colors.primary,
+                            borderRadius: BorderRadius.circular(8),
+                            onPressed: () {
+                              setState(() {
+                                _expanded = !_expanded;
+                              });
+                            },
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _expanded
+                                      ? AelIcons.chevronUp
+                                      : AelIcons.chevronDown,
+                                  size: 13,
+                                  color: _expanded
+                                      ? colors.textPrimary
+                                      : colors.onPrimary,
+                                ),
                                 const SizedBox(width: 4),
-                                const Text(
-                                  '展开课件',
+                                Text(
+                                  _expanded ? '收起' : '展开',
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
-                                    color: CupertinoColors.white,
+                                    color: _expanded
+                                        ? colors.textPrimary
+                                        : colors.onPrimary,
                                   ),
                                 ),
                               ],
-                            ],
-                          ),
-                        )
-                      else
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            CupertinoButton(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 6),
-                              minSize: 32,
-                              color: CupertinoDynamicColor.resolve(
-                                  CupertinoColors.secondarySystemFill, context),
-                              borderRadius: BorderRadius.circular(8),
-                              onPressed: _loading ? null : _fetchCourseware,
-                              child: _loading
-                                  ? const CupertinoActivityIndicator(radius: 7)
-                                  : const Icon(CupertinoIcons.arrow_clockwise,
-                                      size: 14),
                             ),
-                            const SizedBox(width: 6),
-                            CupertinoButton(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 6),
-                              minSize: 32,
-                              color: _expanded
-                                  ? CupertinoDynamicColor.resolve(
-                                      CupertinoColors.secondarySystemFill,
-                                      context)
-                                  : CupertinoColors.activeBlue,
-                              borderRadius: BorderRadius.circular(8),
-                              onPressed: () {
-                                setState(() {
-                                  _expanded = !_expanded;
-                                });
-                              },
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+                if (_expanded) ...[
+                  const SizedBox(height: 12),
+                  if (_loading)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Center(
+                        child: Column(
+                          children: [
+                            const CupertinoActivityIndicator(),
+                            const SizedBox(height: 6),
+                            Text(
+                              '正在同步学在浙大与智云课堂课件...',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Text(
+                        '获取课件失败：$_error',
+                        style: TextStyle(fontSize: 12, color: colors.error),
+                      ),
+                    )
+                  else if (_items.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Text(
+                        '暂未在学在浙大或智云课堂检索到该课程的公开课件附件。',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                    )
+                  else
+                    ..._items.map((item) {
+                      final key = _itemKey(item);
+                      final downloading = _downloadingKeys.contains(key);
+                      final savedPath = _downloadedPaths[key];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Row(
+                          children: [
+                            Icon(
+                              AelIcons.file,
+                              size: 18,
+                              color: colors.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Icon(
-                                    _expanded
-                                        ? CupertinoIcons.chevron_up
-                                        : CupertinoIcons.chevron_down,
-                                    size: 13,
-                                    color: _expanded
-                                        ? CupertinoDynamicColor.resolve(
-                                            CupertinoColors.label, context)
-                                        : CupertinoColors.white,
-                                  ),
-                                  const SizedBox(width: 4),
                                   Text(
-                                    _expanded ? '收起' : '展开',
+                                    item.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: _expanded
-                                          ? CupertinoDynamicColor.resolve(
-                                              CupertinoColors.label, context)
-                                          : CupertinoColors.white,
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w500,
+                                      color: colors.textPrimary,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${item.sectionTitle} · ${item.formattedSize}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: colors.textSecondary,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                          ],
-                        ),
-                    ],
-                  ),
-                  if (_expanded) ...[
-                    const SizedBox(height: 12),
-                    if (_loading)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        child: Center(
-                          child: Column(
-                            children: [
-                              CupertinoActivityIndicator(),
-                              SizedBox(height: 6),
-                              Text('正在同步学在浙大与智云课堂课件...',
-                                  style: TextStyle(fontSize: 12)),
-                            ],
-                          ),
-                        ),
-                      )
-                    else if (_error != null)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Text(
-                          '获取课件失败：$_error',
-                          style: const TextStyle(
-                              fontSize: 12, color: CupertinoColors.systemRed),
-                        ),
-                      )
-                    else if (_items.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Text(
-                          '暂未在学在浙大或智云课堂检索到该课程的公开课件附件。',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.secondaryLabel, context),
-                          ),
-                        ),
-                      )
-                    else
-                      ..._items.map((item) {
-                        final key = _itemKey(item);
-                        final downloading = _downloadingKeys.contains(key);
-                        final savedPath = _downloadedPaths[key];
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          child: Row(
-                            children: [
-                              Icon(
-                                CupertinoIcons.doc_on_doc_fill,
-                                size: 18,
-                                color: CupertinoDynamicColor.resolve(
-                                    CupertinoColors.activeBlue, context),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item.name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        fontSize: 13.5,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    Text(
-                                      '${item.sectionTitle} · ${item.formattedSize}',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: CupertinoDynamicColor.resolve(
-                                            CupertinoColors.secondaryLabel,
-                                            context),
-                                      ),
-                                    ),
-                                  ],
+                            const SizedBox(width: 6),
+                            if (savedPath != null) ...[
+                              CupertinoButton(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 5,
                                 ),
-                              ),
-                              const SizedBox(width: 6),
-                              if (savedPath != null) ...[
-                                CupertinoButton(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 5),
-                                  minSize: 28,
-                                  color: CupertinoColors.activeGreen
-                                      .withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(6),
-                                  onPressed: () =>
-                                      _shareCoursewareItem(item, savedPath),
-                                  child: const Text(
-                                    '分享',
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w600,
-                                      color: CupertinoColors.activeGreen,
-                                    ),
+                                minimumSize: const Size(28, 28),
+                                color: colors.successContainer,
+                                borderRadius: BorderRadius.circular(6),
+                                onPressed: () =>
+                                    _shareCoursewareItem(item, savedPath),
+                                child: Text(
+                                  '分享',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: colors.onSuccessContainer,
                                   ),
                                 ),
-                                const SizedBox(width: 4),
-                              ],
-                              CupertinoButton(
-                                padding: EdgeInsets.symmetric(
-                                    horizontal: savedPath != null ? 8 : 10,
-                                    vertical: 5),
-                                minSize: 28,
-                                color: CupertinoColors.activeBlue
-                                    .withValues(alpha: 0.14),
-                                borderRadius: BorderRadius.circular(6),
-                                onPressed: downloading
-                                    ? null
-                                    : () => _downloadItem(context, item),
-                                child: downloading
-                                    ? const CupertinoActivityIndicator(
-                                        radius: 7)
-                                    : Text(
-                                        '下载并分享',
-                                        style: TextStyle(
-                                          fontSize:
-                                              savedPath != null ? 11.5 : 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: CupertinoColors.activeBlue,
-                                        ),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                            CupertinoButton(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: savedPath != null ? 8 : 10,
+                                vertical: 5,
+                              ),
+                              minimumSize: const Size(28, 28),
+                              color: colors.primaryContainer,
+                              borderRadius: BorderRadius.circular(6),
+                              onPressed: downloading
+                                  ? null
+                                  : () => _downloadItem(context, item),
+                              child: downloading
+                                  ? const CupertinoActivityIndicator(radius: 7)
+                                  : Text(
+                                      '下载并分享',
+                                      style: TextStyle(
+                                        fontSize: savedPath != null ? 11.5 : 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: colors.onPrimaryContainer,
                                       ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                  ],
-
-                  const SizedBox(height: 12),
-                  Container(
-                    height: 0.5,
-                    color: CupertinoDynamicColor.resolve(
-                        CupertinoColors.separator, context),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // 智云课堂语音字幕下载
-                  Row(
-                    children: [
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: CupertinoColors.systemTeal,
-                          borderRadius: BorderRadius.circular(8),
+                                    ),
+                            ),
+                          ],
                         ),
-                        child: const Icon(
-                          CupertinoIcons.waveform_circle_fill,
-                          size: 18,
-                          color: CupertinoColors.white,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => _showZhiyunSubtitleBatchDialog(context),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '智云课堂语音字幕下载',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  color: CupertinoDynamicColor.resolve(
-                                      CupertinoColors.label, context),
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '多选批量导出已生成的课节语音转写字幕（txt 格式）',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: CupertinoDynamicColor.resolve(
-                                      CupertinoColors.secondaryLabel, context),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      CupertinoButton(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        minSize: 32,
-                        color: CupertinoDynamicColor.resolve(
-                            CupertinoColors.secondarySystemFill, context),
-                        borderRadius: BorderRadius.circular(8),
-                        onPressed: () =>
-                            _showZhiyunSubtitleBatchDialog(context),
-                        child: Text(
-                          '批量管理',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.activeBlue, context),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 12),
-                  Container(
-                    height: 0.5,
-                    color: CupertinoDynamicColor.resolve(
-                        CupertinoColors.separator, context),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // 智云课堂切片课件下载
-                  Row(
-                    children: [
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: CupertinoColors.systemPurple,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(
-                          CupertinoIcons.photo_on_rectangle,
-                          size: 18,
-                          color: CupertinoColors.white,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => _showZhiyunPptBatchDialog(context),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '智云课堂切片课件下载',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  color: CupertinoDynamicColor.resolve(
-                                      CupertinoColors.label, context),
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '多选批量打包下载已生成的课堂 PPT 切片（ZIP 压缩包）',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: CupertinoDynamicColor.resolve(
-                                      CupertinoColors.secondaryLabel, context),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      CupertinoButton(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        minSize: 32,
-                        color: CupertinoDynamicColor.resolve(
-                            CupertinoColors.secondarySystemFill, context),
-                        borderRadius: BorderRadius.circular(8),
-                        onPressed: () => _showZhiyunPptBatchDialog(context),
-                        child: Text(
-                          '批量管理',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.activeBlue, context),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                      );
+                    }),
                 ],
-              ),
+
+                const SizedBox(height: 12),
+                Container(height: 0.5, color: colors.divider),
+                const SizedBox(height: 12),
+
+                // 智云课堂语音字幕下载
+                Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: colors.infoContainer,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        AelIcons.audio,
+                        size: 18,
+                        color: colors.onInfoContainer,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _showZhiyunSubtitleBatchDialog(context),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '智云课堂语音字幕下载',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: colors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '多选批量导出已生成的课节语音转写字幕（txt 格式）',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    CupertinoButton(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      minimumSize: const Size(32, 32),
+                      color: colors.tonalTileBg,
+                      borderRadius: BorderRadius.circular(8),
+                      onPressed: () => _showZhiyunSubtitleBatchDialog(context),
+                      child: Text(
+                        '批量管理',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: colors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 12),
+                Container(height: 0.5, color: colors.divider),
+                const SizedBox(height: 12),
+
+                // 智云课堂切片课件下载
+                Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: colors.primaryContainer,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        AelIcons.image,
+                        size: 18,
+                        color: colors.onPrimaryContainer,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _showZhiyunPptBatchDialog(context),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '智云课堂切片课件下载',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: colors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '多选批量打包下载已生成的课堂 PPT 切片（ZIP 压缩包）',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    CupertinoButton(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      minimumSize: const Size(32, 32),
+                      color: colors.tonalTileBg,
+                      borderRadius: BorderRadius.circular(8),
+                      onPressed: () => _showZhiyunPptBatchDialog(context),
+                      child: Text(
+                        '批量管理',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: colors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
@@ -2306,7 +2153,9 @@ class _CourseHomeworkCardState extends State<CourseHomeworkCard> {
       return false;
     }
     return ZhiyunService.matchesCourseName(
-        widget.course.name, candidateCourseName);
+      widget.course.name,
+      candidateCourseName,
+    );
   }
 
   List<Todo> _collectLocalHomeworks() {
@@ -2327,8 +2176,9 @@ class _CourseHomeworkCardState extends State<CourseHomeworkCard> {
           }
         }
         String? cidFromUrl;
-        final urlMatch =
-            RegExp(r'/course[s]?/(\d+)/').firstMatch(t.description);
+        final urlMatch = RegExp(
+          r'/course[s]?/(\d+)/',
+        ).firstMatch(t.description);
         if (urlMatch != null) {
           cidFromUrl = urlMatch.group(1);
         }
@@ -2336,32 +2186,40 @@ class _CourseHomeworkCardState extends State<CourseHomeworkCard> {
           continue;
         }
 
-        final aid = (t.fromUid != null && t.fromUid!.startsWith('courses-todo:'))
+        final aid =
+            (t.fromUid != null && t.fromUid!.startsWith('courses-todo:'))
             ? t.fromUid!.substring('courses-todo:'.length)
             : 'task:${t.uid}';
         taskMap[aid] = t;
 
-        final cleanTitle =
-            t.summary.replaceFirst(RegExp(r'^(作业|小测)：'), '').trim();
-        localItems.add(Todo.fromJson({
-          'id': aid,
-          'title': cleanTitle.isNotEmpty ? cleanTitle : t.summary,
-          'course_name':
-              taskCourse.isNotEmpty ? taskCourse : widget.course.name,
-          'course_id': cidFromUrl ?? '',
-          'end_time': t.endTime.toIso8601String(),
-          'type': t.isQuiz ? 'quiz' : 'homework',
-          'completeness':
-              t.status == TaskStatus.completed ? 'full' : 'incomplete',
-        }));
+        final cleanTitle = t.summary
+            .replaceFirst(RegExp(r'^(作业|小测)：'), '')
+            .trim();
+        localItems.add(
+          Todo.fromJson({
+            'id': aid,
+            'title': cleanTitle.isNotEmpty ? cleanTitle : t.summary,
+            'course_name': taskCourse.isNotEmpty
+                ? taskCourse
+                : widget.course.name,
+            'course_id': cidFromUrl ?? '',
+            'end_time': t.endTime.toIso8601String(),
+            'type': t.isQuiz ? 'quiz' : 'homework',
+            'completeness': t.status == TaskStatus.completed
+                ? 'full'
+                : 'incomplete',
+          }),
+        );
       }
     }
 
     if (Get.isRegistered<Rx<Scholar>>(tag: 'scholar')) {
       final scholarTodos = Get.find<Rx<Scholar>>(tag: 'scholar').value.todos;
       for (final todo in scholarTodos) {
-        if (!_matchesThisCourse(todo.course,
-            candidateCid: todo.resolvedCourseId)) {
+        if (!_matchesThisCourse(
+          todo.course,
+          candidateCid: todo.resolvedCourseId,
+        )) {
           continue;
         }
         localItems.add(Todo.fromJson(todo.toJson()));
@@ -2387,9 +2245,12 @@ class _CourseHomeworkCardState extends State<CourseHomeworkCard> {
       _error = null;
     });
 
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
-    applyZjuNetworkDefense(client,
-        connectionTimeout: const Duration(seconds: 10));
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 10);
+    applyZjuNetworkDefense(
+      client,
+      connectionTimeout: const Duration(seconds: 10),
+    );
     try {
       final remote = await Courses.fetchCourseHomeworks(
         client,
@@ -2455,195 +2316,189 @@ class _CourseHomeworkCardState extends State<CourseHomeworkCard> {
 
   @override
   Widget build(BuildContext context) {
-    final badgeAccent = CupertinoDynamicColor.resolve(
-        CustomCupertinoDynamicColors.magenta, context);
+    final colors = AelTheme.colorsOf(context);
+    final badgeAccent = colors.primary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       child: Column(
         children: [
           SubSubtitleRow(subtitle: '作业'),
-          RoundRectangleCard(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: badgeAccent,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          CupertinoIcons.checkmark_alt_circle_fill,
-                          size: 18,
-                          color: CupertinoDynamicColor.resolve(
-                              CupertinoColors.label, context),
-                        ),
+          AelSectionCard(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: badgeAccent,
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () {
-                            setState(() {
-                              _expanded = !_expanded;
-                            });
-                          },
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '课程作业',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  color: CupertinoDynamicColor.resolve(
-                                      CupertinoColors.label, context),
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _summarySubtitle(),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: CupertinoDynamicColor.resolve(
-                                      CupertinoColors.secondaryLabel, context),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                      child: Icon(
+                        AelIcons.homework,
+                        size: 18,
+                        color: colors.onPrimary,
                       ),
-                      const SizedBox(width: 8),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CupertinoButton(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 6),
-                            minSize: 32,
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.secondarySystemFill, context),
-                            borderRadius: BorderRadius.circular(8),
-                            onPressed: _loading ? null : _fetchHomeworks,
-                            child: _loading
-                                ? const CupertinoActivityIndicator(radius: 7)
-                                : const Icon(CupertinoIcons.arrow_clockwise,
-                                    size: 14),
-                          ),
-                          if (_items.isNotEmpty || _error != null) ...[
-                            const SizedBox(width: 6),
-                            CupertinoButton(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 6),
-                              minSize: 32,
-                              color: _expanded
-                                  ? CupertinoDynamicColor.resolve(
-                                      CupertinoColors.secondarySystemFill,
-                                      context)
-                                  : CupertinoColors.activeBlue,
-                              borderRadius: BorderRadius.circular(8),
-                              onPressed: () {
-                                setState(() {
-                                  _expanded = !_expanded;
-                                });
-                              },
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    _expanded
-                                        ? CupertinoIcons.chevron_up
-                                        : CupertinoIcons.chevron_down,
-                                    size: 13,
-                                    color: _expanded
-                                        ? CupertinoDynamicColor.resolve(
-                                            CupertinoColors.label, context)
-                                        : CupertinoColors.white,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    _expanded ? '收起' : '展开',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: _expanded
-                                          ? CupertinoDynamicColor.resolve(
-                                              CupertinoColors.label, context)
-                                          : CupertinoColors.white,
-                                    ),
-                                  ),
-                                ],
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          setState(() {
+                            _expanded = !_expanded;
+                          });
+                        },
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '课程作业',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: colors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _summarySubtitle(),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colors.textSecondary,
                               ),
                             ),
                           ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CupertinoButton(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          minimumSize: const Size(32, 32),
+                          color: colors.tonalTileBg,
+                          borderRadius: BorderRadius.circular(8),
+                          onPressed: _loading ? null : _fetchHomeworks,
+                          child: _loading
+                              ? const CupertinoActivityIndicator(radius: 7)
+                              : Icon(
+                                  AelIcons.refresh,
+                                  size: 14,
+                                  color: colors.textPrimary,
+                                ),
+                        ),
+                        if (_items.isNotEmpty || _error != null) ...[
+                          const SizedBox(width: 6),
+                          CupertinoButton(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            minimumSize: const Size(32, 32),
+                            color: _expanded
+                                ? colors.tonalTileBg
+                                : colors.primary,
+                            borderRadius: BorderRadius.circular(8),
+                            onPressed: () {
+                              setState(() {
+                                _expanded = !_expanded;
+                              });
+                            },
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _expanded
+                                      ? AelIcons.chevronUp
+                                      : AelIcons.chevronDown,
+                                  size: 13,
+                                  color: _expanded
+                                      ? colors.textPrimary
+                                      : colors.onPrimary,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _expanded ? '收起' : '展开',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: _expanded
+                                        ? colors.textPrimary
+                                        : colors.onPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
-                      ),
-                    ],
-                  ),
-                  if (_expanded) ...[
-                    if (_loading && _items.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        child: Center(
-                          child: Column(
-                            children: [
-                              CupertinoActivityIndicator(),
-                              SizedBox(height: 6),
-                              Text(
-                                '正在同步该课程的全部作业与成绩状态...',
-                                style: TextStyle(fontSize: 12),
+                      ],
+                    ),
+                  ],
+                ),
+                if (_expanded) ...[
+                  if (_loading && _items.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Center(
+                        child: Column(
+                          children: [
+                            const CupertinoActivityIndicator(),
+                            const SizedBox(height: 6),
+                            Text(
+                              '正在同步该课程的全部作业与成绩状态...',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colors.textSecondary,
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                      )
-                    else if (_error != null && _items.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12, bottom: 4),
-                        child: Text(
-                          '获取作业失败：$_error\n请先确保已登录学在浙大后点击刷新。',
-                          style: const TextStyle(
-                              fontSize: 12, color: CupertinoColors.systemRed),
-                        ),
-                      )
-                    else if (_items.isEmpty && _fetchedOnce)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12, bottom: 4),
-                        child: Text(
-                          '学在浙大暂无该课程的已发布作业或测验。',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.secondaryLabel, context),
-                          ),
-                        ),
-                      )
-                    else if (_items.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Divider(
-                        height: 1,
-                        thickness: 1,
-                        color: CupertinoDynamicColor.resolve(
-                            CupertinoColors.systemFill, context),
                       ),
-                      for (int i = 0; i < _items.length; i++) ...[
-                        if (i > 0)
-                          Divider(
-                            height: 16,
-                            thickness: 1,
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.systemFill, context),
-                          ),
-                        Builder(builder: (context) {
+                    )
+                  else if (_error != null && _items.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12, bottom: 4),
+                      child: Text(
+                        '获取作业失败：$_error\n请先确保已登录学在浙大后点击刷新。',
+                        style: TextStyle(fontSize: 12, color: colors.error),
+                      ),
+                    )
+                  else if (_items.isEmpty && _fetchedOnce)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12, bottom: 4),
+                      child: Text(
+                        '学在浙大暂无该课程的已发布作业或测验。',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                    )
+                  else if (_items.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Divider(height: 1, thickness: 1, color: colors.divider),
+                    for (int i = 0; i < _items.length; i++) ...[
+                      if (i > 0)
+                        Divider(
+                          height: 16,
+                          thickness: 1,
+                          color: colors.divider,
+                        ),
+                      Builder(
+                        builder: (context) {
                           final todo = _items[i];
                           final matchingTask = _taskByActivityId[todo.id];
-                          final uidKey = matchingTask?.uid ??
-                              'courses-todo:${todo.id}';
+                          final uidKey =
+                              matchingTask?.uid ?? 'courses-todo:${todo.id}';
                           final indicatorColor = UidColors.colorFromUid(uidKey);
                           final cleanTitle = todo.name
                               .replaceFirst(RegExp(r'^(作业|小测)：'), '')
@@ -2654,7 +2509,8 @@ class _CourseHomeworkCardState extends State<CourseHomeworkCard> {
                           final displayCourse = todo.course.trim().isNotEmpty
                               ? todo.course.trim()
                               : widget.course.name;
-                          final canSubmitInApp = !todo.id.startsWith('task:') ||
+                          final canSubmitInApp =
+                              !todo.id.startsWith('task:') ||
                               (matchingTask != null &&
                                   extractCoursesUrl(matchingTask.description) !=
                                       null);
@@ -2666,16 +2522,18 @@ class _CourseHomeworkCardState extends State<CourseHomeworkCard> {
                                 : null,
                             onLongPress: !todo.id.startsWith('task:')
                                 ? () => showTodoSubmitSheet(
-                                      context,
-                                      todo.submitUrl,
-                                      title: '$displayCourse · $cleanTitle',
-                                      courseId: todo.resolvedCourseId,
-                                      activityId: todo.id,
-                                    )
+                                    context,
+                                    todo.submitUrl,
+                                    title: '$displayCourse · $cleanTitle',
+                                    courseId: todo.resolvedCourseId,
+                                    activityId: todo.id,
+                                  )
                                 : null,
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 4, vertical: 8),
+                                horizontal: 4,
+                                vertical: 8,
+                              ),
                               child: HomeworkTaskItemContent(
                                 indicatorColor: indicatorColor,
                                 title: displayTitle,
@@ -2692,12 +2550,12 @@ class _CourseHomeworkCardState extends State<CourseHomeworkCard> {
                               ),
                             ),
                           );
-                        }),
-                      ],
+                        },
+                      ),
                     ],
                   ],
                 ],
-              ),
+              ],
             ),
           ),
         ],
@@ -2705,4 +2563,3 @@ class _CourseHomeworkCardState extends State<CourseHomeworkCard> {
     );
   }
 }
-
