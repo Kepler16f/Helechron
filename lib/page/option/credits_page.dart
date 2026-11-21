@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/design/persistent_headers.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
 import 'package:celechron/http/github_service.dart';
 import 'package:celechron/utils/legal_links.dart';
 
@@ -66,8 +67,9 @@ class _CreditsPageState extends State<CreditsPage> {
     List<Widget> rows = [];
     for (int i = 0; i < contributors.length; i += 2) {
       final String left = contributors[i];
-      final String? right =
-          (i + 1 < contributors.length) ? contributors[i + 1] : null;
+      final String? right = (i + 1 < contributors.length)
+          ? contributors[i + 1]
+          : null;
 
       rows.add(
         Padding(
@@ -111,7 +113,9 @@ class _CreditsPageState extends State<CreditsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     return CupertinoPageScaffold(
+      backgroundColor: colors.pageBg,
       child: SafeArea(
         bottom: false,
         child: CustomScrollView(
@@ -121,37 +125,26 @@ class _CreditsPageState extends State<CreditsPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const SizedBox(
-                    height: 64,
-                  ),
+                  const SizedBox(height: 64),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Image.asset(
-                        "assets/logo.png",
-                        height: 108,
-                      ),
-                      const SizedBox(
-                        width: 8,
-                      ),
+                      Image.asset("assets/logo.png", height: 108),
+                      const SizedBox(width: 8),
                       Column(
                         children: [
                           const Text(
                             'Helechron',
                             textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 32,
-                            ),
+                            style: TextStyle(fontSize: 32),
                           ),
                           Text(
                             '${widget.version} 版本',
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 12,
-                            ),
+                            style: const TextStyle(fontSize: 12),
                           ),
                         ],
-                      )
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -166,25 +159,17 @@ class _CreditsPageState extends State<CreditsPage> {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,
-                        color: CupertinoDynamicColor.resolve(
-                            CupertinoColors.secondaryLabel, context),
+                        color: colors.textSecondary,
                       ),
                     ),
                   ),
-                  const SizedBox(
-                    height: 24,
-                  ),
+                  const SizedBox(height: 24),
                   const Text(
                     'Helechron 移植、开发与维护',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
                   ),
-                  const SizedBox(
-                    height: 16,
-                  ),
+                  const SizedBox(height: 16),
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 32),
                     child: Row(
@@ -203,31 +188,19 @@ class _CreditsPageState extends State<CreditsPage> {
                       ],
                     ),
                   ),
-                  const SizedBox(
-                    height: 24,
-                  ),
+                  const SizedBox(height: 24),
                   const Text(
                     '开源来源致谢：Celechron',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
                   ),
-                  const SizedBox(
-                    height: 16,
-                  ),
+                  const SizedBox(height: 16),
                   const Text(
                     '🎨设计',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(
-                    height: 8,
-                  ),
+                  const SizedBox(height: 8),
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 32),
                     child: Row(
@@ -253,29 +226,19 @@ class _CreditsPageState extends State<CreditsPage> {
                       ],
                     ),
                   ),
-                  const SizedBox(
-                    height: 24,
-                  ),
+                  const SizedBox(height: 24),
                   const Text(
                     '🧑‍💻开发',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(
-                    height: 8,
-                  ),
+                  const SizedBox(height: 8),
                   _buildContributorsList(),
                   const SizedBox(height: 24),
                   const Text(
                     '参考与致谢开源项目',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 16),
                   Padding(
@@ -294,8 +257,7 @@ class _CreditsPageState extends State<CreditsPage> {
                       style: TextStyle(
                         fontSize: 12,
                         height: 1.5,
-                        color: CupertinoDynamicColor.resolve(
-                            CupertinoColors.secondaryLabel, context),
+                        color: colors.textSecondary,
                       ),
                     ),
                   ),
@@ -303,22 +265,13 @@ class _CreditsPageState extends State<CreditsPage> {
                   Text(
                     '本程序采用 GPLv3 协议开源',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: CupertinoDynamicColor.resolve(
-                            CupertinoColors.secondaryLabel, context)),
+                    style: TextStyle(fontSize: 12, color: colors.textSecondary),
                   ),
-                  const SizedBox(
-                    height: 4,
-                  ),
+                  const SizedBox(height: 4),
                   Text(
                     'github.com/Kepler16f/Helechron',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: CupertinoDynamicColor.resolve(
-                          CupertinoColors.secondaryLabel, context),
-                    ),
+                    style: TextStyle(fontSize: 12, color: colors.textSecondary),
                   ),
                   const NativeBottomBarSpacer(extra: 48),
                 ],

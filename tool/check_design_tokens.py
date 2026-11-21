@@ -41,6 +41,7 @@ ENFORCED_FILES = [
     "lib/page/scholar/todo/todo_card.dart",
     "lib/page/option/appearance_section.dart",
     "lib/page/option/option_view.dart",
+    "lib/page/option/credits_page.dart",
 ]
 
 FORBIDDEN_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
