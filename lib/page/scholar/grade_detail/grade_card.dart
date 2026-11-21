@@ -1,68 +1,32 @@
-import 'dart:math';
-
-import 'package:celechron/page/scholar/grade_detail/grade_detail_controller.dart';
-import 'package:celechron/services/diagnostic_log_service.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/cupertino.dart'
+    show CupertinoCheckbox, CupertinoPageRoute;
+import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/model/grade.dart';
 import 'package:celechron/page/scholar/course_detail/course_detail_view.dart';
+import 'package:celechron/page/scholar/grade_detail/grade_detail_controller.dart';
+import 'package:celechron/services/diagnostic_log_service.dart';
 
-class GradeCard extends StatefulWidget {
+class GradeCard extends StatelessWidget {
   final Grade grade;
-  final CupertinoDynamicColor backgroundColor;
 
-  const GradeCard({
-    super.key,
-    required this.grade,
-    this.backgroundColor = CupertinoColors.systemBackground,
-  });
+  const GradeCard({super.key, required this.grade});
 
-  @override
-  State<GradeCard> createState() => _GradeCardState();
-}
-
-class _GradeCardState extends State<GradeCard>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
-  late Animation<double> _scaleAnimation;
-  final _gradeDetailController = Get.find<GradeDetailController>();
-
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
-      reverseDuration: const Duration(milliseconds: 400),
-    );
-    _scaleAnimation = Tween<double>(begin: 1, end: 0.95).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeInOut,
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
-
-  bool isHighlighted() {
-    return !_gradeDetailController.customGpaMode.value ||
-        (_gradeDetailController.customGpaSelected[widget.grade.id] ?? false);
+  bool _isHighlighted(GradeDetailController controller) {
+    return !controller.customGpaMode.value ||
+        (controller.customGpaSelected[grade.id] ?? false);
   }
 
   void _openCourseDetail(BuildContext context) {
     try {
       Navigator.of(context, rootNavigator: true).push(
         CupertinoPageRoute(
-          builder: (_) => CourseDetailPage(
-            courseId: widget.grade.id,
-            showZhiyun: false,
-          ),
+          builder: (_) =>
+              CourseDetailPage(courseId: grade.id, showZhiyun: false),
         ),
       );
     } catch (error, stackTrace) {
@@ -70,185 +34,124 @@ class _GradeCardState extends State<GradeCard>
         level: CelechronLogLevel.error,
         module: 'grade',
         operation: 'openCourseDetail',
-        message: 'gradeId=${widget.grade.id}',
+        message: 'gradeId=${grade.id}',
         error: error,
         stackTrace: stackTrace,
       );
     }
   }
 
+  void _handleTap(BuildContext context, GradeDetailController controller) {
+    if (controller.customGpaMode.value) {
+      final cur = controller.customGpaSelected[grade.id] ?? false;
+      controller.customGpaSelected[grade.id] = !cur;
+      controller.refreshCustomGpa();
+    } else {
+      _openCourseDetail(context);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    var brightness = CupertinoTheme.of(context).brightness ??
-        MediaQuery.of(context).platformBrightness;
-    var isDown = false;
-    var isCancel = false;
+    final colors = AelTheme.colorsOf(context);
+    final controller = Get.find<GradeDetailController>();
 
-    return GestureDetector(
-      onTapDown: (_) async {
-        isDown = true;
-        isCancel = false;
-        if (_gradeDetailController.customGpaMode.value) {
-          var cur = _gradeDetailController.customGpaSelected[widget.grade.id] ??
-              false;
-          _gradeDetailController.customGpaSelected[widget.grade.id] = !cur;
-        }
-        _animationController.forward();
-        await Future.delayed(const Duration(milliseconds: 125));
-        isDown = false;
-        if (isCancel) {
-          if (!_gradeDetailController.customGpaMode.value) {
-            _openCourseDetail(context);
-          }
-          if (mounted) _animationController.reverse();
-          isCancel = false;
-        }
-      },
-      onTapUp: (_) async {
-        isCancel = true;
-        if (!isDown && mounted) _animationController.reverse();
-      },
-      onTapCancel: () async {
-        if (mounted) _animationController.reverse();
-      },
-      onLongPress: () async {
-        isDown = true;
-        isCancel = false;
-        _animationController.forward();
-        await Future.delayed(const Duration(milliseconds: 125));
-        isDown = false;
-        _openCourseDetail(context);
-        if (mounted) _animationController.reverse();
-      },
-      child: Obx(
-        () => ScaleTransition(
-          scale: _scaleAnimation,
-          child: Container(
-            padding:
-                const EdgeInsets.only(left: 12, right: 12, bottom: 8, top: 8),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              color: brightness == Brightness.dark
-                  ? CupertinoColors.systemFill
-                  : CupertinoDynamicColor.resolve(
-                      widget.backgroundColor, context),
-              // boxShadow
-              boxShadow: [
-                BoxShadow(
-                  // Only show shadow in light mode
-                  color: CupertinoColors.black.withValues(alpha: 0.1),
-                  spreadRadius: 0,
-                  blurRadius: 12,
-                  offset: const Offset(0, 6), // changes position of shadow
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return Obx(() {
+      final highlighted = _isHighlighted(controller);
+      final customMode = controller.customGpaMode.value;
+
+      return AelSectionCard(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        cornerRadius: AelRadius.tile,
+        onTap: () => _handleTap(context, controller),
+        onLongPress: () => _openCourseDetail(context),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Row(
-                  children: [
-                    if (_gradeDetailController.customGpaMode.value)
-                      GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        child: SizedBox(
-                          height: 32.0,
-                          width: 32.0,
-                          child: CupertinoCheckbox(
-                            value: _gradeDetailController
-                                    .customGpaSelected[widget.grade.id] ??
-                                false,
-                            onChanged: (bool? value) {
-                              if (value != null) {
-                                _gradeDetailController
-                                    .customGpaSelected[widget.grade.id] = value;
-                                _gradeDetailController.refreshCustomGpa();
-                              }
-                            },
-                          ),
+                if (customMode)
+                  GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    child: SizedBox(
+                      height: 32.0,
+                      width: 32.0,
+                      child: CupertinoCheckbox(
+                        activeColor: colors.primary,
+                        value: controller.customGpaSelected[grade.id] ?? false,
+                        onChanged: (bool? value) {
+                          if (value != null) {
+                            controller.customGpaSelected[grade.id] = value;
+                            controller.refreshCustomGpa();
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        grade.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w600,
+                          color: highlighted
+                              ? colors.textPrimary
+                              : colors.textSecondary.withValues(alpha: 0.5),
                         ),
                       ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.grade.name,
-                            style: CupertinoTheme.of(context)
-                                .textTheme
-                                .textStyle
-                                .copyWith(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.normal,
-                                  color: CupertinoTheme.of(context)
-                                      .textTheme
-                                      .textStyle
-                                      .color!
-                                      .withValues(
-                                          alpha: isHighlighted() ? 1.0 : 0.5),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                          ),
-                          Text(
-                            '${widget.grade.realId} / ${widget.grade.credit.toStringAsFixed(1)} 学分',
-                            style: CupertinoTheme.of(context)
-                                .textTheme
-                                .textStyle
-                                .copyWith(
-                                  color: CupertinoTheme.of(context)
-                                      .textTheme
-                                      .textStyle
-                                      .color!
-                                      .withValues(alpha: 0.5),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.normal,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                          ),
-                        ],
+                      const SizedBox(height: 2),
+                      Text(
+                        '${grade.realId} / ${grade.credit.toStringAsFixed(1)} 学分',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colors.textTertiary,
+                        ),
                       ),
-                    ),
-                    Text(
-                      '${widget.grade.original} / ${widget.grade.fivePoint.toStringAsFixed(1)}',
-                      style: CupertinoTheme.of(context)
-                          .textTheme
-                          .textStyle
-                          .copyWith(
-                            fontSize: 20,
-                            fontWeight: FontWeight.normal,
-                            color: CupertinoTheme.of(context)
-                                .textTheme
-                                .textStyle
-                                .color!
-                                .withValues(alpha: isHighlighted() ? 1.0 : 0.5),
-                          ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 4),
-                SizedBox(
-                  height: 8,
-                  width: max(
-                      (context.width - 60) *
-                          (widget.grade.fivePoint - 1.4) /
-                          3.6,
-                      0),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: CupertinoDynamicColor.resolve(
-                          isHighlighted()
-                              ? CupertinoColors.systemTeal
-                              : CupertinoColors.systemGrey,
-                          context),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
+                Text(
+                  '${grade.original} / ${grade.fivePoint.toStringAsFixed(1)}',
+                  style: TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.3,
+                    color: highlighted
+                        ? colors.textPrimary
+                        : colors.textSecondary.withValues(alpha: 0.5),
                   ),
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 6),
+            Container(
+              height: 6,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: colors.tonalTileBg,
+                borderRadius: BorderRadius.circular(3),
+              ),
+              alignment: Alignment.centerLeft,
+              child: FractionallySizedBox(
+                widthFactor: ((grade.fivePoint - 1.4) / 3.6).clamp(0.0, 1.0),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: highlighted ? colors.primary : colors.outline,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
-      ),
-    );
+      );
+    });
   }
 }
