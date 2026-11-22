@@ -21,8 +21,8 @@ class AelIconBadge extends StatelessWidget {
   const AelIconBadge({
     super.key,
     required this.icon,
-    this.size = 42,
-    this.iconSize = 20,
+    this.size = 34,
+    this.iconSize = 17,
     this.backgroundColor,
     this.iconColor,
     this.style = AelIconBadgeStyle.cookie,
@@ -86,19 +86,21 @@ class AelSwitchTile extends StatelessWidget {
 
     final row = Padding(
       padding: EdgeInsets.symmetric(
-        horizontal: useTonalContainer ? 14 : 0,
-        vertical: useTonalContainer ? 12 : 4,
+        horizontal: useTonalContainer ? 12 : 0,
+        vertical: useTonalContainer ? 8 : 4,
       ),
       child: Row(
         children: [
           if (icon != null) ...[
             AelIconBadge(
               icon: icon!,
+              size: 34,
+              iconSize: 17,
               style: badgeStyle,
               backgroundColor: value ? colors.primary : colors.tonalTileBg,
               iconColor: value ? colors.onPrimary : colors.textSecondary,
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
           ],
           Expanded(
             child: Column(
@@ -111,7 +113,7 @@ class AelSwitchTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: enabled ? colors.textPrimary : colors.textTertiary,
-                    fontSize: 15.5,
+                    fontSize: 15,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -123,14 +125,15 @@ class AelSwitchTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: colors.textSecondary,
-                      fontSize: 12.5,
+                      fontSize: 12,
+                      height: 1.25,
                     ),
                   ),
                 ],
               ],
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           MiuixSwitch(value: value, enabled: enabled, onChanged: onChanged),
         ],
       ),
@@ -189,21 +192,21 @@ class AelListRow extends StatelessWidget {
     final colors = AelTheme.colorsOf(context);
     final row = Padding(
       padding: EdgeInsets.symmetric(
-        horizontal: useTonalContainer ? 14 : 0,
-        vertical: useTonalContainer ? 12 : 6,
+        horizontal: useTonalContainer ? 12 : 0,
+        vertical: useTonalContainer ? 8 : 4,
       ),
       child: Row(
         children: [
           if (icon != null) ...[
             AelIconBadge(
               icon: icon!,
-              size: 38,
-              iconSize: 18,
+              size: 34,
+              iconSize: 17,
               style: AelIconBadgeStyle.circle,
               backgroundColor: iconBgColor ?? colors.cardBg,
               iconColor: iconColor ?? colors.textSecondary,
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
           ],
           Expanded(
             child: Column(
@@ -216,7 +219,7 @@ class AelListRow extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: colors.textPrimary,
-                    fontSize: 15,
+                    fontSize: 14.5,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -228,7 +231,8 @@ class AelListRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: colors.textSecondary,
-                      fontSize: 12.5,
+                      fontSize: 12,
+                      height: 1.25,
                     ),
                   ),
                 ],
@@ -238,7 +242,7 @@ class AelListRow extends StatelessWidget {
           if (trailing != null) ...[const SizedBox(width: 8), trailing!],
           if (showChevron && onTap != null) ...[
             const SizedBox(width: 4),
-            Icon(AelIcons.chevronRight, size: 17, color: colors.textTertiary),
+            Icon(AelIcons.chevronRight, size: 16, color: colors.textTertiary),
           ],
         ],
       ),

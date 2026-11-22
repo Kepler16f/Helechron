@@ -184,155 +184,142 @@ class _FlowPageState extends State<FlowPage> {
       onTap: period.type == PeriodType.classes
           ? () => _openPeriodDetail(context, period)
           : null,
-      child: Stack(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Positioned.fill(
-            child: IgnorePointer(
-              child: CustomPaint(
-                painter: AelWavyEdgePainter(
-                  color: colors.tonalTileBg.withValues(alpha: 0.65),
-                  widthFraction: 0.30,
-                  amplitude: 8,
-                ),
-              ),
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          Row(
             children: [
-              Row(
-                children: [
-                  AelIconBadge(
-                    icon: _periodIcon(period.type),
-                    style: AelIconBadgeStyle.cookie,
-                    size: 46,
-                    iconSize: 21,
-                    backgroundColor: isOngoing
-                        ? colors.primary
-                        : colors.primaryContainer,
-                    iconColor: isOngoing
-                        ? colors.onPrimary
-                        : colors.onPrimaryContainer,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          period.summary,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: colors.textPrimary,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.3,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          period.friendlyTimeTodayBased,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: colors.textSecondary,
-                            fontSize: 13,
-                            fontFeatures: const [FontFeature.tabularFigures()],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (period.type == PeriodType.classes)
-                    AelHeroButton(
-                      icon: AelIcons.chevronRight,
-                      size: 44,
-                      iconSize: 20,
-                      tooltip: '查看课程详情',
-                      onPressed: () => _openPeriodDetail(context, period),
-                    ),
-                ],
+              AelIconBadge(
+                icon: _periodIcon(period.type),
+                style: AelIconBadgeStyle.cookie,
+                size: 46,
+                iconSize: 21,
+                backgroundColor: isOngoing
+                    ? colors.primary
+                    : colors.primaryContainer,
+                iconColor: isOngoing
+                    ? colors.onPrimary
+                    : colors.onPrimaryContainer,
               ),
-              const SizedBox(height: AelSpacing.md),
-              Row(
-                children: [
-                  Expanded(
-                    child: Obx(() {
-                      final now = _flowController.timeNow.value;
-                      final started = period.startTime.isBefore(now);
-                      final diff = started
-                          ? period.endTime.difference(now)
-                          : period.startTime.difference(now);
-                      return AelStatTile(
-                        icon: AelIcons.tabFlow,
-                        iconColor: isOngoing ? colors.primary : accent,
-                        label: started ? '离结束还有' : '开始还有',
-                        value: TimeHelper.toHMS(diff),
-                        valueColor: isOngoing
-                            ? colors.primary
-                            : colors.textPrimary,
-                        subtitle: started ? '专注当前安排' : '准备下一程',
-                      );
-                    }),
-                  ),
-                  const SizedBox(width: AelSpacing.sm),
-                  Expanded(
-                    child: AelStatTile(
-                      icon: AelIcons.location,
-                      iconColor: accent,
-                      label: '地点',
-                      value: period.location.isNotEmpty
-                          ? period.location
-                          : '未指定',
-                      subtitle: _periodTypeLabel(period.type),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AelSpacing.md),
-              LayoutBuilder(
-                builder: (context, constraints) => Stack(
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(
-                      height: 8,
-                      width: constraints.maxWidth,
-                      child: DecoratedBox(
-                        decoration: ShapeDecoration(
-                          color: colors.tonalTileBg,
-                          shape: AelShapes.squircle(AelRadius.pill),
-                        ),
+                    Text(
+                      period.summary,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: colors.textPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.3,
                       ),
                     ),
-                    Obx(() {
-                      final double ratio;
-                      if (_flowController.isDuringFlow) {
-                        final elapsed = _flowController.timeNow.value
-                            .difference(period.startTime)
-                            .inMilliseconds;
-                        final total = period.endTime
-                            .difference(period.startTime)
-                            .inMilliseconds;
-                        ratio = total > 0
-                            ? (elapsed / total).clamp(0.0, 1.0)
-                            : 0.0;
-                      } else {
-                        ratio = 1.0;
-                      }
-                      return AnimatedContainer(
-                        duration: AelDurations.fast,
-                        height: 8,
-                        width: max(constraints.maxWidth * ratio, 0.0),
-                        decoration: ShapeDecoration(
-                          color: isOngoing ? colors.primary : accent,
-                          shape: AelShapes.squircle(AelRadius.pill),
-                        ),
-                      );
-                    }),
+                    const SizedBox(height: 3),
+                    Text(
+                      period.friendlyTimeTodayBased,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: colors.textSecondary,
+                        fontSize: 13,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
                   ],
                 ),
               ),
+              if (period.type == PeriodType.classes)
+                AelHeroButton(
+                  icon: AelIcons.chevronRight,
+                  size: 44,
+                  iconSize: 20,
+                  tooltip: '查看课程详情',
+                  onPressed: () => _openPeriodDetail(context, period),
+                ),
             ],
+          ),
+          const SizedBox(height: AelSpacing.md),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: Obx(() {
+                    final now = _flowController.timeNow.value;
+                    final started = period.startTime.isBefore(now);
+                    final diff = started
+                        ? period.endTime.difference(now)
+                        : period.startTime.difference(now);
+                    return AelStatTile(
+                      icon: AelIcons.tabFlow,
+                      iconColor: isOngoing ? colors.primary : accent,
+                      label: started ? '离结束还有' : '开始还有',
+                      value: TimeHelper.toHMS(diff),
+                      valueFontSize: 20,
+                      valueColor: isOngoing
+                          ? colors.primary
+                          : colors.textPrimary,
+                      subtitle: started ? '专注当前安排' : '准备下一程',
+                    );
+                  }),
+                ),
+                const SizedBox(width: AelSpacing.sm),
+                Expanded(
+                  child: AelStatTile(
+                    icon: AelIcons.location,
+                    iconColor: accent,
+                    label: '地点',
+                    value: period.location.isNotEmpty ? period.location : '未指定',
+                    valueFontSize: 15,
+                    valueMaxLines: 2,
+                    subtitle: _periodTypeLabel(period.type),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AelSpacing.md),
+          LayoutBuilder(
+            builder: (context, constraints) => Stack(
+              children: [
+                SizedBox(
+                  height: 8,
+                  width: constraints.maxWidth,
+                  child: DecoratedBox(
+                    decoration: ShapeDecoration(
+                      color: colors.tonalTileBg,
+                      shape: AelShapes.squircle(AelRadius.pill),
+                    ),
+                  ),
+                ),
+                Obx(() {
+                  final double ratio;
+                  if (_flowController.isDuringFlow) {
+                    final elapsed = _flowController.timeNow.value
+                        .difference(period.startTime)
+                        .inMilliseconds;
+                    final total = period.endTime
+                        .difference(period.startTime)
+                        .inMilliseconds;
+                    ratio = total > 0 ? (elapsed / total).clamp(0.0, 1.0) : 0.0;
+                  } else {
+                    ratio = 1.0;
+                  }
+                  return AnimatedContainer(
+                    duration: AelDurations.fast,
+                    height: 8,
+                    width: max(constraints.maxWidth * ratio, 0.0),
+                    decoration: ShapeDecoration(
+                      color: isOngoing ? colors.primary : accent,
+                      shape: AelShapes.squircle(AelRadius.pill),
+                    ),
+                  );
+                }),
+              ],
+            ),
           ),
         ],
       ),

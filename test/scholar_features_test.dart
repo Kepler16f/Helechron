@@ -48,7 +48,8 @@ void main() {
       final grade = Grade.empty()..id = '123'..name = '测试课'..credit = 2.0;
 
       expect(CreditProgressController.normalizeCategory('通识必修课', grade), '通识必修课');
-      expect(CreditProgressController.normalizeCategory('通识核心课程', grade), '通识选修课');
+      expect(CreditProgressController.normalizeCategory('通识核心课程', grade), '通识核心课');
+      expect(CreditProgressController.normalizeCategory('通识选修课程', grade), '通识选修课');
       expect(CreditProgressController.normalizeCategory('学科基础课', grade), '大类基础课');
       expect(CreditProgressController.normalizeCategory('专业核心课', grade), '专业必修课');
       expect(CreditProgressController.normalizeCategory('专业方向课', grade), '专业选修课');

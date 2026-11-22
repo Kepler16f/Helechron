@@ -65,7 +65,7 @@ class AppearanceSection extends StatelessWidget {
               onTap: () => _showSourcePicker(context, monetSupported),
             ),
             if (source == ThemeColorSource.custom) ...[
-              const SizedBox(height: AelSpacing.sm),
+              const SizedBox(height: 6),
               DecoratedBox(
                 decoration: ShapeDecoration(
                   color: colors.tonalTileBg,
@@ -85,7 +85,7 @@ class AppearanceSection extends StatelessWidget {
                 ),
               ),
             ],
-            const SizedBox(height: AelSpacing.sm),
+            const SizedBox(height: 6),
             AelListRow(
               title: '配色风格',
               subtitle: '决定莫奈/主题色生成整套配色的方式',
@@ -95,7 +95,7 @@ class AppearanceSection extends StatelessWidget {
               trailing: Text(style.label, style: trailingStyle),
               onTap: () => _showStylePicker(context),
             ),
-            const SizedBox(height: AelSpacing.sm),
+            const SizedBox(height: 6),
             AelListRow(
               title: '对比度',
               subtitle: '提高文字与背景对比，便于阅读',
@@ -105,7 +105,7 @@ class AppearanceSection extends StatelessWidget {
               trailing: Text(contrast.label, style: trailingStyle),
               onTap: () => _showContrastPicker(context),
             ),
-            const SizedBox(height: AelSpacing.sm),
+            const SizedBox(height: 6),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Text(

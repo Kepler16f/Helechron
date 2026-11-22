@@ -148,7 +148,7 @@ class OptionPage extends StatelessWidget {
                 ),
                 onTap: () => _confirmLogout(context),
               ),
-              const SizedBox(height: AelSpacing.sm),
+              const SizedBox(height: 6),
               DecoratedBox(
                 decoration: ShapeDecoration(
                   color: colors.tonalTileBg,
@@ -186,7 +186,7 @@ class OptionPage extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: AelSpacing.sm),
+              const SizedBox(height: 6),
               Obx(
                 () => AelSwitchTile(
                   title: '隐藏绩点',
@@ -198,7 +198,7 @@ class OptionPage extends StatelessWidget {
                   },
                 ),
               ),
-              const SizedBox(height: AelSpacing.sm),
+              const SizedBox(height: 6),
               AelListRow(
                 title: '自定义课程代码映射',
                 icon: AelIcons.edit,
@@ -210,7 +210,7 @@ class OptionPage extends StatelessWidget {
                   );
                 },
               ),
-              const SizedBox(height: AelSpacing.sm),
+              const SizedBox(height: 6),
               Obx(
                 () => AelSwitchTile(
                   title: '异步刷新',
@@ -222,7 +222,7 @@ class OptionPage extends StatelessWidget {
                   },
                 ),
               ),
-              const SizedBox(height: AelSpacing.sm),
+              const SizedBox(height: 6),
               AelSwitchTile(
                 title: '推送成绩变动',
                 icon: AelIcons.bell,
@@ -234,7 +234,7 @@ class OptionPage extends StatelessWidget {
                       }
                     : null,
               ),
-              const SizedBox(height: AelSpacing.sm),
+              const SizedBox(height: 6),
               AelSwitchTile(
                 title: '推送作业截止提醒',
                 icon: AelIcons.homework,
@@ -246,7 +246,7 @@ class OptionPage extends StatelessWidget {
                       }
                     : null,
               ),
-              const SizedBox(height: AelSpacing.sm),
+              const SizedBox(height: 6),
               AelSwitchTile(
                 title: '推送考前 1 小时提醒',
                 subtitle: '考试开始前 1 小时发送座位号与物品清单通知',
@@ -303,7 +303,7 @@ class OptionPage extends StatelessWidget {
             ),
             onTap: () => _showWorkTimePicker(context),
           ),
-          const SizedBox(height: AelSpacing.sm),
+          const SizedBox(height: 6),
           AelListRow(
             title: '休息段时间长度',
             icon: AelIcons.sun,
@@ -315,7 +315,7 @@ class OptionPage extends StatelessWidget {
             ),
             onTap: () => _showRestTimePicker(context),
           ),
-          const SizedBox(height: AelSpacing.sm),
+          const SizedBox(height: 6),
           AelListRow(
             title: '可用的工作时段',
             icon: AelIcons.tabFlow,
@@ -362,7 +362,7 @@ class OptionPage extends StatelessWidget {
                 },
               ),
             ),
-            const SizedBox(height: AelSpacing.sm),
+            const SizedBox(height: 6),
             DecoratedBox(
               decoration: ShapeDecoration(
                 color: colors.tonalTileBg,
@@ -411,7 +411,7 @@ class OptionPage extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: AelSpacing.sm),
+            const SizedBox(height: 6),
             Opacity(
               opacity: syncEnabled ? 1 : 0.5,
               child: AelListRow(
@@ -425,13 +425,13 @@ class OptionPage extends StatelessWidget {
                     : null,
               ),
             ),
-            const SizedBox(height: AelSpacing.sm),
+            const SizedBox(height: 6),
             AelListRow(
               title: '导出为iCal文件',
               icon: AelIcons.share,
               onTap: () => _optionController.showExportDialog(context),
             ),
-            const SizedBox(height: AelSpacing.sm),
+            const SizedBox(height: 6),
             AelListRow(
               key: ValueKey(
                 'import_ics_${_optionController.icsImportKey.value}',
@@ -464,7 +464,7 @@ class OptionPage extends StatelessWidget {
               icon: AelIcons.share,
               onTap: () => _optionController.exportBackup(),
             ),
-            const SizedBox(height: AelSpacing.sm),
+            const SizedBox(height: 6),
             AelListRow(
               key: ValueKey(
                 'import_backup_${_optionController.backupActionKey.value}',
@@ -497,7 +497,7 @@ class OptionPage extends StatelessWidget {
               ).pushNamed('/ecardpaypage');
             },
           ),
-          const SizedBox(height: AelSpacing.sm),
+          const SizedBox(height: 6),
           AelListRow(
             title: '校园卡账单与消费统计',
             subtitle: '按月查看流水、餐饮/商超/水电分类消费占比',
@@ -508,7 +508,7 @@ class OptionPage extends StatelessWidget {
               );
             },
           ),
-          const SizedBox(height: AelSpacing.sm),
+          const SizedBox(height: 6),
           Obx(() {
             final threshold = _optionController.ecardLowBalanceThreshold;
             final label = threshold <= 0
@@ -522,7 +522,7 @@ class OptionPage extends StatelessWidget {
               onTap: () => _showLowBalanceThresholdPicker(context),
             );
           }),
-          const SizedBox(height: AelSpacing.sm),
+          const SizedBox(height: 6),
           Obx(() {
             final path = _optionController.downloadPath;
             final displayPath = path.isEmpty ? '应用默认目录' : path;
@@ -577,7 +577,7 @@ class OptionPage extends StatelessWidget {
             ),
             onTap: () => _showBrightnessPicker(context),
           ),
-          const SizedBox(height: AelSpacing.sm),
+          const SizedBox(height: 6),
           Obx(
             () => AelSwitchTile(
               title: '悬浮底栏',
@@ -590,7 +590,7 @@ class OptionPage extends StatelessWidget {
               },
             ),
           ),
-          const SizedBox(height: AelSpacing.sm),
+          const SizedBox(height: 6),
           Obx(
             () => AelSwitchTile(
               title: '沉浸光感',
@@ -605,7 +605,7 @@ class OptionPage extends StatelessWidget {
                   : null,
             ),
           ),
-          const SizedBox(height: AelSpacing.sm),
+          const SizedBox(height: 6),
           Obx(
             () => Opacity(
               opacity: _optionController.bottomBarImmersiveLight ? 1 : 0.5,
@@ -667,7 +667,7 @@ class OptionPage extends StatelessWidget {
               ),
               onTap: () => _optionController.manualCheckUpdate(context),
             ),
-            const SizedBox(height: AelSpacing.sm),
+            const SizedBox(height: 6),
             Obx(
               () => AelSwitchTile(
                 title: '启动时自动检查更新',
@@ -678,7 +678,7 @@ class OptionPage extends StatelessWidget {
                     _optionController.toggleAutoCheckUpdate(value),
               ),
             ),
-            const SizedBox(height: AelSpacing.sm),
+            const SizedBox(height: 6),
           ],
           AelListRow(
             title: '关于 Helechron',
@@ -696,7 +696,7 @@ class OptionPage extends StatelessWidget {
               );
             },
           ),
-          const SizedBox(height: AelSpacing.sm),
+          const SizedBox(height: 6),
           AelListRow(
             title: '隐私政策',
             icon: AelIcons.shield,
@@ -712,7 +712,7 @@ class OptionPage extends StatelessWidget {
               );
             },
           ),
-          const SizedBox(height: AelSpacing.sm),
+          const SizedBox(height: 6),
           AelListRow(
             title: '用户协议',
             icon: AelIcons.file,
@@ -728,14 +728,14 @@ class OptionPage extends StatelessWidget {
               );
             },
           ),
-          const SizedBox(height: AelSpacing.sm),
+          const SizedBox(height: 6),
           AelListRow(
             title: 'ICP 备案号',
             icon: AelIcons.globe,
             showChevron: false,
             trailing: _trailingText(context, icpFilingNumber),
           ),
-          const SizedBox(height: AelSpacing.sm),
+          const SizedBox(height: 6),
           AelListRow(
             title: '开源许可证',
             icon: AelIcons.book,
@@ -747,7 +747,7 @@ class OptionPage extends StatelessWidget {
               );
             },
           ),
-          const SizedBox(height: AelSpacing.sm),
+          const SizedBox(height: 6),
           AelListRow(
             title: 'Helechron项目网站',
             icon: AelIcons.externalLink,

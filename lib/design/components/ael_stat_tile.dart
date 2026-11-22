@@ -20,6 +20,9 @@ class AelStatTile extends StatelessWidget {
     this.icon,
     this.iconColor,
     this.valueColor,
+    this.valueFontSize,
+    this.valueMaxLines = 1,
+    this.valueOverflow = TextOverflow.ellipsis,
     this.backgroundColor,
     this.padding = const EdgeInsets.all(14),
     this.onTap,
@@ -32,6 +35,9 @@ class AelStatTile extends StatelessWidget {
   final IconData? icon;
   final Color? iconColor;
   final Color? valueColor;
+  final double? valueFontSize;
+  final int valueMaxLines;
+  final TextOverflow valueOverflow;
   final Color? backgroundColor;
   final EdgeInsetsGeometry padding;
   final VoidCallback? onTap;
@@ -82,14 +88,17 @@ class AelStatTile extends StatelessWidget {
               Flexible(
                 child: Text(
                   value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  maxLines: valueMaxLines,
+                  overflow: valueOverflow,
                   style: TextStyle(
                     color: valueColor ?? colors.textPrimary,
-                    fontSize: 24,
+                    fontSize: valueFontSize ?? 24,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: -0.5,
-                    height: 1.1,
+                    letterSpacing:
+                        (valueFontSize != null && valueFontSize! < 20)
+                        ? -0.2
+                        : -0.5,
+                    height: 1.15,
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),

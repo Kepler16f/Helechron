@@ -133,30 +133,36 @@ class ExamWeekBanner extends StatelessWidget {
               ],
             ),
             const SizedBox(height: AelSpacing.md),
-            Row(
-              children: [
-                Expanded(
-                  child: AelStatTile(
-                    icon: AelIcons.location,
-                    iconColor: accent,
-                    label: '考场',
-                    value: next.location?.isNotEmpty == true
-                        ? next.location!
-                        : '待公布',
-                    subtitle: next.chineseTime,
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: AelStatTile(
+                      icon: AelIcons.location,
+                      iconColor: accent,
+                      label: '考场',
+                      value: next.location?.isNotEmpty == true
+                          ? next.location!
+                          : '待公布',
+                      valueFontSize: 15,
+                      valueMaxLines: 2,
+                      subtitle: next.chineseTime,
+                    ),
                   ),
-                ),
-                const SizedBox(width: AelSpacing.sm),
-                Expanded(
-                  child: AelStatTile(
-                    icon: AelIcons.exam,
-                    iconColor: accent,
-                    label: '座位号',
-                    value: next.seat?.isNotEmpty == true ? next.seat! : '未分配',
-                    subtitle: '携带证件与文具',
+                  const SizedBox(width: AelSpacing.sm),
+                  Expanded(
+                    child: AelStatTile(
+                      icon: AelIcons.exam,
+                      iconColor: accent,
+                      label: '座位号',
+                      value: next.seat?.isNotEmpty == true ? next.seat! : '未分配',
+                      valueFontSize: 18,
+                      subtitle: '携带证件与文具',
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             if (others.isNotEmpty) ...[
               const SizedBox(height: AelSpacing.md),
