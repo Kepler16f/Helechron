@@ -244,10 +244,13 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
 
     if (autoPlayFirstTime && _isLiveMode && !_autoLaunched) {
       _autoLaunched = true;
-      final launchUrl =
-          streams.isNotEmpty ? streams.first.url : _currentLivingroomUrl;
-      if (launchUrl.isNotEmpty) {
-        await _launchInAppPlayer(launchUrl, preferWeb: streams.isEmpty);
+      // For live mode, always open the web player (livingroom URL) directly,
+      // matching the same behaviour as replay web playback.
+      final webUrl = _currentLivingroomUrl.isNotEmpty
+          ? _currentLivingroomUrl
+          : (streams.isNotEmpty ? streams.first.url : '');
+      if (webUrl.isNotEmpty) {
+        await _launchInAppPlayer(webUrl, preferWeb: true);
       }
     }
   }
@@ -292,7 +295,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
             lowerUrl.contains('.m3u8') ||
             lowerUrl.contains('.flv') ||
             lowerUrl.contains('.ts'));
-    final openWebDirectly = preferWeb || !isDirect;
+    final openWebDirectly = preferWeb || !isDirect || _isLiveMode;
 
     final bool streamIsLive = _isLiveMode ||
         _streams.firstWhereOrNull((s) => s.url == url)?.isLive == true;
@@ -851,9 +854,14 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
               child: CupertinoButton.filled(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 borderRadius: BorderRadius.circular(12),
-                onPressed: activeStream == null
-                    ? null
-                    : () => _launchInAppPlayer(activeStream.url),
+                onPressed: _isLiveMode
+                    ? () => _launchInAppPlayer(
+                          _currentLivingroomUrl,
+                          preferWeb: true,
+                        )
+                    : (activeStream == null
+                        ? null
+                        : () => _launchInAppPlayer(activeStream.url)),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -861,8 +869,8 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                         size: 20, color: CupertinoColors.white),
                     const SizedBox(width: 8),
                     Text(
-                      activeStream?.isLive == true
-                          ? '观看实时直播 (${activeStream!.label})'
+                      _isLiveMode
+                          ? '观看实时直播（网页播放器）'
                           : '播放视频 (${activeStream?.label ?? "回放"})',
                       style: const TextStyle(
                           fontSize: 15, fontWeight: FontWeight.w600),
