@@ -1,8 +1,13 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' show SelectableText;
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/icons/ael_icons.dart';
+import 'package:celechron/design/persistent_headers.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/utils/legal_links.dart';
 
 /// 展示打包在 assets 中的法律文本，保证无网络时也能查看。
@@ -36,62 +41,76 @@ class LegalDocumentPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        middle: Text(title),
-      ),
+      backgroundColor: colors.pageBg,
       child: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             Expanded(
-              child: FutureBuilder<String>(
-                future: rootBundle.loadString(assetPath),
-                builder: (context, snapshot) {
-                  if (snapshot.hasError) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          '文档加载失败：${snapshot.error}',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    );
-                  }
-                  if (!snapshot.hasData) {
-                    return const Center(child: CupertinoActivityIndicator());
-                  }
-                  return SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        SelectableText(
-                          resolvePlaceholders(snapshot.data!),
-                          style: TextStyle(
-                            fontSize: 15,
-                            height: 1.65,
-                            color: CupertinoDynamicColor.resolve(
-                              CupertinoColors.label,
-                              context,
-                            ),
-                          ),
-                        ),
-                        if (onlineUrl != null && onlineUrl!.isNotEmpty) ...[
-                          const SizedBox(height: 24),
-                          CupertinoButton(
-                            padding: EdgeInsets.zero,
-                            onPressed: () => launchUrlString(
-                              onlineUrl!,
-                              mode: LaunchMode.externalApplication,
-                            ),
-                            child: const Text('在线查看最新版本'),
-                          ),
-                        ],
-                      ],
+              child: CustomScrollView(
+                slivers: [
+                  CelechronSliverTextHeader(subtitle: title),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AelSpacing.pageHorizontal,
+                      AelSpacing.sm,
+                      AelSpacing.pageHorizontal,
+                      AelSpacing.xl,
                     ),
-                  );
-                },
+                    sliver: SliverToBoxAdapter(
+                      child: FutureBuilder<String>(
+                        future: rootBundle.loadString(assetPath),
+                        builder: (context, snapshot) {
+                          if (snapshot.hasError) {
+                            return AelEmptyState(
+                              icon: AelIcons.error,
+                              title: '文档加载失败',
+                              subtitle: '${snapshot.error}',
+                            );
+                          }
+                          if (!snapshot.hasData) {
+                            return const Padding(
+                              padding: EdgeInsets.all(32),
+                              child: Center(
+                                child: CupertinoActivityIndicator(),
+                              ),
+                            );
+                          }
+                          return AelSectionCard(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                SelectableText(
+                                  resolvePlaceholders(snapshot.data!),
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    height: 1.65,
+                                    color: colors.textPrimary,
+                                  ),
+                                ),
+                                if (onlineUrl != null &&
+                                    onlineUrl!.isNotEmpty) ...[
+                                  const SizedBox(height: AelSpacing.lg),
+                                  AelButton(
+                                    variant: AelButtonVariant.tonal,
+                                    icon: AelIcons.externalLink,
+                                    label: '在线查看最新版本',
+                                    onPressed: () => launchUrlString(
+                                      onlineUrl!,
+                                      mode: LaunchMode.externalApplication,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             if (footer != null) footer!,

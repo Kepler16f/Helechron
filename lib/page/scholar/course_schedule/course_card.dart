@@ -1,3 +1,5 @@
+import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/page/scholar/course_detail/course_detail_view.dart';
 import 'package:flutter/cupertino.dart';
 
@@ -5,7 +7,7 @@ import 'package:celechron/model/session.dart';
 
 class SessionCard extends StatefulWidget {
   final List<Session> sessionList;
-  final CupertinoDynamicColor backgroundColor;
+  final Color? backgroundColor;
   final bool hideInfomation;
   final String? preferredHalfTag;
 
@@ -14,10 +16,7 @@ class SessionCard extends StatefulWidget {
     required this.sessionList,
     this.hideInfomation = false,
     this.preferredHalfTag,
-    this.backgroundColor = const CupertinoDynamicColor.withBrightness(
-      color: Color.fromRGBO(0, 141, 236, 1.0),
-      darkColor: Color.fromRGBO(0, 108, 180, 1.0),
-    ),
+    this.backgroundColor,
   });
 
   @override
@@ -38,10 +37,7 @@ class _SessionCardState extends State<SessionCard>
       reverseDuration: const Duration(milliseconds: 400),
     );
     _scaleAnimation = Tween<double>(begin: 1, end: 0.95).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeInOut,
-      ),
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
   }
 
@@ -104,17 +100,19 @@ class _SessionCardState extends State<SessionCard>
             context: context,
             builder: (BuildContext context) {
               return CupertinoAlertDialog(
-                title: const Text(
-                  '要查看哪一个？',
-                ),
+                title: const Text('要查看哪一个？'),
                 content: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     for (var s in widget.sessionList)
                       CupertinoButton(
                         minSize: 22.0,
-                        padding:
-                            const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 0.0),
+                        padding: const EdgeInsets.fromLTRB(
+                          16.0,
+                          16.0,
+                          16.0,
+                          0.0,
+                        ),
                         child: Text(
                           s.name,
                           textAlign: TextAlign.center,
@@ -141,7 +139,7 @@ class _SessionCardState extends State<SessionCard>
                     onPressed: () async {
                       Navigator.of(context).pop();
                     },
-                  )
+                  ),
                 ],
               );
             },
@@ -160,14 +158,18 @@ class _SessionCardState extends State<SessionCard>
           child: Container(
             alignment: Alignment.topCenter,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(4),
-              color: CupertinoDynamicColor.resolve(
-                  widget.backgroundColor, context),
+              borderRadius: BorderRadius.circular(6),
+              color:
+                  widget.backgroundColor ?? AelTheme.colorsOf(context).primary,
             ),
             child: ClipRect(
               child: Padding(
                 padding: const EdgeInsets.only(
-                    left: 2.0, right: 2.0, top: 2.0, bottom: 2.0),
+                  left: 2.0,
+                  right: 2.0,
+                  top: 2.0,
+                  bottom: 2.0,
+                ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
@@ -180,17 +182,16 @@ class _SessionCardState extends State<SessionCard>
                         textAlign: TextAlign.center,
                         maxLines: widget.sessionList.length == 1
                             ? 3 // 单课程最多3行
-                            : (widget.sessionList.length * 2)
-                                .clamp(2, 6), // 冲突课程最多6行
+                            : (widget.sessionList.length * 2).clamp(
+                                2,
+                                6,
+                              ), // 冲突课程最多6行
                         overflow: TextOverflow.ellipsis,
-                        style: CupertinoTheme.of(context)
-                            .textTheme
-                            .textStyle
-                            .copyWith(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: const Color.fromRGBO(255, 255, 255, 1.0),
-                            ),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: AelTheme.colorsOf(context).onPrimary,
+                        ),
                       ),
                     ),
                     if (!widget.hideInfomation &&
@@ -203,13 +204,12 @@ class _SessionCardState extends State<SessionCard>
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.center,
-                          style: CupertinoTheme.of(context)
-                              .textTheme
-                              .textStyle
-                              .copyWith(
-                                fontSize: 9,
-                                color: const Color.fromRGBO(255, 255, 255, 0.9),
-                              ),
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: AelTheme.colorsOf(
+                              context,
+                            ).onPrimary.withValues(alpha: 0.9),
+                          ),
                         ),
                       ),
                     ],

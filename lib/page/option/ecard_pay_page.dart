@@ -16,6 +16,11 @@ import 'package:celechron/model/option.dart';
 import 'ecard_bill_page.dart';
 import '../../http/zjuServices/ecard.dart';
 import '../../http/zjuServices/network_defense.dart';
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/icons/ael_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 enum _ViewState { loading, notLoggedIn, error, showing }
 
@@ -114,8 +119,9 @@ class _ECardPayPageState extends State<ECardPayPage>
         account = await ECard.getAccount(_httpClient, synjonesAuth);
       } catch (_) {
         // synjonesAuth 可能在墓碑后台过期，自动重登一次
-        final reloginOk =
-            await ECardWidgetMessenger.update(notifyNative: false);
+        final reloginOk = await ECardWidgetMessenger.update(
+          notifyNative: false,
+        );
         if (reloginOk) {
           synjonesAuth = await secureStorage.read(key: 'synjonesAuth') ?? '';
           account = await secureStorage.read(key: 'eCardAccount') ?? '';
@@ -141,8 +147,9 @@ class _ECardPayPageState extends State<ECardPayPage>
       } catch (firstErr) {
         // 墓碑后台唤醒或长时间未打开后 synjonesAuth 过期（HTTP 401/302/HTML 登录页）：
         // 自动调用 CAS + Synjones OAuth2 重登并重试一次取码
-        final reloginOk =
-            await ECardWidgetMessenger.update(notifyNative: false);
+        final reloginOk = await ECardWidgetMessenger.update(
+          notifyNative: false,
+        );
         if (!reloginOk) {
           rethrow;
         }
@@ -165,7 +172,9 @@ class _ECardPayPageState extends State<ECardPayPage>
       _viewState.value = _ViewState.showing;
       await secureStorage.write(key: _cacheKeyCode, value: code);
       await secureStorage.write(
-          key: _cacheKeyTime, value: fetchedAt.toIso8601String());
+        key: _cacheKeyTime,
+        value: fetchedAt.toIso8601String(),
+      );
       await _syncPaymentCode(code, auth: synjonesAuth, account: account);
       _scheduleCountdown(fetchedAt);
       unawaited(_loadBalance(synjonesAuth, account));
@@ -191,7 +200,8 @@ class _ECardPayPageState extends State<ECardPayPage>
   }
 
   Future<_CachedBarcode?> _readCachedBarcode(
-      FlutterSecureStorage secureStorage) async {
+    FlutterSecureStorage secureStorage,
+  ) async {
     final code = await secureStorage.read(key: _cacheKeyCode);
     final timeStr = await secureStorage.read(key: _cacheKeyTime);
     if (code == null || code.isEmpty || timeStr == null) return null;
@@ -202,12 +212,16 @@ class _ECardPayPageState extends State<ECardPayPage>
     return _CachedBarcode(code, t);
   }
 
-  static final RegExp _validBarcodePattern =
-      RegExp(r'^[A-Za-z0-9+/=_\-]{14,64}$');
+  static final RegExp _validBarcodePattern = RegExp(
+    r'^[A-Za-z0-9+/=_\-]{14,64}$',
+  );
   static bool _isValidBarcode(String s) => _validBarcodePattern.hasMatch(s);
 
-  Future<void> _syncPaymentCode(String code,
-      {String? auth, String? account}) async {
+  Future<void> _syncPaymentCode(
+    String code, {
+    String? auth,
+    String? account,
+  }) async {
     await OhosNativeService.instance.updatePaymentCodeWidget(code: code);
     if (auth != null && auth.isNotEmpty) {
       const secureStorage = FlutterSecureStorage();
@@ -225,7 +239,8 @@ class _ECardPayPageState extends State<ECardPayPage>
   void _scheduleCountdown(DateTime fetchedAt) {
     _cancelTimers();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      final remaining = _barcodeTtl.inSeconds -
+      final remaining =
+          _barcodeTtl.inSeconds -
           DateTime.now().difference(fetchedAt).inSeconds;
       _secondsRemaining.value = remaining > 0 ? remaining : 0;
       if (remaining <= 0) {
@@ -258,51 +273,67 @@ class _ECardPayPageState extends State<ECardPayPage>
   }
 
   Widget _buildCenter(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     final state = _viewState.value;
     switch (state) {
       case _ViewState.loading:
-        return const Column(
+        return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CupertinoActivityIndicator(radius: 14),
-            SizedBox(height: 12),
-            Text('加载中...', style: TextStyle(fontSize: 13)),
+            const CupertinoActivityIndicator(radius: 14),
+            const SizedBox(height: 12),
+            Text(
+              '加载中...',
+              style: TextStyle(fontSize: 13, color: colors.textSecondary),
+            ),
           ],
         );
       case _ViewState.notLoggedIn:
-        return const Column(
+        return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(CupertinoIcons.creditcard,
-                size: 56, color: CupertinoColors.systemGrey),
-            SizedBox(height: 12),
-            Text('尚未登录校园卡',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-            SizedBox(height: 6),
-            Text('请到"设置 → 校园卡账户"完成登录后查看付款码',
-                textAlign: TextAlign.center,
-                style:
-                    TextStyle(fontSize: 12, color: CupertinoColors.systemGrey)),
+            Icon(AelIcons.wallet, size: 56, color: colors.textTertiary),
+            const SizedBox(height: 12),
+            Text(
+              '尚未登录校园卡',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: colors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '请到"设置 → 校园卡账户"完成登录后查看付款码',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: colors.textTertiary),
+            ),
           ],
         );
       case _ViewState.error:
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(CupertinoIcons.exclamationmark_circle,
-                size: 48, color: CupertinoColors.systemRed),
+            Icon(AelIcons.error, size: 48, color: colors.error),
             const SizedBox(height: 12),
-            const Text('获取付款码失败',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+            Text(
+              '获取付款码失败',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: colors.textPrimary,
+              ),
+            ),
             const SizedBox(height: 6),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Text(_errorMsg.value,
-                  textAlign: TextAlign.center,
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      fontSize: 11, color: CupertinoColors.systemGrey)),
+              child: Text(
+                _errorMsg.value,
+                textAlign: TextAlign.center,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11, color: colors.textTertiary),
+              ),
             ),
           ],
         );
@@ -322,13 +353,13 @@ class _ECardPayPageState extends State<ECardPayPage>
             height: 204,
             padding: const EdgeInsets.all(22),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: const [
+              color: AelSemanticPalette.pureWhite,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
                 BoxShadow(
-                  color: Color(0x14000000),
+                  color: colors.textPrimary.withValues(alpha: 0.08),
                   blurRadius: 12,
-                  offset: Offset(0, 4),
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
@@ -338,7 +369,7 @@ class _ECardPayPageState extends State<ECardPayPage>
               errorCorrectionLevel: QrErrorCorrectLevel.M,
               size: 160,
               padding: EdgeInsets.zero,
-              backgroundColor: Colors.white,
+              backgroundColor: AelSemanticPalette.pureWhite,
             ),
           ),
         );
@@ -346,24 +377,28 @@ class _ECardPayPageState extends State<ECardPayPage>
   }
 
   Widget _buildSubtitle(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     final state = _viewState.value;
     switch (state) {
       case _ViewState.showing:
         if (_isCached.value) {
-          final age =
-              DateTime.now().difference(_fetchedAt.value ?? DateTime.now());
+          final age = DateTime.now().difference(
+            _fetchedAt.value ?? DateTime.now(),
+          );
           return Text(
             '缓存码 · ${age.inSeconds < 60 ? '${age.inSeconds}秒前' : '${age.inMinutes}分钟前'}',
-            style: const TextStyle(
-                fontSize: 12, color: CupertinoColors.systemOrange),
+            style: TextStyle(fontSize: 12, color: colors.warning),
           );
         }
         return Text(
           '剩余 ${_secondsRemaining.value}s 自动刷新 · 点击二维码可刷新',
-          style: const TextStyle(fontSize: 12),
+          style: TextStyle(fontSize: 12, color: colors.textSecondary),
         );
       case _ViewState.error:
-        return const Text('付款码获取失败', style: TextStyle(fontSize: 12));
+        return Text(
+          '付款码获取失败',
+          style: TextStyle(fontSize: 12, color: colors.error),
+        );
       case _ViewState.notLoggedIn:
         return const SizedBox.shrink();
       case _ViewState.loading:
@@ -373,23 +408,24 @@ class _ECardPayPageState extends State<ECardPayPage>
 
   Widget _buildCodeValue() {
     if (_code.value.isEmpty) return const SizedBox.shrink();
+    final colors = AelTheme.colorsOf(context);
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: CupertinoColors.systemGrey6,
-        borderRadius: BorderRadius.circular(8),
+        color: colors.tonalTileBg,
+        borderRadius: BorderRadius.circular(10),
       ),
       child: SelectableText(
         _code.value,
         textAlign: TextAlign.center,
         maxLines: 1,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 18,
           fontFamily: 'monospace',
           letterSpacing: 1.5,
           fontWeight: FontWeight.w500,
-          color: CupertinoColors.black,
+          color: colors.textPrimary,
         ),
       ),
     );
@@ -397,13 +433,20 @@ class _ECardPayPageState extends State<ECardPayPage>
 
   Future<void> _loadBalance(String auth, String account) async {
     try {
-      final value =
-          await ECard.getBalance(_httpClient, auth, eCardAccount: account);
+      final value = await ECard.getBalance(
+        _httpClient,
+        auth,
+        eCardAccount: account,
+      );
       if (mounted) _balance.value = value;
-      await OhosNativeService.instance
-          .setWidgetData('ecardBalance', value.toStringAsFixed(2));
       await OhosNativeService.instance.setWidgetData(
-          'ecardLowBalanceThreshold', _lowBalanceThreshold.toString());
+        'ecardBalance',
+        value.toStringAsFixed(2),
+      );
+      await OhosNativeService.instance.setWidgetData(
+        'ecardLowBalanceThreshold',
+        _lowBalanceThreshold.toString(),
+      );
     } catch (_) {
       // 余额只是附加信息，失败时保留上一次的数值，不打扰付款流程
     }
@@ -414,10 +457,10 @@ class _ECardPayPageState extends State<ECardPayPage>
     if (balance == null || _viewState.value != _ViewState.showing) {
       return const SizedBox.shrink();
     }
+    final colors = AelTheme.colorsOf(context);
     final threshold = _lowBalanceThreshold;
     final low = threshold > 0 && balance < threshold;
-    final color =
-        low ? CupertinoColors.systemOrange : CupertinoColors.secondaryLabel;
+    final color = low ? colors.warning : colors.textSecondary;
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: Column(
@@ -426,17 +469,17 @@ class _ECardPayPageState extends State<ECardPayPage>
           Text(
             '余额 ¥${balance.toStringAsFixed(2)}',
             style: TextStyle(
-                fontSize: 14,
-                fontWeight: low ? FontWeight.w600 : FontWeight.w400,
-                color: color),
+              fontSize: 14,
+              fontWeight: low ? FontWeight.w600 : FontWeight.w400,
+              color: color,
+            ),
           ),
           if (low)
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text(
                 '余额不足 ¥${threshold.toStringAsFixed(threshold == threshold.roundToDouble() ? 0 : 1)}，请注意充值',
-                style: const TextStyle(
-                    fontSize: 12, color: CupertinoColors.systemOrange),
+                style: TextStyle(fontSize: 12, color: colors.warning),
               ),
             ),
         ],
@@ -449,38 +492,24 @@ class _ECardPayPageState extends State<ECardPayPage>
       return const SizedBox.shrink();
     }
     final loading = _viewState.value == _ViewState.loading;
-    return CupertinoButton(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      color: CupertinoColors.activeBlue,
-      borderRadius: BorderRadius.circular(20),
+    return AelButton(
+      icon: loading ? null : AelIcons.refresh,
+      label: loading ? '正在刷新...' : '刷新二维码',
+      cornerRadius: AelRadius.pill,
       onPressed: loading
           ? null
           : () {
               _viewState.value = _ViewState.loading;
               _requestNewCode(showErrors: true);
             },
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          loading
-              ? const CupertinoActivityIndicator(
-                  color: CupertinoColors.white, radius: 8)
-              : const Icon(CupertinoIcons.refresh,
-                  size: 18, color: CupertinoColors.white),
-          const SizedBox(width: 8),
-          const Text('刷新二维码',
-              style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: CupertinoColors.white)),
-        ],
-      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     return CupertinoPageScaffold(
+      backgroundColor: colors.pageBg,
       child: SafeArea(
         bottom: false,
         child: CustomScrollView(
@@ -500,9 +529,11 @@ class _ECardPayPageState extends State<ECardPayPage>
                   const SizedBox(height: 24),
                   Obx(() => _buildRefreshButton(context)),
                   const SizedBox(height: 12),
-                  CupertinoButton(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  AelButton(
+                    variant: AelButtonVariant.tonal,
+                    icon: LucideIcons.chartColumn,
+                    label: '消费账单与统计',
+                    cornerRadius: AelRadius.pill,
                     onPressed: () {
                       Navigator.of(context, rootNavigator: true).push(
                         CupertinoPageRoute(
@@ -510,14 +541,6 @@ class _ECardPayPageState extends State<ECardPayPage>
                         ),
                       );
                     },
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(CupertinoIcons.chart_bar_alt_fill, size: 16),
-                        SizedBox(width: 6),
-                        Text('消费账单与统计', style: TextStyle(fontSize: 14)),
-                      ],
-                    ),
                   ),
                   const Spacer(flex: 4),
                 ],

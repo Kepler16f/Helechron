@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:celechron/design/app_notification.dart';
@@ -25,22 +26,33 @@ class SavedShareFileResult {
   bool get isSuccess => savedPath != null && savedPath!.isNotEmpty;
 }
 
+class SavedDownloadRecord {
+  final String savedPath;
+  final String fileName;
+  final String mimeType;
+
+  const SavedDownloadRecord({
+    required this.savedPath,
+    required this.fileName,
+    required this.mimeType,
+  });
+}
+
 class SaveTargetChoice {
   final String directory;
   final String fileName;
 
-  const SaveTargetChoice({
-    required this.directory,
-    required this.fileName,
-  });
+  const SaveTargetChoice({required this.directory, required this.fileName});
 }
 
 class FileDownloadShareHelper {
   FileDownloadShareHelper._();
 
   static String sanitizeFileName(String raw) {
-    final cleaned =
-        raw.trim().replaceAll(RegExp(r'[\\/:*?"<>|\r\n]'), '_').trim();
+    final cleaned = raw
+        .trim()
+        .replaceAll(RegExp(r'[\\/:*?"<>|\r\n]'), '_')
+        .trim();
     return cleaned.isEmpty ? 'helechron_export' : cleaned;
   }
 
@@ -168,6 +180,7 @@ class FileDownloadShareHelper {
     String? description,
     String fileNamePlaceholder = '请输入文件名',
     bool preserveExtension = true,
+    String? confirmHint,
   }) async {
     final fallbackDir = (currentDir != null && currentDir.trim().isNotEmpty)
         ? currentDir.trim()
@@ -188,7 +201,7 @@ class FileDownloadShareHelper {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${description != null && description.isNotEmpty ? "$description\n" : ""}保存路径：${formatDirShort(fallbackDir)}\n可自定义文件名，下载完成后自动调起原生分享：',
+                '${description != null && description.isNotEmpty ? "$description\n" : ""}保存路径：${formatDirShort(fallbackDir)}\n${confirmHint ?? "可自定义文件名，下载完成后自动调起原生分享："}',
                 style: TextStyle(
                   fontSize: 12.5,
                   color: CupertinoColors.secondaryLabel.resolveFrom(dialogCtx),
@@ -209,8 +222,9 @@ class FileDownloadShareHelper {
                   color: CupertinoColors.placeholderText.resolveFrom(dialogCtx),
                 ),
                 decoration: BoxDecoration(
-                  color: CupertinoColors.tertiarySystemFill
-                      .resolveFrom(dialogCtx),
+                  color: CupertinoColors.tertiarySystemFill.resolveFrom(
+                    dialogCtx,
+                  ),
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
@@ -251,10 +265,7 @@ class FileDownloadShareHelper {
         fileName: finalFileName,
       );
     }
-    return SaveTargetChoice(
-      directory: fallbackDir,
-      fileName: finalFileName,
-    );
+    return SaveTargetChoice(directory: fallbackDir, fileName: finalFileName);
   }
 
   static Future<Directory> _ensureShareCacheDir() async {
@@ -326,8 +337,10 @@ class FileDownloadShareHelper {
   }) async {
     final safeName = sanitizeFileName(fileName);
     final resolvedMime = mimeType ?? inferMimeType(safeName);
-    final shareFile =
-        await prepareShareCacheFile(safeName, sourceFile: tempFile);
+    final shareFile = await prepareShareCacheFile(
+      safeName,
+      sourceFile: tempFile,
+    );
 
     String? savedPath;
     final canDirect = await Courses.isDirectoryDirectlyWritable(targetDir);
@@ -363,7 +376,8 @@ class FileDownloadShareHelper {
     required String saveDir,
     String? customFileName,
   }) async {
-    final safeName = (customFileName != null && customFileName.trim().isNotEmpty)
+    final safeName =
+        (customFileName != null && customFileName.trim().isNotEmpty)
         ? resolveFinalFileName(customFileName, defaultFileName: item.name)
         : sanitizeFileName(item.name);
     final effectiveItem = safeName == item.name
@@ -420,6 +434,150 @@ class FileDownloadShareHelper {
     );
   }
 
+  // ───────────── 下载记录（下载与分享解耦） ─────────────
+
+  static Future<File> _recordsFile() async {
+    final doc = await getApplicationDocumentsDirectory();
+    return File('${doc.path}/download_records.json');
+  }
+
+  static Future<Map<String, dynamic>> _loadRecords() async {
+    try {
+      final f = await _recordsFile();
+      if (await f.exists()) {
+        final decoded = jsonDecode(await f.readAsString());
+        if (decoded is Map<String, dynamic>) return decoded;
+      }
+    } catch (_) {}
+    return <String, dynamic>{};
+  }
+
+  /// 记录一次成功下载（key 为业务唯一键，如 课程+课节+类型）
+  static Future<void> saveDownloadRecord(
+    String key, {
+    required String savedPath,
+    required String fileName,
+    String? mimeType,
+  }) async {
+    try {
+      final records = await _loadRecords();
+      records[key] = {
+        'savedPath': savedPath,
+        'fileName': fileName,
+        'mimeType': mimeType ?? inferMimeType(fileName),
+      };
+      final f = await _recordsFile();
+      await f.writeAsString(jsonEncode(records), flush: true);
+    } catch (e) {
+      debugPrint('[FileDownloadShareHelper] saveDownloadRecord error: $e');
+    }
+  }
+
+  /// 读取并校验下载记录；文件已被删除则返回 null
+  static Future<SavedDownloadRecord?> getDownloadRecord(String key) async {
+    final records = await _loadRecords();
+    final raw = records[key];
+    if (raw is! Map) return null;
+    final savedPath = '${raw['savedPath'] ?? ''}';
+    final fileName = '${raw['fileName'] ?? ''}';
+    if (savedPath.isEmpty || fileName.isEmpty) return null;
+    var exists = false;
+    if (savedPath.startsWith('content://') || savedPath.startsWith('file://')) {
+      exists = await findShareCacheFile(fileName) != null;
+    } else {
+      try {
+        final f = File(savedPath);
+        exists = await f.exists() && await f.length() > 0;
+      } catch (_) {}
+      if (!exists) exists = await findShareCacheFile(fileName) != null;
+    }
+    if (!exists) return null;
+    return SavedDownloadRecord(
+      savedPath: savedPath,
+      fileName: fileName,
+      mimeType: '${raw['mimeType'] ?? inferMimeType(fileName)}',
+    );
+  }
+
+  /// 统一的「仅下载 / 分享」流程。
+  /// - [share]=false：弹出命名/路径选择 → 生成文件 → 保存并登记，不分享。
+  /// - [share]=true：已下载过则直接分享原文件；未下载则等同「下载并分享」。
+  /// [writeTemp] 负责把内容写入给定临时文件，返回是否成功。
+  static Future<bool> exportFile(
+    BuildContext context, {
+    required String recordKey,
+    required String defaultFileName,
+    required String mimeType,
+    required Future<bool> Function(File tempFile) writeTemp,
+    required bool share,
+    String? description,
+    String? title,
+  }) async {
+    if (share) {
+      final record = await getDownloadRecord(recordKey);
+      if (record != null) {
+        return shareSavedOrPrepare(
+          savedPath: record.savedPath,
+          fileName: record.fileName,
+          mimeType: record.mimeType,
+          subject: record.fileName,
+        );
+      }
+    }
+    if (!context.mounted) return false;
+    final target = await chooseSaveTarget(
+      context,
+      defaultFileName: defaultFileName,
+      title: title ?? (share ? '下载并分享' : '下载'),
+      description: description,
+      confirmHint: share ? '下载完成后将自动调起系统分享：' : '仅下载保存，不会触发分享：',
+    );
+    if (target == null) return false;
+
+    final tempFile = File(
+      '${Directory.systemTemp.path}/temp_export_${DateTime.now().millisecondsSinceEpoch}',
+    );
+    try {
+      final ok = await writeTemp(tempFile);
+      if (!ok) return false;
+      final res = await saveTempFileAndPrepareShare(
+        tempFile: tempFile,
+        targetDir: target.directory,
+        fileName: target.fileName,
+        mimeType: mimeType,
+      );
+      if (!res.isSuccess) {
+        AppNotification.error('保存失败', '未能写入目标目录');
+        return false;
+      }
+      await saveDownloadRecord(
+        recordKey,
+        savedPath: res.savedPath!,
+        fileName: res.fileName,
+        mimeType: res.mimeType,
+      );
+      AppNotification.success(
+        share ? '已保存，正在分享' : '下载完成',
+        '${res.fileName}\n已保存：${formatDirShort(target.directory)}',
+      );
+      if (share && res.shareFile != null) {
+        await shareFiles(
+          [res.shareFile!],
+          mimeTypes: [res.mimeType],
+          subject: res.fileName,
+        );
+      }
+      return true;
+    } catch (e) {
+      AppNotification.error('操作失败', '$e');
+      return false;
+    } finally {
+      try {
+        if (await tempFile.exists()) await tempFile.delete();
+      } catch (_) {}
+    }
+  }
+
   /// 调用系统原生分享（单文件或多文件）
   static Future<bool> shareFiles(
     List<File> files, {
@@ -438,16 +596,12 @@ class FileDownloadShareHelper {
       }
     }
     if (existing.isEmpty) {
-      AppNotification.info('分享提示', '未能定位到可分享的本地文件，请点击“下载并分享”重试');
+      AppNotification.info('分享提示', '未能定位到可分享的本地文件，请重新点击分享或下载重试');
       return false;
     }
 
     try {
-      await Share.shareXFiles(
-        existing,
-        subject: subject,
-        text: text,
-      );
+      await Share.shareXFiles(existing, subject: subject, text: text);
       return true;
     } catch (e) {
       debugPrint('[FileDownloadShareHelper] shareFiles error: $e');
@@ -480,7 +634,7 @@ class FileDownloadShareHelper {
       target = await onPrepareShareFile();
     }
     if (target == null) {
-      AppNotification.info('分享提示', '未能读取该文件，请点击「下载并分享」重新获取');
+      AppNotification.info('分享提示', '未能读取该文件，请重新下载后分享');
       return false;
     }
     return shareFiles(

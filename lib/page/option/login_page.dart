@@ -1,11 +1,14 @@
 import 'package:celechron/utils/platform_features.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:get/get.dart';
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/icons/ael_icons.dart';
 import 'package:celechron/model/option.dart';
 import 'package:celechron/model/scholar.dart';
 
 import '../../worker/ecard_widget_messenger.dart';
 import 'option_controller.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
 
 /// 原生底栏在安全区之上额外占用的高度：
 /// 悬浮模式 = 底部外边距 8 + 栏高 56；普通模式 = 栏高 56。
@@ -28,161 +31,143 @@ class LoginForm extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     return Container(
-        decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            color: CupertinoDynamicColor.resolve(
-                CupertinoColors.systemGroupedBackground, context)),
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom +
-              (MediaQuery.of(context).viewInsets.bottom > 0
-                  ? 0
-                  : _nativeBottomBarInset()),
-          left: 6,
-          right: 6,
-        ),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                padding: const EdgeInsets.only(
-                    left: 16, right: 16, bottom: 8, top: 16),
-                child: Text(
-                  '统一身份认证登录',
-                  style: CupertinoTheme.of(context).textTheme.navTitleTextStyle,
+      decoration: BoxDecoration(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        color: colors.pageBg,
+      ),
+      padding: EdgeInsets.only(
+        bottom:
+            MediaQuery.of(context).viewInsets.bottom +
+            (MediaQuery.of(context).viewInsets.bottom > 0
+                ? 0
+                : _nativeBottomBarInset()),
+        left: 16,
+        right: 16,
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12, top: 18),
+              child: Text(
+                '统一身份认证登录',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: colors.textPrimary,
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.all(8),
-                child: Column(
-                  children: [
-                    SizedBox(
-                        height: 48,
-                        child: CupertinoTextField(
-                          controller: usernameController,
-                          keyboardType: TextInputType.number,
-                          style: TextStyle(
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.label, context),
-                          ),
-                          placeholderStyle: TextStyle(
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.placeholderText, context),
-                          ),
-                          prefix: Container(
-                              padding: const EdgeInsets.only(left: 12),
-                              child: Text('学号',
-                                  style: TextStyle(
-                                    color: CupertinoDynamicColor.resolve(
-                                        CupertinoColors.label, context),
-                                  ))),
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors
-                                    .secondarySystemGroupedBackground,
-                                context),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        )),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                        height: 48,
-                        child: CupertinoTextField(
-                          controller: passwordController,
-                          obscureText: true,
-                          style: TextStyle(
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.label, context),
-                          ),
-                          placeholderStyle: TextStyle(
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.placeholderText, context),
-                          ),
-                          prefix: Container(
-                            padding: const EdgeInsets.only(left: 12),
-                            child: Text('密码',
-                                style: TextStyle(
-                                  color: CupertinoDynamicColor.resolve(
-                                      CupertinoColors.label, context),
-                                )),
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors
-                                    .secondarySystemGroupedBackground,
-                                context),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        )),
-                    const SizedBox(height: 16),
-                    Obx(() => CupertinoButton(
-                        onPressed: () async {
-                          buttonPressed.value = true;
-                          var scholar = Get.find<Rx<Scholar>>(tag: 'scholar');
-                          scholar.update((val) {
-                            val!.username = usernameController.value.text;
-                            val.password = passwordController.value.text;
-                            val.login().then((value) async {
-                              if (value.every((e) => e == null)) {
-                                await val.refresh(
-                                    onPartialUpdate: scholar.refresh);
-                                scholar.refresh();
-                                buttonPressed.value = false;
-                                _optionController.pushOnGradeChange =
-                                    PlatformFeatures.hasBackgroundRefresh;
-                                if (context.mounted) {
-                                  Navigator.of(context).pop();
-                                }
-                              } else {
-                                buttonPressed.value = false;
-                                if (!context.mounted) return;
-                                showCupertinoDialog(
-                                    context: context,
-                                    builder: (context) {
-                                      return CupertinoAlertDialog(
-                                        title: const Text('登录失败'),
-                                        content: Text(value
-                                            .where((e) => e != null)
-                                            .fold('', (p, v) => '$p\n$v')
-                                            .trim()),
-                                        actions: [
-                                          CupertinoDialogAction(
-                                            child: const Text('确定'),
-                                            onPressed: () async {
-                                              Navigator.of(context).pop();
-                                            },
-                                          )
-                                        ],
-                                      );
-                                    });
+            ),
+            SizedBox(
+              height: 48,
+              child: CupertinoTextField(
+                controller: usernameController,
+                keyboardType: TextInputType.number,
+                style: TextStyle(color: colors.textPrimary),
+                placeholderStyle: TextStyle(color: colors.textTertiary),
+                prefix: Container(
+                  padding: const EdgeInsets.only(left: 12),
+                  child: Text(
+                    '学号',
+                    style: TextStyle(color: colors.textPrimary),
+                  ),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: colors.cardBg,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 48,
+              child: CupertinoTextField(
+                controller: passwordController,
+                obscureText: true,
+                style: TextStyle(color: colors.textPrimary),
+                placeholderStyle: TextStyle(color: colors.textTertiary),
+                prefix: Container(
+                  padding: const EdgeInsets.only(left: 12),
+                  child: Text(
+                    '密码',
+                    style: TextStyle(color: colors.textPrimary),
+                  ),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: colors.cardBg,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Obx(
+              () => AelButton(
+                expanded: true,
+                icon: buttonPressed.value ? null : AelIcons.check,
+                label: buttonPressed.value ? '正在登录...' : '登录',
+                onPressed: buttonPressed.value
+                    ? null
+                    : () async {
+                        buttonPressed.value = true;
+                        var scholar = Get.find<Rx<Scholar>>(tag: 'scholar');
+                        scholar.update((val) {
+                          val!.username = usernameController.value.text;
+                          val.password = passwordController.value.text;
+                          val.login().then((value) async {
+                            if (value.every((e) => e == null)) {
+                              await val.refresh(
+                                onPartialUpdate: scholar.refresh,
+                              );
+                              scholar.refresh();
+                              buttonPressed.value = false;
+                              _optionController.pushOnGradeChange =
+                                  PlatformFeatures.hasBackgroundRefresh;
+                              if (context.mounted) {
+                                Navigator.of(context).pop();
                               }
-                              ECardWidgetMessenger.update();
-                            });
+                            } else {
+                              buttonPressed.value = false;
+                              if (!context.mounted) return;
+                              showCupertinoDialog(
+                                context: context,
+                                builder: (context) {
+                                  return CupertinoAlertDialog(
+                                    title: const Text('登录失败'),
+                                    content: Text(
+                                      value
+                                          .where((e) => e != null)
+                                          .fold('', (p, v) => '$p\n$v')
+                                          .trim(),
+                                    ),
+                                    actions: [
+                                      CupertinoDialogAction(
+                                        child: const Text('确定'),
+                                        onPressed: () async {
+                                          Navigator.of(context).pop();
+                                        },
+                                      ),
+                                    ],
+                                  );
+                                },
+                              );
+                            }
+                            ECardWidgetMessenger.update();
                           });
-                        },
-                        color: buttonPressed.value
-                            ? CupertinoColors.inactiveGray
-                            : CupertinoColors.activeBlue,
-                        child: SizedBox(
-                          height: 24,
-                          width: 60,
-                          child: Center(
-                              child: buttonPressed.value
-                                  ? const CupertinoActivityIndicator()
-                                  : const Text('登录',
-                                      style: TextStyle(
-                                          color: CupertinoColors.white))),
-                        ))),
-                  ],
-                ),
+                        });
+                      },
               ),
-            ],
-          ),
-        ));
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
   }
 }

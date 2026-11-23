@@ -1,14 +1,14 @@
 import 'dart:math';
 
-import 'package:celechron/design/custom_colors.dart';
 import 'package:celechron/utils/tuple.dart';
 import 'package:celechron/model/session.dart';
 import 'package:celechron/design/persistent_headers.dart';
 import 'course_schedule_controller.dart';
 import 'package:get/get.dart';
-import 'package:celechron/design/animate_button.dart';
-import 'package:celechron/design/round_rectangle_card.dart';
-import 'package:celechron/design/two_line_card.dart';
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/icons/ael_icons.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'course_card.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:celechron/design/native_bar_spacer.dart';
@@ -26,56 +26,50 @@ class CourseSchedulePage extends StatelessWidget {
       // not initialized
     }
     Get.delete<CourseScheduleController>();
-    _courseScheduleController = Get.put(CourseScheduleController(
-      initialName: name,
-      initialFirstOrSecondSemester: first,
-      initialHideCourseInfomation: initialHideCourseInfomation,
-    ));
+    _courseScheduleController = Get.put(
+      CourseScheduleController(
+        initialName: name,
+        initialFirstOrSecondSemester: first,
+        initialHideCourseInfomation: initialHideCourseInfomation,
+      ),
+    );
   }
 
   Widget _semesterPicker(BuildContext context) {
-    return RoundRectangleCard(
-      animate: false,
+    final colors = AelTheme.colorsOf(context);
+    return AelSectionCard(
+      padding: const EdgeInsets.all(AelSpacing.md),
       child: Column(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: 30,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _courseScheduleController.semesters.length,
-                    itemBuilder: (context, index) {
-                      final semester =
-                          _courseScheduleController.semesters[index];
-                      return Obx(
-                        () => Stack(
-                          children: [
-                            AnimateButton(
-                              text:
-                                  '${semester.name.substring(2, 5)}${semester.name.substring(7, 11)}',
-                              onTap: () {
-                                _courseScheduleController.semesterIndex.value =
-                                    index;
-                                _courseScheduleController.semesterIndex
-                                    .refresh();
-                              },
-                              backgroundColor: _courseScheduleController
-                                          .semesterIndex.value ==
-                                      index
-                                  ? CustomCupertinoDynamicColors.cyan
-                                  : CupertinoColors.systemFill,
-                            ),
-                            const SizedBox(width: 90),
-                          ],
-                        ),
-                      );
-                    },
+          SizedBox(
+            height: 32,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _courseScheduleController.semesters.length,
+              itemBuilder: (context, index) {
+                final semester = _courseScheduleController.semesters[index];
+                return Obx(
+                  () => Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Center(
+                      child: AelChip(
+                        label:
+                            '${semester.name.substring(2, 5)}${semester.name.substring(7, 11)}',
+                        tone:
+                            _courseScheduleController.semesterIndex.value ==
+                                index
+                            ? AelChipTone.primary
+                            : AelChipTone.neutral,
+                        onTap: () {
+                          _courseScheduleController.semesterIndex.value = index;
+                          _courseScheduleController.semesterIndex.refresh();
+                        },
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ],
+                );
+              },
+            ),
           ),
           const SizedBox(height: 8),
           Obx(
@@ -84,43 +78,47 @@ class CourseSchedulePage extends StatelessWidget {
               child: Row(
                 children: [
                   Expanded(
-                    child: TwoLineCard(
-                        animate: true,
-                        onTap: () {
-                          _courseScheduleController
-                              .firstOrSecondSemester.value = true;
-                        },
-                        title:
-                            '${_courseScheduleController.semester.firstHalfName}学期课时',
-                        content:
-                            '${_courseScheduleController.semester.firstHalfSessionCount}节/两周',
-                        backgroundColor: _courseScheduleController
-                                .firstOrSecondSemester.value
-                            ? _courseScheduleController.semester.name[9] == '春'
-                                ? CustomCupertinoDynamicColors.spring
-                                : CustomCupertinoDynamicColors.autumn
-                            : CupertinoColors.systemFill,
-                        withColoredFont: true),
+                    child: AelStatTile(
+                      label:
+                          '${_courseScheduleController.semester.firstHalfName}学期课时',
+                      value:
+                          '${_courseScheduleController.semester.firstHalfSessionCount}',
+                      unit: '节/两周',
+                      backgroundColor:
+                          _courseScheduleController.firstOrSecondSemester.value
+                          ? colors.primaryContainer
+                          : colors.tonalTileBg,
+                      valueColor:
+                          _courseScheduleController.firstOrSecondSemester.value
+                          ? colors.onPrimaryContainer
+                          : colors.textPrimary,
+                      onTap: () {
+                        _courseScheduleController.firstOrSecondSemester.value =
+                            true;
+                      },
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: TwoLineCard(
-                        animate: true,
-                        onTap: () {
-                          _courseScheduleController
-                              .firstOrSecondSemester.value = false;
-                        },
-                        title:
-                            '${_courseScheduleController.semester.secondHalfName}学期课时',
-                        content:
-                            '${_courseScheduleController.semester.secondHalfSessionCount}节/两周',
-                        backgroundColor: _courseScheduleController
-                                .firstOrSecondSemester.value
-                            ? CupertinoColors.systemFill
-                            : _courseScheduleController.semester.name[9] == '春'
-                                ? CustomCupertinoDynamicColors.summer
-                                : CustomCupertinoDynamicColors.winter,
-                        withColoredFont: true),
+                    child: AelStatTile(
+                      label:
+                          '${_courseScheduleController.semester.secondHalfName}学期课时',
+                      value:
+                          '${_courseScheduleController.semester.secondHalfSessionCount}',
+                      unit: '节/两周',
+                      backgroundColor:
+                          !_courseScheduleController.firstOrSecondSemester.value
+                          ? colors.primaryContainer
+                          : colors.tonalTileBg,
+                      valueColor:
+                          !_courseScheduleController.firstOrSecondSemester.value
+                          ? colors.onPrimaryContainer
+                          : colors.textPrimary,
+                      onTap: () {
+                        _courseScheduleController.firstOrSecondSemester.value =
+                            false;
+                      },
+                    ),
                   ),
                 ],
               ),
@@ -145,9 +143,10 @@ class CourseSchedulePage extends StatelessWidget {
       "17:05",
       "18:50",
       "19:40",
-      "20:30"
+      "20:30",
     ];
-    return RoundRectangleCard(
+    return AelSectionCard(
+      padding: const EdgeInsets.all(AelSpacing.md),
       child: Column(
         children: [
           Row(
@@ -158,10 +157,9 @@ class CourseSchedulePage extends StatelessWidget {
                 child: Center(
                   child: Text(
                     '一',
-                    style:
-                        CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                              fontSize: 14,
-                            ),
+                    style: CupertinoTheme.of(
+                      context,
+                    ).textTheme.textStyle.copyWith(fontSize: 14),
                   ),
                 ),
               ),
@@ -170,10 +168,9 @@ class CourseSchedulePage extends StatelessWidget {
                 child: Center(
                   child: Text(
                     '二',
-                    style:
-                        CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                              fontSize: 14,
-                            ),
+                    style: CupertinoTheme.of(
+                      context,
+                    ).textTheme.textStyle.copyWith(fontSize: 14),
                   ),
                 ),
               ),
@@ -182,10 +179,9 @@ class CourseSchedulePage extends StatelessWidget {
                 child: Center(
                   child: Text(
                     '三',
-                    style:
-                        CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                              fontSize: 14,
-                            ),
+                    style: CupertinoTheme.of(
+                      context,
+                    ).textTheme.textStyle.copyWith(fontSize: 14),
                   ),
                 ),
               ),
@@ -194,10 +190,9 @@ class CourseSchedulePage extends StatelessWidget {
                 child: Center(
                   child: Text(
                     '四',
-                    style:
-                        CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                              fontSize: 14,
-                            ),
+                    style: CupertinoTheme.of(
+                      context,
+                    ).textTheme.textStyle.copyWith(fontSize: 14),
                   ),
                 ),
               ),
@@ -206,10 +201,9 @@ class CourseSchedulePage extends StatelessWidget {
                 child: Center(
                   child: Text(
                     '五',
-                    style:
-                        CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                              fontSize: 14,
-                            ),
+                    style: CupertinoTheme.of(
+                      context,
+                    ).textTheme.textStyle.copyWith(fontSize: 14),
                   ),
                 ),
               ),
@@ -218,10 +212,9 @@ class CourseSchedulePage extends StatelessWidget {
                 child: Center(
                   child: Text(
                     '六',
-                    style:
-                        CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                              fontSize: 14,
-                            ),
+                    style: CupertinoTheme.of(
+                      context,
+                    ).textTheme.textStyle.copyWith(fontSize: 14),
                   ),
                 ),
               ),
@@ -230,10 +223,9 @@ class CourseSchedulePage extends StatelessWidget {
                 child: Center(
                   child: Text(
                     '日',
-                    style:
-                        CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                              fontSize: 14,
-                            ),
+                    style: CupertinoTheme.of(
+                      context,
+                    ).textTheme.textStyle.copyWith(fontSize: 14),
                   ),
                 ),
               ),
@@ -242,113 +234,56 @@ class CourseSchedulePage extends StatelessWidget {
           const SizedBox(height: 4),
           SizedBox(
             height: 560,
-            child: Obx(
-              () {
-                var sessionsByDayOfWeek =
-                    _courseScheduleController.sessionsByDayOfWeek;
-                final semName = _courseScheduleController.semester.name;
-                final isFirstHalf =
-                    _courseScheduleController.firstOrSecondSemester.value;
-                final preferredHalfTag = isFirstHalf
-                    ? (semName.contains('春夏') ? 'spring' : 'autumn')
-                    : (semName.contains('春夏') ? 'summer' : 'winter');
-                return Row(
-                  children: [
-                    Expanded(
-                      flex: 1,
-                      child: Column(
-                        children: [
-                          for (var i = 1; i <= 13; i++)
-                            Expanded(
-                              child: Center(
-                                child: Column(
-                                  // mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    FittedBox(
-                                      fit: BoxFit.fitWidth,
-                                      child: Text(
-                                        courseStartTime[i - 1],
-                                        style: CupertinoTheme.of(context)
-                                            .textTheme
-                                            .textStyle
-                                            .copyWith(
-                                              fontSize: 10,
-                                            ),
-                                      ),
-                                    ),
-                                    const SizedBox(
-                                      height: 2,
-                                    ),
-                                    Text(
-                                      i.toString(),
+            child: Obx(() {
+              var sessionsByDayOfWeek =
+                  _courseScheduleController.sessionsByDayOfWeek;
+              final semName = _courseScheduleController.semester.name;
+              final isFirstHalf =
+                  _courseScheduleController.firstOrSecondSemester.value;
+              final preferredHalfTag = isFirstHalf
+                  ? (semName.contains('春夏') ? 'spring' : 'autumn')
+                  : (semName.contains('春夏') ? 'summer' : 'winter');
+              return Row(
+                children: [
+                  Expanded(
+                    flex: 1,
+                    child: Column(
+                      children: [
+                        for (var i = 1; i <= 13; i++)
+                          Expanded(
+                            child: Center(
+                              child: Column(
+                                // mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  FittedBox(
+                                    fit: BoxFit.fitWidth,
+                                    child: Text(
+                                      courseStartTime[i - 1],
                                       style: CupertinoTheme.of(context)
                                           .textTheme
                                           .textStyle
-                                          .copyWith(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
-                                          ),
+                                          .copyWith(fontSize: 10),
                                     ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    for (var i = 1; i <= 6; i++)
-                      Expanded(
-                        flex: 2,
-                        child: LayoutBuilder(
-                          builder: (context, constraints) => Stack(
-                            children: [
-                              Column(
-                                children: [
-                                  for (var j = 1; j <= 12; j++)
-                                    Expanded(
-                                      child: Container(
-                                          // decoration: BoxDecoration(
-                                          //   border: Border(
-                                          //     bottom: BorderSide(
-                                          //         color: CupertinoDynamicColor
-                                          //             .resolve(
-                                          //                 CupertinoColors
-                                          //                     .systemGrey4,
-                                          //                 context)),
-                                          //     right: BorderSide(
-                                          //       color:
-                                          //           CupertinoDynamicColor.resolve(
-                                          //               CupertinoColors
-                                          //                   .systemGrey4,
-                                          //               context),
-                                          //     ),
-                                          //   ),
-                                          // ),
-                                          ),
-                                    ),
-                                  Expanded(
-                                    child: Container(
-                                        // decoration: BoxDecoration(
-                                        //   border: Border(
-                                        //     right: BorderSide(
-                                        //       color:
-                                        //           CupertinoDynamicColor.resolve(
-                                        //               CupertinoColors.systemGrey4,
-                                        //               context),
-                                        //     ),
-                                        //   ),
-                                        // ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    i.toString(),
+                                    style: CupertinoTheme.of(context)
+                                        .textTheme
+                                        .textStyle
+                                        .copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
                                         ),
                                   ),
                                 ],
                               ),
-                              ..._buildCourseScheduleByDayOfWeek(
-                                  sessionsByDayOfWeek, i, constraints,
-                                  preferredHalfTag: preferredHalfTag)
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
+                      ],
+                    ),
+                  ),
+                  for (var i = 1; i <= 6; i++)
                     Expanded(
                       flex: 2,
                       child: LayoutBuilder(
@@ -359,32 +294,81 @@ class CourseSchedulePage extends StatelessWidget {
                                 for (var j = 1; j <= 12; j++)
                                   Expanded(
                                     child: Container(
-                                        // decoration: BoxDecoration(
-                                        //   border: Border(
-                                        //     bottom: BorderSide(
-                                        //       color:
-                                        //           CupertinoDynamicColor.resolve(
-                                        //               CupertinoColors.systemGrey4,
-                                        //               context),
-                                        //     ),
-                                        //   ),
-                                        // ),
-                                        ),
+                                      // decoration: BoxDecoration(
+                                      //   border: Border(
+                                      //     bottom: BorderSide(
+                                      //             .resolve(
+                                      //                     .systemGrey4,
+                                      //                 context)),
+                                      //     right: BorderSide(
+                                      //       color:
+                                      //                   .systemGrey4,
+                                      //               context),
+                                      //     ),
+                                      //   ),
+                                      // ),
+                                    ),
                                   ),
-                                Expanded(child: Container())
+                                Expanded(
+                                  child: Container(
+                                    // decoration: BoxDecoration(
+                                    //   border: Border(
+                                    //     right: BorderSide(
+                                    //       color:
+                                    //               context),
+                                    //     ),
+                                    //   ),
+                                    // ),
+                                  ),
+                                ),
                               ],
                             ),
                             ..._buildCourseScheduleByDayOfWeek(
-                                sessionsByDayOfWeek, 7, constraints,
-                                preferredHalfTag: preferredHalfTag)
+                              sessionsByDayOfWeek,
+                              i,
+                              constraints,
+                              preferredHalfTag: preferredHalfTag,
+                            ),
                           ],
                         ),
                       ),
-                    )
-                  ],
-                );
-              },
-            ),
+                    ),
+                  Expanded(
+                    flex: 2,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => Stack(
+                        children: [
+                          Column(
+                            children: [
+                              for (var j = 1; j <= 12; j++)
+                                Expanded(
+                                  child: Container(
+                                    // decoration: BoxDecoration(
+                                    //   border: Border(
+                                    //     bottom: BorderSide(
+                                    //       color:
+                                    //               context),
+                                    //     ),
+                                    //   ),
+                                    // ),
+                                  ),
+                                ),
+                              Expanded(child: Container()),
+                            ],
+                          ),
+                          ..._buildCourseScheduleByDayOfWeek(
+                            sessionsByDayOfWeek,
+                            7,
+                            constraints,
+                            preferredHalfTag: preferredHalfTag,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }),
           ),
         ],
       ),
@@ -392,10 +376,11 @@ class CourseSchedulePage extends StatelessWidget {
   }
 
   List<Widget> _buildCourseScheduleByDayOfWeek(
-      List<List<Session>> sessionsByDayOfWeek,
-      int day,
-      BoxConstraints constraints,
-      {String? preferredHalfTag}) {
+    List<List<Session>> sessionsByDayOfWeek,
+    int day,
+    BoxConstraints constraints, {
+    String? preferredHalfTag,
+  }) {
     List<Tuple<int, int>> period = [];
     for (var i = 1; i <= 13; i++) {
       period.add(Tuple(i, i));
@@ -480,49 +465,22 @@ class CourseSchedulePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoDynamicColor.resolve(
-          CupertinoColors.systemGroupedBackground, context),
+      backgroundColor: AelTheme.colorsOf(context).pageBg,
       child: CustomScrollView(
         slivers: [
           CelechronSliverTextHeader(
             subtitle: '课表',
-            right: CupertinoButton(
+            right: Padding(
               padding: const EdgeInsets.only(right: 12),
-              minSize: 32,
-              onPressed: () => Navigator.of(context, rootNavigator: true).push(
-                CupertinoPageRoute(
-                  builder: (context) => const CurriculumPlanPage(),
-                  title: '培养方案查看',
-                ),
-              ),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.secondarySystemFill, context),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      CupertinoIcons.doc_text,
-                      size: 13,
-                      color: CupertinoDynamicColor.resolve(
-                          CupertinoColors.activeBlue, context),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '培养方案',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: CupertinoDynamicColor.resolve(
-                            CupertinoColors.activeBlue, context),
-                      ),
-                    ),
-                  ],
+              child: AelChip(
+                label: '培养方案',
+                tone: AelChipTone.primary,
+                leadingIcon: AelIcons.file,
+                onTap: () => Navigator.of(context, rootNavigator: true).push(
+                  CupertinoPageRoute(
+                    builder: (context) => const CurriculumPlanPage(),
+                    title: '培养方案查看',
+                  ),
                 ),
               ),
             ),
@@ -539,8 +497,6 @@ class CourseSchedulePage extends StatelessWidget {
                   //   child: Text(
                   //     '请前往教务网查看冲突选课课表',
                   //     style: TextStyle(
-                  //         color: CupertinoDynamicColor.resolve(
-                  //             CupertinoColors.secondaryLabel, context),
                   //         fontSize: 14),
                   //   ),
                   // ),
@@ -548,22 +504,22 @@ class CourseSchedulePage extends StatelessWidget {
                   _courseSchedule(context),
                   const SizedBox(height: 20),
                   Obx(
-                    () => CupertinoListSection.insetGrouped(
-                      margin: const EdgeInsetsDirectional.fromSTEB(
-                          0.0, 0.0, 0.0, 10.0),
-                      additionalDividerMargin: 2,
-                      children: <CupertinoListTile>[
-                        CupertinoListTile(
-                            title: const Text('隐藏课程信息'),
-                            trailing: CupertinoSwitch(
-                              value: _courseScheduleController
-                                  .hideCourseInfomation.value,
-                              onChanged: (value) async {
-                                _courseScheduleController
-                                    .hideCourseInfomation.value = value;
-                              },
-                            )),
-                      ],
+                    () => AelSectionCard(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AelSpacing.lg,
+                        vertical: AelSpacing.xs,
+                      ),
+                      child: AelSwitchTile(
+                        icon: AelIcons.shield,
+                        title: '隐藏课程信息',
+                        value: _courseScheduleController
+                            .hideCourseInfomation
+                            .value,
+                        onChanged: (value) async {
+                          _courseScheduleController.hideCourseInfomation.value =
+                              value;
+                        },
+                      ),
                     ),
                   ),
                 ],

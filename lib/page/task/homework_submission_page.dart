@@ -10,8 +10,12 @@ import 'package:hive/hive.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 import 'package:celechron/design/app_notification.dart';
-import 'package:celechron/design/round_rectangle_card.dart';
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/icons/ael_icons.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/http/zjuServices/courses.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:celechron/http/zjuServices/network_defense.dart';
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/model/task.dart';
@@ -58,7 +62,10 @@ class HomeworkSubmissionPage extends StatefulWidget {
         : 0;
     double fraction;
     if (totalBytes > 0) {
-      fraction = ((uploadedBytesBefore + clampedSent) / totalBytes).clamp(0.0, 1.0);
+      fraction = ((uploadedBytesBefore + clampedSent) / totalBytes).clamp(
+        0.0,
+        1.0,
+      );
     } else {
       final filePart = currentFileTotalBytes > 0
           ? (clampedSent / currentFileTotalBytes).clamp(0.0, 1.0)
@@ -90,20 +97,101 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
   DateTime? _submittedAt;
   bool _allowRetract = true;
   final Set<String> _downloadingAttachments = <String>{};
+  final Map<String, String> _downloadedAttachments = <String, String>{};
+  final Map<String, String> _downloadedAttachmentNames = <String, String>{};
 
-  Future<void> _downloadAndShareAttachment({
+  String _attachmentRecordKey(String attKey) => 'homework|$attKey';
+
+  Future<void> _refreshAttachmentDownloadStates() async {
+    final nextPaths = <String, String>{};
+    final nextNames = <String, String>{};
+    for (final file in _teacherUploads) {
+      final uploadId = (file['id'] as num?)?.toInt() ?? 0;
+      final referenceId = (file['reference_id'] as num?)?.toInt() ?? 0;
+      final downloadUrl =
+          file['download_url']?.toString() ?? '/api/uploads/${file['id']}/blob';
+      final fullUrl = downloadUrl.startsWith('http')
+          ? downloadUrl
+          : 'https://courses.zju.edu.cn$downloadUrl';
+      final attKey = '${uploadId}_${referenceId}_$fullUrl';
+      final rec = await FileDownloadShareHelper.getDownloadRecord(
+        _attachmentRecordKey(attKey),
+      );
+      if (rec != null) {
+        nextPaths[attKey] = rec.savedPath;
+        nextNames[attKey] = rec.fileName;
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _downloadedAttachments
+          ..clear()
+          ..addAll(nextPaths);
+        _downloadedAttachmentNames
+          ..clear()
+          ..addAll(nextNames);
+      });
+    }
+  }
+
+  Future<void> _downloadOrShareAttachment({
     required String attKey,
     required String name,
     required String fullUrl,
     required int size,
     int uploadId = 0,
     int referenceId = 0,
+    required bool share,
   }) async {
     if (_downloadingAttachments.contains(attKey)) return;
+
+    if (share) {
+      final rec = await FileDownloadShareHelper.getDownloadRecord(
+        _attachmentRecordKey(attKey),
+      );
+      final savedPath = _downloadedAttachments[attKey] ?? rec?.savedPath;
+      final savedName =
+          _downloadedAttachmentNames[attKey] ?? rec?.fileName ?? name;
+      if (savedPath != null && savedPath.isNotEmpty) {
+        await FileDownloadShareHelper.shareSavedOrPrepare(
+          savedPath: savedPath,
+          fileName: savedName,
+          mimeType: FileDownloadShareHelper.inferMimeType(savedName),
+          subject: savedName,
+          onPrepareShareFile: () async {
+            final client = HttpClient();
+            applyZjuNetworkDefense(client);
+            try {
+              final tempDir = Directory.systemTemp;
+              final result =
+                  await FileDownloadShareHelper.downloadCoursewareAndPrepareShare(
+                    client,
+                    item: CoursewareItem(
+                      name: savedName,
+                      sectionTitle: '作业附件',
+                      sizeBytes: size,
+                      uploadId: uploadId,
+                      referenceId: referenceId,
+                      directUrl: fullUrl,
+                    ),
+                    saveDir: tempDir.path,
+                    customFileName: savedName,
+                  );
+              return result.shareFile;
+            } finally {
+              client.close(force: true);
+            }
+          },
+        );
+        return;
+      }
+    }
+
     final target = await FileDownloadShareHelper.chooseSaveTarget(
       context,
-      defaultFileName: name,
-      title: '下载并分享作业附件',
+      defaultFileName: _downloadedAttachmentNames[attKey] ?? name,
+      title: share ? '下载并分享作业附件' : '下载作业附件',
+      confirmHint: share ? null : '仅下载保存，不会触发分享：',
     );
     if (target == null || !mounted) return;
     final saveDir = target.directory;
@@ -117,28 +205,38 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
     try {
       final result =
           await FileDownloadShareHelper.downloadCoursewareAndPrepareShare(
-        client,
-        item: CoursewareItem(
-          name: name,
-          sectionTitle: '作业附件',
-          sizeBytes: size,
-          uploadId: uploadId,
-          referenceId: referenceId,
-          directUrl: fullUrl,
-        ),
-        saveDir: saveDir,
-        customFileName: target.fileName,
-      );
+            client,
+            item: CoursewareItem(
+              name: name,
+              sectionTitle: '作业附件',
+              sizeBytes: size,
+              uploadId: uploadId,
+              referenceId: referenceId,
+              directUrl: fullUrl,
+            ),
+            saveDir: saveDir,
+            customFileName: target.fileName,
+          );
       if (!mounted) return;
       setState(() {
         _downloadingAttachments.remove(attKey);
+        if (result.isSuccess) {
+          _downloadedAttachments[attKey] = result.savedPath!;
+          _downloadedAttachmentNames[attKey] = result.fileName;
+        }
       });
       if (result.isSuccess) {
+        await FileDownloadShareHelper.saveDownloadRecord(
+          _attachmentRecordKey(attKey),
+          savedPath: result.savedPath!,
+          fileName: result.fileName,
+          mimeType: result.mimeType,
+        );
         AppNotification.success(
-          '下载完成',
+          share ? '已保存，正在分享' : '下载完成',
           '${result.fileName}\n已保存：${FileDownloadShareHelper.formatDirShort(saveDir)}',
         );
-        if (result.shareFile != null) {
+        if (share && result.shareFile != null) {
           await FileDownloadShareHelper.shareFiles(
             [result.shareFile!],
             mimeTypes: [result.mimeType],
@@ -213,8 +311,9 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
       _resolvedActivityId = widget.todo!.id;
     } else if (widget.task?.fromUid != null &&
         widget.task!.fromUid!.startsWith('courses-todo:')) {
-      _resolvedActivityId =
-          widget.task!.fromUid!.substring('courses-todo:'.length);
+      _resolvedActivityId = widget.task!.fromUid!.substring(
+        'courses-todo:'.length,
+      );
     }
 
     // 解析 courseId 与 submitUrl
@@ -223,8 +322,9 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
       if (widget.todo != null) {
         rawUrl = widget.todo!.submitUrl;
       } else if (widget.task != null) {
-        final match = RegExp(r'https://courses\.zju\.edu\.cn\S+')
-            .firstMatch(widget.task!.description);
+        final match = RegExp(
+          r'https://courses\.zju\.edu\.cn\S+',
+        ).firstMatch(widget.task!.description);
         rawUrl = match?.group(0);
       }
     }
@@ -237,8 +337,9 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
         widget.todo!.resolvedCourseId.isNotEmpty) {
       _resolvedCourseId = widget.todo!.resolvedCourseId;
     } else {
-      final match = RegExp(r'/course[s]?/(\d+)/[^\d]*(\d+)')
-          .firstMatch(_resolvedSubmitUrl);
+      final match = RegExp(
+        r'/course[s]?/(\d+)/[^\d]*(\d+)',
+      ).firstMatch(_resolvedSubmitUrl);
       if (match != null) {
         _resolvedCourseId = match.group(1);
         _resolvedActivityId ??= match.group(2);
@@ -254,8 +355,9 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
           final cached = box.get('courses_todo');
           if (cached is String && cached.isNotEmpty) {
             final decoded = jsonDecode(cached);
-            final list =
-                asDynamicList(decoded is Map ? decoded['todo_list'] : null);
+            final list = asDynamicList(
+              decoded is Map ? decoded['todo_list'] : null,
+            );
             if (list != null) {
               for (final item in list) {
                 final m = asStringMap(item);
@@ -279,8 +381,10 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
     } else if (widget.todo != null) {
       _resolvedTitle = widget.todo!.name;
     } else if (widget.task != null) {
-      _resolvedTitle =
-          widget.task!.summary.replaceFirst(RegExp(r'^(作业|小测)：'), '');
+      _resolvedTitle = widget.task!.summary.replaceFirst(
+        RegExp(r'^(作业|小测)：'),
+        '',
+      );
     }
 
     if (widget.todo != null && widget.todo!.course.isNotEmpty) {
@@ -326,8 +430,10 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
 
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 10);
-    applyZjuNetworkDefense(client,
-        connectionTimeout: const Duration(seconds: 10));
+    applyZjuNetworkDefense(
+      client,
+      connectionTimeout: const Duration(seconds: 10),
+    );
 
     try {
       // 1. 获取作业活动详情（兼容 TronClass 多租户与多路由）
@@ -406,7 +512,8 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
         if (scoreVal is num) {
           score = scoreVal.toDouble();
         }
-        final createdAtStr = submission['created_time']?.toString() ??
+        final createdAtStr =
+            submission['created_time']?.toString() ??
             submission['updated_time']?.toString();
         if (createdAtStr != null) {
           submittedAt = DateTime.tryParse(createdAtStr);
@@ -463,6 +570,7 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
           _studentUploads = studentFiles;
           _teacherComment = teacherComment;
         });
+        await _refreshAttachmentDownloadStates();
       }
     } catch (e) {
       client.close(force: true);
@@ -521,8 +629,8 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
           final targetStatus = (submitted || score != null)
               ? TaskStatus.completed
               : (t.endTime.isBefore(DateTime.now())
-                  ? TaskStatus.failed
-                  : TaskStatus.running);
+                    ? TaskStatus.failed
+                    : TaskStatus.running);
           if (oldStatus != targetStatus) {
             t.status = targetStatus;
             t.refreshStatus();
@@ -558,16 +666,18 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
   /// 选择本地文件作为附件（支持单选或一次多选，支持追加）
   Future<void> _pickAttachments() async {
     try {
-      final pickedList =
-          await OhosNativeService.instance.pickAnyFiles(maxCount: 10);
+      final pickedList = await OhosNativeService.instance.pickAnyFiles(
+        maxCount: 10,
+      );
       if (pickedList.isNotEmpty) {
         if (mounted) {
           setState(() {
             for (final item in pickedList) {
               final name = item['name'] as String;
               final size = item['size'] as int;
-              final alreadyAdded = _selectedAttachments
-                  .any((a) => a['name'] == name && a['size'] == size);
+              final alreadyAdded = _selectedAttachments.any(
+                (a) => a['name'] == name && a['size'] == size,
+              );
               if (!alreadyAdded) {
                 _selectedAttachments.add(item);
               }
@@ -663,8 +773,10 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
 
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 40);
-    applyZjuNetworkDefense(client,
-        connectionTimeout: const Duration(seconds: 40));
+    applyZjuNetworkDefense(
+      client,
+      connectionTimeout: const Duration(seconds: 40),
+    );
 
     try {
       final uploadIds = <int>[];
@@ -719,8 +831,9 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
               fileCount: _selectedAttachments.length,
             );
             // 严格保证进度单调递增，杜绝任何通道回退或重传导致的进度条倒退
-            final nextProgress =
-                rawProgress > _submitProgress ? rawProgress : _submitProgress;
+            final nextProgress = rawProgress > _submitProgress
+                ? rawProgress
+                : _submitProgress;
             final String nextStatus;
             if (fileTotal > 0 && clampedSent >= fileTotal) {
               nextStatus =
@@ -838,8 +951,10 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
                 child: const Text('在浏览器打开'),
                 onPressed: () {
                   Navigator.of(ctx).pop();
-                  launchUrlString(_resolvedSubmitUrl,
-                      mode: LaunchMode.externalApplication);
+                  launchUrlString(
+                    _resolvedSubmitUrl,
+                    mode: LaunchMode.externalApplication,
+                  );
                 },
               ),
             ],
@@ -880,8 +995,10 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
     final subId = _latestSubmission?['id']?.toString() ?? '';
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 15);
-    applyZjuNetworkDefense(client,
-        connectionTimeout: const Duration(seconds: 15));
+    applyZjuNetworkDefense(
+      client,
+      connectionTimeout: const Duration(seconds: 15),
+    );
 
     try {
       final success = await Courses.retractHomework(
@@ -990,11 +1107,13 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
   static String _cleanHtmlText(String html) {
     var text = html
         .replaceAll(
-            RegExp(r'<style\b[^>]*>[\s\S]*?<\/style>', caseSensitive: false),
-            '')
+          RegExp(r'<style\b[^>]*>[\s\S]*?<\/style>', caseSensitive: false),
+          '',
+        )
         .replaceAll(
-            RegExp(r'<script\b[^>]*>[\s\S]*?<\/script>', caseSensitive: false),
-            '')
+          RegExp(r'<script\b[^>]*>[\s\S]*?<\/script>', caseSensitive: false),
+          '',
+        )
         .replaceAll(RegExp(r'<!--[\s\S]*?-->'), '')
         .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
         .replaceAll(RegExp(r'</p>', caseSensitive: false), '\n\n')
@@ -1016,18 +1135,25 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
 
     final segments = <_DescriptionSegment>[];
     final imgRegex = RegExp(r'<img\b([^>]*)>', caseSensitive: false);
-    final srcRegex =
-        RegExp(r'''src\s*=\s*["']([^"']+)["']''', caseSensitive: false);
-    final unquotedSrcRegex =
-        RegExp(r'''src\s*=\s*([^\s>]+)''', caseSensitive: false);
-    final altRegex =
-        RegExp(r'''alt\s*=\s*["']([^"']*)["']''', caseSensitive: false);
+    final srcRegex = RegExp(
+      r'''src\s*=\s*["']([^"']+)["']''',
+      caseSensitive: false,
+    );
+    final unquotedSrcRegex = RegExp(
+      r'''src\s*=\s*([^\s>]+)''',
+      caseSensitive: false,
+    );
+    final altRegex = RegExp(
+      r'''alt\s*=\s*["']([^"']*)["']''',
+      caseSensitive: false,
+    );
 
     int lastIndex = 0;
     for (final match in imgRegex.allMatches(rawHtml)) {
       if (match.start > lastIndex) {
-        final precedingText =
-            _cleanHtmlText(rawHtml.substring(lastIndex, match.start));
+        final precedingText = _cleanHtmlText(
+          rawHtml.substring(lastIndex, match.start),
+        );
         if (precedingText.isNotEmpty) {
           segments.add(_TextDescriptionSegment(precedingText));
         }
@@ -1065,82 +1191,120 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
+    final navTitle = _resolvedCourseName.isNotEmpty
+        ? '$_resolvedCourseName · ${_isQuiz ? '在线测验' : '作业'}'
+        : (_isQuiz ? '在线测试详情' : '作业详情与提交');
     return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        middle: Text(
-          _resolvedCourseName.isNotEmpty
-              ? '$_resolvedCourseName · ${_isQuiz ? '在线测验' : '作业'}'
-              : (_isQuiz ? '在线测试详情' : '作业详情与提交'),
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
+      backgroundColor: colors.pageBg,
+      child: SafeArea(
+        bottom: false,
+        child: Column(
           children: [
-            CupertinoButton(
-              padding: EdgeInsets.zero,
-              minSize: 0,
-              onPressed: () => launchUrlString(_resolvedSubmitUrl,
-                  mode: LaunchMode.externalApplication),
-              child: const Icon(CupertinoIcons.compass, size: 22),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+              child: Row(
+                children: [
+                  AelCircleIconButton(
+                    icon: AelIcons.back,
+                    size: 36,
+                    iconSize: 18,
+                    tooltip: '返回',
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      navTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.3,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  AelCircleIconButton(
+                    icon: AelIcons.compass,
+                    size: 36,
+                    iconSize: 17,
+                    tooltip: '在浏览器打开',
+                    onPressed: () => launchUrlString(
+                      _resolvedSubmitUrl,
+                      mode: LaunchMode.externalApplication,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  AelCircleIconButton(
+                    icon: AelIcons.refresh,
+                    size: 36,
+                    iconSize: 17,
+                    tooltip: '刷新',
+                    onPressed: _isLoading ? null : _loadData,
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(width: 14),
-            CupertinoButton(
-              padding: EdgeInsets.zero,
-              minSize: 0,
-              onPressed: _isLoading ? null : _loadData,
-              child: const Icon(CupertinoIcons.arrow_clockwise, size: 20),
+            Expanded(
+              child: _isLoading
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const CupertinoActivityIndicator(radius: 14),
+                          const SizedBox(height: 12),
+                          Text(
+                            '正在获取学在浙大作业与提交信息...',
+                            style: TextStyle(color: colors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    )
+                  : SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: EdgeInsets.fromLTRB(
+                        16,
+                        10,
+                        16,
+                        MediaQuery.paddingOf(context).bottom + 24,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildHeaderCard(colors),
+                          const SizedBox(height: 12),
+                          if (_errorMessage != null) ...[
+                            _buildErrorCard(colors),
+                            const SizedBox(height: 12),
+                          ],
+                          if (_isQuiz) ...[
+                            _buildQuizRuleCard(colors),
+                            const SizedBox(height: 12),
+                          ],
+                          _buildRequirementsCard(colors),
+                          const SizedBox(height: 12),
+                          if (_teacherUploads.isNotEmpty) ...[
+                            _buildTeacherUploadsCard(colors),
+                            const SizedBox(height: 12),
+                          ],
+                          if (_isQuiz)
+                            _buildQuizConsoleSection(colors)
+                          else
+                            _buildSubmissionCard(colors),
+                        ],
+                      ),
+                    ),
             ),
           ],
         ),
       ),
-      child: SafeArea(
-        child: _isLoading
-            ? const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CupertinoActivityIndicator(radius: 14),
-                    SizedBox(height: 12),
-                    Text('正在获取学在浙大作业与提交信息...'),
-                  ],
-                ),
-              )
-            : SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildHeaderCard(),
-                    const SizedBox(height: 12),
-                    if (_errorMessage != null) ...[
-                      _buildErrorCard(),
-                      const SizedBox(height: 12),
-                    ],
-                    if (_isQuiz) ...[
-                      _buildQuizRuleCard(),
-                      const SizedBox(height: 12),
-                    ],
-                    _buildRequirementsCard(),
-                    const SizedBox(height: 12),
-                    if (_teacherUploads.isNotEmpty) ...[
-                      _buildTeacherUploadsCard(),
-                      const SizedBox(height: 12),
-                    ],
-                    if (_isQuiz)
-                      _buildQuizConsoleSection()
-                    else
-                      _buildSubmissionCard(),
-                    const SizedBox(height: 24),
-                  ],
-                ),
-              ),
-      ),
     );
   }
 
-  Widget _buildQuizRuleCard() {
+  Widget _buildQuizRuleCard(AelColorTokens colors) {
     final details = _activityDetails;
     if (details == null) return const SizedBox.shrink();
 
@@ -1155,7 +1319,8 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
     }
 
     String? attemptsStr;
-    final rawAttempts = details['submission_count_limit'] ??
+    final rawAttempts =
+        details['submission_count_limit'] ??
         details['allowed_attempts'] ??
         details['submit_count_limit'] ??
         details['attempt_limit'];
@@ -1180,73 +1345,47 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
       questionsCountStr = '$rawQCount 题';
     }
 
-    return RoundRectangleCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return AelSectionCard(
+      title: '测验规则与说明',
+      icon: AelIcons.exam,
+      trailing: const AelChip(label: '在线小测', tone: AelChipTone.info),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 8,
         children: [
-          Row(
-            children: [
-              const Icon(CupertinoIcons.square_list,
-                  size: 16, color: CupertinoColors.systemPurple),
-              const SizedBox(width: 6),
-              const Text(
-                '测验规则与说明',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(width: 6),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                decoration: BoxDecoration(
-                  color: CupertinoColors.systemPurple.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Text(
-                  '在线小测',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: CupertinoColors.systemPurple,
-                  ),
-                ),
-              ),
-            ],
+          _buildQuizParamChip(
+            colors,
+            icon: LucideIcons.timer,
+            label: '答题限时',
+            value: durationStr ?? '不限时长',
           ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            children: [
-              _buildQuizParamChip(
-                icon: CupertinoIcons.stopwatch,
-                label: '答题限时',
-                value: durationStr ?? '不限时长',
-              ),
-              _buildQuizParamChip(
-                icon: CupertinoIcons.repeat,
-                label: '允许次数',
-                value: attemptsStr ?? '1 次',
-              ),
-              if (totalScoreStr != null)
-                _buildQuizParamChip(
-                  icon: CupertinoIcons.flag,
-                  label: '测验满分',
-                  value: totalScoreStr,
-                ),
-              if (questionsCountStr != null)
-                _buildQuizParamChip(
-                  icon: CupertinoIcons.number,
-                  label: '题目数量',
-                  value: questionsCountStr,
-                ),
-            ],
+          _buildQuizParamChip(
+            colors,
+            icon: AelIcons.refresh,
+            label: '允许次数',
+            value: attemptsStr ?? '1 次',
           ),
+          if (totalScoreStr != null)
+            _buildQuizParamChip(
+              colors,
+              icon: AelIcons.award,
+              label: '测验满分',
+              value: totalScoreStr,
+            ),
+          if (questionsCountStr != null)
+            _buildQuizParamChip(
+              colors,
+              icon: LucideIcons.hash,
+              label: '题目数量',
+              value: questionsCountStr,
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildQuizParamChip({
+  Widget _buildQuizParamChip(
+    AelColorTokens colors, {
     required IconData icon,
     required String label,
     required String value,
@@ -1254,27 +1393,24 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: CupertinoColors.systemPurple.withValues(alpha: 0.08),
+        color: colors.infoContainer,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: CupertinoColors.systemPurple),
+          Icon(icon, size: 13, color: colors.onInfoContainer),
           const SizedBox(width: 5),
           Text(
             '$label: ',
-            style: const TextStyle(
-              fontSize: 12,
-              color: CupertinoColors.secondaryLabel,
-            ),
+            style: TextStyle(fontSize: 12, color: colors.textSecondary),
           ),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.bold,
-              color: CupertinoColors.systemPurple,
+              color: colors.onInfoContainer,
             ),
           ),
         ],
@@ -1282,95 +1418,55 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
     );
   }
 
-  Widget _buildQuizConsoleSection() {
-    return RoundRectangleCard(
+  Widget _buildQuizConsoleSection(AelColorTokens colors) {
+    return AelSectionCard(
+      title: _isSubmitted ? '测验完成记录' : '在线测验作答',
+      icon: _isSubmitted ? AelIcons.success : AelIcons.edit,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Icon(
-                _isSubmitted
-                    ? CupertinoIcons.check_mark_circled_solid
-                    : CupertinoIcons.pencil_outline,
-                size: 16,
-                color: _isSubmitted
-                    ? CupertinoColors.systemGreen
-                    : CupertinoColors.systemPurple,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                _isSubmitted ? '测验完成记录' : '在线测验作答',
-                style:
-                    const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
           if (_isSubmitted) ...[
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: CupertinoColors.systemGreen.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: CupertinoColors.systemGreen.withValues(alpha: 0.25),
-                  width: 1,
-                ),
+                color: colors.successContainer,
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      const Icon(CupertinoIcons.checkmark_alt,
-                          size: 16, color: CupertinoColors.systemGreen),
+                      Icon(AelIcons.check, size: 16, color: colors.success),
                       const SizedBox(width: 6),
-                      Text(
-                        _submittedAt != null
-                            ? '已于 ${_submittedAt!.year}-${_submittedAt!.month.toString().padLeft(2, '0')}-${_submittedAt!.day.toString().padLeft(2, '0')} ${_submittedAt!.hour.toString().padLeft(2, '0')}:${_submittedAt!.minute.toString().padLeft(2, '0')} 完成作答'
-                            : '已在学在浙大完成测验作答',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: CupertinoColors.systemGreen,
+                      Expanded(
+                        child: Text(
+                          _submittedAt != null
+                              ? '已于 ${_submittedAt!.year}-${_submittedAt!.month.toString().padLeft(2, '0')}-${_submittedAt!.day.toString().padLeft(2, '0')} ${_submittedAt!.hour.toString().padLeft(2, '0')}:${_submittedAt!.minute.toString().padLeft(2, '0')} 完成作答'
+                              : '已在学在浙大完成测验作答',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: colors.onSuccessContainer,
+                          ),
                         ),
                       ),
                     ],
                   ),
                   if (_score != null) ...[
                     const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: CupertinoColors.systemOrange
-                            .withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(CupertinoIcons.star_fill,
-                              size: 14, color: CupertinoColors.systemOrange),
-                          const SizedBox(width: 5),
-                          Text(
-                            '测验得分：${_score == _score!.roundToDouble() ? _score!.toInt() : _score!.toStringAsFixed(1)} 分',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: CupertinoColors.systemOrange,
-                            ),
-                          ),
-                        ],
-                      ),
+                    AelChip(
+                      leadingIcon: AelIcons.award,
+                      label:
+                          '测验得分：${_score == _score!.roundToDouble() ? _score!.toInt() : _score!.toStringAsFixed(1)} 分',
+                      tone: AelChipTone.warning,
                     ),
                   ],
                   if (_teacherComment != null) ...[
                     const SizedBox(height: 8),
                     Text(
                       '教师评语：$_teacherComment',
-                      style: const TextStyle(fontSize: 12),
+                      style: TextStyle(fontSize: 12, color: colors.textPrimary),
                     ),
                   ],
                 ],
@@ -1381,26 +1477,21 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: CupertinoColors.systemPurple.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: CupertinoColors.systemPurple.withValues(alpha: 0.2),
-                  width: 1,
-                ),
+                color: colors.infoContainer,
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: const Row(
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(CupertinoIcons.info_circle,
-                      size: 16, color: CupertinoColors.systemPurple),
-                  SizedBox(width: 8),
+                  Icon(AelIcons.info, size: 16, color: colors.onInfoContainer),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '在线小测/随堂测试需在学在浙大在线答题系统完成。请点击下方“进入在线作答”在浏览器中完成试题。答题完毕后，点击“探测作答与得分状态”即可一键同步。',
+                      '在线小测/随堂测试需在学在浙大在线答题系统完成。请点击下方“进入在线作答”在浏览器中完成试题。答题完毕后，点击“探测作答与得分”即可一键同步。',
                       style: TextStyle(
                         fontSize: 13,
                         height: 1.4,
-                        color: CupertinoColors.systemPurple,
+                        color: colors.onInfoContainer,
                       ),
                     ),
                   ),
@@ -1411,28 +1502,13 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
           ],
 
           // 核心作答按钮
-          CupertinoButton.filled(
-            padding: const EdgeInsets.symmetric(vertical: 11),
-            borderRadius: BorderRadius.circular(8),
+          AelButton(
+            expanded: true,
+            icon: AelIcons.externalLink,
+            label: _isSubmitted ? '在网页端查看答卷与解析' : '进入学在浙大在线作答',
             onPressed: () => launchUrlString(
               _resolvedSubmitUrl,
               mode: LaunchMode.externalApplication,
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(CupertinoIcons.rocket_fill,
-                    size: 17, color: CupertinoColors.white),
-                const SizedBox(width: 8),
-                Text(
-                  _isSubmitted ? '在网页端查看答卷与解析' : '🚀 进入学在浙大在线作答',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: CupertinoColors.white,
-                  ),
-                ),
-              ],
             ),
           ),
           const SizedBox(height: 10),
@@ -1441,37 +1517,21 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
           Row(
             children: [
               Expanded(
-                child: CupertinoButton(
-                  padding: const EdgeInsets.symmetric(vertical: 9),
-                  color: CupertinoColors.activeBlue.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
+                child: AelButton(
+                  variant: AelButtonVariant.tonal,
+                  icon: AelIcons.search,
+                  label: '探测作答与得分',
                   onPressed: _isLoading ? null : _loadData,
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(CupertinoIcons.search,
-                          size: 14, color: CupertinoColors.activeBlue),
-                      SizedBox(width: 5),
-                      Text(
-                        '探测作答与得分',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: CupertinoColors.activeBlue,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: CupertinoButton(
-                  padding: const EdgeInsets.symmetric(vertical: 9),
-                  color: _isSubmitted
-                      ? CupertinoColors.destructiveRed.withValues(alpha: 0.12)
-                      : CupertinoColors.systemGreen.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
+                child: AelButton(
+                  variant: _isSubmitted
+                      ? AelButtonVariant.destructive
+                      : AelButtonVariant.tonal,
+                  icon: _isSubmitted ? AelIcons.close : AelIcons.check,
+                  label: _isSubmitted ? '标记为未作答' : '手动标记已作答',
                   onPressed: () {
                     final targetSubmitted = !_isSubmitted;
                     setState(() {
@@ -1482,38 +1542,16 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
                     });
                     _syncTaskStatusLocally(targetSubmitted, _score);
                   },
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        _isSubmitted
-                            ? CupertinoIcons.clear_circled
-                            : CupertinoIcons.checkmark_alt_circle,
-                        size: 14,
-                        color: _isSubmitted
-                            ? CupertinoColors.destructiveRed
-                            : CupertinoColors.systemGreen,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        _isSubmitted ? '标记为未作答' : '手动标记已作答',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: _isSubmitted
-                              ? CupertinoColors.destructiveRed
-                              : CupertinoColors.systemGreen,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          CupertinoButton(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+          AelButton(
+            expanded: true,
+            variant: AelButtonVariant.tonal,
+            icon: AelIcons.copy,
+            label: '复制作答直达链接',
             onPressed: () {
               Clipboard.setData(ClipboardData(text: _resolvedSubmitUrl));
               showCupertinoDialog<void>(
@@ -1534,60 +1572,47 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
                 ),
               );
             },
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(CupertinoIcons.doc_on_clipboard, size: 14),
-                SizedBox(width: 4),
-                Text('复制作答直达链接', style: TextStyle(fontSize: 13)),
-              ],
-            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildHeaderCard() {
+  Widget _buildHeaderCard(AelColorTokens colors) {
     final now = DateTime.now();
     final isGraded = _score != null;
-    final isOverdue = !_isSubmitted &&
+    final isOverdue =
+        !_isSubmitted &&
         _resolvedEndTime != null &&
         _resolvedEndTime!.isBefore(now);
 
-    Color badgeBg;
-    Color badgeFg;
+    AelChipTone badgeTone;
     IconData badgeIcon;
     String badgeText;
 
     if (isGraded) {
-      badgeBg = CupertinoColors.systemOrange.withValues(alpha: 0.15);
-      badgeFg = CupertinoColors.systemOrange;
-      badgeIcon = CupertinoIcons.star_fill;
+      badgeTone = AelChipTone.warning;
+      badgeIcon = AelIcons.award;
       final sText = _score == _score!.roundToDouble()
           ? _score!.toInt().toString()
           : _score!.toStringAsFixed(1);
       badgeText = '已批改 · $sText 分';
     } else if (_isSubmitted) {
-      badgeBg = CupertinoColors.systemGreen.withValues(alpha: 0.15);
-      badgeFg = CupertinoColors.systemGreen;
-      badgeIcon = CupertinoIcons.checkmark_circle_fill;
+      badgeTone = AelChipTone.success;
+      badgeIcon = AelIcons.success;
       badgeText = _isQuiz ? '已作答（待批改）' : '已提交（待批改）';
     } else if (isOverdue) {
-      badgeBg = CupertinoColors.systemRed.withValues(alpha: 0.12);
-      badgeFg = CupertinoColors.systemRed;
-      badgeIcon = CupertinoIcons.exclamationmark_circle_fill;
+      badgeTone = AelChipTone.error;
+      badgeIcon = AelIcons.error;
       badgeText = _isQuiz ? '已逾期未测' : '已逾期';
     } else {
       if (_isQuiz) {
-        badgeBg = CupertinoColors.systemPurple.withValues(alpha: 0.15);
-        badgeFg = CupertinoColors.systemPurple;
-        badgeIcon = CupertinoIcons.pencil_ellipsis_rectangle;
+        badgeTone = AelChipTone.info;
+        badgeIcon = AelIcons.edit;
         badgeText = '待作答';
       } else {
-        badgeBg = CupertinoColors.activeBlue.withValues(alpha: 0.12);
-        badgeFg = CupertinoColors.activeBlue;
-        badgeIcon = CupertinoIcons.clock;
+        badgeTone = AelChipTone.primary;
+        badgeIcon = AelIcons.tabFlow;
         badgeText = '待提交';
       }
     }
@@ -1608,69 +1633,35 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
       }
     }
 
-    return RoundRectangleCard(
+    return AelSectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (_isQuiz) ...[
-            Container(
-              margin: const EdgeInsets.only(bottom: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: CupertinoColors.systemPurple.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(CupertinoIcons.pencil_outline,
-                      size: 11, color: CupertinoColors.systemPurple),
-                  SizedBox(width: 3),
-                  Text(
-                    '随堂测验 / 在线小测',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: CupertinoColors.systemPurple,
-                    ),
-                  ),
-                ],
-              ),
+            const AelChip(
+              leadingIcon: AelIcons.edit,
+              label: '随堂测验 / 在线小测',
+              tone: AelChipTone.info,
             ),
+            const SizedBox(height: 8),
           ],
           Row(
             children: [
               Expanded(
                 child: Text(
                   _resolvedTitle,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
+                    color: colors.textPrimary,
                   ),
                 ),
               ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-                decoration: BoxDecoration(
-                  color: badgeBg,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(badgeIcon, size: 12, color: badgeFg),
-                    const SizedBox(width: 4),
-                    Text(
-                      badgeText,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: badgeFg,
-                      ),
-                    ),
-                  ],
-                ),
+              const SizedBox(width: 8),
+              AelChip(
+                leadingIcon: badgeIcon,
+                label: badgeText,
+                tone: badgeTone,
               ),
             ],
           ),
@@ -1678,11 +1669,7 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
             const SizedBox(height: 6),
             Text(
               '课程：$_resolvedCourseName',
-              style: TextStyle(
-                fontSize: 13,
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.secondaryLabel, context),
-              ),
+              style: TextStyle(fontSize: 13, color: colors.textSecondary),
             ),
           ],
           const SizedBox(height: 4),
@@ -1690,10 +1677,7 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
             ddlStr,
             style: TextStyle(
               fontSize: 12,
-              color: isOverdue
-                  ? CupertinoColors.systemRed
-                  : CupertinoDynamicColor.resolve(
-                      CupertinoColors.secondaryLabel, context),
+              color: isOverdue ? colors.error : colors.textSecondary,
             ),
           ),
         ],
@@ -1701,18 +1685,22 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
     );
   }
 
-  Widget _buildErrorCard() {
-    return RoundRectangleCard(
+  Widget _buildErrorCard(AelColorTokens colors) {
+    return AelSectionCard(
+      backgroundColor: colors.warningContainer,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(CupertinoIcons.exclamationmark_triangle_fill,
-              size: 20, color: CupertinoColors.systemOrange),
+          Icon(AelIcons.warning, size: 20, color: colors.warning),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               _errorMessage ?? '',
-              style: const TextStyle(fontSize: 13, height: 1.4),
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.4,
+                color: colors.onWarningContainer,
+              ),
             ),
           ),
         ],
@@ -1720,44 +1708,19 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
     );
   }
 
-  Widget _buildRequirementsCard() {
+  Widget _buildRequirementsCard(AelColorTokens colors) {
     final rawDesc = Courses.extractDescription(_activityDetails);
     final segments = _parseDescriptionSegments(rawDesc);
 
-    return RoundRectangleCard(
+    return AelSectionCard(
+      title: '作业要求与说明',
+      icon: AelIcons.file,
+      trailing: segments.any((s) => s is _ImageDescriptionSegment)
+          ? const AelChip(label: '含图', tone: AelChipTone.primary)
+          : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(CupertinoIcons.doc_text, size: 16),
-              const SizedBox(width: 6),
-              const Text(
-                '作业要求与说明',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-              ),
-              if (segments.any((s) => s is _ImageDescriptionSegment)) ...[
-                const SizedBox(width: 6),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.activeBlue.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text(
-                    '含图',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: CupertinoColors.activeBlue,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 10),
           if (segments.isNotEmpty) ...[
             ...segments.asMap().entries.map((entry) {
               final idx = entry.key;
@@ -1771,18 +1734,14 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
                     style: TextStyle(
                       fontSize: 14,
                       height: 1.45,
-                      color:
-                          CupertinoTheme.of(context).textTheme.textStyle.color,
+                      color: colors.textPrimary,
                     ),
                   ),
                 );
               } else if (seg is _ImageDescriptionSegment) {
                 return Padding(
                   padding: EdgeInsets.only(bottom: isLast ? 0 : 8.0),
-                  child: _CoursesNetworkImage(
-                    url: seg.src,
-                    alt: seg.alt,
-                  ),
+                  child: _CoursesNetworkImage(url: seg.src, alt: seg.alt),
                 );
               }
               return const SizedBox.shrink();
@@ -1795,8 +1754,7 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
               style: TextStyle(
                 fontSize: 14,
                 height: 1.45,
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.placeholderText, context),
+                color: colors.textTertiary,
               ),
             ),
           ],
@@ -1805,125 +1763,179 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
     );
   }
 
-  Widget _buildTeacherUploadsCard() {
-    return RoundRectangleCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+  Widget _attachmentPill({
+    required IconData icon,
+    required String label,
+    required Color bg,
+    required Color fg,
+    required VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Opacity(
+        opacity: onTap == null ? 0.5 : 1,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(CupertinoIcons.paperclip, size: 16),
-              const SizedBox(width: 6),
+              Icon(icon, size: 12.5, color: fg),
+              const SizedBox(width: 4),
               Text(
-                '教师附件 (${_teacherUploads.length})',
-                style:
-                    const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                label,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: fg,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTeacherUploadsCard(AelColorTokens colors) {
+    return AelSectionCard(
+      title: '教师附件 (${_teacherUploads.length})',
+      icon: LucideIcons.paperclip,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           ..._teacherUploads.map((file) {
             final name = file['name']?.toString() ?? '附件文件';
             final size = (file['size'] as num?)?.toInt() ?? 0;
             final uploadId = (file['id'] as num?)?.toInt() ?? 0;
             final referenceId = (file['reference_id'] as num?)?.toInt() ?? 0;
-            final downloadUrl = file['download_url']?.toString() ??
+            final downloadUrl =
+                file['download_url']?.toString() ??
                 '/api/uploads/${file['id']}/blob';
             final fullUrl = downloadUrl.startsWith('http')
                 ? downloadUrl
                 : 'https://courses.zju.edu.cn$downloadUrl';
             final attKey = '${uploadId}_${referenceId}_$fullUrl';
             final isDownloading = _downloadingAttachments.contains(attKey);
+            final isDownloaded = _downloadedAttachments.containsKey(attKey);
 
             final isImage =
-                RegExp(r'\.(png|jpe?g|gif|webp|bmp)$', caseSensitive: false)
-                        .hasMatch(name) ||
-                    (file['content_type']
-                            ?.toString()
-                            .toLowerCase()
-                            .startsWith('image/') ??
-                        false);
+                RegExp(
+                  r'\.(png|jpe?g|gif|webp|bmp)$',
+                  caseSensitive: false,
+                ).hasMatch(name) ||
+                (file['content_type']?.toString().toLowerCase().startsWith(
+                      'image/',
+                    ) ??
+                    false);
 
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 4.0),
               child: Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.tertiarySystemFill, context),
-                  borderRadius: BorderRadius.circular(8),
+                  color: colors.tonalTileBg,
+                  borderRadius: BorderRadius.circular(AelRadius.tile),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      isImage ? CupertinoIcons.photo : CupertinoIcons.doc_fill,
-                      size: 20,
-                      color: isImage
-                          ? CupertinoColors.systemTeal
-                          : CupertinoColors.activeBlue,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(name,
-                              style: const TextStyle(
-                                  fontSize: 13, fontWeight: FontWeight.w500)),
-                          if (size > 0)
-                            Text(
-                              _formatFileSize(size),
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: CupertinoDynamicColor.resolve(
-                                    CupertinoColors.secondaryLabel, context),
+                    Row(
+                      children: [
+                        Icon(
+                          isImage ? AelIcons.image : AelIcons.file,
+                          size: 20,
+                          color: isImage ? colors.info : colors.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                name,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: colors.textPrimary,
+                                ),
                               ),
+                              if (size > 0)
+                                Text(
+                                  _formatFileSize(size),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: colors.textSecondary,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        if (isDownloading)
+                          const CupertinoActivityIndicator(radius: 8)
+                        else ...[
+                          if (isImage) ...[
+                            _attachmentPill(
+                              icon: AelIcons.search,
+                              label: '预览',
+                              bg: colors.infoContainer,
+                              fg: colors.onInfoContainer,
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  CupertinoPageRoute(
+                                    builder: (ctx) => _CoursesImageViewerPage(
+                                      imageUrl: fullUrl,
+                                      title: name,
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
+                            const SizedBox(width: 4),
+                          ],
+                          _attachmentPill(
+                            icon: isDownloaded
+                                ? AelIcons.check
+                                : AelIcons.download,
+                            label: isDownloaded ? '已下载' : '下载',
+                            bg: isDownloaded
+                                ? colors.successContainer
+                                : colors.primaryContainer,
+                            fg: isDownloaded
+                                ? colors.onSuccessContainer
+                                : colors.onPrimaryContainer,
+                            onTap: () => _downloadOrShareAttachment(
+                              attKey: attKey,
+                              name: name,
+                              fullUrl: fullUrl,
+                              size: size,
+                              uploadId: uploadId,
+                              referenceId: referenceId,
+                              share: false,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          _attachmentPill(
+                            icon: AelIcons.share,
+                            label: '分享',
+                            bg: colors.cardBg,
+                            fg: colors.textPrimary,
+                            onTap: () => _downloadOrShareAttachment(
+                              attKey: attKey,
+                              name: name,
+                              fullUrl: fullUrl,
+                              size: size,
+                              uploadId: uploadId,
+                              referenceId: referenceId,
+                              share: true,
+                            ),
+                          ),
                         ],
-                      ),
-                    ),
-                    if (isImage) ...[
-                      CupertinoButton(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 9, vertical: 4),
-                        minSize: 0,
-                        color: CupertinoColors.systemTeal,
-                        borderRadius: BorderRadius.circular(6),
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            CupertinoPageRoute(
-                              builder: (ctx) => _CoursesImageViewerPage(
-                                imageUrl: fullUrl,
-                                title: name,
-                              ),
-                            ),
-                          );
-                        },
-                        child: const Text('预览', style: TextStyle(fontSize: 12)),
-                      ),
-                      const SizedBox(width: 6),
-                    ],
-                    CupertinoButton(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      minSize: 0,
-                      color: CupertinoColors.activeBlue,
-                      borderRadius: BorderRadius.circular(6),
-                      onPressed: isDownloading
-                          ? null
-                          : () => _downloadAndShareAttachment(
-                                attKey: attKey,
-                                name: name,
-                                fullUrl: fullUrl,
-                                size: size,
-                                uploadId: uploadId,
-                                referenceId: referenceId,
-                              ),
-                      child: isDownloading
-                          ? const CupertinoActivityIndicator(
-                              radius: 7, color: CupertinoColors.white)
-                          : const Text('下载并分享',
-                              style: TextStyle(fontSize: 12)),
+                      ],
                     ),
                   ],
                 ),
@@ -1935,69 +1947,52 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
     );
   }
 
-  Widget _buildSubmissionCard() {
-    return RoundRectangleCard(
+  Widget _buildSubmissionCard(AelColorTokens colors) {
+    return AelSectionCard(
+      title: _isSubmitted ? '提交记录' : '作业提交',
+      icon: _isSubmitted ? AelIcons.success : AelIcons.upload,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Icon(
-                _isSubmitted
-                    ? CupertinoIcons.check_mark_circled_solid
-                    : CupertinoIcons.arrow_up_doc,
-                size: 16,
-                color: _isSubmitted
-                    ? CupertinoColors.systemGreen
-                    : CupertinoColors.activeBlue,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                _isSubmitted ? '提交记录' : '作业提交',
-                style:
-                    const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
           // 若已提交：展示提交详情与撤回选项
           if (_isSubmitted) ...[
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: CupertinoColors.systemGreen.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: CupertinoColors.systemGreen.withValues(alpha: 0.25),
-                  width: 1,
-                ),
+                color: colors.successContainer,
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      const Icon(CupertinoIcons.checkmark_alt,
-                          size: 16, color: CupertinoColors.systemGreen),
+                      Icon(AelIcons.check, size: 16, color: colors.success),
                       const SizedBox(width: 6),
-                      Text(
-                        _submittedAt != null
-                            ? '已于 ${_submittedAt!.year}-${_submittedAt!.month.toString().padLeft(2, '0')}-${_submittedAt!.day.toString().padLeft(2, '0')} ${_submittedAt!.hour.toString().padLeft(2, '0')}:${_submittedAt!.minute.toString().padLeft(2, '0')} 提交'
-                            : '已在学在浙大完成提交',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: CupertinoColors.systemGreen,
+                      Expanded(
+                        child: Text(
+                          _submittedAt != null
+                              ? '已于 ${_submittedAt!.year}-${_submittedAt!.month.toString().padLeft(2, '0')}-${_submittedAt!.day.toString().padLeft(2, '0')} ${_submittedAt!.hour.toString().padLeft(2, '0')}:${_submittedAt!.minute.toString().padLeft(2, '0')} 提交'
+                              : '已在学在浙大完成提交',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: colors.onSuccessContainer,
+                          ),
                         ),
                       ),
                     ],
                   ),
                   if (_studentUploads.isNotEmpty) ...[
                     const SizedBox(height: 8),
-                    const Text('已提交附件：',
-                        style: TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w500)),
+                    Text(
+                      '已提交附件：',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: colors.textSecondary,
+                      ),
+                    ),
                     const SizedBox(height: 4),
                     ..._studentUploads.map((file) {
                       final name = file['name']?.toString() ?? '提交文件';
@@ -2006,12 +2001,19 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
                         padding: const EdgeInsets.symmetric(vertical: 2.0),
                         child: Row(
                           children: [
-                            const Icon(CupertinoIcons.paperclip, size: 14),
+                            Icon(
+                              LucideIcons.paperclip,
+                              size: 14,
+                              color: colors.textSecondary,
+                            ),
                             const SizedBox(width: 4),
                             Expanded(
                               child: Text(
                                 '$name (${size > 0 ? _formatFileSize(size) : "已上传"})',
-                                style: const TextStyle(fontSize: 12),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: colors.textPrimary,
+                                ),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -2025,7 +2027,7 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
                     const SizedBox(height: 8),
                     Text(
                       '提交留言：${_latestSubmission!['comment']}',
-                      style: const TextStyle(fontSize: 12),
+                      style: TextStyle(fontSize: 12, color: colors.textPrimary),
                     ),
                   ],
                   if (_teacherComment != null) ...[
@@ -2033,14 +2035,15 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color:
-                            CupertinoColors.systemOrange.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(6),
+                        color: colors.warningContainer,
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         '教师评语：$_teacherComment',
-                        style: const TextStyle(
-                            fontSize: 12, color: CupertinoColors.systemOrange),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colors.onWarningContainer,
+                        ),
                       ),
                     ),
                   ],
@@ -2049,30 +2052,12 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
             ),
             const SizedBox(height: 12),
             if (_allowRetract && _score == null) ...[
-              CupertinoButton(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                color: CupertinoColors.destructiveRed.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
+              AelButton(
+                expanded: true,
+                variant: AelButtonVariant.destructive,
+                icon: _isSubmitting ? null : AelIcons.refresh,
+                label: _isSubmitting ? '正在撤回...' : '撤回作业提交',
                 onPressed: _isSubmitting ? null : _retractHomework,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (_isSubmitting)
-                      const CupertinoActivityIndicator(radius: 8)
-                    else
-                      const Icon(CupertinoIcons.arrow_counterclockwise,
-                          size: 15, color: CupertinoColors.destructiveRed),
-                    const SizedBox(width: 6),
-                    const Text(
-                      '撤回作业提交',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: CupertinoColors.destructiveRed,
-                      ),
-                    ),
-                  ],
-                ),
               ),
             ],
           ] else ...[
@@ -2083,22 +2068,20 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
                 children: [
                   Text(
                     '待提交附件 (${_selectedAttachments.length})',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
+                      color: colors.textPrimary,
                     ),
                   ),
-                  CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    minSize: 0,
-                    onPressed: () {
+                  AelChip(
+                    label: '清空',
+                    tone: AelChipTone.error,
+                    onTap: () {
                       setState(() {
                         _selectedAttachments.clear();
                       });
                     },
-                    child: const Text('清空',
-                        style: TextStyle(
-                            fontSize: 12, color: CupertinoColors.systemRed)),
                   ),
                 ],
               ),
@@ -2112,34 +2095,36 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 3.0),
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
-                      color: CupertinoDynamicColor.resolve(
-                          CupertinoColors.tertiarySystemFill, context),
-                      borderRadius: BorderRadius.circular(8),
+                      color: colors.tonalTileBg,
+                      borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(
                       children: [
-                        const Icon(CupertinoIcons.doc_fill,
-                            size: 20, color: CupertinoColors.activeBlue),
+                        Icon(AelIcons.file, size: 20, color: colors.primary),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(name,
-                                  style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600)),
+                              Text(
+                                name,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: colors.textPrimary,
+                                ),
+                              ),
                               if (size > 0)
                                 Text(
                                   _formatFileSize(size),
                                   style: TextStyle(
                                     fontSize: 11,
-                                    color: CupertinoDynamicColor.resolve(
-                                        CupertinoColors.secondaryLabel,
-                                        context),
+                                    color: colors.textSecondary,
                                   ),
                                 ),
                             ],
@@ -2147,10 +2132,13 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
                         ),
                         CupertinoButton(
                           padding: const EdgeInsets.all(4),
-                          minSize: 0,
+                          minimumSize: Size.zero,
                           onPressed: () => _removeAttachment(idx),
-                          child: const Icon(CupertinoIcons.clear_circled,
-                              size: 18, color: CupertinoColors.systemGrey),
+                          child: Icon(
+                            AelIcons.close,
+                            size: 18,
+                            color: colors.textTertiary,
+                          ),
                         ),
                       ],
                     ),
@@ -2160,28 +2148,12 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
               const SizedBox(height: 6),
             ],
 
-            CupertinoButton(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              color: CupertinoDynamicColor.resolve(
-                  CupertinoColors.secondarySystemFill, context),
-              borderRadius: BorderRadius.circular(8),
+            AelButton(
+              expanded: true,
+              variant: AelButtonVariant.tonal,
+              icon: LucideIcons.paperclip,
+              label: _selectedAttachments.isEmpty ? '选择文件附件（支持多选）' : '继续添加附件',
               onPressed: _isSubmitting ? null : _pickAttachments,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(CupertinoIcons.paperclip,
-                      size: 16, color: CupertinoColors.activeBlue),
-                  const SizedBox(width: 6),
-                  Text(
-                    _selectedAttachments.isEmpty ? '选择文件附件（支持多选）' : '+ 继续添加附件',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: CupertinoColors.activeBlue,
-                    ),
-                  ),
-                ],
-              ),
             ),
             const SizedBox(height: 10),
 
@@ -2190,63 +2162,34 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
               placeholder: '给教师的留言或作业文字说明（可选）',
               maxLines: 3,
               padding: const EdgeInsets.all(10),
-              style: TextStyle(
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.label, context),
-              ),
-              placeholderStyle: TextStyle(
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.placeholderText, context),
-              ),
+              style: TextStyle(color: colors.textPrimary),
+              placeholderStyle: TextStyle(color: colors.textTertiary),
               decoration: BoxDecoration(
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.tertiarySystemFill, context),
-                borderRadius: BorderRadius.circular(8),
+                color: colors.tonalTileBg,
+                borderRadius: BorderRadius.circular(10),
               ),
             ),
             const SizedBox(height: 12),
 
-            _buildSubmitButton(context),
+            _buildSubmitButton(context, colors),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildSubmitButton(BuildContext context) {
+  Widget _buildSubmitButton(BuildContext context, AelColorTokens colors) {
     if (!_isSubmitting) {
-      return SizedBox(
-        width: double.infinity,
-        child: CupertinoButton.filled(
-          padding: const EdgeInsets.symmetric(vertical: 11),
-          borderRadius: BorderRadius.circular(8),
-          onPressed: _submitHomework,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(CupertinoIcons.cloud_upload_fill,
-                  size: 17, color: CupertinoColors.white),
-              const SizedBox(width: 6),
-              Text(
-                _selectedAttachments.isNotEmpty
-                    ? '提交作业 (${_selectedAttachments.length} 个附件)'
-                    : '提交作业',
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: CupertinoColors.white,
-                ),
-              ),
-            ],
-          ),
-        ),
+      return AelButton(
+        expanded: true,
+        icon: AelIcons.upload,
+        label: _selectedAttachments.isNotEmpty
+            ? '提交作业 (${_selectedAttachments.length} 个附件)'
+            : '提交作业',
+        onPressed: _submitHomework,
       );
     }
 
-    final activeBlue =
-        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
-    final activeGreen =
-        CupertinoDynamicColor.resolve(CupertinoColors.systemGreen, context);
     final statusLabel = _submittingStatusText ?? '正在提交作业...';
 
     return TweenAnimationBuilder<double>(
@@ -2264,8 +2207,7 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (isCompletedStage)
-                  Icon(CupertinoIcons.checkmark_circle_fill,
-                      size: 16, color: foreground)
+                  Icon(AelIcons.success, size: 16, color: foreground)
                 else
                   CupertinoActivityIndicator(
                     radius: 7.5,
@@ -2301,7 +2243,7 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
         }
 
         return ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AelRadius.button),
           child: SizedBox(
             width: double.infinity,
             height: 44,
@@ -2310,29 +2252,23 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
               children: [
                 Container(
                   decoration: BoxDecoration(
-                    color: activeBlue.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: activeBlue.withValues(alpha: 0.35),
-                      width: 0.8,
-                    ),
+                    color: colors.primaryContainer,
+                    borderRadius: BorderRadius.circular(AelRadius.button),
                   ),
                   alignment: Alignment.center,
-                  child: buildContent(activeBlue, animateSpinner: true),
+                  child: buildContent(
+                    colors.onPrimaryContainer,
+                    animateSpinner: true,
+                  ),
                 ),
                 ClipRect(
                   clipper: _HorizontalFractionClipper(progress),
                   child: Container(
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: isCompletedStage
-                            ? [activeGreen, activeGreen]
-                            : [activeBlue, const Color(0xFF34AADC)],
-                      ),
+                      color: isCompletedStage ? colors.success : colors.primary,
                     ),
                     alignment: Alignment.center,
-                    child: buildContent(CupertinoColors.white,
-                        animateSpinner: true),
+                    child: buildContent(colors.onPrimary, animateSpinner: true),
                   ),
                 ),
               ],
@@ -2379,10 +2315,7 @@ class _CoursesNetworkImage extends StatefulWidget {
   final String url;
   final String? alt;
 
-  const _CoursesNetworkImage({
-    required this.url,
-    this.alt,
-  });
+  const _CoursesNetworkImage({required this.url, this.alt});
 
   static final Map<String, Uint8List> _imageCache = <String, Uint8List>{};
 
@@ -2456,8 +2389,10 @@ class _CoursesNetworkImageState extends State<_CoursesNetworkImage> {
 
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 10);
-    applyZjuNetworkDefense(client,
-        connectionTimeout: const Duration(seconds: 10));
+    applyZjuNetworkDefense(
+      client,
+      connectionTimeout: const Duration(seconds: 10),
+    );
 
     try {
       var currentUri = Uri.parse(fullUrl);
@@ -2536,26 +2471,23 @@ class _CoursesNetworkImageState extends State<_CoursesNetworkImage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     if (_isLoading) {
       return Container(
         height: 120,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: CupertinoDynamicColor.resolve(
-              CupertinoColors.tertiarySystemFill, context),
+          color: colors.tonalTileBg,
           borderRadius: BorderRadius.circular(8),
         ),
-        child: const Column(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CupertinoActivityIndicator(radius: 12),
-            SizedBox(height: 8),
+            const CupertinoActivityIndicator(radius: 12),
+            const SizedBox(height: 8),
             Text(
               '正在加载说明插图...',
-              style: TextStyle(
-                fontSize: 12,
-                color: CupertinoColors.secondaryLabel,
-              ),
+              style: TextStyle(fontSize: 12, color: colors.textSecondary),
             ),
           ],
         ),
@@ -2566,32 +2498,22 @@ class _CoursesNetworkImageState extends State<_CoursesNetworkImage> {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: CupertinoDynamicColor.resolve(
-              CupertinoColors.tertiarySystemFill, context),
+          color: colors.tonalTileBg,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
           children: [
-            const Icon(CupertinoIcons.photo,
-                size: 20, color: CupertinoColors.systemOrange),
+            Icon(AelIcons.image, size: 20, color: colors.warning),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 widget.alt?.isNotEmpty == true
                     ? '${widget.alt} (图片加载失败)'
                     : (_error ?? '图片无法加载'),
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: CupertinoColors.secondaryLabel,
-                ),
+                style: TextStyle(fontSize: 12, color: colors.textSecondary),
               ),
             ),
-            CupertinoButton(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              minSize: 0,
-              onPressed: _loadImage,
-              child: const Text('重试', style: TextStyle(fontSize: 12)),
-            ),
+            AelChip(label: '重试', tone: AelChipTone.primary, onTap: _loadImage),
           ],
         ),
       );
@@ -2607,29 +2529,32 @@ class _CoursesNetworkImageState extends State<_CoursesNetworkImage> {
             Container(
               constraints: const BoxConstraints(maxHeight: 320),
               width: double.infinity,
-              color: CupertinoDynamicColor.resolve(
-                  CupertinoColors.tertiarySystemFill, context),
-              child: Image.memory(
-                _bytes!,
-                fit: BoxFit.contain,
-              ),
+              color: colors.tonalTileBg,
+              child: Image.memory(_bytes!, fit: BoxFit.contain),
             ),
             Container(
               margin: const EdgeInsets.all(6),
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: CupertinoColors.black.withValues(alpha: 0.6),
+                color: AelSemanticPalette.pureBlack.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(CupertinoIcons.zoom_in,
-                      color: CupertinoColors.white, size: 12),
+                  Icon(
+                    AelIcons.search,
+                    color: AelSemanticPalette.pureWhite,
+                    size: 12,
+                  ),
                   SizedBox(width: 3),
-                  Text('点击放大',
-                      style: TextStyle(
-                          color: CupertinoColors.white, fontSize: 10)),
+                  Text(
+                    '点击放大',
+                    style: TextStyle(
+                      color: AelSemanticPalette.pureWhite,
+                      fontSize: 10,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -2690,8 +2615,10 @@ class _CoursesImageViewerPageState extends State<_CoursesImageViewerPage> {
 
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 12);
-    applyZjuNetworkDefense(client,
-        connectionTimeout: const Duration(seconds: 12));
+    applyZjuNetworkDefense(
+      client,
+      connectionTimeout: const Duration(seconds: 12),
+    );
 
     try {
       var currentUri = Uri.parse(fullUrl);
@@ -2758,34 +2685,46 @@ class _CoursesImageViewerPageState extends State<_CoursesImageViewerPage> {
   Widget build(BuildContext context) {
     final fullUrl = widget.imageUrl != null && widget.imageUrl!.isNotEmpty
         ? (widget.imageUrl!.startsWith('http')
-            ? widget.imageUrl!
-            : 'https://courses.zju.edu.cn${widget.imageUrl!.startsWith('/') ? '' : '/'}${widget.imageUrl!}')
+              ? widget.imageUrl!
+              : 'https://courses.zju.edu.cn${widget.imageUrl!.startsWith('/') ? '' : '/'}${widget.imageUrl!}')
         : null;
 
+    final colors = AelTheme.colorsOf(context);
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.black,
+      backgroundColor: AelSemanticPalette.pureBlack,
       navigationBar: CupertinoNavigationBar(
-        backgroundColor: CupertinoColors.black.withValues(alpha: 0.7),
+        backgroundColor: AelSemanticPalette.pureBlack.withValues(alpha: 0.7),
         middle: Text(
           widget.title,
-          style: const TextStyle(color: CupertinoColors.white, fontSize: 16),
+          style: const TextStyle(
+            color: AelSemanticPalette.pureWhite,
+            fontSize: 16,
+          ),
           overflow: TextOverflow.ellipsis,
         ),
         leading: CupertinoButton(
           padding: EdgeInsets.zero,
-          minSize: 0,
+          minimumSize: Size.zero,
           onPressed: () => Navigator.of(context).pop(),
-          child: const Icon(CupertinoIcons.xmark,
-              color: CupertinoColors.white, size: 20),
+          child: const Icon(
+            AelIcons.close,
+            color: AelSemanticPalette.pureWhite,
+            size: 20,
+          ),
         ),
         trailing: fullUrl != null
             ? CupertinoButton(
                 padding: EdgeInsets.zero,
-                minSize: 0,
-                onPressed: () => launchUrlString(fullUrl,
-                    mode: LaunchMode.externalApplication),
-                child: const Icon(CupertinoIcons.compass,
-                    color: CupertinoColors.white, size: 20),
+                minimumSize: Size.zero,
+                onPressed: () => launchUrlString(
+                  fullUrl,
+                  mode: LaunchMode.externalApplication,
+                ),
+                child: const Icon(
+                  AelIcons.compass,
+                  color: AelSemanticPalette.pureWhite,
+                  size: 20,
+                ),
               )
             : null,
       ),
@@ -2796,50 +2735,48 @@ class _CoursesImageViewerPageState extends State<_CoursesImageViewerPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     CupertinoActivityIndicator(
-                        radius: 14, color: CupertinoColors.white),
+                      radius: 14,
+                      color: AelSemanticPalette.pureWhite,
+                    ),
                     SizedBox(height: 12),
                     Text(
                       '正在加载完整图片...',
-                      style:
-                          TextStyle(color: CupertinoColors.white, fontSize: 13),
+                      style: TextStyle(
+                        color: AelSemanticPalette.pureWhite,
+                        fontSize: 13,
+                      ),
                     ),
                   ],
                 )
               : _error != null
-                  ? Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(CupertinoIcons.exclamationmark_triangle_fill,
-                            color: CupertinoColors.systemOrange, size: 36),
-                        const SizedBox(height: 10),
-                        Text(
-                          _error!,
-                          style: const TextStyle(
-                              color: CupertinoColors.white, fontSize: 13),
-                        ),
-                        const SizedBox(height: 12),
-                        CupertinoButton(
-                          color: CupertinoColors.activeBlue,
-                          onPressed: _fetchImage,
-                          child: const Text('重试'),
-                        ),
-                      ],
-                    )
-                  : _bytes != null && _bytes!.isNotEmpty
-                      ? InteractiveViewer(
-                          minScale: 0.5,
-                          maxScale: 6.0,
-                          child: Center(
-                            child: Image.memory(
-                              _bytes!,
-                              fit: BoxFit.contain,
-                            ),
-                          ),
-                        )
-                      : const Text(
-                          '暂无图片数据',
-                          style: TextStyle(color: CupertinoColors.white),
-                        ),
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(AelIcons.warning, color: colors.warning, size: 36),
+                    const SizedBox(height: 10),
+                    Text(
+                      _error!,
+                      style: const TextStyle(
+                        color: AelSemanticPalette.pureWhite,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    AelButton(label: '重试', onPressed: _fetchImage),
+                  ],
+                )
+              : _bytes != null && _bytes!.isNotEmpty
+              ? InteractiveViewer(
+                  minScale: 0.5,
+                  maxScale: 6.0,
+                  child: Center(
+                    child: Image.memory(_bytes!, fit: BoxFit.contain),
+                  ),
+                )
+              : const Text(
+                  '暂无图片数据',
+                  style: TextStyle(color: AelSemanticPalette.pureWhite),
+                ),
         ),
       ),
     );

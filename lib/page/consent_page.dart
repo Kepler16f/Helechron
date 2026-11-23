@@ -2,8 +2,15 @@ import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show Theme;
 import 'package:flutter/services.dart';
+import 'package:flutter_miuix/miuix.dart' show MiuixTheme;
 
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/icons/ael_icons.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/theme/ael_theme_config.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/page/legal_page.dart';
 import 'package:celechron/services/consent_store.dart';
 import 'package:celechron/services/ohos_native_service.dart';
@@ -20,11 +27,24 @@ class ConsentApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoApp(
-      title: 'Helechron',
-      debugShowCheckedModeBanner: false,
-      theme: const CupertinoThemeData(brightness: Brightness.light),
-      home: ConsentPage(onAgreed: onAgreed),
+    final bundle = AelThemeEngine.resolve(
+      brightness: Brightness.light,
+      source: ThemeColorSource.defaultBlue,
+      customSeed: AelPalettePresets.defaultBlue,
+      paletteStyle: ThemePaletteStyle.tonalSpot,
+      contrastLevel: ThemeContrastLevel.standard,
+    );
+    return Theme(
+      data: bundle.materialTheme,
+      child: MiuixTheme(
+        data: bundle.miuixTheme,
+        child: CupertinoApp(
+          title: 'Helechron',
+          debugShowCheckedModeBanner: false,
+          theme: bundle.cupertinoTheme,
+          home: ConsentPage(onAgreed: onAgreed),
+        ),
+      ),
     );
   }
 }
@@ -39,9 +59,6 @@ class ConsentPage extends StatefulWidget {
 }
 
 class _ConsentPageState extends State<ConsentPage> {
-  static const _primary = Color(0xFF3478F6);
-  static const _secondaryText = Color(0xFF6B6B70);
-
   bool _busy = false;
 
   /// 同意复选框状态。默认未勾选，必须由用户主动勾选。
@@ -68,13 +85,18 @@ class _ConsentPageState extends State<ConsentPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     return CupertinoPageScaffold(
-      child: Container(
-        decoration: const BoxDecoration(
+      backgroundColor: colors.pageBg,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFFF2F7FF), Color(0xFFFFFFFF)],
+            colors: [
+              colors.primaryContainer.withValues(alpha: 0.45),
+              colors.pageBg,
+            ],
           ),
         ),
         child: SafeArea(
@@ -90,37 +112,37 @@ class _ConsentPageState extends State<ConsentPage> {
                         width: 64,
                         height: 64,
                         decoration: BoxDecoration(
-                          color: _primary,
+                          color: colors.primary,
                           borderRadius: BorderRadius.circular(18),
                         ),
-                        child: const Icon(
-                          CupertinoIcons.time,
-                          color: CupertinoColors.white,
+                        child: Icon(
+                          AelIcons.tabFlow,
+                          color: colors.onPrimary,
                           size: 36,
                         ),
                       ),
                       const SizedBox(height: 24),
-                      const Text(
+                      Text(
                         '欢迎使用 Helechron',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w700,
                           letterSpacing: -0.5,
-                          color: CupertinoColors.label,
+                          color: colors.textPrimary,
                         ),
                       ),
                       const SizedBox(height: 12),
-                      const Text(
+                      Text(
                         '$appOriginStatement\n\n在开始使用前，请阅读并同意以下条款。我们会严格按照《隐私政策》处理你的信息。',
                         style: TextStyle(
                           fontSize: 16,
                           height: 1.5,
-                          color: _secondaryText,
+                          color: colors.textSecondary,
                         ),
                       ),
                       const SizedBox(height: 28),
                       _LegalTile(
-                        icon: CupertinoIcons.lock,
+                        icon: AelIcons.shield,
                         title: '《Helechron 隐私政策》',
                         subtitle: '了解我们处理哪些信息、如何存储和保护',
                         onTap: () => _openLegal(
@@ -131,7 +153,7 @@ class _ConsentPageState extends State<ConsentPage> {
                       ),
                       const SizedBox(height: 12),
                       _LegalTile(
-                        icon: CupertinoIcons.doc_text,
+                        icon: AelIcons.file,
                         title: '《Helechron 用户协议》',
                         subtitle: '使用本应用的权利、义务与免责声明',
                         onTap: () => _openLegal(
@@ -141,13 +163,11 @@ class _ConsentPageState extends State<ConsentPage> {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEAF1FF),
-                          borderRadius: BorderRadius.circular(12),
+                      AelSectionCard(
+                        backgroundColor: colors.primaryContainer.withValues(
+                          alpha: 0.65,
                         ),
-                        child: const Text(
+                        child: Text(
                           '要点提示：\n'
                           '· 账号密码仅保存在你的设备本地，不会上传到我们运营的服务器；\n'
                           '· 课表、成绩、校园卡等数据来自你本人登录的学校系统；\n'
@@ -157,7 +177,7 @@ class _ConsentPageState extends State<ConsentPage> {
                           style: TextStyle(
                             fontSize: 14,
                             height: 1.65,
-                            color: Color(0xFF3D3D42),
+                            color: colors.textPrimary,
                           ),
                         ),
                       ),
@@ -221,9 +241,7 @@ class _ConsentPageState extends State<ConsentPage> {
       context: context,
       builder: (context) => CupertinoAlertDialog(
         title: const Text('无法继续使用'),
-        content: const Text(
-          '未同意隐私政策，我们不会处理你的个人信息，你将无法使用 Helechron。',
-        ),
+        content: const Text('未同意隐私政策，我们不会处理你的个人信息，你将无法使用 Helechron。'),
         actions: [
           CupertinoDialogAction(
             isDefaultAction: true,
@@ -298,10 +316,6 @@ class _ConsentPageState extends State<ConsentPage> {
 ///
 /// 复选框默认未勾选，未勾选时“同意并继续”不可点击；拒绝入口始终可见。
 class _ConsentActions extends StatelessWidget {
-  /// 同意按钮的前景色：用恒定 [Color] 而非 [CupertinoColors.white]
-  /// 这类动态颜色，避免深色外观下被解析成深色。
-  static const Color _buttonContent = Color(0xFFFFFFFF);
-
   final ValueListenable<bool> checked;
   final ValueChanged<bool> onCheckedChanged;
   final bool busy;
@@ -318,73 +332,45 @@ class _ConsentActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     return ValueListenableBuilder<bool>(
       valueListenable: checked,
       builder: (context, isChecked, _) {
         final canAgree = isChecked && !busy;
         return Container(
-          decoration: const BoxDecoration(
-            color: CupertinoColors.white,
-            border: Border(
-              top: BorderSide(color: Color(0xFFE3E8F0), width: 0.5),
-            ),
+          decoration: BoxDecoration(
+            color: colors.cardBg,
+            border: Border(top: BorderSide(color: colors.divider, width: 0.5)),
           ),
           padding: const EdgeInsets.fromLTRB(24, 10, 24, 8),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _ConsentCheckbox(
-                checked: isChecked,
-                onChanged: onCheckedChanged,
-              ),
+              _ConsentCheckbox(checked: isChecked, onChanged: onCheckedChanged),
               const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: CupertinoButton(
-                  color: _ConsentPageState._primary,
-                  disabledColor: const Color(0xFFBFC9D8),
-                  borderRadius: BorderRadius.circular(12),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  onPressed: canAgree ? onAgree : null,
-                  child: busy
-                      ? const CupertinoActivityIndicator(color: _buttonContent)
-                      : const Text(
-                          '同意并继续',
-                          // 前景色显式写死白色：按钮默认前景走
-                          // primaryContrastingColor 动态解析，在部分外观下
-                          // 与蓝色背景同系导致文字不可见。不能用
-                          // CupertinoButton.foregroundColor —— CI 的
-                          // flutter-ohos 3.27 SDK 没有该参数，写了会编译失败。
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                            color: _buttonContent,
-                          ),
-                        ),
-                ),
+              AelButton(
+                expanded: true,
+                label: busy ? '正在初始化...' : '同意并继续',
+                icon: busy ? null : AelIcons.check,
+                onPressed: canAgree ? onAgree : null,
               ),
-              // 提示文字始终占位、只切换透明度：勾选时不再把按钮挤走，
-              // 避免按钮下移与版式跳动。
               Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: AnimatedOpacity(
                   duration: const Duration(milliseconds: 150),
                   opacity: (!isChecked && !busy) ? 1.0 : 0.0,
-                  child: const Text(
+                  child: Text(
                     '请先勾选上面的复选框，表示你已阅读并同意隐私政策与用户协议',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF8E8E93)),
+                    style: TextStyle(fontSize: 12, color: colors.textTertiary),
                   ),
                 ),
               ),
               CupertinoButton(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 onPressed: busy ? null : onDeny,
-                child: const Text(
+                child: Text(
                   '不同意并退出应用',
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Color(0xFF8E8E93),
-                  ),
+                  style: TextStyle(fontSize: 15, color: colors.textSecondary),
                 ),
               ),
             ],
@@ -404,50 +390,47 @@ class _ConsentCheckbox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoButton(
-      padding: EdgeInsets.zero,
-      onPressed: () => onChanged(!checked),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 22,
-            height: 22,
-            margin: const EdgeInsets.only(top: 1),
-            decoration: BoxDecoration(
-              color:
-                  checked ? _ConsentPageState._primary : CupertinoColors.white,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: checked
-                    ? _ConsentPageState._primary
-                    : const Color(0xFFB8BEC9),
-                width: 1.5,
+    final colors = AelTheme.colorsOf(context);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => onChanged(!checked),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 22,
+              height: 22,
+              margin: const EdgeInsets.only(top: 1),
+              decoration: BoxDecoration(
+                color: checked ? colors.primary : colors.cardBg,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: checked ? colors.primary : colors.outline,
+                  width: 1.5,
+                ),
               ),
+              child: checked
+                  ? Icon(AelIcons.check, size: 16, color: colors.onPrimary)
+                  : null,
             ),
-            child: checked
-                ? const Icon(
-                    CupertinoIcons.check_mark,
-                    size: 18,
-                    color: CupertinoColors.white,
-                  )
-                : null,
-          ),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(top: 2),
-              child: Text(
-                '我已阅读并同意《Helechron 隐私政策》和《Helechron 用户协议》',
-                style: TextStyle(
-                  fontSize: 13,
-                  height: 1.5,
-                  color: _ConsentPageState._secondaryText,
+            const SizedBox(width: 10),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  '我已阅读并同意《Helechron 隐私政策》和《Helechron 用户协议》',
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.5,
+                    color: colors.textSecondary,
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -468,50 +451,45 @@ class _LegalTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoButton(
-      padding: EdgeInsets.zero,
-      onPressed: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: CupertinoColors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE3E8F0)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: _ConsentPageState._primary, size: 22),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: CupertinoColors.label,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: _ConsentPageState._secondaryText,
-                    ),
-                  ),
-                ],
-              ),
+    final colors = AelTheme.colorsOf(context);
+    return AelSectionCard(
+      onTap: onTap,
+      cornerRadius: AelRadius.tile,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: colors.primaryContainer,
+              borderRadius: BorderRadius.circular(10),
             ),
-            const Icon(
-              CupertinoIcons.chevron_forward,
-              size: 16,
-              color: Color(0xFFB0B4BB),
+            child: Icon(icon, color: colors.onPrimaryContainer, size: 19),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: colors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 12, color: colors.textSecondary),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+          Icon(AelIcons.chevronRight, size: 16, color: colors.textTertiary),
+        ],
       ),
     );
   }

@@ -1,6 +1,10 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/icons/ael_icons.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:celechron/utils/global.dart';
 
@@ -27,9 +31,10 @@ class ImageCodePortal {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final colors = AelTheme.colorsOf(context);
             return CupertinoPopupSurface(
               child: Container(
-                color: CupertinoColors.systemBackground.resolveFrom(context),
+                color: colors.pageBg,
                 width: double.infinity,
                 padding: EdgeInsets.only(
                   left: 24,
@@ -40,11 +45,12 @@ class ImageCodePortal {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
-                      "安全验证",
+                    Text(
+                      '安全验证',
                       style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.bold,
+                        color: colors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -56,23 +62,23 @@ class ImageCodePortal {
                         setDialogState(() => currentImage = newImage);
                       },
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
                         child: Image.memory(
                           currentImage,
                           height: 60,
                           width: 160,
                           fit: BoxFit.cover,
                           errorBuilder: (c, e, s) =>
-                              const Icon(CupertinoIcons.refresh_thick),
+                              Icon(AelIcons.refresh, color: colors.primary),
                         ),
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      "点击图片刷新",
+                    Text(
+                      '点击图片刷新',
                       style: TextStyle(
                         fontSize: 12,
-                        color: CupertinoColors.secondaryLabel,
+                        color: colors.textSecondary,
                       ),
                     ),
 
@@ -81,31 +87,18 @@ class ImageCodePortal {
                     // 输入框
                     CupertinoTextField(
                       controller: _inputController,
-                      placeholder: "请输入验证码",
+                      placeholder: '请输入验证码',
                       autofocus: true,
                       padding: const EdgeInsets.symmetric(
                         vertical: 12,
                         horizontal: 10,
                       ),
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: CupertinoDynamicColor.resolve(
-                          CupertinoColors.label,
-                          context,
-                        ),
-                      ),
-                      placeholderStyle: TextStyle(
-                        color: CupertinoDynamicColor.resolve(
-                          CupertinoColors.placeholderText,
-                          context,
-                        ),
-                      ),
+                      style: TextStyle(color: colors.textPrimary),
+                      placeholderStyle: TextStyle(color: colors.textTertiary),
                       decoration: BoxDecoration(
-                        color: CupertinoDynamicColor.resolve(
-                          CupertinoColors.tertiarySystemFill,
-                          context,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
+                        color: colors.cardBg,
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
 
@@ -115,8 +108,9 @@ class ImageCodePortal {
                     Row(
                       children: [
                         Expanded(
-                          child: CupertinoButton(
-                            child: const Text("取消"),
+                          child: AelButton(
+                            variant: AelButtonVariant.tonal,
+                            label: '取消',
                             onPressed: () {
                               Navigator.pop(context);
                               if (!completer.isCompleted) {
@@ -125,10 +119,10 @@ class ImageCodePortal {
                             },
                           ),
                         ),
+                        const SizedBox(width: AelSpacing.sm),
                         Expanded(
-                          child: CupertinoButton.filled(
-                            padding: EdgeInsets.zero,
-                            child: const Text("确定"),
+                          child: AelButton(
+                            label: '确定',
                             onPressed: () {
                               final text = _inputController.text;
                               Navigator.pop(context);

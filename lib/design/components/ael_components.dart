@@ -1,5 +1,6 @@
 export 'ael_button.dart';
 export 'ael_chip.dart';
+export 'ael_download_share_bar.dart';
 export 'ael_empty.dart';
 export 'ael_glass.dart';
 export 'ael_large_title_bar.dart';

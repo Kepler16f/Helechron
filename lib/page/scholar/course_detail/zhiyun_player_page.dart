@@ -9,7 +9,10 @@ import 'package:get/get.dart';
 
 import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/design/persistent_headers.dart';
-import 'package:celechron/design/round_rectangle_card.dart';
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/icons/ael_icons.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/http/zjuServices/network_defense.dart';
 import 'package:celechron/design/app_notification.dart';
 import 'package:celechron/services/file_download_share_helper.dart';
@@ -61,7 +64,8 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
     _currentSubId = widget.initialSubId;
     _currentTitle = widget.initialTitle;
     _currentLivingroomUrl = widget.livingroomUrl;
-    _isLiveMode = widget.preferLive ||
+    _isLiveMode =
+        widget.preferLive ||
         widget.initialTitle.contains('直播') ||
         widget.replays.any((r) => r.subId == _currentSubId && r.isLive);
     if ((_currentSubId == null || _currentSubId!.isEmpty) &&
@@ -75,7 +79,8 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
 
       ZhiyunReplayInfo? matched;
       if (_isLiveMode) {
-        matched = widget.replays.firstWhereOrNull(
+        matched =
+            widget.replays.firstWhereOrNull(
               (r) => r.isLive && r.subId?.isNotEmpty == true,
             ) ??
             widget.replays.firstWhereOrNull(
@@ -86,20 +91,28 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
             );
       } else {
         final pastWithReplay = widget.replays
-            .where((r) =>
-                r.subId?.isNotEmpty == true && r.hasReplay && isNotFuture(r))
+            .where(
+              (r) =>
+                  r.subId?.isNotEmpty == true && r.hasReplay && isNotFuture(r),
+            )
             .toList();
         if (pastWithReplay.isNotEmpty) {
-          pastWithReplay.sort((a, b) => (b.lessonDate ?? DateTime(1970))
-              .compareTo(a.lessonDate ?? DateTime(1970)));
+          pastWithReplay.sort(
+            (a, b) => (b.lessonDate ?? DateTime(1970)).compareTo(
+              a.lessonDate ?? DateTime(1970),
+            ),
+          );
           matched = pastWithReplay.first;
         } else {
           final pastAny = widget.replays
               .where((r) => r.subId?.isNotEmpty == true && isNotFuture(r))
               .toList();
           if (pastAny.isNotEmpty) {
-            pastAny.sort((a, b) => (b.lessonDate ?? DateTime(1970))
-                .compareTo(a.lessonDate ?? DateTime(1970)));
+            pastAny.sort(
+              (a, b) => (b.lessonDate ?? DateTime(1970)).compareTo(
+                a.lessonDate ?? DateTime(1970),
+              ),
+            );
             matched = pastAny.first;
           }
         }
@@ -125,8 +138,10 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
         if (activeToday != null && activeToday.isNotEmpty) {
           subId = activeToday;
           _currentSubId = activeToday;
-          _currentLivingroomUrl =
-              ZhiyunService.buildLivingroomUrl(widget.courseId, activeToday);
+          _currentLivingroomUrl = ZhiyunService.buildLivingroomUrl(
+            widget.courseId,
+            activeToday,
+          );
         }
       }
 
@@ -146,7 +161,8 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
 
         Map<String, dynamic>? picked;
         if (_isLiveMode) {
-          picked = freshCat.firstWhereOrNull(
+          picked =
+              freshCat.firstWhereOrNull(
                 (item) =>
                     ZhiyunService.checkIsLive(item: item) &&
                     (item['sub_id']?.toString().isNotEmpty == true ||
@@ -158,12 +174,15 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
               );
         } else {
           final validPast = freshCat
-              .where((item) =>
-                  (item['sub_id']?.toString().isNotEmpty == true ||
-                      item['id']?.toString().isNotEmpty == true) &&
-                  isItemNotFuture(item))
+              .where(
+                (item) =>
+                    (item['sub_id']?.toString().isNotEmpty == true ||
+                        item['id']?.toString().isNotEmpty == true) &&
+                    isItemNotFuture(item),
+              )
               .toList();
-          picked = validPast.firstWhereOrNull(
+          picked =
+              validPast.firstWhereOrNull(
                 (item) => ZhiyunService.checkHasReplay(item: item),
               ) ??
               validPast.firstOrNull;
@@ -173,11 +192,14 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
         if (pickedSub != null && pickedSub.isNotEmpty) {
           subId = pickedSub;
           _currentSubId = pickedSub;
-          _currentLivingroomUrl =
-              ZhiyunService.buildLivingroomUrl(widget.courseId, pickedSub);
+          _currentLivingroomUrl = ZhiyunService.buildLivingroomUrl(
+            widget.courseId,
+            pickedSub,
+          );
           if (mounted) {
             setState(() {
-              _currentTitle = picked?['title']?.toString() ??
+              _currentTitle =
+                  picked?['title']?.toString() ??
                   picked?['sub_title']?.toString() ??
                   _currentTitle;
             });
@@ -197,7 +219,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
           !_autoLaunched &&
           _currentLivingroomUrl.isNotEmpty) {
         _autoLaunched = true;
-        await _launchInAppPlayer(_currentLivingroomUrl);
+        await _launchInAppPlayer(_currentLivingroomUrl, preferWeb: true);
       }
       return;
     }
@@ -255,10 +277,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
     }
   }
 
-  Future<void> _launchInAppPlayer(
-    String url, {
-    bool preferWeb = false,
-  }) async {
+  Future<void> _launchInAppPlayer(String url, {bool preferWeb = false}) async {
     final authResults = await Future.wait<String?>([
       ZhiyunService.ensureValidToken(),
       ZhiyunService.ensureSsoCookieValue(),
@@ -290,22 +309,22 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
         : rawTargetUrl;
 
     final lowerUrl = effectiveUrl.toLowerCase();
-    final isDirect = !lowerUrl.contains('livingroom') &&
+    final isDirect =
+        !lowerUrl.contains('livingroom') &&
         (lowerUrl.contains('.mp4') ||
             lowerUrl.contains('.m3u8') ||
             lowerUrl.contains('.flv') ||
             lowerUrl.contains('.ts'));
     final openWebDirectly = preferWeb || !isDirect || _isLiveMode;
 
-    final bool streamIsLive = _isLiveMode ||
+    final bool streamIsLive =
+        _isLiveMode ||
         _streams.firstWhereOrNull((s) => s.url == url)?.isLive == true;
 
     final ok = await OhosNativeService.instance.openInAppVideoPlayer(
       url: effectiveUrl,
       title: '${widget.courseName} · $_currentTitle',
-      streams: _streams
-          .map((s) => {'label': s.label, 'url': s.url})
-          .toList(),
+      streams: _streams.map((s) => {'label': s.label, 'url': s.url}).toList(),
       livingroomUrl: effectiveLivingroom,
       token: token,
       ssoCookie: ssoCookie,
@@ -337,310 +356,106 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
     }
   }
 
-  Future<void> _downloadAndShareSlide(ZhiyunPptSlide slide, int index) async {
-    final safeCourse =
-        FileDownloadShareHelper.sanitizeFileName(widget.courseName);
-    final defaultFileName =
-        '${safeCourse}_PPT_${index + 1}_${slide.createdSec}s.jpg';
-    final target = await FileDownloadShareHelper.chooseSaveTarget(
-      context,
-      defaultFileName: defaultFileName,
-      title: '下载并分享 PPT 截图',
-    );
-    if (target == null) return;
-    final saveDir = target.directory;
-    final fileName = target.fileName;
+  String get _recordBase =>
+      '${widget.courseId}|${_currentSubId ?? _currentTitle}';
 
+  Future<bool> _fetchSlideToFile(
+    HttpClient client,
+    ZhiyunPptSlide slide,
+    File target,
+  ) async {
+    final req = await client
+        .getUrl(Uri.parse(slide.imageUrl))
+        .timeout(const Duration(seconds: 12));
+    req.headers.set('Referer', 'https://classroom.zju.edu.cn/');
+    final resp = await req.close().timeout(const Duration(seconds: 20));
+    if (resp.statusCode != 200) {
+      await resp.drain();
+      AppNotification.error('下载失败', 'HTTP ${resp.statusCode}');
+      return false;
+    }
+    final sink = target.openWrite();
+    await resp.pipe(sink);
+    await sink.flush();
+    await sink.close();
+    return true;
+  }
+
+  Widget _buildSlideBar(
+    ZhiyunPptSlide slide,
+    int index, {
+    bool compact = false,
+  }) {
+    final safeCourse = FileDownloadShareHelper.sanitizeFileName(
+      widget.courseName,
+    );
+    return AelDownloadShareBar(
+      key: ValueKey('${_recordBase}|slide_$index'),
+      recordKey: '${_recordBase}|slide_$index',
+      defaultFileName:
+          '${safeCourse}_PPT_${index + 1}_${slide.createdSec}s.jpg',
+      mimeType: 'image/jpeg',
+      title: 'PPT 第 ${index + 1} 页截图',
+      compact: compact,
+      writeTemp: (tempFile) async {
+        final client = HttpClient();
+        applyZjuNetworkDefense(client);
+        try {
+          return await _fetchSlideToFile(client, slide, tempFile);
+        } finally {
+          client.close(force: true);
+        }
+      },
+    );
+  }
+
+  Widget _buildZipBar() {
+    final safeCourse = FileDownloadShareHelper.sanitizeFileName(
+      widget.courseName,
+    );
+    final safeTitle = FileDownloadShareHelper.sanitizeFileName(_currentTitle);
+    return AelDownloadShareBar(
+      key: ValueKey('${_recordBase}|zip'),
+      recordKey: '${_recordBase}|zip',
+      defaultFileName: '${safeCourse}_${safeTitle}_切片课件.zip',
+      mimeType: 'application/zip',
+      title: '切片课件压缩包',
+      description: '共 ${_slides.length} 页 PPT 切片截图，将打包为 ZIP 压缩包。',
+      writeTemp: _writeSlidesZip,
+    );
+  }
+
+  Future<bool> _writeSlidesZip(File tempFile) async {
+    final slides = List<ZhiyunPptSlide>.of(_slides);
+    AppNotification.info('正在打包 PPT', '共 ${slides.length} 页，正在下载切片并生成压缩包...');
     final client = HttpClient();
     applyZjuNetworkDefense(client);
-    final tempFile = File(
-      '${Directory.systemTemp.path}/temp_slide_${DateTime.now().millisecondsSinceEpoch}.jpg',
-    );
-    try {
-      final req = await client
-          .getUrl(Uri.parse(slide.imageUrl))
-          .timeout(const Duration(seconds: 12));
-      req.headers.set('Referer', 'https://classroom.zju.edu.cn/');
-      final resp = await req.close().timeout(const Duration(seconds: 20));
-      if (resp.statusCode == 200) {
-        final sink = tempFile.openWrite();
-        await resp.pipe(sink);
-        await sink.flush();
-        await sink.close();
-
-        final res = await FileDownloadShareHelper.saveTempFileAndPrepareShare(
-          tempFile: tempFile,
-          targetDir: saveDir,
-          fileName: fileName,
-          mimeType: 'image/jpeg',
-        );
-        if (res.isSuccess) {
-          AppNotification.success('已保存', 'PPT 第 ${index + 1} 页已保存，正在调起分享...');
-          if (res.shareFile != null) {
-            await FileDownloadShareHelper.shareFiles(
-              [res.shareFile!],
-              mimeTypes: [res.mimeType],
-              subject: fileName,
-            );
-          }
-        } else {
-          AppNotification.error('保存失败', '未能写入目标目录');
-        }
-      } else {
-        await resp.drain();
-        AppNotification.error('下载失败', 'HTTP ${resp.statusCode}');
-      }
-    } catch (e) {
-      if (mounted) {
-        AppNotification.error('保存失败', '$e');
-      }
-    } finally {
-      try {
-        if (await tempFile.exists()) await tempFile.delete();
-      } catch (_) {}
-      client.close(force: true);
-    }
-  }
-
-  Future<void> _exportTranscriptAsTxt(BuildContext context) async {
-    if (_transcript.isEmpty) {
-      AppNotification.info('提示', '当前课节暂无语音转写字幕可导出');
-      return;
-    }
-    final safeCourse =
-        FileDownloadShareHelper.sanitizeFileName(widget.courseName);
-    final safeTitle = FileDownloadShareHelper.sanitizeFileName(_currentTitle);
-    final defaultFileName = '${safeCourse}_${safeTitle}_语音字幕.txt';
-    final nameCtrl = TextEditingController(text: defaultFileName);
-
-    await showCupertinoDialog<void>(
-      context: context,
-      builder: (dialogCtx) => CupertinoAlertDialog(
-        title: const Text('下载并分享语音字幕'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 10),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '共 ${_transcript.length} 条语音字幕，将保存为 txt 文本并在完成后调起原生分享。可自定义文件名：',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: CupertinoColors.secondaryLabel.resolveFrom(dialogCtx),
-                ),
-              ),
-              const SizedBox(height: 8),
-              CupertinoTextField(
-                controller: nameCtrl,
-                autofocus: true,
-                style: TextStyle(
-                  color: CupertinoColors.label.resolveFrom(dialogCtx),
-                ),
-                placeholderStyle: TextStyle(
-                  color: CupertinoColors.placeholderText.resolveFrom(dialogCtx),
-                ),
-                decoration: BoxDecoration(
-                  color: CupertinoColors.tertiarySystemFill
-                      .resolveFrom(dialogCtx),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogCtx).pop(),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            onPressed: () async {
-              Navigator.of(dialogCtx).pop();
-              final pickedDir =
-                  await OhosNativeService.instance.pickDirectory();
-              if (pickedDir != null && pickedDir.isNotEmpty) {
-                await _doSaveTranscriptFile(nameCtrl.text.trim(),
-                    targetDir: pickedDir);
-              }
-            },
-            child: const Text('选择目录并分享'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () async {
-              Navigator.of(dialogCtx).pop();
-              await _doSaveTranscriptFile(nameCtrl.text.trim());
-            },
-            child: const Text('默认目录并分享'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _doSaveTranscriptFile(String fileName,
-      {String? targetDir}) async {
-    final cleanName = FileDownloadShareHelper.sanitizeFileName(fileName);
-    final finalName = cleanName.endsWith('.txt') ? cleanName : '$cleanName.txt';
-    final saveDir = (targetDir != null && targetDir.isNotEmpty)
-        ? targetDir
-        : await FileDownloadShareHelper.resolveDefaultSaveDir();
-
-    final buffer = StringBuffer();
-    buffer.writeln('课程：${widget.courseName}');
-    buffer.writeln('课节：$_currentTitle');
-    buffer.writeln('导出时间：${DateTime.now().toString().split('.').first}');
-    buffer.writeln('=' * 40);
-    buffer.writeln();
-    for (final seg in _transcript) {
-      buffer.writeln('[${seg.timeLabel}] ${seg.text}');
-    }
-
-    final tempFile = File(
-        '${Directory.systemTemp.path}/temp_sub_${DateTime.now().millisecondsSinceEpoch}.txt');
-    try {
-      await tempFile.writeAsString(buffer.toString(), encoding: utf8);
-      final res = await FileDownloadShareHelper.saveTempFileAndPrepareShare(
-        tempFile: tempFile,
-        targetDir: saveDir,
-        fileName: finalName,
-        mimeType: 'text/plain',
-      );
-      if (res.isSuccess) {
-        AppNotification.success('字幕已保存', '已保存至：$finalName，正在调起分享...');
-        if (res.shareFile != null) {
-          await FileDownloadShareHelper.shareFiles(
-            [res.shareFile!],
-            mimeTypes: [res.mimeType],
-            subject: finalName,
-          );
-        }
-      } else {
-        AppNotification.error('保存失败', '未能将字幕文件写入目标目录');
-      }
-    } catch (e) {
-      AppNotification.error('导出失败', '$e');
-    } finally {
-      try {
-        if (await tempFile.exists()) await tempFile.delete();
-      } catch (_) {}
-    }
-  }
-
-  Future<void> _exportAllSlidesAsZip(BuildContext context) async {
-    if (_slides.isEmpty) {
-      AppNotification.info('提示', '当前课节暂无 PPT 幻灯片可打包');
-      return;
-    }
-    final safeCourse =
-        FileDownloadShareHelper.sanitizeFileName(widget.courseName);
-    final safeTitle = FileDownloadShareHelper.sanitizeFileName(_currentTitle);
-    final defaultFileName = '${safeCourse}_${safeTitle}_切片课件.zip';
-    final nameCtrl = TextEditingController(text: defaultFileName);
-
-    await showCupertinoDialog<void>(
-      context: context,
-      builder: (dialogCtx) => CupertinoAlertDialog(
-        title: const Text('打包下载并分享切片课件'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 10),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '共 ${_slides.length} 页 PPT 切片截图，将打包为 ZIP 压缩包保存并在完成后调起原生分享。可自定义文件名：',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: CupertinoColors.secondaryLabel.resolveFrom(dialogCtx),
-                ),
-              ),
-              const SizedBox(height: 8),
-              CupertinoTextField(
-                controller: nameCtrl,
-                autofocus: true,
-                style: TextStyle(
-                  color: CupertinoColors.label.resolveFrom(dialogCtx),
-                ),
-                placeholderStyle: TextStyle(
-                  color: CupertinoColors.placeholderText.resolveFrom(dialogCtx),
-                ),
-                decoration: BoxDecoration(
-                  color: CupertinoColors.tertiarySystemFill
-                      .resolveFrom(dialogCtx),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogCtx).pop(),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            onPressed: () async {
-              Navigator.of(dialogCtx).pop();
-              final pickedDir =
-                  await OhosNativeService.instance.pickDirectory();
-              if (pickedDir != null && pickedDir.isNotEmpty) {
-                await _doPackageSlidesZip(nameCtrl.text.trim(),
-                    targetDir: pickedDir);
-              }
-            },
-            child: const Text('选择目录并分享'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () async {
-              Navigator.of(dialogCtx).pop();
-              await _doPackageSlidesZip(nameCtrl.text.trim());
-            },
-            child: const Text('默认目录并分享'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _doPackageSlidesZip(String fileName, {String? targetDir}) async {
-    final cleanName = FileDownloadShareHelper.sanitizeFileName(fileName);
-    final finalName = cleanName.endsWith('.zip') ? cleanName : '$cleanName.zip';
-    final saveDir = (targetDir != null && targetDir.isNotEmpty)
-        ? targetDir
-        : await FileDownloadShareHelper.resolveDefaultSaveDir();
-
-    AppNotification.info('正在打包 PPT', '共 ${_slides.length} 页，正在下载切片并生成压缩包...');
-
-    final client = HttpClient();
-    applyZjuNetworkDefense(client);
-    final tempFile = File(
-        '${Directory.systemTemp.path}/temp_ppt_${DateTime.now().millisecondsSinceEpoch}.zip');
-
     try {
       final archive = Archive();
       var downloadedCount = 0;
       const poolSize = 4;
-      for (var i = 0; i < _slides.length; i += poolSize) {
-        final end =
-            (i + poolSize < _slides.length) ? i + poolSize : _slides.length;
+      for (var i = 0; i < slides.length; i += poolSize) {
+        final end = (i + poolSize < slides.length)
+            ? i + poolSize
+            : slides.length;
         final chunk = <Future<void>>[];
         for (var j = i; j < end; j++) {
           final idx = j;
-          final slide = _slides[idx];
+          final slide = slides[idx];
           chunk.add(() async {
             try {
               final req = await client
                   .getUrl(Uri.parse(slide.imageUrl))
                   .timeout(const Duration(seconds: 12));
               req.headers.set('Referer', 'https://classroom.zju.edu.cn/');
-              final resp =
-                  await req.close().timeout(const Duration(seconds: 20));
+              final resp = await req.close().timeout(
+                const Duration(seconds: 20),
+              );
               if (resp.statusCode == 200) {
-                final bytes =
-                    await resp.fold<List<int>>([], (a, b) => a..addAll(b));
+                final bytes = await resp.fold<List<int>>(
+                  [],
+                  (a, b) => a..addAll(b),
+                );
                 final entryName =
                     'PPT_${(idx + 1).toString().padLeft(3, '0')}_${slide.createdSec}s.jpg';
                 archive.addFile(ArchiveFile(entryName, bytes.length, bytes));
@@ -653,46 +468,48 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
         }
         await Future.wait(chunk);
       }
-
       if (downloadedCount == 0) {
         AppNotification.error('打包失败', '未能下载任何一页 PPT 切片截图');
-        return;
+        return false;
       }
-
       final zipData = ZipEncoder().encode(archive);
       if (zipData.isEmpty) {
         AppNotification.error('打包失败', 'ZIP 压缩包生成失败');
-        return;
+        return false;
       }
-
       await tempFile.writeAsBytes(zipData);
-      final res = await FileDownloadShareHelper.saveTempFileAndPrepareShare(
-        tempFile: tempFile,
-        targetDir: saveDir,
-        fileName: finalName,
-        mimeType: 'application/zip',
-      );
-      if (res.isSuccess) {
-        AppNotification.success(
-            '打包完成', '已保存 $downloadedCount 页 PPT 切片，正在调起分享...');
-        if (res.shareFile != null) {
-          await FileDownloadShareHelper.shareFiles(
-            [res.shareFile!],
-            mimeTypes: [res.mimeType],
-            subject: finalName,
-          );
-        }
-      } else {
-        AppNotification.error('保存失败', '未能将 ZIP 压缩包写入目标目录');
-      }
-    } catch (e) {
-      AppNotification.error('打包异常', '$e');
+      return true;
     } finally {
-      try {
-        if (await tempFile.exists()) await tempFile.delete();
-      } catch (_) {}
       client.close(force: true);
     }
+  }
+
+  Widget _buildTranscriptBar() {
+    final safeCourse = FileDownloadShareHelper.sanitizeFileName(
+      widget.courseName,
+    );
+    final safeTitle = FileDownloadShareHelper.sanitizeFileName(_currentTitle);
+    return AelDownloadShareBar(
+      key: ValueKey('${_recordBase}|txt'),
+      recordKey: '${_recordBase}|txt',
+      defaultFileName: '${safeCourse}_${safeTitle}_语音字幕.txt',
+      mimeType: 'text/plain',
+      title: '语音字幕',
+      description: '共 ${_transcript.length} 条语音字幕，将保存为 txt 文本。',
+      writeTemp: (tempFile) async {
+        final buffer = StringBuffer();
+        buffer.writeln('课程：${widget.courseName}');
+        buffer.writeln('课节：$_currentTitle');
+        buffer.writeln('导出时间：${DateTime.now().toString().split('.').first}');
+        buffer.writeln('=' * 40);
+        buffer.writeln();
+        for (final seg in _transcript) {
+          buffer.writeln('[${seg.timeLabel}] ${seg.text}');
+        }
+        await tempFile.writeAsString(buffer.toString(), encoding: utf8);
+        return true;
+      },
+    );
   }
 
   void _showFullscreenSlide(int index) {
@@ -702,9 +519,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
         builder: (ctx) => _FullscreenPptViewer(
           slides: _slides,
           initialIndex: index,
-          courseName: widget.courseName,
-          lessonTitle: _currentTitle,
-          onSave: (slide, i) => _downloadAndShareSlide(slide, i),
+          barBuilder: (slide, i) => _buildSlideBar(slide, i, compact: true),
         ),
       ),
     );
@@ -719,26 +534,32 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
           title: Text('${widget.courseName} · 切换课节'),
           actions: widget.replays
               .where((r) => r.subId != null && r.subId!.isNotEmpty)
-              .map((r) => CupertinoActionSheetAction(
-                    onPressed: () {
-                      Navigator.pop(sheetCtx);
-                      setState(() {
-                        _currentSubId = r.subId;
-                        _currentTitle = r.lessonTitle;
-                        _currentLivingroomUrl = r.livingroomUrl;
-                        _isLiveMode = r.isLive;
-                      });
-                      _loadLessonData(autoPlayFirstTime: false);
-                    },
-                    child: Text(
-                      '${r.lessonTitle}${r.isLive ? " [直播中]" : r.hasReplay ? " [有回放]" : ""}',
-                      style: TextStyle(
-                        fontWeight: r.subId == _currentSubId
-                            ? FontWeight.bold
-                            : FontWeight.normal,
-                      ),
+              .map(
+                (r) => CupertinoActionSheetAction(
+                  onPressed: () {
+                    Navigator.pop(sheetCtx);
+                    setState(() {
+                      _currentSubId = r.subId;
+                      _currentTitle = r.lessonTitle;
+                      _currentLivingroomUrl = r.livingroomUrl;
+                      _isLiveMode = r.isLive;
+                    });
+                    _loadLessonData(autoPlayFirstTime: false);
+                  },
+                  child: Text(
+                    '${r.lessonTitle}${r.isLive
+                        ? " [直播中]"
+                        : r.hasReplay
+                        ? " [有回放]"
+                        : ""}',
+                    style: TextStyle(
+                      fontWeight: r.subId == _currentSubId
+                          ? FontWeight.bold
+                          : FontWeight.normal,
                     ),
-                  ))
+                  ),
+                ),
+              )
               .toList(),
           cancelButton: CupertinoActionSheetAction(
             onPressed: () => Navigator.pop(sheetCtx),
@@ -750,59 +571,40 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
   }
 
   Widget _buildPlayerControlCard(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     final activeStream =
         (_streams.isNotEmpty && _selectedStreamIndex < _streams.length)
-            ? _streams[_selectedStreamIndex]
-            : null;
+        ? _streams[_selectedStreamIndex]
+        : null;
 
-    return RoundRectangleCard(
+    return AelSectionCard(
+      title: _currentTitle,
+      icon: AelIcons.video,
+      trailing: widget.replays.length > 1
+          ? AelChip(
+              label: '切换课节',
+              tone: AelChipTone.primary,
+              onTap: () => _showLessonPicker(context),
+            )
+          : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(CupertinoIcons.play_rectangle_fill,
-                  color: CupertinoColors.activeBlue, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  _currentTitle,
-                  style: CupertinoTheme.of(context)
-                      .textTheme
-                      .textStyle
-                      .copyWith(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-              ),
-              if (widget.replays.length > 1)
-                CupertinoButton(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  minSize: 28,
-                  color: CupertinoColors.activeBlue.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(14),
-                  onPressed: () => _showLessonPicker(context),
-                  child: const Text(
-                    '切换课节',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: CupertinoColors.activeBlue,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
           if (_loading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: AelSpacing.lg),
               child: Center(
                 child: Column(
                   children: [
-                    CupertinoActivityIndicator(),
-                    SizedBox(height: 8),
-                    Text('正在解析智云直播/回放流媒体与课堂 PPT...',
-                        style: TextStyle(fontSize: 12)),
+                    const CupertinoActivityIndicator(),
+                    const SizedBox(height: AelSpacing.sm),
+                    Text(
+                      '正在解析智云直播/回放流媒体与课堂 PPT...',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.textSecondary,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -810,104 +612,48 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
           else if (_streams.isNotEmpty) ...[
             if (_streams.length > 1) ...[
               Wrap(
-                spacing: 8,
-                runSpacing: 8,
+                spacing: AelSpacing.sm,
+                runSpacing: AelSpacing.sm,
                 children: List.generate(_streams.length, (i) {
-                  final s = _streams[i];
-                  final selected = i == _selectedStreamIndex;
-                  return GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedStreamIndex = i;
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: selected
-                            ? CupertinoColors.activeBlue
-                            : CupertinoDynamicColor.resolve(
-                                CupertinoColors.systemFill, context),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Text(
-                        s.label,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight:
-                              selected ? FontWeight.w600 : FontWeight.normal,
-                          color: selected
-                              ? CupertinoColors.white
-                              : CupertinoDynamicColor.resolve(
-                                  CupertinoColors.label, context),
-                        ),
-                      ),
-                    ),
+                  return AelChip(
+                    label: _streams[i].label,
+                    tone: i == _selectedStreamIndex
+                        ? AelChipTone.primary
+                        : AelChipTone.neutral,
+                    onTap: () => setState(() => _selectedStreamIndex = i),
                   );
                 }),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AelSpacing.md),
             ],
-            SizedBox(
-              width: double.infinity,
-              child: CupertinoButton.filled(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                borderRadius: BorderRadius.circular(12),
-                onPressed: _isLiveMode
-                    ? () => _launchInAppPlayer(
-                          _currentLivingroomUrl,
-                          preferWeb: true,
-                        )
-                    : (activeStream == null
+            AelButton(
+              expanded: true,
+              icon: AelIcons.video,
+              label: _isLiveMode
+                  ? '观看实时直播（网页播放器）'
+                  : '播放视频 (${activeStream?.label ?? "回放"})',
+              onPressed: _isLiveMode
+                  ? () => _launchInAppPlayer(
+                      _currentLivingroomUrl,
+                      preferWeb: true,
+                    )
+                  : (activeStream == null
                         ? null
                         : () => _launchInAppPlayer(activeStream.url)),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(CupertinoIcons.play_circle_fill,
-                        size: 20, color: CupertinoColors.white),
-                    const SizedBox(width: 8),
-                    Text(
-                      _isLiveMode
-                          ? '观看实时直播（网页播放器）'
-                          : '播放视频 (${activeStream?.label ?? "回放"})',
-                      style: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-              ),
             ),
           ] else ...[
             Text(
               '当前课节暂未生成直接视频流（可能尚未开课或录播转码中），您仍可尝试播放网页版或查看下方 PPT 与语音转写。',
-              style: TextStyle(
-                fontSize: 12,
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.secondaryLabel, context),
-              ),
+              style: TextStyle(fontSize: 12, color: colors.textSecondary),
             ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: CupertinoButton(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                color: CupertinoColors.activeBlue.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(12),
-                onPressed: () => _launchInAppPlayer(
-                  _currentLivingroomUrl,
-                  preferWeb: true,
-                ),
-                child: const Text(
-                  '打开网页播放器',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: CupertinoColors.activeBlue,
-                  ),
-                ),
-              ),
+            const SizedBox(height: AelSpacing.md),
+            AelButton(
+              expanded: true,
+              variant: AelButtonVariant.tonal,
+              icon: AelIcons.globe,
+              label: '打开网页播放器',
+              onPressed: () =>
+                  _launchInAppPlayer(_currentLivingroomUrl, preferWeb: true),
             ),
           ],
         ],
@@ -916,60 +662,34 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
   }
 
   Widget _buildSlidesView(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     if (_slides.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(32),
-        child: Center(
-          child: Text(
-            '该课节暂无抓取到的 PPT 幻灯片截图',
-            style: TextStyle(
-              fontSize: 13,
-              color: CupertinoDynamicColor.resolve(
-                  CupertinoColors.secondaryLabel, context),
-            ),
-          ),
+      return const Padding(
+        padding: EdgeInsets.all(AelSpacing.lg),
+        child: AelEmptyState(
+          icon: AelIcons.image,
+          title: '该课节暂无抓取到的 PPT 幻灯片截图',
         ),
       );
     }
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+          padding: const EdgeInsets.fromLTRB(
+            AelSpacing.lg,
+            AelSpacing.xxs,
+            AelSpacing.lg,
+            AelSpacing.sm,
+          ),
           child: Row(
             children: [
-              Text(
-                '共 ${_slides.length} 页切片 · 点击可放大浏览',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.secondaryLabel, context),
+              Expanded(
+                child: Text(
+                  '共 ${_slides.length} 页切片 · 点击可放大浏览',
+                  style: TextStyle(fontSize: 13, color: colors.textSecondary),
                 ),
               ),
-              const Spacer(),
-              CupertinoButton(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                minSize: 30,
-                color: CupertinoColors.activeBlue,
-                borderRadius: BorderRadius.circular(8),
-                onPressed: () => _exportAllSlidesAsZip(context),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(CupertinoIcons.archivebox_fill,
-                        size: 14, color: CupertinoColors.white),
-                    SizedBox(width: 4),
-                    Text(
-                      '下载并分享',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: CupertinoColors.white,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              _buildZipBar(),
             ],
           ),
         ),
@@ -980,42 +700,34 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
           itemBuilder: (context, index) {
             final slide = _slides[index];
             return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: RoundRectangleCard(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AelSpacing.lg,
+                vertical: 6,
+              ),
+              child: AelSectionCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          '第 ${index + 1} 页 · 课堂时间 ${slide.timeLabel}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.label, context),
+                        Flexible(
+                          child: Text(
+                            '第 ${index + 1} 页 · 课堂时间 ${slide.timeLabel}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: colors.textPrimary,
+                            ),
                           ),
                         ),
-                        CupertinoButton(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
-                          minSize: 26,
-                          onPressed: () => _downloadAndShareSlide(slide, index),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(CupertinoIcons.share, size: 14),
-                              SizedBox(width: 4),
-                              Text('下载并分享', style: TextStyle(fontSize: 12)),
-                            ],
-                          ),
-                        ),
+                        const SizedBox(width: AelSpacing.sm),
+                        _buildSlideBar(slide, index, compact: true),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: AelSpacing.sm),
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(AelRadius.xs),
                       child: GestureDetector(
                         onTap: () => _showFullscreenSlide(index),
                         child: Stack(
@@ -1028,30 +740,44 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                               },
                               fit: BoxFit.contain,
                               cacheWidth: 1080,
-                              errorBuilder: (_, __, ___) => const SizedBox(
+                              errorBuilder: (_, __, ___) => SizedBox(
                                 height: 120,
-                                child: Center(child: Text('PPT 图片加载失败')),
+                                child: Center(
+                                  child: Text(
+                                    'PPT 图片加载失败',
+                                    style: TextStyle(
+                                      color: colors.textSecondary,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                             Container(
-                              margin: const EdgeInsets.all(8),
+                              margin: const EdgeInsets.all(AelSpacing.sm),
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
+                                horizontal: AelSpacing.sm,
+                                vertical: AelSpacing.xs,
+                              ),
                               decoration: BoxDecoration(
-                                color: const Color(0x99000000),
+                                color: AelSemanticPalette.pureBlack.withValues(
+                                  alpha: 0.6,
+                                ),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: const Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(CupertinoIcons.zoom_in,
-                                      size: 13, color: CupertinoColors.white),
-                                  SizedBox(width: 4),
+                                  Icon(
+                                    AelIcons.search,
+                                    size: 13,
+                                    color: AelSemanticPalette.pureWhite,
+                                  ),
+                                  SizedBox(width: AelSpacing.xs),
                                   Text(
                                     '点击放大',
                                     style: TextStyle(
                                       fontSize: 11,
-                                      color: CupertinoColors.white,
+                                      color: AelSemanticPalette.pureWhite,
                                     ),
                                   ),
                                 ],
@@ -1072,82 +798,68 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
   }
 
   Widget _buildTranscriptView(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     final filtered = _searchKeyword.trim().isEmpty
         ? _transcript
         : _transcript
-            .where((s) =>
-                s.text.toLowerCase().contains(_searchKeyword.toLowerCase()))
-            .toList();
+              .where(
+                (s) =>
+                    s.text.toLowerCase().contains(_searchKeyword.toLowerCase()),
+              )
+              .toList();
 
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          child: Row(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AelSpacing.lg,
+            vertical: 6,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: CupertinoSearchTextField(
-                  placeholder: '搜索课堂语音转写内容...',
-                  style: TextStyle(
-                    color: CupertinoDynamicColor.resolve(
-                        CupertinoColors.label, context),
-                  ),
-                  placeholderStyle: TextStyle(
-                    color: CupertinoDynamicColor.resolve(
-                        CupertinoColors.placeholderText, context),
-                  ),
-                  onChanged: (val) {
-                    setState(() {
-                      _searchKeyword = val;
-                    });
-                  },
-                ),
+              CupertinoSearchTextField(
+                placeholder: '搜索课堂语音转写内容...',
+                backgroundColor: colors.tonalTileBg,
+                itemColor: colors.textSecondary,
+                style: TextStyle(color: colors.textPrimary),
+                placeholderStyle: TextStyle(color: colors.textTertiary),
+                onChanged: (val) {
+                  setState(() {
+                    _searchKeyword = val;
+                  });
+                },
               ),
               if (_transcript.isNotEmpty) ...[
-                const SizedBox(width: 8),
-                CupertinoButton(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  minSize: 32,
-                  color: CupertinoColors.activeBlue.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                  onPressed: () async {
-                    final allText = _transcript
-                        .map((e) => '[${e.timeLabel}] ${e.text}')
-                        .join('\n');
-                    await Clipboard.setData(ClipboardData(text: allText));
-                    if (mounted) {
-                      AppNotification.success('已复制', '全部语音转写字幕已复制到剪贴板');
-                    }
-                  },
-                  child: const Text('复制全文',
-                      style: TextStyle(
-                          fontSize: 12, color: CupertinoColors.activeBlue)),
-                ),
-                const SizedBox(width: 6),
-                CupertinoButton(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  minSize: 32,
-                  color: CupertinoColors.activeBlue,
-                  borderRadius: BorderRadius.circular(8),
-                  onPressed: () => _exportTranscriptAsTxt(context),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(CupertinoIcons.share,
-                          size: 14, color: CupertinoColors.white),
-                      SizedBox(width: 4),
-                      Text(
-                        '下载并分享',
+                const SizedBox(height: AelSpacing.sm),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '共 ${_transcript.length} 条转写',
                         style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: CupertinoColors.white,
+                          fontSize: 12.5,
+                          color: colors.textSecondary,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    AelChip(
+                      label: '复制全文',
+                      tone: AelChipTone.primary,
+                      leadingIcon: AelIcons.copy,
+                      onTap: () async {
+                        final allText = _transcript
+                            .map((e) => '[${e.timeLabel}] ${e.text}')
+                            .join('\n');
+                        await Clipboard.setData(ClipboardData(text: allText));
+                        if (mounted) {
+                          AppNotification.success('已复制', '全部语音转写字幕已复制到剪贴板');
+                        }
+                      },
+                    ),
+                    const SizedBox(width: 6),
+                    _buildTranscriptBar(),
+                  ],
                 ),
               ],
             ],
@@ -1155,57 +867,60 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
         ),
         if (filtered.isEmpty)
           Padding(
-            padding: const EdgeInsets.all(32),
-            child: Center(
-              child: Text(
-                _transcript.isEmpty ? '该课节暂无语音转写字幕' : '未找到匹配的转写内容',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.secondaryLabel, context),
-                ),
-              ),
+            padding: const EdgeInsets.all(AelSpacing.lg),
+            child: AelEmptyState(
+              icon: AelIcons.search,
+              title: _transcript.isEmpty ? '该课节暂无语音转写字幕' : '未找到匹配的转写内容',
             ),
           )
         else
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: RoundRectangleCard(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AelSpacing.lg,
+              vertical: 6,
+            ),
+            child: AelSectionCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: filtered
-                    .map((seg) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 5),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: CupertinoColors.activeBlue
-                                      .withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  seg.timeLabel,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontFamily: 'monospace',
-                                    color: CupertinoColors.activeBlue,
-                                  ),
+                    .map(
+                      (seg) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 5),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colors.primaryContainer,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                seg.timeLabel,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontFamily: 'monospace',
+                                  color: colors.onPrimaryContainer,
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: SelectableText(
-                                  seg.text,
-                                  style: const TextStyle(fontSize: 14),
+                            ),
+                            const SizedBox(width: AelSpacing.sm),
+                            Expanded(
+                              child: SelectableText(
+                                seg.text,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: colors.textPrimary,
                                 ),
                               ),
-                            ],
-                          ),
-                        ))
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
                     .toList(),
               ),
             ),
@@ -1216,9 +931,9 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoDynamicColor.resolve(
-          CupertinoColors.systemGroupedBackground, context),
+      backgroundColor: colors.pageBg,
       child: SafeArea(
         bottom: false,
         child: CustomScrollView(
@@ -1226,28 +941,33 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
             CelechronSliverTextHeader(subtitle: '${widget.courseName} · 智云课堂'),
             SliverToBoxAdapter(
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AelSpacing.lg,
+                  vertical: 6,
+                ),
                 child: _buildPlayerControlCard(context),
               ),
             ),
             SliverToBoxAdapter(
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: CupertinoSlidingSegmentedControl<int>(
-                  groupValue: _tabIndex,
-                  children: {
-                    0: Text('课堂 PPT (${_slides.length})'),
-                    1: Text('语音字幕 (${_transcript.length})'),
-                  },
-                  onValueChanged: (val) {
-                    if (val != null) {
-                      setState(() {
-                        _tabIndex = val;
-                      });
-                    }
-                  },
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AelSpacing.lg,
+                  vertical: AelSpacing.sm,
+                ),
+                child: AelSegmented<int>(
+                  stackedIcon: false,
+                  value: _tabIndex,
+                  items: [
+                    AelSegmentItem(
+                      value: 0,
+                      label: '课堂 PPT (${_slides.length})',
+                    ),
+                    AelSegmentItem(
+                      value: 1,
+                      label: '语音字幕 (${_transcript.length})',
+                    ),
+                  ],
+                  onChanged: (val) => setState(() => _tabIndex = val),
                 ),
               ),
             ),
@@ -1267,16 +987,12 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
 class _FullscreenPptViewer extends StatefulWidget {
   final List<ZhiyunPptSlide> slides;
   final int initialIndex;
-  final String courseName;
-  final String lessonTitle;
-  final void Function(ZhiyunPptSlide slide, int index) onSave;
+  final Widget Function(ZhiyunPptSlide slide, int index) barBuilder;
 
   const _FullscreenPptViewer({
     required this.slides,
     required this.initialIndex,
-    required this.courseName,
-    required this.lessonTitle,
-    required this.onSave,
+    required this.barBuilder,
   });
 
   @override
@@ -1304,27 +1020,23 @@ class _FullscreenPptViewerState extends State<_FullscreenPptViewer> {
   Widget build(BuildContext context) {
     final slide = widget.slides[_currentIndex];
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.black,
+      backgroundColor: AelSemanticPalette.pureBlack,
       navigationBar: CupertinoNavigationBar(
-        backgroundColor: const Color(0xCC000000),
-        middle: Text(
-          '第 ${_currentIndex + 1} / ${widget.slides.length} 页 (${slide.timeLabel})',
-          style: const TextStyle(color: CupertinoColors.white),
-        ),
-        trailing: CupertinoButton(
+        backgroundColor: AelSemanticPalette.pureBlack.withValues(alpha: 0.8),
+        leading: CupertinoButton(
           padding: EdgeInsets.zero,
-          onPressed: () => widget.onSave(slide, _currentIndex),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(CupertinoIcons.share,
-                  size: 15, color: CupertinoColors.white),
-              SizedBox(width: 4),
-              Text('下载并分享',
-                  style: TextStyle(color: CupertinoColors.white, fontSize: 13)),
-            ],
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Icon(AelIcons.back, color: AelSemanticPalette.pureWhite),
+        ),
+        middle: Text(
+          '${_currentIndex + 1}/${widget.slides.length} · ${slide.timeLabel}',
+          style: const TextStyle(
+            color: AelSemanticPalette.pureWhite,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
           ),
         ),
+        trailing: widget.barBuilder(slide, _currentIndex),
       ),
       child: SafeArea(
         child: PageView.builder(

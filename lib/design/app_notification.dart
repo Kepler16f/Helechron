@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:get/get.dart';
 
+import 'package:celechron/design/icons/ael_icons.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
 import 'package:celechron/model/option.dart';
 
 /// 统一的应用内悬浮弹出通知组件。
@@ -29,6 +31,16 @@ class AppNotification {
         Brightness.dark;
   }
 
+  static AelColorTokens _resolveTokens() {
+    final ctx = Get.context;
+    if (ctx != null) {
+      try {
+        return AelTheme.colorsOf(ctx);
+      } catch (_) {}
+    }
+    return AelTheme.fallback(isDark ? Brightness.dark : Brightness.light);
+  }
+
   /// 弹出通用应用内通知
   static void show({
     required String title,
@@ -38,20 +50,12 @@ class AppNotification {
     SnackPosition snackPosition = SnackPosition.TOP,
     VoidCallback? onTap,
   }) {
-    final bool dark = isDark;
+    final tokens = _resolveTokens();
 
-    final Color bgColor = dark
-        ? const Color(0xF22C2C2E)
-        : const Color(0xF2FFFFFF);
-    final Color titleColor = dark
-        ? const Color(0xFFF2F2F7)
-        : const Color(0xFF1C1C1E);
-    final Color messageColor = dark
-        ? const Color(0xD9EBEBF5)
-        : const Color(0x993C3C43);
-    final Color borderColor = dark
-        ? const Color(0x33FFFFFF)
-        : const Color(0x1F000000);
+    final Color bgColor = tokens.cardBg.withValues(alpha: 0.96);
+    final Color titleColor = tokens.textPrimary;
+    final Color messageColor = tokens.textSecondary;
+    final Color borderColor = tokens.divider;
 
     Get.showSnackbar(
       GetSnackBar(
@@ -83,7 +87,7 @@ class AppNotification {
         borderWidth: 0.8,
         boxShadows: [
           BoxShadow(
-            color: dark ? const Color(0x66000000) : const Color(0x1A000000),
+            color: tokens.textPrimary.withValues(alpha: isDark ? 0.35 : 0.1),
             blurRadius: 18,
             offset: const Offset(0, 5),
           ),
@@ -103,14 +107,11 @@ class AppNotification {
     SnackPosition snackPosition = SnackPosition.TOP,
     VoidCallback? onTap,
   }) {
+    final tokens = _resolveTokens();
     show(
       title: title,
       message: message,
-      icon: const Icon(
-        CupertinoIcons.checkmark_alt_circle_fill,
-        color: CupertinoColors.systemGreen,
-        size: 24,
-      ),
+      icon: Icon(AelIcons.success, color: tokens.success, size: 22),
       duration: duration,
       snackPosition: snackPosition,
       onTap: onTap,
@@ -125,21 +126,18 @@ class AppNotification {
     SnackPosition snackPosition = SnackPosition.TOP,
     VoidCallback? onTap,
   }) {
+    final tokens = _resolveTokens();
     show(
       title: title,
       message: message,
-      icon: const Icon(
-        CupertinoIcons.exclamationmark_circle_fill,
-        color: CupertinoColors.systemRed,
-        size: 24,
-      ),
+      icon: Icon(AelIcons.error, color: tokens.error, size: 22),
       duration: duration,
       snackPosition: snackPosition,
       onTap: onTap,
     );
   }
 
-  /// 提示/信息类通知（蓝色感叹号图标）
+  /// 提示/信息类通知（主色信息图标）
   static void info(
     String title,
     String message, {
@@ -147,14 +145,11 @@ class AppNotification {
     SnackPosition snackPosition = SnackPosition.TOP,
     VoidCallback? onTap,
   }) {
+    final tokens = _resolveTokens();
     show(
       title: title,
       message: message,
-      icon: const Icon(
-        CupertinoIcons.info_circle_fill,
-        color: CupertinoColors.activeBlue,
-        size: 24,
-      ),
+      icon: Icon(AelIcons.info, color: tokens.primary, size: 22),
       duration: duration,
       snackPosition: snackPosition,
       onTap: onTap,

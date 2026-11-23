@@ -2,6 +2,10 @@ import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 
+import 'package:celechron/design/components/ael_large_title_bar.dart';
+import 'package:celechron/design/icons/ael_icons.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
+
 class CelechronSliverTextHeader extends StatelessWidget {
   final String subtitle;
   final Widget? right;
@@ -57,55 +61,45 @@ class CelechronHeader extends SliverPersistentHeaderDelegate {
     double shrinkOffset,
     bool overlapsContent,
   ) {
+    final colors = AelTheme.colorsOf(context);
+    final bgAlpha = shrinkOffset > 12
+        ? 0.78
+        : (shrinkOffset / 16).clamp(0.0, 0.78);
     return ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(
-          sigmaX: shrinkOffset > 12 ? 10 : shrinkOffset / 1.2,
-          sigmaY: shrinkOffset > 12 ? 10 : shrinkOffset / 1.2,
+          sigmaX: shrinkOffset > 12 ? 12 : shrinkOffset,
+          sigmaY: shrinkOffset > 12 ? 12 : shrinkOffset,
         ),
         child: Container(
           padding: EdgeInsets.only(top: padding),
-          color: shrinkOffset > 12
-              ? CupertinoDynamicColor.resolve(
-                  CupertinoColors.systemBackground,
-                  context,
-                ).withValues(alpha: 0.5)
-              : CupertinoDynamicColor.resolve(
-                  CupertinoColors.systemBackground,
-                  context,
-                ).withValues(alpha: shrinkOffset / 24),
+          color: colors.pageBg.withValues(alpha: bgAlpha),
           child: Column(
             children: [
-              Stack(
-                children: [
-                  // Back button if not first page
-                  if (!firstPage)
-                    Container(
-                      alignment: Alignment.centerLeft,
-                      child: CupertinoButton(
-                        padding: const EdgeInsets.only(left: 2),
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                        },
-                        child: Icon(
-                          CupertinoIcons.back,
-                          color: CupertinoDynamicColor.resolve(
-                            CupertinoColors.label,
-                            context,
-                          ),
+              SizedBox(
+                height: 52,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    if (!firstPage)
+                      Positioned(
+                        left: 12,
+                        child: AelCircleIconButton(
+                          icon: AelIcons.back,
+                          size: 36,
+                          iconSize: 18,
+                          tooltip: '返回',
+                          onPressed: () => Navigator.of(context).pop(),
                         ),
                       ),
-                    ),
-                  // Title at the center
-                  Positioned.fill(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: right != null ? 98 : (firstPage ? 16 : 48),
-                      ),
-                      child: Center(
-                        child: Container(
-                          alignment: Alignment.center,
-                          padding: const EdgeInsets.symmetric(vertical: 8),
+                    Positioned.fill(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: right != null
+                              ? 104
+                              : (firstPage ? 16 : 56),
+                        ),
+                        child: Center(
                           child: Hero(
                             tag: subtitle,
                             child: Column(
@@ -117,14 +111,13 @@ class CelechronHeader extends SliverPersistentHeaderDelegate {
                                     subtitle,
                                     maxLines: 1,
                                     softWrap: false,
-                                    style: CupertinoTheme.of(context)
-                                        .textTheme
-                                        .navTitleTextStyle
-                                        .copyWith(
-                                          fontSize:
-                                              fontSize -
-                                              (bottom == null ? 0 : 2),
-                                        ),
+                                    style: TextStyle(
+                                      color: colors.textPrimary,
+                                      fontSize:
+                                          fontSize - (bottom == null ? 0 : 2),
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: -0.3,
+                                    ),
                                   ),
                                 ),
                                 if (bottom != null) bottom!,
@@ -134,11 +127,9 @@ class CelechronHeader extends SliverPersistentHeaderDelegate {
                         ),
                       ),
                     ),
-                  ),
-                  // Right button
-                  if (right != null)
-                    Container(alignment: Alignment.centerRight, child: right),
-                ],
+                    if (right != null) Positioned(right: 0, child: right!),
+                  ],
+                ),
               ),
             ],
           ),
@@ -148,10 +139,10 @@ class CelechronHeader extends SliverPersistentHeaderDelegate {
   }
 
   @override
-  double get minExtent => 48 + padding + (bottom == null ? 0 : 48);
+  double get minExtent => 52 + padding + (bottom == null ? 0 : 48);
 
   @override
-  double get maxExtent => 48 + padding + (bottom == null ? 0 : 48);
+  double get maxExtent => 52 + padding + (bottom == null ? 0 : 48);
 
   @override
   bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) {

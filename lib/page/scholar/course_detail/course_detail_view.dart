@@ -1457,18 +1457,28 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
         }
       }
 
-      // 检查本地是否已下载
+      // 检查本地是否已下载（含持久化记录，兼容 SAF 目录）
       final saveDir = await _resolveSaveDir();
       final downloaded = <String, String>{};
-      if (!saveDir.startsWith('content://') && !saveDir.startsWith('file://')) {
-        for (final item in list) {
+      for (final item in list) {
+        final key = _itemKey(item);
+        if (!saveDir.startsWith('content://') &&
+            !saveDir.startsWith('file://')) {
           final safeName = item.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
           final file = File('$saveDir/$safeName');
           try {
             if (await file.exists() && await file.length() > 0) {
-              downloaded[_itemKey(item)] = file.path;
+              downloaded[key] = file.path;
+              continue;
             }
           } catch (_) {}
+        }
+        final rec = await FileDownloadShareHelper.getDownloadRecord(
+          'courseware|$key',
+        );
+        if (rec != null) {
+          downloaded[key] = rec.savedPath;
+          _downloadedNames[key] = rec.fileName;
         }
       }
 
@@ -1498,9 +1508,22 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
   String _itemKey(CoursewareItem item) =>
       '${item.source}_${item.uploadId}_${item.referenceId}_${item.name}';
 
-  Future<void> _downloadItem(BuildContext context, CoursewareItem item) async {
+  Future<void> _downloadItem(
+    BuildContext context,
+    CoursewareItem item, {
+    bool share = false,
+  }) async {
     final key = _itemKey(item);
     if (_downloadingKeys.contains(key)) return;
+
+    // 分享：已下载则直接分享原文件，未下载则等同「下载并分享」
+    if (share) {
+      final saved = _downloadedPaths[key];
+      if (saved != null) {
+        await _shareCoursewareItem(item, saved);
+        return;
+      }
+    }
 
     final currentDir = await _resolveSaveDir();
     if (!context.mounted) return;
@@ -1508,7 +1531,8 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
       context,
       defaultFileName: _downloadedNames[key] ?? item.name,
       currentDir: currentDir,
-      title: '下载并分享课件',
+      title: share ? '下载并分享课件' : '下载课件',
+      confirmHint: share ? null : '仅下载保存，不会触发分享：',
     );
     if (target == null || !mounted) return;
     final saveDir = target.directory;
@@ -1537,17 +1561,23 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
       });
 
       if (result.isSuccess) {
+        await FileDownloadShareHelper.saveDownloadRecord(
+          'courseware|$key',
+          savedPath: result.savedPath!,
+          fileName: result.fileName,
+          mimeType: result.mimeType,
+        );
         AppNotification.success(
-          '下载完成',
+          share ? '已保存，正在分享' : '下载完成',
           '${result.fileName}\n已保存：${FileDownloadShareHelper.formatDirShort(saveDir)}',
         );
-        if (result.shareFile != null) {
+        if (result.shareFile != null && share) {
           await FileDownloadShareHelper.shareFiles(
             [result.shareFile!],
             mimeTypes: [result.mimeType],
             subject: result.fileName,
           );
-        } else {
+        } else if (share) {
           AppNotification.info('分享提示', '文件已保存，暂未能生成系统分享副本');
         }
       } else if (context.mounted) {
@@ -1857,50 +1887,52 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
                               ),
                             ),
                             const SizedBox(width: 6),
-                            if (savedPath != null) ...[
+                            if (downloading)
+                              const CupertinoActivityIndicator(radius: 8)
+                            else ...[
                               CupertinoButton(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
+                                  horizontal: 9,
                                   vertical: 5,
                                 ),
                                 minimumSize: const Size(28, 28),
-                                color: colors.successContainer,
-                                borderRadius: BorderRadius.circular(6),
+                                color: savedPath != null
+                                    ? colors.successContainer
+                                    : colors.primaryContainer,
+                                borderRadius: BorderRadius.circular(999),
+                                onPressed: () => _downloadItem(context, item),
+                                child: Text(
+                                  savedPath != null ? '已下载' : '下载',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: savedPath != null
+                                        ? colors.onSuccessContainer
+                                        : colors.onPrimaryContainer,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              CupertinoButton(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 9,
+                                  vertical: 5,
+                                ),
+                                minimumSize: const Size(28, 28),
+                                color: colors.tonalTileBg,
+                                borderRadius: BorderRadius.circular(999),
                                 onPressed: () =>
-                                    _shareCoursewareItem(item, savedPath),
+                                    _downloadItem(context, item, share: true),
                                 child: Text(
                                   '分享',
                                   style: TextStyle(
                                     fontSize: 11.5,
                                     fontWeight: FontWeight.w600,
-                                    color: colors.onSuccessContainer,
+                                    color: colors.textPrimary,
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 4),
                             ],
-                            CupertinoButton(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: savedPath != null ? 8 : 10,
-                                vertical: 5,
-                              ),
-                              minimumSize: const Size(28, 28),
-                              color: colors.primaryContainer,
-                              borderRadius: BorderRadius.circular(6),
-                              onPressed: downloading
-                                  ? null
-                                  : () => _downloadItem(context, item),
-                              child: downloading
-                                  ? const CupertinoActivityIndicator(radius: 7)
-                                  : Text(
-                                      '下载并分享',
-                                      style: TextStyle(
-                                        fontSize: savedPath != null ? 11.5 : 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: colors.onPrimaryContainer,
-                                      ),
-                                    ),
-                            ),
                           ],
                         ),
                       );

@@ -16,12 +16,14 @@ class AelChip extends StatelessWidget {
     required this.label,
     this.tone = AelChipTone.neutral,
     this.leadingIcon,
+    this.trailingIcon,
     this.onTap,
   });
 
   final String label;
   final AelChipTone tone;
   final IconData? leadingIcon;
+  final IconData? trailingIcon;
   final VoidCallback? onTap;
 
   @override
@@ -70,6 +72,10 @@ class AelChip extends StatelessWidget {
                 height: 1.2,
               ),
             ),
+            if (trailingIcon != null) ...[
+              const SizedBox(width: 4),
+              Icon(trailingIcon, size: 13, color: fg),
+            ],
           ],
         ),
       ),
