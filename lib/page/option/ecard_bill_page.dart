@@ -9,7 +9,6 @@ import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/design/components/ael_components.dart';
 import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/design/persistent_headers.dart';
-import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/http/zjuServices/ecard.dart';
 import 'package:celechron/http/zjuServices/exceptions.dart';
 import 'package:celechron/http/zjuServices/network_defense.dart';

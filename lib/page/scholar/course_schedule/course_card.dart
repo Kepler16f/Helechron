@@ -1,5 +1,4 @@
 import 'package:celechron/design/theme/ael_theme.dart';
-import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/page/scholar/course_detail/course_detail_view.dart';
 import 'package:flutter/cupertino.dart';
 
