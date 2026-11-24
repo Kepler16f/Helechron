@@ -28,12 +28,16 @@ class CurriculumPlanPage extends StatefulWidget {
 
 class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
   final _c = Get.put(CurriculumPlanController());
-  final Set<String> _collapsedSections = <String>{};
+  final Set<String> _toggledSections = <String>{};
   final Set<String> _expandedAuditModules = <String>{};
   bool _showAuditDetails = false;
   bool _showPdfModuleList = true;
   bool _showMoreSimilarPlans = false;
   bool _showObjectivesAndNotes = false;
+
+  PlanPdfSections? _cachedSectionsSource;
+  List<PdfModuleSection>? _cachedCourseSections;
+  List<PdfModuleSection>? _cachedIntroSections;
 
   Color _sakuraInk(BuildContext context) => AelTheme.colorsOf(context).info;
 
@@ -52,48 +56,41 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
           CelechronSliverTextHeader(
             subtitle: '培养方案查看',
             right: Obx(() {
-              final blue = AelTheme.colorsOf(context).primary;
+              final colors = AelTheme.colorsOf(context);
               return Padding(
-                padding: const EdgeInsets.only(right: 10),
+                padding: const EdgeInsets.only(right: 12),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    CupertinoButton(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      minSize: 30,
-                      onPressed: () => _showPlanSelector(context),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(AelIcons.layers, size: 14, color: blue),
-                          const SizedBox(width: 3),
-                          Text(
-                            '全校',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: blue,
-                            ),
+                    AelChip(
+                      label: '全校',
+                      leadingIcon: AelIcons.layers,
+                      tone: AelChipTone.primary,
+                      onTap: () => _showPlanSelector(context),
+                    ),
+                    const SizedBox(width: 8),
+                    if (_c.isSyncing.value)
+                      SizedBox(
+                        width: 34,
+                        height: 34,
+                        child: DecoratedBox(
+                          decoration: ShapeDecoration(
+                            color: colors.cardBg,
+                            shape: const CircleBorder(),
                           ),
-                        ],
+                          child: const Center(
+                            child: CupertinoActivityIndicator(radius: 8),
+                          ),
+                        ),
+                      )
+                    else
+                      AelCircleIconButton(
+                        icon: AelIcons.refresh,
+                        size: 34,
+                        iconSize: 16,
+                        tooltip: '同步培养方案',
+                        onPressed: () => _c.syncCatalog(silent: false),
                       ),
-                    ),
-                    CupertinoButton(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 4,
-                      ),
-                      minSize: 30,
-                      onPressed: _c.isSyncing.value
-                          ? null
-                          : () => _c.syncCatalog(silent: false),
-                      child: _c.isSyncing.value
-                          ? const CupertinoActivityIndicator(radius: 7)
-                          : Icon(AelIcons.refresh, size: 16, color: blue),
-                    ),
                   ],
                 ),
               );
@@ -192,6 +189,46 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
     final secondary = colors.textSecondary;
     final label = colors.textPrimary;
 
+    if (plan == null && _c.isInitializing.value) {
+      return AelSectionCard(
+        cornerRadius: AelRadius.tile,
+        child: Row(
+          children: [
+            AelIconBadge(
+              icon: AelIcons.tabScholar,
+              size: 38,
+              iconSize: 19,
+              style: AelIconBadgeStyle.cookie,
+              backgroundColor: colors.infoContainer,
+              iconColor: colors.onInfoContainer,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '正在加载培养方案...',
+                    style: TextStyle(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w700,
+                      color: label,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '正在后台解析方案目录与学分审计',
+                    style: TextStyle(fontSize: 12, color: secondary),
+                  ),
+                ],
+              ),
+            ),
+            const CupertinoActivityIndicator(radius: 9),
+          ],
+        ),
+      );
+    }
+
     return AelSectionCard(
       cornerRadius: AelRadius.tile,
       child: Column(
@@ -199,13 +236,13 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(AelIcons.search, size: 18, color: accent),
+              AelIconBadge(
+                icon: AelIcons.tabScholar,
+                size: 38,
+                iconSize: 19,
+                style: AelIconBadgeStyle.cookie,
+                backgroundColor: colors.infoContainer,
+                iconColor: colors.onInfoContainer,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -243,23 +280,10 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                 ),
               ),
               if (_c.catalog.isNotEmpty)
-                CupertinoButton(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  minSize: 30,
-                  color: AelTheme.colorsOf(context).tonalTileBg,
-                  borderRadius: BorderRadius.circular(10),
-                  onPressed: () => _showPlanSelector(context),
-                  child: Text(
-                    '切换',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w500,
-                      color: AelTheme.colorsOf(context).primary,
-                    ),
-                  ),
+                AelChip(
+                  label: '切换',
+                  tone: AelChipTone.primary,
+                  onTap: () => _showPlanSelector(context),
                 ),
             ],
           ),
@@ -358,18 +382,17 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                 ),
                 if (_c.pdfPath.value != null) ...[
                   const SizedBox(width: 8),
-                  CupertinoButton(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 9,
-                    ),
-                    minSize: 36,
-                    color: AelTheme.colorsOf(context).tonalTileBg,
-                    borderRadius: BorderRadius.circular(10),
+                  AelCircleIconButton(
+                    icon: AelIcons.refresh,
+                    size: 38,
+                    iconSize: 16,
+                    backgroundColor: colors.tonalTileBg,
+                    iconColor: label,
+                    elevated: false,
+                    tooltip: '重新解析 PDF',
                     onPressed: _c.isPdfLoading.value
                         ? null
                         : () => _c.downloadAndParsePdf(),
-                    child: Icon(AelIcons.refresh, size: 16, color: label),
                   ),
                 ],
               ],
@@ -493,9 +516,9 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                                       const SizedBox(width: 2),
                                       Icon(
                                         _showMoreSimilarPlans
-                                            ? AelIcons.chevronRight
-                                            : AelIcons.chevronRight,
-                                        size: 11,
+                                            ? AelIcons.chevronUp
+                                            : AelIcons.chevronDown,
+                                        size: 13,
                                         color: AelTheme.colorsOf(
                                           context,
                                         ).primary,
@@ -539,7 +562,6 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
     final colors = AelTheme.colorsOf(context);
     final secondary = colors.textSecondary;
     final label = colors.textPrimary;
-    final accent = _sakuraInk(context);
     final spring = _springInk(context);
     final cyan = _cyanInk(context);
     final peach = _peachInk(context);
@@ -561,23 +583,11 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                 ),
               ),
               const Spacer(),
-              GestureDetector(
+              AelChip(
+                label: '要求 ${total.toStringAsFixed(1)} 分',
+                leadingIcon: AelIcons.edit,
+                tone: AelChipTone.info,
                 onTap: () => _showEditGraduationCreditsDialog(context),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(AelIcons.edit, size: 13, color: accent),
-                    const SizedBox(width: 4),
-                    Text(
-                      '要求 ${total.toStringAsFixed(1)} 分',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: accent,
-                      ),
-                    ),
-                  ],
-                ),
               ),
             ],
           ),
@@ -805,9 +815,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                 ],
                 const Spacer(),
                 Icon(
-                  _showAuditDetails
-                      ? AelIcons.chevronRight
-                      : AelIcons.chevronRight,
+                  _showAuditDetails ? AelIcons.chevronUp : AelIcons.chevronDown,
                   size: 16,
                   color: secondary,
                 ),
@@ -887,12 +895,14 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                             children: [
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
+                                  horizontal: 7,
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
                                   color: badgeColor,
-                                  borderRadius: BorderRadius.circular(6),
+                                  borderRadius: BorderRadius.circular(
+                                    AelRadius.pill,
+                                  ),
                                 ),
                                 child: Text(
                                   colorLabel(cStr),
@@ -926,9 +936,9 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                                 const SizedBox(width: 4),
                                 Icon(
                                   expanded
-                                      ? AelIcons.chevronRight
-                                      : AelIcons.chevronRight,
-                                  size: 13,
+                                      ? AelIcons.chevronUp
+                                      : AelIcons.chevronDown,
+                                  size: 15,
                                   color: secondary,
                                 ),
                               ],
@@ -1051,22 +1061,11 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                 ),
               ),
               const Spacer(),
-              GestureDetector(
+              AelChip(
+                label: '自选学分',
+                leadingIcon: AelIcons.filter,
+                tone: AelChipTone.info,
                 onTap: () => _showEditForeignCreditsDialog(context),
-                child: Row(
-                  children: [
-                    Icon(AelIcons.filter, size: 13, color: accent),
-                    const SizedBox(width: 4),
-                    Text(
-                      '自选学分',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: accent,
-                      ),
-                    ),
-                  ],
-                ),
               ),
             ],
           ),
@@ -1212,6 +1211,9 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
   }
 
   List<PdfModuleSection> _filteredCourseSections(PlanPdfSections ps) {
+    if (identical(_cachedSectionsSource, ps) && _cachedCourseSections != null) {
+      return _cachedCourseSections!;
+    }
     final roots = _buildSecTree(ps.sections);
     final out = <PdfModuleSection>[];
     void walk(_SecTreeNode node) {
@@ -1226,10 +1228,16 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
     for (final r in roots) {
       walk(r);
     }
+    _cachedSectionsSource = ps;
+    _cachedCourseSections = out;
+    _cachedIntroSections = null;
     return out;
   }
 
   List<PdfModuleSection> _mergedIntroSections(PlanPdfSections ps) {
+    if (identical(_cachedSectionsSource, ps) && _cachedIntroSections != null) {
+      return _cachedIntroSections!;
+    }
     final roots = _buildSecTree(ps.sections);
     final out = <PdfModuleSection>[];
     for (final r in roots) {
@@ -1247,6 +1255,11 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
         collect(r);
       }
     }
+    if (!identical(_cachedSectionsSource, ps)) {
+      _cachedSectionsSource = ps;
+      _cachedCourseSections = null;
+    }
+    _cachedIntroSections = out;
     return out;
   }
 
@@ -1297,11 +1310,15 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                 final sec = visibleSections[i];
                 final secKey = '${i}_${sec.label}';
                 final indent = ((sec.level - 1) * 12.0).clamp(0.0, 36.0);
-                final isExpanded = !_collapsedSections.contains(secKey);
                 final isForeign = PlanAuditHelper.isForeignSection(sec);
                 final practiceIdx = PlanAuditHelper.practiceClassroomIndex(
                   '${sec.title} ${sec.parentPath}',
                 );
+                // 第二/三/四课堂的详细要求默认收起，点击再展开
+                final defaultExpanded = practiceIdx == null;
+                final isExpanded = defaultExpanded
+                    ? !_toggledSections.contains(secKey)
+                    : _toggledSections.contains(secKey);
 
                 final mergedForeignExtras = <ForeignCourseEntry>[];
                 if (isForeign) {
@@ -1374,10 +1391,10 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                         onTap: hasBody
                             ? () {
                                 setState(() {
-                                  if (isExpanded) {
-                                    _collapsedSections.add(secKey);
+                                  if (_toggledSections.contains(secKey)) {
+                                    _toggledSections.remove(secKey);
                                   } else {
-                                    _collapsedSections.remove(secKey);
+                                    _toggledSections.add(secKey);
                                   }
                                 });
                               }
@@ -1411,12 +1428,14 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                                 const SizedBox(width: 6),
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
+                                    horizontal: 7,
                                     vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
                                     color: badgeColor.withValues(alpha: 0.14),
-                                    borderRadius: BorderRadius.circular(6),
+                                    borderRadius: BorderRadius.circular(
+                                      AelRadius.pill,
+                                    ),
                                   ),
                                   child: Text(
                                     badgeText,
@@ -1443,9 +1462,9 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                                 const SizedBox(width: 4),
                                 Icon(
                                   isExpanded
-                                      ? AelIcons.chevronRight
-                                      : AelIcons.chevronRight,
-                                  size: 12,
+                                      ? AelIcons.chevronUp
+                                      : AelIcons.chevronDown,
+                                  size: 15,
                                   color: secondary,
                                 ),
                               ],
@@ -1585,7 +1604,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
             onPressed: () => setState(() {
               _showPdfModuleList = !_showPdfModuleList;
               if (_showPdfModuleList) {
-                _collapsedSections.clear();
+                _toggledSections.clear();
               }
             }),
             child: Text(
@@ -1794,8 +1813,8 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                 const Spacer(),
                 Icon(
                   _showObjectivesAndNotes
-                      ? AelIcons.chevronRight
-                      : AelIcons.chevronRight,
+                      ? AelIcons.chevronUp
+                      : AelIcons.chevronDown,
                   size: 16,
                   color: secondary,
                 ),

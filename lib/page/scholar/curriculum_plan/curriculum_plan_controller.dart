@@ -12,6 +12,51 @@ import 'package:celechron/services/ohos_native_service.dart';
 import 'package:celechron/services/plan_audit_engine.dart';
 import 'package:celechron/utils/json_utils.dart';
 
+/// 后台 Isolate 解析全校培养方案目录 JSON 并预排序，避免主线程卡顿
+List<PlanSummary> _parseCatalogJsonIsolate(String cached) {
+  final decoded = jsonDecode(cached);
+  final rawItems = asDynamicList(decoded is Map ? decoded['items'] : decoded);
+  if (rawItems == null || rawItems.isEmpty) return const [];
+  final list = <PlanSummary>[];
+  for (final item in rawItems) {
+    final m = asStringMap(item);
+    if (m != null) list.add(PlanSummary.fromJson(m));
+  }
+  list.sort((a, b) {
+    final gCmp = b.gradeYear.compareTo(a.gradeYear);
+    if (gCmp != 0) return gCmp;
+    return a.zymc.compareTo(b.zymc);
+  });
+  return list;
+}
+
+class _MatchPlansIsolateArgs {
+  final List<PlanSummary> catalog;
+  final String majorName;
+  final String? grade;
+
+  const _MatchPlansIsolateArgs({
+    required this.catalog,
+    required this.majorName,
+    this.grade,
+  });
+}
+
+PlanMatchResult _matchPlansIsolate(_MatchPlansIsolateArgs args) {
+  return matchPlans(
+    args.catalog,
+    majorName: args.majorName,
+    grade: args.grade,
+    maxCandidates: 20,
+  );
+}
+
+/// 后台 Isolate 执行 PDF 流解压、文本提取与结构化课程表解析
+PlanPdfSections _parsePdfBytesIsolate(Uint8List bytes) {
+  final text = extractPdfText(bytes);
+  return parsePlanPdfText(text);
+}
+
 class ForeignCourseEntry {
   final String name;
   final String courseId;
@@ -30,8 +75,8 @@ class ForeignCourseEntry {
   CompassCourseState get state => passed
       ? CompassCourseState.earned
       : active
-          ? CompassCourseState.active
-          : CompassCourseState.noCredit;
+      ? CompassCourseState.active
+      : CompassCourseState.noCredit;
 }
 
 class CurriculumPlanController extends GetxController {
@@ -64,12 +109,24 @@ class CurriculumPlanController extends GetxController {
   final customGraduationCredits = RxnDouble();
 
   /// 同步与 PDF 解析状态
+  final isInitializing = false.obs;
   final isSyncing = false.obs;
   final syncError = RxnString();
   final isPdfLoading = false.obs;
   final pdfError = RxnString();
   final pdfPath = RxnString();
   final pdfSections = Rxn<PlanPdfSections>();
+
+  /// 跨页面生命周期的内存缓存，避免重复进入页面时二次 JSON / PDF 解析
+  static String? _cachedCatalogKey;
+  static List<PlanSummary>? _cachedCatalogList;
+  static final Map<
+    String,
+    ({int size, int modifiedMs, PlanPdfSections sections})
+  >
+  _parsedPdfMemoryCache = {};
+
+  Worker? _scholarWorker;
 
   /// Compass 审计引擎产出：PlanFile + 审计报告（三色状态 + 总学分 + 口径说明 + 警告）
   final planFile = Rxn<Map<String, dynamic>>();
@@ -100,9 +157,22 @@ class CurriculumPlanController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    loadProfileAndCatalog();
+    _loadSavedPrefs();
+    _loadProfile();
+    _collectEvidence();
+    isInitializing.value = true;
 
-    ever(scholar, (_) {
+    // 推迟重型目录/PDF解析到页面转场动画之后，避免初次打开卡顿掉帧
+    final delay = _cachedCatalogList != null
+        ? Duration.zero
+        : const Duration(milliseconds: 140);
+    Future<void>.delayed(delay, () {
+      if (isClosed) return;
+      loadProfileAndCatalog();
+    });
+
+    _scholarWorker = ever(scholar, (_) {
+      if (isClosed) return;
       _loadProfile();
       _collectEvidence();
       if (scholar.value.isLogan &&
@@ -112,6 +182,7 @@ class CurriculumPlanController extends GetxController {
         _initialPracticeSyncAttempted = true;
         _refreshPracticeSilently();
       }
+      if (isInitializing.value) return;
       if (catalog.isEmpty &&
           scholar.value.isLogan &&
           !_initialAutoSyncAttempted) {
@@ -121,6 +192,12 @@ class CurriculumPlanController extends GetxController {
         _rebuildPlanAndAudit();
       }
     });
+  }
+
+  @override
+  void onClose() {
+    _scholarWorker?.dispose();
+    super.onClose();
   }
 
   /// 有效最低毕业总学分（优先用户覆盖，其次审计引擎口径（含外语档位与二三四课堂调整），再其次方案声明 zdbyxf）
@@ -190,21 +267,22 @@ class CurriculumPlanController extends GetxController {
   }
 
   double get firstClassroomRequiredCredits =>
-      (effectiveGraduationCredits - practiceRequiredTotal)
-          .clamp(0.0, double.infinity);
+      (effectiveGraduationCredits - practiceRequiredTotal).clamp(
+        0.0,
+        double.infinity,
+      );
 
   double get firstClassroomEarnedCredits =>
-      (auditEarnedCredits - practiceEffectiveEarned)
-          .clamp(0.0, double.infinity);
+      (auditEarnedCredits - practiceEffectiveEarned).clamp(
+        0.0,
+        double.infinity,
+      );
 
   /// 审计引擎统计已获学分（已打通二/三/四课堂素拓有效分；PDF 尚未解析时回落至成绩单总学分 + 素拓有效分）
   double get auditEarnedCredits {
     final ps = pdfSections.value;
     final totals = auditReport.value?['totals'];
-    if (ps != null &&
-        !ps.isEmpty &&
-        totals is Map &&
-        totals['earned'] is num) {
+    if (ps != null && !ps.isEmpty && totals is Map && totals['earned'] is num) {
       return (totals['earned'] as num).toDouble();
     }
     return earnedCredits.value + practiceEffectiveEarned;
@@ -214,10 +292,7 @@ class CurriculumPlanController extends GetxController {
   double get creditGap {
     final ps = pdfSections.value;
     final totals = auditReport.value?['totals'];
-    if (ps != null &&
-        !ps.isEmpty &&
-        totals is Map &&
-        totals['gap'] is num) {
+    if (ps != null && !ps.isEmpty && totals is Map && totals['gap'] is num) {
       return (totals['gap'] as num).toDouble();
     }
     final gap = effectiveGraduationCredits - auditEarnedCredits;
@@ -240,31 +315,25 @@ class CurriculumPlanController extends GetxController {
     return foreignCapForLevel(foreignLevel.value, gradeYear) ?? 3.0;
   }
 
-  /// 过滤后的全校培养方案列表
+  /// 过滤后的全校培养方案列表（目录加载时已按年级降序、专业名升序预排）
   List<PlanSummary> get filteredCatalog {
     final q = searchQuery.value.trim().toLowerCase();
-    final Iterable<PlanSummary> source = q.isEmpty
-        ? catalog
-        : catalog.where((p) {
-            return p.zymc.toLowerCase().contains(q) ||
-                p.xymc.toLowerCase().contains(q) ||
-                p.synj.toLowerCase().contains(q) ||
-                p.jxjhh.toLowerCase().contains(q) ||
-                p.dlbsmc.toLowerCase().contains(q);
-          });
-    final list = source.toList()
-      ..sort((a, b) {
-        final gCmp = b.gradeYear.compareTo(a.gradeYear);
-        if (gCmp != 0) return gCmp;
-        return a.zymc.compareTo(b.zymc);
-      });
-    return list;
+    if (q.isEmpty) return catalog.toList(growable: false);
+    return catalog
+        .where((p) {
+          return p.zymc.toLowerCase().contains(q) ||
+              p.xymc.toLowerCase().contains(q) ||
+              p.synj.toLowerCase().contains(q) ||
+              p.jxjhh.toLowerCase().contains(q) ||
+              p.dlbsmc.toLowerCase().contains(q);
+        })
+        .toList(growable: false);
   }
 
   Future<void> _refreshPracticeSilently() async {
     try {
       final updated = await scholar.value.refreshPracticeScores();
-      if (updated) {
+      if (updated && !isClosed) {
         scholar.refresh();
         await _rebuildPlanAndAudit();
       }
@@ -272,25 +341,34 @@ class CurriculumPlanController extends GetxController {
   }
 
   Future<void> loadProfileAndCatalog({bool silent = false}) async {
-    _loadSavedPrefs();
-    _loadProfile();
-    _collectEvidence();
-    _loadCachedCatalog();
+    isInitializing.value = true;
+    try {
+      _loadSavedPrefs();
+      _loadProfile();
+      _collectEvidence();
 
-    if (scholar.value.isLogan &&
-        !scholar.value.isGrs &&
-        !scholar.value.isPracticeScoresGet &&
-        !_initialPracticeSyncAttempted) {
-      _initialPracticeSyncAttempted = true;
-      _refreshPracticeSilently();
-    }
+      final loadedFromCache = await _loadCachedCatalog();
+      if (isClosed) return;
 
-    if (catalog.isEmpty && !silent) {
-      _initialAutoSyncAttempted = true;
-      await syncCatalog(silent: true);
-    } else if (selectedPlan.value != null) {
-      await _loadCachedPdfForPlan(selectedPlan.value!);
-      await _rebuildPlanAndAudit();
+      if (scholar.value.isLogan &&
+          !scholar.value.isGrs &&
+          !scholar.value.isPracticeScoresGet &&
+          !_initialPracticeSyncAttempted) {
+        _initialPracticeSyncAttempted = true;
+        _refreshPracticeSilently();
+      }
+
+      if (catalog.isEmpty && !silent) {
+        _initialAutoSyncAttempted = true;
+        await syncCatalog(silent: true);
+      } else if (!loadedFromCache && selectedPlan.value != null) {
+        await _loadCachedPdfForPlan(selectedPlan.value!);
+        if (!isClosed) await _rebuildPlanAndAudit();
+      }
+    } finally {
+      if (!isClosed) {
+        isInitializing.value = false;
+      }
     }
   }
 
@@ -371,24 +449,35 @@ class CurriculumPlanController extends GetxController {
         final name = g.name.trim();
         if (name.isEmpty || !isForeignCourseName(name)) continue;
         final code = PlanAuditHelper.extractCourseCode(g.id);
-        final passed = g.creditIncluded &&
+        final passed =
+            g.creditIncluded &&
             (g.fivePoint > 0 ||
                 g.hundredPoint >= 60 ||
-                const {'合格', '通过', '免修', '及格', '中等', '良好', '优秀'}
-                    .contains(g.original.trim().toUpperCase()));
+                const {
+                  '合格',
+                  '通过',
+                  '免修',
+                  '及格',
+                  '中等',
+                  '良好',
+                  '优秀',
+                }.contains(g.original.trim().toUpperCase()));
         final key = code.isNotEmpty ? code : name;
         if (!passed && seenForeign.contains(key)) continue;
         seenForeign.remove(key);
         collectedForeign.removeWhere(
-            (e) => (e.courseId.isNotEmpty ? e.courseId : e.name) == key);
+          (e) => (e.courseId.isNotEmpty ? e.courseId : e.name) == key,
+        );
         seenForeign.add(key);
-        collectedForeign.add(ForeignCourseEntry(
-          name: name,
-          courseId: code,
-          credits: g.credit,
-          passed: passed,
-          active: false,
-        ));
+        collectedForeign.add(
+          ForeignCourseEntry(
+            name: name,
+            courseId: code,
+            credits: g.credit,
+            passed: passed,
+            active: false,
+          ),
+        );
       }
     }
     earnedCredits.value = earned;
@@ -399,7 +488,8 @@ class CurriculumPlanController extends GetxController {
     var active = 0.0;
     for (final c in currentCourses) {
       final g = c.grade;
-      final alreadyPassed = g != null &&
+      final alreadyPassed =
+          g != null &&
           g.creditIncluded &&
           (g.fivePoint > 0 || g.hundredPoint >= 60);
       if (!alreadyPassed) {
@@ -410,39 +500,45 @@ class CurriculumPlanController extends GetxController {
       final code = PlanAuditHelper.extractCourseCode(c.id ?? '');
       final key = code.isNotEmpty ? code : name;
       if (seenForeign.add(key)) {
-        collectedForeign.add(ForeignCourseEntry(
-          name: name,
-          courseId: code,
-          credits: c.credit,
-          passed: alreadyPassed,
-          active: !alreadyPassed,
-        ));
+        collectedForeign.add(
+          ForeignCourseEntry(
+            name: name,
+            courseId: code,
+            credits: c.credit,
+            passed: alreadyPassed,
+            active: !alreadyPassed,
+          ),
+        );
       }
     }
     activeCredits.value = active;
     foreignCourses.value = collectedForeign;
   }
 
-  void _loadCachedCatalog() {
+  Future<bool> _loadCachedCatalog() async {
     final cached = _db.getCachedWebPage('zdbk_training_plans');
     if (cached != null && cached.trim().isNotEmpty) {
       try {
-        final decoded = jsonDecode(cached);
-        final rawItems =
-            asDynamicList(decoded is Map ? decoded['items'] : decoded);
-        if (rawItems != null && rawItems.isNotEmpty) {
-          final list = <PlanSummary>[];
-          for (final item in rawItems) {
-            final m = asStringMap(item);
-            if (m != null) list.add(PlanSummary.fromJson(m));
-          }
+        final cacheKey = '${cached.length}:${cached.hashCode}';
+        List<PlanSummary> list;
+        if (_cachedCatalogKey == cacheKey && _cachedCatalogList != null) {
+          list = _cachedCatalogList!;
+        } else {
+          list = await compute(_parseCatalogJsonIsolate, cached);
           if (list.isNotEmpty) {
-            catalog.value = list;
-            _runMatching();
+            _cachedCatalogKey = cacheKey;
+            _cachedCatalogList = list;
           }
+        }
+        if (isClosed) return false;
+        if (list.isNotEmpty) {
+          catalog.value = list;
+          await _runMatching();
+          return true;
         }
       } catch (_) {}
     }
+    return false;
   }
 
   /// 全量拉取学籍画像 + 方案目录，并在客户端打分匹配与下载官方 PDF
@@ -452,6 +548,7 @@ class CurriculumPlanController extends GetxController {
     syncError.value = null;
     try {
       final profile = await scholar.value.fetchStudentProfile(refresh: !silent);
+      if (isClosed) return;
       if (profile != null && !profile.isEmpty) {
         studentProfile.value = profile;
         if (profile.majorName.isNotEmpty) {
@@ -468,14 +565,27 @@ class CurriculumPlanController extends GetxController {
         }
       }
 
-      final res =
-          await scholar.value.fetchPlanCatalogWithError(refresh: !silent);
+      final res = await scholar.value.fetchPlanCatalogWithError(
+        refresh: !silent,
+      );
+      if (isClosed) return;
       if (!silent && scholar.value.isLogan && !scholar.value.isGrs) {
         // 同步培养方案时一并联动刷新素拓二/三/四课堂记点
         await _refreshPracticeSilently();
       }
       if (res.item2.isNotEmpty) {
-        catalog.value = res.item2;
+        final sorted = List<PlanSummary>.from(res.item2)
+          ..sort((a, b) {
+            final gCmp = b.gradeYear.compareTo(a.gradeYear);
+            if (gCmp != 0) return gCmp;
+            return a.zymc.compareTo(b.zymc);
+          });
+        catalog.value = sorted;
+        final cached = _db.getCachedWebPage('zdbk_training_plans');
+        if (cached != null) {
+          _cachedCatalogKey = '${cached.length}:${cached.hashCode}';
+          _cachedCatalogList = sorted;
+        }
         syncError.value = null;
         await _runMatching(downloadPdfIfMissing: true);
       } else {
@@ -487,7 +597,9 @@ class CurriculumPlanController extends GetxController {
         debugPrint('syncCatalog failed: $e');
       }
     } finally {
-      isSyncing.value = false;
+      if (!isClosed) {
+        isSyncing.value = false;
+      }
     }
   }
 
@@ -495,12 +607,15 @@ class CurriculumPlanController extends GetxController {
     if (catalog.isEmpty) return;
 
     final major = userMajor.value.isNotEmpty ? userMajor.value : '工科试验班';
-    final result = matchPlans(
-      catalog,
-      majorName: major,
-      grade: studentGrade.value.isNotEmpty ? studentGrade.value : null,
-      maxCandidates: 20,
+    final result = await compute(
+      _matchPlansIsolate,
+      _MatchPlansIsolateArgs(
+        catalog: catalog.toList(growable: false),
+        majorName: major,
+        grade: studentGrade.value.isNotEmpty ? studentGrade.value : null,
+      ),
     );
+    if (isClosed) return;
     matchResult.value = result;
 
     final savedId = _db.optionsBox.get(_kSavedPlanIdKey);
@@ -556,11 +671,26 @@ class CurriculumPlanController extends GetxController {
     try {
       final file = await _pdfCacheFileFor(plan);
       if (await file.exists()) {
-        final bytes = await file.readAsBytes();
-        if (bytes.length > 100) {
-          final text = extractPdfText(bytes);
-          final parsed = parsePlanPdfText(text);
+        final stat = await file.stat();
+        final cachedMem = _parsedPdfMemoryCache[file.path];
+        if (cachedMem != null &&
+            cachedMem.size == stat.size &&
+            cachedMem.modifiedMs == stat.modified.millisecondsSinceEpoch &&
+            !cachedMem.sections.isEmpty) {
+          pdfPath.value = file.path;
+          pdfSections.value = cachedMem.sections;
+          return true;
+        }
+        if (stat.size > 100) {
+          final bytes = await file.readAsBytes();
+          final parsed = await compute(_parsePdfBytesIsolate, bytes);
+          if (isClosed) return false;
           if (!parsed.isEmpty) {
+            _parsedPdfMemoryCache[file.path] = (
+              size: stat.size,
+              modifiedMs: stat.modified.millisecondsSinceEpoch,
+              sections: parsed,
+            );
             pdfPath.value = file.path;
             pdfSections.value = parsed;
             return true;
@@ -594,8 +724,16 @@ class CurriculumPlanController extends GetxController {
       if (bytes != null && bytes.isNotEmpty) {
         final file = await _pdfCacheFileFor(plan);
         await file.writeAsBytes(bytes, flush: true);
-        final text = extractPdfText(bytes);
-        final parsed = parsePlanPdfText(text);
+        final parsed = await compute(_parsePdfBytesIsolate, bytes);
+        if (isClosed) return;
+        final stat = await file.stat();
+        if (!parsed.isEmpty) {
+          _parsedPdfMemoryCache[file.path] = (
+            size: stat.size,
+            modifiedMs: stat.modified.millisecondsSinceEpoch,
+            sections: parsed,
+          );
+        }
         pdfPath.value = file.path;
         pdfSections.value = parsed;
         if (parsed.isEmpty) {
@@ -608,8 +746,10 @@ class CurriculumPlanController extends GetxController {
     } catch (e) {
       pdfError.value = '下载或解析方案 PDF 失败: $e';
     } finally {
-      await _rebuildPlanAndAudit(fallbackCourseRows: fallbackCourseRows);
-      isPdfLoading.value = false;
+      if (!isClosed) {
+        await _rebuildPlanAndAudit(fallbackCourseRows: fallbackCourseRows);
+        isPdfLoading.value = false;
+      }
     }
   }
 
@@ -634,8 +774,8 @@ class CurriculumPlanController extends GetxController {
     final gradeStr = studentGrade.value.isNotEmpty
         ? studentGrade.value
         : (plan?.synj.isNotEmpty == true
-            ? plan!.synj
-            : '${DateTime.now().year}');
+              ? plan!.synj
+              : '${DateTime.now().year}');
     final majorStr = userMajor.value.isNotEmpty
         ? userMajor.value
         : (plan?.zymc ?? '主修专业');
@@ -647,8 +787,8 @@ class CurriculumPlanController extends GetxController {
     );
     final uiActiveNames =
         (record['uiActiveNames'] as Set<String>?) ?? const <String>{};
-    final transcriptRows =
-        (record['courses'] as List).cast<Map<String, dynamic>>();
+    final transcriptRows = (record['courses'] as List)
+        .cast<Map<String, dynamic>>();
 
     Map<String, dynamic>? pf;
     final ps = pdfSections.value;
@@ -692,12 +832,9 @@ class CurriculumPlanController extends GetxController {
           else
             'foreign_lang_level': foreignLevel.value,
         };
-        auditReport.value = AuditEngine(const {}).build(
-          record,
-          pf,
-          action: action,
-          uiActiveNames: uiActiveNames,
-        );
+        auditReport.value = AuditEngine(
+          const {},
+        ).build(record, pf, action: action, uiActiveNames: uiActiveNames);
       } catch (e) {
         if (kDebugMode) {
           debugPrint('AuditEngine build error: $e');

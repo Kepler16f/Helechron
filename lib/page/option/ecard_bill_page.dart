@@ -702,14 +702,14 @@ class _ECardBillPageState extends State<ECardBillPage> {
                 child: Row(
                   children: [
                     Container(
-                      width: 18,
-                      height: 18,
+                      width: 20,
+                      height: 20,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: idx <= 3
                             ? colors.warningContainer
                             : colors.neutralChipBg,
-                        borderRadius: BorderRadius.circular(4),
+                        shape: BoxShape.circle,
                       ),
                       child: Text(
                         '$idx',
@@ -785,15 +785,13 @@ class _ECardBillPageState extends State<ECardBillPage> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              alignment: Alignment.center,
-              child: Icon(_categoryIcon(tx.category), color: color, size: 20),
+            AelIconBadge(
+              icon: _categoryIcon(tx.category),
+              size: 38,
+              iconSize: 19,
+              style: AelIconBadgeStyle.circle,
+              backgroundColor: color.withValues(alpha: 0.14),
+              iconColor: color,
             ),
             const SizedBox(width: 12),
             Expanded(

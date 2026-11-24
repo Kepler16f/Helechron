@@ -1,9 +1,7 @@
 import 'package:flutter/cupertino.dart'
     show
         CupertinoAlertDialog,
-        CupertinoButton,
         CupertinoDialogAction,
-        CupertinoNavigationBar,
         CupertinoPageScaffold,
         CupertinoPageRoute,
         CupertinoTextField,
@@ -14,6 +12,7 @@ import 'package:flutter/widgets.dart';
 import 'package:celechron/design/components/ael_components.dart';
 import 'package:celechron/design/icons/ael_icons.dart';
 import 'package:celechron/design/native_bar_spacer.dart';
+import 'package:celechron/design/persistent_headers.dart';
 import 'package:celechron/design/theme/ael_theme.dart';
 import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/model/practice_score_item.dart';
@@ -353,12 +352,12 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
               children: breakdown.entries.map((entry) {
                 return Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
+                    horizontal: 11,
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
                     color: colors.tonalTileBg,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(AelRadius.pill),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -424,100 +423,97 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
         .toList(growable: false);
 
     return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        middle: Text('${_getCategoryTitle(_selectedCategoryId)}看板'),
-        trailing: CupertinoButton(
-          padding: EdgeInsets.zero,
-          onPressed: () {
-            setState(() => _sortAscending = !_sortAscending);
-          },
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(AelIcons.filter, size: 16, color: colors.primary),
-              const SizedBox(width: 2),
-              Text(
-                _sortAscending ? '正序' : '倒序',
-                style: TextStyle(fontSize: 13, color: colors.primary),
-              ),
-            ],
-          ),
-        ),
-      ),
       backgroundColor: colors.pageBg,
-      child: SafeArea(
-        bottom: false,
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            12,
-            16,
-            MediaQuery.paddingOf(context).bottom + nativeBottomBarInset() + 16,
-          ),
-          children: [
-            _buildCategorySegment(),
-            if (_selectedCategoryId == 0) ...[
-              _buildTargetCard(1),
-              const SizedBox(height: 10),
-              _buildTargetCard(2),
-              const SizedBox(height: 10),
-              _buildTargetCard(3),
-            ] else ...[
-              _buildTargetCard(_selectedCategoryId),
-            ],
-            const SizedBox(height: 12),
-            _SummaryCard(
-              categoryName: _selectedCategoryId == 0
-                  ? '全部看板'
-                  : '${_getCategoryTitle(_selectedCategoryId)}项目',
-              total: _getCategoryScore(_selectedCategoryId),
-              includedCount: included.length,
-              excludedCount: inReview.length + otherExcluded.length,
-              source: widget.scholar.practiceSummarySource,
-              detailSource: widget.scholar.practiceDataSource,
-              updatedAt: widget.scholar.practiceUpdatedAt,
-              stale: widget.scholar.practiceSummaryStale,
-              detailsStale: widget.scholar.practiceDetailsStale,
+      child: CustomScrollView(
+        slivers: [
+          CelechronSliverTextHeader(
+            subtitle: '${_getCategoryTitle(_selectedCategoryId)}看板',
+            right: Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: AelChip(
+                label: _sortAscending ? '正序' : '倒序',
+                leadingIcon: AelIcons.filter,
+                tone: AelChipTone.primary,
+                onTap: () => setState(() => _sortAscending = !_sortAscending),
+              ),
             ),
-            _buildQualityBreakdown(filteredItems),
-            const SizedBox(height: 16),
-            if (!widget.scholar.practiceDetailsAvailable)
-              _NoDetailsCard(source: widget.scholar.practiceDataSource)
-            else ...[
-              _SectionTitle(title: '已计入记点项目', count: included.length),
-              if (included.isEmpty)
-                const _EmptyGroup(text: '暂无已计入记点的项目')
-              else
-                ...included.map(
-                  (item) => _PracticeItemCard(
-                    item: item,
-                    onTap: () => _openDetail(context, item),
-                  ),
-                ),
-              const SizedBox(height: 12),
-              if (inReview.isNotEmpty) ...[
-                _SectionTitle(title: '审核中项目', count: inReview.length),
-                ...inReview.map(
-                  (item) => _PracticeItemCard(
-                    item: item,
-                    onTap: () => _openDetail(context, item),
-                  ),
-                ),
+          ),
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              8,
+              16,
+              MediaQuery.paddingOf(context).bottom +
+                  nativeBottomBarInset() +
+                  16,
+            ),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                _buildCategorySegment(),
+                if (_selectedCategoryId == 0) ...[
+                  _buildTargetCard(1),
+                  const SizedBox(height: 10),
+                  _buildTargetCard(2),
+                  const SizedBox(height: 10),
+                  _buildTargetCard(3),
+                ] else ...[
+                  _buildTargetCard(_selectedCategoryId),
+                ],
                 const SizedBox(height: 12),
-              ],
-              _SectionTitle(title: '未计入或其他项目', count: otherExcluded.length),
-              if (otherExcluded.isEmpty && inReview.isEmpty)
-                const _EmptyGroup(text: '暂无未计入或异常项目')
-              else if (otherExcluded.isNotEmpty)
-                ...otherExcluded.map(
-                  (item) => _PracticeItemCard(
-                    item: item,
-                    onTap: () => _openDetail(context, item),
-                  ),
+                _SummaryCard(
+                  categoryName: _selectedCategoryId == 0
+                      ? '全部看板'
+                      : '${_getCategoryTitle(_selectedCategoryId)}项目',
+                  total: _getCategoryScore(_selectedCategoryId),
+                  includedCount: included.length,
+                  excludedCount: inReview.length + otherExcluded.length,
+                  source: widget.scholar.practiceSummarySource,
+                  detailSource: widget.scholar.practiceDataSource,
+                  updatedAt: widget.scholar.practiceUpdatedAt,
+                  stale: widget.scholar.practiceSummaryStale,
+                  detailsStale: widget.scholar.practiceDetailsStale,
                 ),
-            ],
-          ],
-        ),
+                _buildQualityBreakdown(filteredItems),
+                const SizedBox(height: 16),
+                if (!widget.scholar.practiceDetailsAvailable)
+                  _NoDetailsCard(source: widget.scholar.practiceDataSource)
+                else ...[
+                  _SectionTitle(title: '已计入记点项目', count: included.length),
+                  if (included.isEmpty)
+                    const _EmptyGroup(text: '暂无已计入记点的项目')
+                  else
+                    ...included.map(
+                      (item) => _PracticeItemCard(
+                        item: item,
+                        onTap: () => _openDetail(context, item),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  if (inReview.isNotEmpty) ...[
+                    _SectionTitle(title: '审核中项目', count: inReview.length),
+                    ...inReview.map(
+                      (item) => _PracticeItemCard(
+                        item: item,
+                        onTap: () => _openDetail(context, item),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  _SectionTitle(title: '未计入或其他项目', count: otherExcluded.length),
+                  if (otherExcluded.isEmpty && inReview.isEmpty)
+                    const _EmptyGroup(text: '暂无未计入或异常项目')
+                  else if (otherExcluded.isNotEmpty)
+                    ...otherExcluded.map(
+                      (item) => _PracticeItemCard(
+                        item: item,
+                        onTap: () => _openDetail(context, item),
+                      ),
+                    ),
+                ],
+              ]),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -556,40 +552,48 @@ class PracticeScoreDetailPage extends StatelessWidget {
       ('最近更新时间', _dateTime(item.updatedAt)),
     ];
     return CupertinoPageScaffold(
-      navigationBar: const CupertinoNavigationBar(middle: Text('实践项目详情')),
       backgroundColor: colors.pageBg,
-      child: SafeArea(
-        bottom: false,
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            16,
-            16,
-            MediaQuery.paddingOf(context).bottom + nativeBottomBarInset() + 16,
-          ),
-          children: [
-            AelSectionCard(
-              padding: const EdgeInsets.all(16),
-              cornerRadius: AelRadius.tile,
-              child: Column(
-                children: [
-                  for (var index = 0; index < rows.length; index++) ...[
-                    _DetailRow(label: rows[index].$1, value: rows[index].$2),
-                    if (index != rows.length - 1)
-                      Divider(height: 1, color: colors.divider),
-                  ],
-                ],
-              ),
+      child: CustomScrollView(
+        slivers: [
+          const CelechronSliverTextHeader(subtitle: '实践项目详情'),
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              8,
+              16,
+              MediaQuery.paddingOf(context).bottom +
+                  nativeBottomBarInset() +
+                  16,
             ),
-            if (!item.countsTowardTotal) ...[
-              const SizedBox(height: 12),
-              Text(
-                '该项目当前未计入总分。',
-                style: TextStyle(color: colors.warning, fontSize: 14),
-              ),
-            ],
-          ],
-        ),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                AelSectionCard(
+                  padding: const EdgeInsets.all(16),
+                  cornerRadius: AelRadius.tile,
+                  child: Column(
+                    children: [
+                      for (var index = 0; index < rows.length; index++) ...[
+                        _DetailRow(
+                          label: rows[index].$1,
+                          value: rows[index].$2,
+                        ),
+                        if (index != rows.length - 1)
+                          Divider(height: 1, color: colors.divider),
+                      ],
+                    ],
+                  ),
+                ),
+                if (!item.countsTowardTotal) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    '该项目当前未计入总分。',
+                    style: TextStyle(color: colors.warning, fontSize: 14),
+                  ),
+                ],
+              ]),
+            ),
+          ),
+        ],
       ),
     );
   }

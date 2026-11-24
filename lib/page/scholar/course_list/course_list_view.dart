@@ -1,6 +1,6 @@
 import 'package:extended_sliver/extended_sliver.dart';
 import 'package:flutter/cupertino.dart'
-    show CupertinoButton, CupertinoPageScaffold, CupertinoPageRoute;
+    show CupertinoPageScaffold, CupertinoPageRoute;
 import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 
@@ -65,42 +65,17 @@ class CourseListPage extends StatelessWidget {
         slivers: [
           CelechronSliverTextHeader(
             subtitle: '课程',
-            right: CupertinoButton(
+            right: Padding(
               padding: const EdgeInsets.only(right: 12),
-              minSize: 32,
-              onPressed: () => Navigator.of(context, rootNavigator: true).push(
-                CupertinoPageRoute(
-                  builder: (context) => const CurriculumPlanPage(),
-                  title: '培养方案查看',
-                ),
-              ),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: colors.primaryContainer,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      AelIcons.file,
-                      size: 13,
-                      color: colors.onPrimaryContainer,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '培养方案',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: colors.onPrimaryContainer,
-                      ),
-                    ),
-                  ],
+              child: AelChip(
+                label: '培养方案',
+                leadingIcon: AelIcons.book,
+                tone: AelChipTone.primary,
+                onTap: () => Navigator.of(context, rootNavigator: true).push(
+                  CupertinoPageRoute(
+                    builder: (context) => const CurriculumPlanPage(),
+                    title: '培养方案查看',
+                  ),
                 ),
               ),
             ),

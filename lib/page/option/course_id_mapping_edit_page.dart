@@ -212,19 +212,19 @@ class CourseIdMappingEditPage extends StatelessWidget {
                                     ],
                                   ),
                                 ),
-                                CupertinoButton(
-                                  padding: const EdgeInsets.all(6),
-                                  minSize: 32,
+                                AelCircleIconButton(
+                                  icon: AelIcons.delete,
+                                  size: 32,
+                                  iconSize: 15,
+                                  backgroundColor: colors.errorContainer,
+                                  iconColor: colors.onErrorContainer,
+                                  elevated: false,
+                                  tooltip: '删除映射',
                                   onPressed: () async {
                                     courseIdMappingList.removeAt(index);
                                     await scholar.value.recalculateGpa();
                                     scholar.refresh();
                                   },
-                                  child: Icon(
-                                    AelIcons.delete,
-                                    size: 18,
-                                    color: colors.error,
-                                  ),
                                 ),
                               ],
                             ),

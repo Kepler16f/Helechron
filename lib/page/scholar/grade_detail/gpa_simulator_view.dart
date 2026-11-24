@@ -559,19 +559,12 @@ class GpaSimulatorPage extends StatelessWidget {
           CelechronSliverTextHeader(
             subtitle: 'GPA 模拟器',
             right: Padding(
-              padding: const EdgeInsets.only(right: 18),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    child: Text(
-                      '重置',
-                      style: TextStyle(fontSize: 16, color: colors.primary),
-                    ),
-                    onPressed: () => _showSimulatorResetActionSheet(context),
-                  ),
-                ],
+              padding: const EdgeInsets.only(right: 14),
+              child: AelChip(
+                label: '重置',
+                leadingIcon: AelIcons.refresh,
+                tone: AelChipTone.neutral,
+                onTap: () => _showSimulatorResetActionSheet(context),
               ),
             ),
           ),

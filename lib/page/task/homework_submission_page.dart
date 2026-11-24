@@ -1846,12 +1846,19 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
                   children: [
                     Row(
                       children: [
-                        Icon(
-                          isImage ? AelIcons.image : AelIcons.file,
-                          size: 20,
-                          color: isImage ? colors.info : colors.primary,
+                        AelIconBadge(
+                          icon: isImage ? AelIcons.image : AelIcons.file,
+                          size: 34,
+                          iconSize: 17,
+                          style: AelIconBadgeStyle.circle,
+                          backgroundColor: isImage
+                              ? colors.infoContainer
+                              : colors.primaryContainer,
+                          iconColor: isImage
+                              ? colors.onInfoContainer
+                              : colors.onPrimaryContainer,
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2105,8 +2112,15 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
                     ),
                     child: Row(
                       children: [
-                        Icon(AelIcons.file, size: 20, color: colors.primary),
-                        const SizedBox(width: 8),
+                        AelIconBadge(
+                          icon: AelIcons.file,
+                          size: 32,
+                          iconSize: 16,
+                          style: AelIconBadgeStyle.circle,
+                          backgroundColor: colors.primaryContainer,
+                          iconColor: colors.onPrimaryContainer,
+                        ),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2130,15 +2144,15 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
                             ],
                           ),
                         ),
-                        CupertinoButton(
-                          padding: const EdgeInsets.all(4),
-                          minimumSize: Size.zero,
+                        AelCircleIconButton(
+                          icon: AelIcons.close,
+                          size: 28,
+                          iconSize: 14,
+                          backgroundColor: colors.cardBg,
+                          iconColor: colors.textSecondary,
+                          elevated: false,
+                          tooltip: '移除附件',
                           onPressed: () => _removeAttachment(idx),
-                          child: Icon(
-                            AelIcons.close,
-                            size: 18,
-                            color: colors.textTertiary,
-                          ),
                         ),
                       ],
                     ),
@@ -2702,28 +2716,38 @@ class _CoursesImageViewerPageState extends State<_CoursesImageViewerPage> {
           ),
           overflow: TextOverflow.ellipsis,
         ),
-        leading: CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: Size.zero,
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Icon(
-            AelIcons.close,
-            color: AelSemanticPalette.pureWhite,
-            size: 20,
+        leading: Center(
+          widthFactor: 1,
+          child: AelCircleIconButton(
+            icon: AelIcons.close,
+            size: 32,
+            iconSize: 16,
+            backgroundColor: AelSemanticPalette.pureWhite.withValues(
+              alpha: 0.16,
+            ),
+            iconColor: AelSemanticPalette.pureWhite,
+            elevated: false,
+            tooltip: '关闭',
+            onPressed: () => Navigator.of(context).pop(),
           ),
         ),
         trailing: fullUrl != null
-            ? CupertinoButton(
-                padding: EdgeInsets.zero,
-                minimumSize: Size.zero,
-                onPressed: () => launchUrlString(
-                  fullUrl,
-                  mode: LaunchMode.externalApplication,
-                ),
-                child: const Icon(
-                  AelIcons.compass,
-                  color: AelSemanticPalette.pureWhite,
-                  size: 20,
+            ? Center(
+                widthFactor: 1,
+                child: AelCircleIconButton(
+                  icon: AelIcons.compass,
+                  size: 32,
+                  iconSize: 16,
+                  backgroundColor: AelSemanticPalette.pureWhite.withValues(
+                    alpha: 0.16,
+                  ),
+                  iconColor: AelSemanticPalette.pureWhite,
+                  elevated: false,
+                  tooltip: '外部浏览器打开',
+                  onPressed: () => launchUrlString(
+                    fullUrl,
+                    mode: LaunchMode.externalApplication,
+                  ),
                 ),
               )
             : null,

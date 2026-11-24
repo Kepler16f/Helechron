@@ -289,10 +289,13 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  _severityIcon(report.severity),
-                  color: statusColor,
-                  size: 24,
+                AelIconBadge(
+                  icon: _severityIcon(report.severity),
+                  size: 38,
+                  iconSize: 19,
+                  style: AelIconBadgeStyle.cookie,
+                  backgroundColor: statusColor.withValues(alpha: 0.14),
+                  iconColor: statusColor,
                 ),
                 const SizedBox(width: 10),
                 Expanded(

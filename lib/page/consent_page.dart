@@ -108,18 +108,13 @@ class _ConsentPageState extends State<ConsentPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: 64,
-                        height: 64,
-                        decoration: BoxDecoration(
-                          color: colors.primary,
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: Icon(
-                          AelIcons.tabFlow,
-                          color: colors.onPrimary,
-                          size: 36,
-                        ),
+                      AelIconBadge(
+                        icon: AelIcons.tabFlow,
+                        size: 64,
+                        iconSize: 32,
+                        style: AelIconBadgeStyle.cookie,
+                        backgroundColor: colors.primary,
+                        iconColor: colors.onPrimary,
                       ),
                       const SizedBox(height: 24),
                       Text(
@@ -458,14 +453,13 @@ class _LegalTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Row(
         children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: colors.primaryContainer,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: colors.onPrimaryContainer, size: 19),
+          AelIconBadge(
+            icon: icon,
+            size: 36,
+            iconSize: 18,
+            style: AelIconBadgeStyle.circle,
+            backgroundColor: colors.primaryContainer,
+            iconColor: colors.onPrimaryContainer,
           ),
           const SizedBox(width: 12),
           Expanded(

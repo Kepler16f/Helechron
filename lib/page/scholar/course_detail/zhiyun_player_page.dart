@@ -1023,10 +1023,20 @@ class _FullscreenPptViewerState extends State<_FullscreenPptViewer> {
       backgroundColor: AelSemanticPalette.pureBlack,
       navigationBar: CupertinoNavigationBar(
         backgroundColor: AelSemanticPalette.pureBlack.withValues(alpha: 0.8),
-        leading: CupertinoButton(
-          padding: EdgeInsets.zero,
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Icon(AelIcons.back, color: AelSemanticPalette.pureWhite),
+        leading: Center(
+          widthFactor: 1,
+          child: AelCircleIconButton(
+            icon: AelIcons.back,
+            size: 32,
+            iconSize: 16,
+            backgroundColor: AelSemanticPalette.pureWhite.withValues(
+              alpha: 0.16,
+            ),
+            iconColor: AelSemanticPalette.pureWhite,
+            elevated: false,
+            tooltip: '返回',
+            onPressed: () => Navigator.of(context).pop(),
+          ),
         ),
         middle: Text(
           '${_currentIndex + 1}/${widget.slides.length} · ${slide.timeLabel}',

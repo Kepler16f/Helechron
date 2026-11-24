@@ -61,8 +61,15 @@ class _ExamListPageState extends State<ExamListPage> {
           children: [
             Row(
               children: [
-                Icon(AelIcons.exam, color: colors.warning, size: 18),
-                const SizedBox(width: 6),
+                AelIconBadge(
+                  icon: AelIcons.exam,
+                  size: 32,
+                  iconSize: 16,
+                  style: AelIconBadgeStyle.cookie,
+                  backgroundColor: colors.warning,
+                  iconColor: colors.onPrimary,
+                ),
+                const SizedBox(width: 8),
                 Text(
                   '考试周冲刺',
                   style: TextStyle(
@@ -142,9 +149,9 @@ class _ExamListPageState extends State<ExamListPage> {
               height: 10.0,
               decoration: BoxDecoration(
                 color: colors.primary,
-                shape: exam.type == ExamType.midterm
-                    ? BoxShape.circle
-                    : BoxShape.rectangle,
+                borderRadius: BorderRadius.circular(
+                  exam.type == ExamType.midterm ? 5.0 : 3.0,
+                ),
               ),
             ),
             const SizedBox(width: 8.0),
@@ -425,9 +432,9 @@ class _ExamListPageState extends State<ExamListPage> {
                           const SizedBox(width: 4),
                           Icon(
                             _examListController.showPastExams.value
-                                ? AelIcons.chevronRight
-                                : AelIcons.chevronRight,
-                            size: 14,
+                                ? AelIcons.chevronUp
+                                : AelIcons.chevronDown,
+                            size: 16,
                             color: colors.textSecondary,
                           ),
                         ],

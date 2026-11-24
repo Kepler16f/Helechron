@@ -8,6 +8,7 @@ import 'package:celechron/design/persistent_headers.dart';
 import 'package:celechron/design/theme/ael_theme.dart';
 import 'package:celechron/design/components/ael_components.dart';
 import 'package:celechron/design/icons/ael_icons.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/http/zjuServices/courses.dart';
 import 'package:celechron/http/zjuServices/network_defense.dart';
 import 'package:celechron/model/option.dart';
@@ -936,14 +937,13 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
               children: [
                 Row(
                   children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: iconColor,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(icon, size: 18, color: effectiveIconFg),
+                    AelIconBadge(
+                      icon: icon,
+                      size: 36,
+                      iconSize: 18,
+                      style: AelIconBadgeStyle.cookie,
+                      backgroundColor: iconColor,
+                      iconColor: effectiveIconFg,
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -965,17 +965,19 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                                 onTap: onTagTap,
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
+                                    horizontal: 7,
                                     vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
                                     color: colors.tonalTileBg,
-                                    borderRadius: BorderRadius.circular(4),
+                                    borderRadius: BorderRadius.circular(
+                                      AelRadius.pill,
+                                    ),
                                   ),
                                   child: Text(
                                     tag,
                                     style: TextStyle(
-                                      fontSize: 10,
+                                      fontSize: 10.5,
                                       fontWeight: FontWeight.w600,
                                       color: colors.textSecondary,
                                     ),
@@ -1126,11 +1128,11 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
               Expanded(
                 child: CupertinoButton(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
+                    horizontal: 10,
                     vertical: 8,
                   ),
                   color: colors.error,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(AelRadius.pill),
                   minimumSize: const Size(36, 36),
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
@@ -1161,16 +1163,14 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                 ),
               ),
               const SizedBox(width: 8),
-              CupertinoButton(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                color: colors.tonalTileBg,
-                borderRadius: BorderRadius.circular(8),
-                minimumSize: const Size(36, 36),
-                child: Icon(
-                  AelIcons.compass,
-                  size: 16,
-                  color: colors.textPrimary,
-                ),
+              AelCircleIconButton(
+                icon: AelIcons.compass,
+                size: 36,
+                iconSize: 16,
+                backgroundColor: colors.tonalTileBg,
+                iconColor: colors.textPrimary,
+                elevated: false,
+                tooltip: '外部浏览器打开',
                 onPressed: () => _openAndRecord(
                   info.livingroomUrl,
                   '实时直播',
@@ -1181,19 +1181,14 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
               ),
               if (info.courseId != null) ...[
                 const SizedBox(width: 8),
-                CupertinoButton(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
-                  ),
-                  color: colors.tonalTileBg,
-                  borderRadius: BorderRadius.circular(8),
-                  minimumSize: const Size(36, 36),
-                  child: Icon(
-                    AelIcons.edit,
-                    size: 16,
-                    color: colors.textPrimary,
-                  ),
+                AelCircleIconButton(
+                  icon: AelIcons.edit,
+                  size: 36,
+                  iconSize: 16,
+                  backgroundColor: colors.tonalTileBg,
+                  iconColor: colors.textPrimary,
+                  elevated: false,
+                  tooltip: '修改智云课程绑定',
                   onPressed: () => _showBindDialog(context, info.courseId!),
                 ),
               ],
@@ -1218,11 +1213,11 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
               Expanded(
                 child: CupertinoButton(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
+                    horizontal: 10,
                     vertical: 8,
                   ),
                   color: colors.primary,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(AelRadius.pill),
                   minimumSize: const Size(36, 36),
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
@@ -1252,16 +1247,14 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                 ),
               ),
               const SizedBox(width: 8),
-              CupertinoButton(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                color: colors.tonalTileBg,
-                borderRadius: BorderRadius.circular(8),
-                minimumSize: const Size(36, 36),
-                child: Icon(
-                  AelIcons.compass,
-                  size: 16,
-                  color: colors.textPrimary,
-                ),
+              AelCircleIconButton(
+                icon: AelIcons.compass,
+                size: 36,
+                iconSize: 16,
+                backgroundColor: colors.tonalTileBg,
+                iconColor: colors.textPrimary,
+                elevated: false,
+                tooltip: '外部浏览器打开',
                 onPressed: () => _openAndRecord(
                   info.livingroomUrl,
                   info.lessonTitle,
@@ -1271,19 +1264,14 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
               ),
               if (info.courseId != null) ...[
                 const SizedBox(width: 8),
-                CupertinoButton(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
-                  ),
-                  color: colors.tonalTileBg,
-                  borderRadius: BorderRadius.circular(8),
-                  minimumSize: const Size(36, 36),
-                  child: Icon(
-                    AelIcons.edit,
-                    size: 16,
-                    color: colors.textPrimary,
-                  ),
+                AelCircleIconButton(
+                  icon: AelIcons.edit,
+                  size: 36,
+                  iconSize: 16,
+                  backgroundColor: colors.tonalTileBg,
+                  iconColor: colors.textPrimary,
+                  elevated: false,
+                  tooltip: '修改智云课程绑定',
                   onPressed: () => _showBindDialog(context, info.courseId!),
                 ),
               ],
@@ -1306,11 +1294,11 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
               Expanded(
                 child: CupertinoButton(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
+                    horizontal: 10,
                     vertical: 8,
                   ),
                   color: colors.primary,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(AelRadius.pill),
                   minimumSize: const Size(36, 36),
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
@@ -1343,16 +1331,14 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                 ),
               ),
               const SizedBox(width: 8),
-              CupertinoButton(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                color: colors.tonalTileBg,
-                borderRadius: BorderRadius.circular(8),
-                minimumSize: const Size(36, 36),
-                child: Icon(
-                  AelIcons.compass,
-                  size: 16,
-                  color: colors.textPrimary,
-                ),
+              AelCircleIconButton(
+                icon: AelIcons.compass,
+                size: 36,
+                iconSize: 16,
+                backgroundColor: colors.tonalTileBg,
+                iconColor: colors.textPrimary,
+                elevated: false,
+                tooltip: '外部浏览器打开',
                 onPressed: () => _openAndRecord(
                   info.livingroomUrl,
                   '课程房间',
@@ -1360,12 +1346,14 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                 ),
               ),
               const SizedBox(width: 8),
-              CupertinoButton(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                color: colors.tonalTileBg,
-                borderRadius: BorderRadius.circular(8),
-                minimumSize: const Size(36, 36),
-                child: Icon(AelIcons.edit, size: 16, color: colors.textPrimary),
+              AelCircleIconButton(
+                icon: AelIcons.edit,
+                size: 36,
+                iconSize: 16,
+                backgroundColor: colors.tonalTileBg,
+                iconColor: colors.textPrimary,
+                elevated: false,
+                tooltip: '修改智云课程绑定',
                 onPressed: () => _showBindDialog(context, info.courseId!),
               ),
             ],
@@ -1643,18 +1631,13 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
               children: [
                 Row(
                   children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: colors.primary,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        AelIcons.folder,
-                        size: 18,
-                        color: colors.onPrimary,
-                      ),
+                    AelIconBadge(
+                      icon: AelIcons.folder,
+                      size: 36,
+                      iconSize: 18,
+                      style: AelIconBadgeStyle.cookie,
+                      backgroundColor: colors.primaryContainer,
+                      iconColor: colors.onPrimaryContainer,
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -1702,104 +1685,54 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
                     ),
                     const SizedBox(width: 8),
                     if (!_hasFetched && !_expanded)
-                      CupertinoButton(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        minimumSize: const Size(32, 32),
-                        color: colors.primary,
-                        borderRadius: BorderRadius.circular(8),
-                        onPressed: _loading ? null : _fetchCourseware,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (_loading)
-                              CupertinoActivityIndicator(
-                                radius: 7,
-                                color: colors.onPrimary,
-                              )
-                            else ...[
-                              Icon(
-                                AelIcons.download,
-                                size: 15,
-                                color: colors.onPrimary,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '展开课件',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: colors.onPrimary,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      )
+                      _loading
+                          ? const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 10),
+                              child: CupertinoActivityIndicator(radius: 8),
+                            )
+                          : AelChip(
+                              label: '展开课件',
+                              leadingIcon: AelIcons.download,
+                              tone: AelChipTone.primary,
+                              onTap: _fetchCourseware,
+                            )
                     else
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          CupertinoButton(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 6,
+                          if (_loading)
+                            const SizedBox(
+                              width: 32,
+                              height: 32,
+                              child: Center(
+                                child: CupertinoActivityIndicator(radius: 7),
+                              ),
+                            )
+                          else
+                            AelCircleIconButton(
+                              icon: AelIcons.refresh,
+                              size: 32,
+                              iconSize: 14,
+                              backgroundColor: colors.tonalTileBg,
+                              iconColor: colors.textPrimary,
+                              elevated: false,
+                              tooltip: '刷新课件列表',
+                              onPressed: _fetchCourseware,
                             ),
-                            minimumSize: const Size(32, 32),
-                            color: colors.tonalTileBg,
-                            borderRadius: BorderRadius.circular(8),
-                            onPressed: _loading ? null : _fetchCourseware,
-                            child: _loading
-                                ? const CupertinoActivityIndicator(radius: 7)
-                                : Icon(
-                                    AelIcons.refresh,
-                                    size: 14,
-                                    color: colors.textPrimary,
-                                  ),
-                          ),
                           const SizedBox(width: 6),
-                          CupertinoButton(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            minimumSize: const Size(32, 32),
-                            color: _expanded
-                                ? colors.tonalTileBg
-                                : colors.primary,
-                            borderRadius: BorderRadius.circular(8),
-                            onPressed: () {
+                          AelChip(
+                            label: _expanded ? '收起' : '展开',
+                            leadingIcon: _expanded
+                                ? AelIcons.chevronUp
+                                : AelIcons.chevronDown,
+                            tone: _expanded
+                                ? AelChipTone.neutral
+                                : AelChipTone.primary,
+                            onTap: () {
                               setState(() {
                                 _expanded = !_expanded;
                               });
                             },
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  _expanded
-                                      ? AelIcons.chevronUp
-                                      : AelIcons.chevronDown,
-                                  size: 13,
-                                  color: _expanded
-                                      ? colors.textPrimary
-                                      : colors.onPrimary,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  _expanded ? '收起' : '展开',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: _expanded
-                                        ? colors.textPrimary
-                                        : colors.onPrimary,
-                                  ),
-                                ),
-                              ],
-                            ),
                           ),
                         ],
                       ),
@@ -1946,18 +1879,13 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
                 // 智云课堂语音字幕下载
                 Row(
                   children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: colors.infoContainer,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        AelIcons.audio,
-                        size: 18,
-                        color: colors.onInfoContainer,
-                      ),
+                    AelIconBadge(
+                      icon: AelIcons.audio,
+                      size: 36,
+                      iconSize: 18,
+                      style: AelIconBadgeStyle.circle,
+                      backgroundColor: colors.infoContainer,
+                      iconColor: colors.onInfoContainer,
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -1988,23 +1916,10 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    CupertinoButton(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      minimumSize: const Size(32, 32),
-                      color: colors.tonalTileBg,
-                      borderRadius: BorderRadius.circular(8),
-                      onPressed: () => _showZhiyunSubtitleBatchDialog(context),
-                      child: Text(
-                        '批量管理',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: colors.primary,
-                        ),
-                      ),
+                    AelChip(
+                      label: '批量管理',
+                      tone: AelChipTone.primary,
+                      onTap: () => _showZhiyunSubtitleBatchDialog(context),
                     ),
                   ],
                 ),
@@ -2016,18 +1931,13 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
                 // 智云课堂切片课件下载
                 Row(
                   children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: colors.primaryContainer,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        AelIcons.image,
-                        size: 18,
-                        color: colors.onPrimaryContainer,
-                      ),
+                    AelIconBadge(
+                      icon: AelIcons.image,
+                      size: 36,
+                      iconSize: 18,
+                      style: AelIconBadgeStyle.circle,
+                      backgroundColor: colors.primaryContainer,
+                      iconColor: colors.onPrimaryContainer,
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -2058,23 +1968,10 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    CupertinoButton(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      minimumSize: const Size(32, 32),
-                      color: colors.tonalTileBg,
-                      borderRadius: BorderRadius.circular(8),
-                      onPressed: () => _showZhiyunPptBatchDialog(context),
-                      child: Text(
-                        '批量管理',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: colors.primary,
-                        ),
-                      ),
+                    AelChip(
+                      label: '批量管理',
+                      tone: AelChipTone.primary,
+                      onTap: () => _showZhiyunPptBatchDialog(context),
                     ),
                   ],
                 ),
@@ -2349,7 +2246,6 @@ class _CourseHomeworkCardState extends State<CourseHomeworkCard> {
   @override
   Widget build(BuildContext context) {
     final colors = AelTheme.colorsOf(context);
-    final badgeAccent = colors.primary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       child: Column(
@@ -2362,18 +2258,13 @@ class _CourseHomeworkCardState extends State<CourseHomeworkCard> {
               children: [
                 Row(
                   children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: badgeAccent,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        AelIcons.homework,
-                        size: 18,
-                        color: colors.onPrimary,
-                      ),
+                    AelIconBadge(
+                      icon: AelIcons.homework,
+                      size: 36,
+                      iconSize: 18,
+                      style: AelIconBadgeStyle.cookie,
+                      backgroundColor: colors.primaryContainer,
+                      iconColor: colors.onPrimaryContainer,
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -2411,65 +2302,40 @@ class _CourseHomeworkCardState extends State<CourseHomeworkCard> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        CupertinoButton(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 6,
+                        if (_loading)
+                          const SizedBox(
+                            width: 32,
+                            height: 32,
+                            child: Center(
+                              child: CupertinoActivityIndicator(radius: 7),
+                            ),
+                          )
+                        else
+                          AelCircleIconButton(
+                            icon: AelIcons.refresh,
+                            size: 32,
+                            iconSize: 14,
+                            backgroundColor: colors.tonalTileBg,
+                            iconColor: colors.textPrimary,
+                            elevated: false,
+                            tooltip: '刷新课程作业',
+                            onPressed: _fetchHomeworks,
                           ),
-                          minimumSize: const Size(32, 32),
-                          color: colors.tonalTileBg,
-                          borderRadius: BorderRadius.circular(8),
-                          onPressed: _loading ? null : _fetchHomeworks,
-                          child: _loading
-                              ? const CupertinoActivityIndicator(radius: 7)
-                              : Icon(
-                                  AelIcons.refresh,
-                                  size: 14,
-                                  color: colors.textPrimary,
-                                ),
-                        ),
                         if (_items.isNotEmpty || _error != null) ...[
                           const SizedBox(width: 6),
-                          CupertinoButton(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            minimumSize: const Size(32, 32),
-                            color: _expanded
-                                ? colors.tonalTileBg
-                                : colors.primary,
-                            borderRadius: BorderRadius.circular(8),
-                            onPressed: () {
+                          AelChip(
+                            label: _expanded ? '收起' : '展开',
+                            leadingIcon: _expanded
+                                ? AelIcons.chevronUp
+                                : AelIcons.chevronDown,
+                            tone: _expanded
+                                ? AelChipTone.neutral
+                                : AelChipTone.primary,
+                            onTap: () {
                               setState(() {
                                 _expanded = !_expanded;
                               });
                             },
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  _expanded
-                                      ? AelIcons.chevronUp
-                                      : AelIcons.chevronDown,
-                                  size: 13,
-                                  color: _expanded
-                                      ? colors.textPrimary
-                                      : colors.onPrimary,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  _expanded ? '收起' : '展开',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: _expanded
-                                        ? colors.textPrimary
-                                        : colors.onPrimary,
-                                  ),
-                                ),
-                              ],
-                            ),
                           ),
                         ],
                       ],

@@ -307,9 +307,14 @@ class _AllowTimeEditPageState extends State<AllowTimeEditPage> {
                                       ),
                                     ),
                                   ),
-                                  CupertinoButton(
-                                    padding: const EdgeInsets.all(6),
-                                    minSize: 32,
+                                  AelCircleIconButton(
+                                    icon: AelIcons.edit,
+                                    size: 32,
+                                    iconSize: 15,
+                                    backgroundColor: colors.primaryContainer,
+                                    iconColor: colors.onPrimaryContainer,
+                                    elevated: false,
+                                    tooltip: '编辑时段',
                                     onPressed: () {
                                       showCupertinoDialog(
                                         context: context,
@@ -331,15 +336,16 @@ class _AllowTimeEditPageState extends State<AllowTimeEditPage> {
                                             ),
                                       );
                                     },
-                                    child: Icon(
-                                      AelIcons.edit,
-                                      size: 18,
-                                      color: colors.primary,
-                                    ),
                                   ),
-                                  CupertinoButton(
-                                    padding: const EdgeInsets.all(6),
-                                    minSize: 32,
+                                  const SizedBox(width: 8),
+                                  AelCircleIconButton(
+                                    icon: AelIcons.delete,
+                                    size: 32,
+                                    iconSize: 15,
+                                    backgroundColor: colors.errorContainer,
+                                    iconColor: colors.onErrorContainer,
+                                    elevated: false,
+                                    tooltip: '删除时段',
                                     onPressed: () {
                                       if (now.length > 1) {
                                         setState(() {
@@ -348,11 +354,6 @@ class _AllowTimeEditPageState extends State<AllowTimeEditPage> {
                                         });
                                       }
                                     },
-                                    child: Icon(
-                                      AelIcons.delete,
-                                      size: 18,
-                                      color: colors.error,
-                                    ),
                                   ),
                                 ],
                               ),

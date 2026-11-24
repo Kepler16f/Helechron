@@ -520,47 +520,42 @@ class GradeDetailPage extends StatelessWidget {
                           _gradeDetailController.customGpaSelected.value = {};
                           _gradeDetailController.refreshCustomGpa();
                         },
-                        child: CupertinoButton(
-                          padding: EdgeInsets.zero,
-                          onPressed: () {},
-                          child: Text(
-                            '长按清空',
-                            style: TextStyle(
-                              color: colors.error,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                        child: const AelChip(
+                          label: '长按清空',
+                          tone: AelChipTone.error,
                         ),
                       ),
                       const SizedBox(width: 8),
                     ] else ...[
                       // 更多工具入口（收纳加权、模拟、看板，彻底解决标题遮挡冲突）
-                      CupertinoButton(
-                        padding: EdgeInsets.zero,
+                      AelCircleIconButton(
+                        icon: AelIcons.more,
+                        size: 36,
+                        iconSize: 18,
+                        tooltip: 'More Tools',
                         onPressed: () => _showMoreActions(context),
-                        child: Icon(
-                          AelIcons.more,
-                          color: colors.primary,
-                          semanticLabel: 'More Tools',
-                        ),
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 8),
                     ],
                     // 自定义 GPA 开关
-                    CupertinoButton(
-                      padding: EdgeInsets.zero,
+                    AelCircleIconButton(
+                      icon: _gradeDetailController.customGpaMode.value
+                          ? AelIcons.check
+                          : AelIcons.filter,
+                      size: 36,
+                      iconSize: 17,
+                      backgroundColor:
+                          _gradeDetailController.customGpaMode.value
+                          ? colors.primary
+                          : null,
+                      iconColor: _gradeDetailController.customGpaMode.value
+                          ? colors.onPrimary
+                          : null,
+                      tooltip: 'Custom GPA',
                       onPressed: () {
                         _gradeDetailController.customGpaMode.value =
                             !_gradeDetailController.customGpaMode.value;
                       },
-                      child: Icon(
-                        _gradeDetailController.customGpaMode.value
-                            ? AelIcons.check
-                            : AelIcons.filter,
-                        color: colors.primary,
-                        semanticLabel: 'Custom GPA',
-                      ),
                     ),
                   ],
                 ),

@@ -1,5 +1,5 @@
 import 'package:flutter/cupertino.dart'
-    show CupertinoButton, CupertinoPageScaffold, CupertinoSlider;
+    show CupertinoPageScaffold, CupertinoSlider;
 import 'package:flutter/material.dart' show Divider;
 import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
@@ -217,29 +217,25 @@ class WeightedGpaPage extends StatelessWidget {
               subtitle: '加权成绩',
               right: Obx(
                 () => Padding(
-                  padding: const EdgeInsets.only(right: 18),
+                  padding: const EdgeInsets.only(right: 14),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        child: Text(
-                          '重置',
-                          style: TextStyle(fontSize: 16, color: colors.primary),
-                        ),
-                        onPressed: () {
+                      AelChip(
+                        label: '重置',
+                        tone: AelChipTone.neutral,
+                        onTap: () {
                           _controller.weightedMap.value = {};
                           _controller.refreshWeightedGpa();
                         },
                       ),
                       const SizedBox(width: 8),
-                      CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        child: Text(
-                          _controller.showAllSemesters.value ? '按学期' : '全选',
-                          style: TextStyle(fontSize: 16, color: colors.primary),
-                        ),
-                        onPressed: () {
+                      AelChip(
+                        label: _controller.showAllSemesters.value
+                            ? '按学期'
+                            : '全选',
+                        tone: AelChipTone.primary,
+                        onTap: () {
                           _controller.showAllSemesters.value =
                               !_controller.showAllSemesters.value;
                         },

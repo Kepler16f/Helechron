@@ -72,7 +72,7 @@ class AelLargeTitleBar extends StatelessWidget {
   }
 }
 
-/// 顶栏右侧白色圆形操作按钮（类似参考图右上角编辑笔按钮）。
+/// 顶栏右侧白色圆形操作按钮（类似参考图右上角编辑笔按钮），也支持卡片内浅底圆形操作按钮。
 class AelCircleIconButton extends StatelessWidget {
   const AelCircleIconButton({
     super.key,
@@ -81,6 +81,9 @@ class AelCircleIconButton extends StatelessWidget {
     this.size = 40,
     this.iconSize = 19,
     this.tooltip,
+    this.backgroundColor,
+    this.iconColor,
+    this.elevated = true,
   });
 
   final IconData icon;
@@ -88,10 +91,15 @@ class AelCircleIconButton extends StatelessWidget {
   final double size;
   final double iconSize;
   final String? tooltip;
+  final Color? backgroundColor;
+  final Color? iconColor;
+  final bool elevated;
 
   @override
   Widget build(BuildContext context) {
     final colors = AelTheme.colorsOf(context);
+    final bg = backgroundColor ?? colors.cardBg;
+    final fg = iconColor ?? colors.textPrimary;
     final btn = MiuixPressable(
       onPressed: onPressed,
       feedbackType: MiuixPressFeedbackType.sink,
@@ -101,20 +109,22 @@ class AelCircleIconButton extends StatelessWidget {
         height: size,
         child: DecoratedBox(
           decoration: ShapeDecoration(
-            color: colors.cardBg,
+            color: bg,
             shape: const CircleBorder(),
-            shadows: [
-              BoxShadow(
-                color: colors.textPrimary.withValues(
-                  alpha: colors.isDark ? 0.18 : 0.05,
-                ),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            shadows: elevated
+                ? [
+                    BoxShadow(
+                      color: colors.textPrimary.withValues(
+                        alpha: colors.isDark ? 0.18 : 0.05,
+                      ),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
           ),
           child: Center(
-            child: Icon(icon, size: iconSize, color: colors.textPrimary),
+            child: Icon(icon, size: iconSize, color: fg),
           ),
         ),
       ),
