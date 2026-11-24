@@ -759,7 +759,7 @@ class ZhiyunPlayerActivity : Activity() {
         followLivePill = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            minHeight = dp(34)
+            minimumHeight = dp(34)
             setPadding(dp(10), dp(5), dp(12), dp(5))
             background = GradientDrawable().apply {
                 cornerRadius = dp(17).toFloat()
