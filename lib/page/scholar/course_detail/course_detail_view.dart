@@ -567,18 +567,10 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
         targetSubId = await _resolveLiveSubId(courseId, subId);
       }
 
-      final authResults = await Future.wait<String?>([
-        ZhiyunService.ensureValidToken().timeout(
-          const Duration(seconds: 4),
-          onTimeout: () => ZhiyunService.getCachedZhiyunToken(),
-        ),
-        ZhiyunService.ensureSsoCookieValue().timeout(
-          const Duration(seconds: 4),
-          onTimeout: () => null,
-        ),
-      ]);
-      final token = authResults[0] ?? ZhiyunService.getCachedZhiyunToken();
-      final ssoCookie = authResults[1];
+      final token =
+          await ZhiyunService.ensureValidToken() ??
+          ZhiyunService.getCachedZhiyunToken();
+      final ssoCookie = await ZhiyunService.ensureSsoCookieValue();
 
       var effectiveLivingroom = url;
       if (courseId != null && courseId.isNotEmpty) {
@@ -610,6 +602,37 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
     }
   }
 
+  Future<void> _openExternalBrowser(
+    String url,
+    String title, {
+    String? courseId,
+    String? subId,
+  }) async {
+    try {
+      await ZhiyunService.saveLastWatchedReplay(
+        courseName: widget.course.name,
+        lessonTitle: title,
+        livingroomUrl: url,
+        courseId: courseId,
+        subId: subId,
+        courseCode: widget.course.id,
+        scopeKey: _semesterScopeKey,
+      );
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (_) {}
+    var target = url;
+    if (courseId != null && courseId.isNotEmpty) {
+      target = ZhiyunService.buildCourseLivingroomUrl(courseId, subId: subId);
+    }
+    target = ZhiyunService.appendTokenToUrl(
+      target,
+      ZhiyunService.getCachedZhiyunToken(),
+    );
+    await ZhiyunService.openUrl(target);
+  }
+
   Future<void> _openInAppPlayer(
     BuildContext context, {
     required String url,
@@ -633,8 +656,8 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
       }
     } catch (_) {}
 
-    // 统一架构：有 courseId 时（无论直播还是回放）均进入 ZhiyunPlayerPage；
-    // 直播模式立即跳转零阻塞，在 ZhiyunPlayerPage 内直接以内嵌网页播放器打开直播间。
+    // 统一架构：有 courseId 时（无论直播还是回放）均进入 ZhiyunPlayerPage，
+    // 对齐回放与 0.1.8 解析直连视频流并拉起原生播放器（直播首次进入自动开播）。
     if (courseId != null && courseId.isNotEmpty) {
       final replayList = <ZhiyunReplayInfo>[];
       if (!preferLive) {
@@ -981,9 +1004,11 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                                             url: url,
                                             title: title,
                                             courseId:
-                                                lastWatched['courseId']
-                                                    ?.toString() ??
-                                                widget.course.id,
+                                                ZhiyunService.extractCourseId(
+                                                  lastWatched['courseId']
+                                                          ?.toString() ??
+                                                      '',
+                                                ),
                                             subId: lastWatched['subId']
                                                 ?.toString(),
                                           )
@@ -1080,12 +1105,13 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
             iconColor: colors.error,
             title: '智云实时直播',
             tag: '● 正在直播',
-            onTagTap: () => _openAndRecord(
-              info.livingroomUrl,
-              '实时直播',
+            onTagTap: () => _openInAppPlayer(
+              context,
+              url: info.livingroomUrl,
+              title: info.lessonTitle.isNotEmpty ? info.lessonTitle : '实时直播',
               courseId: info.courseId,
               subId: info.subId,
-              isLive: true,
+              preferLive: true,
             ),
             subtitle: '该课程当前正在智云课堂进行实时直播，点击可直达直播间观看',
             buttons: [
@@ -1119,7 +1145,9 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                   onPressed: () => _openInAppPlayer(
                     context,
                     url: info.livingroomUrl,
-                    title: '实时直播',
+                    title: info.lessonTitle.isNotEmpty
+                        ? info.lessonTitle
+                        : '实时直播',
                     courseId: info.courseId,
                     subId: info.subId,
                     preferLive: true,
@@ -1135,12 +1163,11 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
                 iconColor: colors.textPrimary,
                 elevated: false,
                 tooltip: '外部浏览器打开',
-                onPressed: () => _openAndRecord(
+                onPressed: () => _openExternalBrowser(
                   info.livingroomUrl,
-                  '实时直播',
+                  info.lessonTitle.isNotEmpty ? info.lessonTitle : '实时直播',
                   courseId: info.courseId,
                   subId: info.subId,
-                  isLive: true,
                 ),
               ),
               if (info.courseId != null) ...[

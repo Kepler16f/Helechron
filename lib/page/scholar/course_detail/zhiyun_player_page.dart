@@ -171,34 +171,18 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
     return list;
   }
 
-  Future<void> _loadLiveExtrasInBackground(String? subId) async {
+  Future<void> _loadCatalogueInBackground() async {
+    if (_replays.isNotEmpty || widget.courseId.isEmpty) return;
     try {
-      if (_replays.isEmpty && widget.courseId.isNotEmpty) {
-        final rawCat = await ZhiyunService.fetchCourseCatalogue(
-          widget.courseId,
-          forceRefresh: false,
-        ).timeout(const Duration(seconds: 6), onTimeout: () => const []);
-        if (mounted && rawCat.isNotEmpty) {
-          setState(() {
-            _replays = _buildReplaysFromCatalogue(rawCat);
-          });
-        }
+      final rawCat = await ZhiyunService.fetchCourseCatalogue(
+        widget.courseId,
+        forceRefresh: false,
+      ).timeout(const Duration(seconds: 6), onTimeout: () => const []);
+      if (mounted && rawCat.isNotEmpty && _replays.isEmpty) {
+        setState(() {
+          _replays = _buildReplaysFromCatalogue(rawCat);
+        });
       }
-      if (subId == null || subId.isEmpty) return;
-      final extras = await Future.wait([
-        ZhiyunService.fetchLessonPptSlides(
-          courseId: widget.courseId,
-          subId: subId,
-        ).timeout(const Duration(seconds: 8), onTimeout: () => const []),
-        ZhiyunService.fetchLessonTranscript(
-          subId: subId,
-        ).timeout(const Duration(seconds: 8), onTimeout: () => const []),
-      ]);
-      if (!mounted || _currentSubId != subId) return;
-      setState(() {
-        _slides = extras[0] as List<ZhiyunPptSlide>;
-        _transcript = extras[1] as List<ZhiyunTranscriptSegment>;
-      });
     } catch (_) {}
   }
 
@@ -212,7 +196,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
             widget.courseId,
             now,
             period: widget.period,
-          ).timeout(const Duration(seconds: 5), onTimeout: () => null);
+          ).timeout(const Duration(seconds: 6), onTimeout: () => null);
           if (activeToday != null && activeToday.isNotEmpty) {
             subId = activeToday;
             _currentSubId = activeToday;
@@ -231,7 +215,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
           freshCat = await ZhiyunService.fetchCourseCatalogue(
             widget.courseId,
             forceRefresh: true,
-          ).timeout(const Duration(seconds: 6), onTimeout: () => const []);
+          ).timeout(const Duration(seconds: 8), onTimeout: () => const []);
         } catch (_) {}
 
         if (mounted && freshCat.isNotEmpty && _replays.isEmpty) {
@@ -306,33 +290,8 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
       );
     }
 
-    // 直播模式：绝不先拉取或尝试直连流媒体，直接以内嵌网页播放器打开直播间；
-    // PPT 切片、语音转写与课节列表在后台异步加载，避免卡住首屏进入。
-    if (_isLiveMode) {
-      if (mounted) {
-        setState(() {
-          _streams = [];
-          _selectedStreamIndex = 0;
-          _loading = false;
-        });
-      }
-      if (subId != null && subId.isNotEmpty) {
-        ZhiyunService.saveLastWatchedReplay(
-          courseName: widget.courseName,
-          lessonTitle: _currentTitle,
-          livingroomUrl: _currentLivingroomUrl,
-          courseId: widget.courseId,
-          subId: subId,
-        );
-      }
-      _loadLiveExtrasInBackground(subId);
-      if (autoPlayFirstTime &&
-          !_autoLaunched &&
-          _currentLivingroomUrl.isNotEmpty) {
-        _autoLaunched = true;
-        await _launchInAppPlayer(_currentLivingroomUrl, preferWeb: true);
-      }
-      return;
+    if (_replays.isEmpty) {
+      _loadCatalogueInBackground();
     }
 
     if (subId == null || subId.isEmpty) {
@@ -340,6 +299,13 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
         setState(() {
           _loading = false;
         });
+      }
+      if (autoPlayFirstTime &&
+          _isLiveMode &&
+          !_autoLaunched &&
+          _currentLivingroomUrl.isNotEmpty) {
+        _autoLaunched = true;
+        await _launchInAppPlayer(_currentLivingroomUrl, preferWeb: true);
       }
       return;
     }
@@ -350,21 +316,74 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
       });
     }
 
+    final streamsFuture = ZhiyunService.fetchLessonStreams(
+      courseId: widget.courseId,
+      subId: subId,
+      preferLive: _isLiveMode,
+    );
+    final slidesFuture = ZhiyunService.fetchLessonPptSlides(
+      courseId: widget.courseId,
+      subId: subId,
+    );
+    final transcriptFuture = ZhiyunService.fetchLessonTranscript(subId: subId);
+
+    // 直播首次自动进入时：像回放与 0.1.8 一样优先解析真实直播视频流并立即拉起原生播放器，
+    // PPT 切片与语音转写在后台完成后更新界面，避免被慢接口拖慢开播。
+    if (autoPlayFirstTime && _isLiveMode) {
+      List<ZhiyunStreamOption> streams = const [];
+      try {
+        streams = await streamsFuture;
+      } catch (_) {}
+      if (!mounted) return;
+      setState(() {
+        _streams = streams;
+        _selectedStreamIndex = 0;
+        if (!widget.preferLive &&
+            streams.isNotEmpty &&
+            streams.every((s) => !s.isLive)) {
+          _isLiveMode = false;
+        }
+        _loading = false;
+      });
+
+      Future.wait([slidesFuture, transcriptFuture])
+          .then((extras) {
+            if (!mounted || _currentSubId != subId) return;
+            setState(() {
+              _slides = extras[0] as List<ZhiyunPptSlide>;
+              _transcript = extras[1] as List<ZhiyunTranscriptSegment>;
+            });
+          })
+          .catchError((_) {});
+
+      await ZhiyunService.saveLastWatchedReplay(
+        courseName: widget.courseName,
+        lessonTitle: _currentTitle,
+        livingroomUrl: _currentLivingroomUrl,
+        courseId: widget.courseId,
+        subId: subId,
+      );
+
+      if (!_autoLaunched) {
+        _autoLaunched = true;
+        final launchUrl = streams.isNotEmpty
+            ? streams.first.url
+            : _currentLivingroomUrl;
+        if (launchUrl.isNotEmpty) {
+          await _launchInAppPlayer(launchUrl, preferWeb: streams.isEmpty);
+        }
+      }
+      return;
+    }
+
     List<ZhiyunStreamOption> streams = const [];
     List<ZhiyunPptSlide> slides = const [];
     List<ZhiyunTranscriptSegment> transcript = const [];
     try {
       final results = await Future.wait([
-        ZhiyunService.fetchLessonStreams(
-          courseId: widget.courseId,
-          subId: subId,
-          preferLive: false,
-        ),
-        ZhiyunService.fetchLessonPptSlides(
-          courseId: widget.courseId,
-          subId: subId,
-        ),
-        ZhiyunService.fetchLessonTranscript(subId: subId),
+        streamsFuture,
+        slidesFuture,
+        transcriptFuture,
       ]);
       streams = results[0] as List<ZhiyunStreamOption>;
       slides = results[1] as List<ZhiyunPptSlide>;
@@ -375,6 +394,11 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
     setState(() {
       _streams = streams;
       _selectedStreamIndex = 0;
+      if (!widget.preferLive &&
+          streams.isNotEmpty &&
+          streams.every((s) => !s.isLive)) {
+        _isLiveMode = false;
+      }
       _slides = slides;
       _transcript = transcript;
       _loading = false;
@@ -400,18 +424,9 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
         ? _currentLivingroomUrl
         : url;
     try {
-      final authResults = await Future.wait<String?>([
-        ZhiyunService.ensureValidToken().timeout(
-          const Duration(seconds: 4),
-          onTimeout: () => ZhiyunService.getCachedZhiyunToken(),
-        ),
-        ZhiyunService.ensureSsoCookieValue().timeout(
-          const Duration(seconds: 4),
-          onTimeout: () => null,
-        ),
-      ]);
-      final token = authResults[0] ?? ZhiyunService.getCachedZhiyunToken();
-      final ssoCookie = authResults[1];
+      final token =
+          await ZhiyunService.ensureValidToken() ??
+          ZhiyunService.getCachedZhiyunToken();
       var effectiveLivingroom = _currentLivingroomUrl;
       if (widget.courseId.isNotEmpty) {
         effectiveLivingroom = ZhiyunService.buildCourseLivingroomUrl(
@@ -447,25 +462,25 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
               lowerUrl.contains('.m3u8') ||
               lowerUrl.contains('.flv') ||
               lowerUrl.contains('.ts'));
-      final openWebDirectly = preferWeb || !isDirect || _isLiveMode;
+      final openWebDirectly = preferWeb || !isDirect;
+
+      // 直连流播放仅用 SSO Cookie 作兜底降级预备，优先读内存缓存或短超时获取；网页播放则完整等待 SSO Cookie
+      final ssoCookie = openWebDirectly
+          ? await ZhiyunService.ensureSsoCookieValue()
+          : (ZhiyunService.getCachedSsoCookieValue() ??
+                await ZhiyunService.ensureSsoCookieValue().timeout(
+                  const Duration(seconds: 4),
+                  onTimeout: () => ZhiyunService.getCachedSsoCookieValue(),
+                ));
 
       final bool streamIsLive =
           _isLiveMode ||
           _streams.firstWhereOrNull((s) => s.url == url)?.isLive == true;
 
-      // 网页模式（含所有实时直播）强制不传直连流列表，并直接以 livingroomUrl 为播放目标，
-      // 确保 Android / iOS / HarmonyOS 三端均直接进入内嵌网页播放器。
-      final launchUrl = openWebDirectly && effectiveLivingroom.isNotEmpty
-          ? effectiveLivingroom
-          : effectiveUrl;
-      final launchStreams = openWebDirectly
-          ? const <Map<String, String>>[]
-          : _streams.map((s) => {'label': s.label, 'url': s.url}).toList();
-
       final ok = await OhosNativeService.instance.openInAppVideoPlayer(
-        url: launchUrl,
+        url: effectiveUrl,
         title: '${widget.courseName} · $_currentTitle',
-        streams: launchStreams,
+        streams: _streams.map((s) => {'label': s.label, 'url': s.url}).toList(),
         livingroomUrl: effectiveLivingroom,
         token: token,
         ssoCookie: ssoCookie,
@@ -755,7 +770,9 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                     const CupertinoActivityIndicator(),
                     const SizedBox(height: AelSpacing.sm),
                     Text(
-                      _isLiveMode ? '正在连接智云实时直播间...' : '正在解析智云回放流媒体与课堂 PPT...',
+                      _isLiveMode
+                          ? '正在解析智云实时直播流与课堂 PPT...'
+                          : '正在解析智云回放流媒体与课堂 PPT...',
                       style: TextStyle(
                         fontSize: 12,
                         color: colors.textSecondary,
@@ -765,10 +782,39 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                 ),
               ),
             )
-          else if (_isLiveMode) ...[
+          else if (_streams.isNotEmpty) ...[
+            if (_streams.length > 1) ...[
+              Wrap(
+                spacing: AelSpacing.sm,
+                runSpacing: AelSpacing.sm,
+                children: List.generate(_streams.length, (i) {
+                  return AelChip(
+                    label: _streams[i].label,
+                    tone: i == _selectedStreamIndex
+                        ? AelChipTone.primary
+                        : AelChipTone.neutral,
+                    onTap: () => setState(() => _selectedStreamIndex = i),
+                  );
+                }),
+              ),
+              const SizedBox(height: AelSpacing.md),
+            ],
+            AelButton(
+              expanded: true,
+              icon: AelIcons.video,
+              label: _launchingPlayer
+                  ? '正在启动播放器...'
+                  : ((_isLiveMode || activeStream?.isLive == true)
+                        ? '观看实时直播 (${activeStream!.label})'
+                        : '播放视频 (${activeStream?.label ?? "回放"})'),
+              onPressed: (_launchingPlayer || activeStream == null)
+                  ? null
+                  : () => _launchInAppPlayer(activeStream.url),
+            ),
+          ] else if (_isLiveMode) ...[
             Text(
-              '当前课节正在进行实时直播，点击直接进入内置网页播放器观看。',
-              style: TextStyle(fontSize: 12.5, color: colors.textSecondary),
+              '当前课节暂未解析到直接视频流，可尝试直接打开课堂直播页面观看。',
+              style: TextStyle(fontSize: 12, color: colors.textSecondary),
             ),
             const SizedBox(height: AelSpacing.md),
             Row(
@@ -777,7 +823,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                   child: AelButton(
                     expanded: true,
                     icon: AelIcons.video,
-                    label: _launchingPlayer ? '正在打开直播间...' : '观看实时直播（网页播放器）',
+                    label: _launchingPlayer ? '正在启动播放器...' : '观看实时直播',
                     onPressed: _launchingPlayer
                         ? null
                         : () => _launchInAppPlayer(
@@ -804,33 +850,6 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                   },
                 ),
               ],
-            ),
-          ] else if (_streams.isNotEmpty) ...[
-            if (_streams.length > 1) ...[
-              Wrap(
-                spacing: AelSpacing.sm,
-                runSpacing: AelSpacing.sm,
-                children: List.generate(_streams.length, (i) {
-                  return AelChip(
-                    label: _streams[i].label,
-                    tone: i == _selectedStreamIndex
-                        ? AelChipTone.primary
-                        : AelChipTone.neutral,
-                    onTap: () => setState(() => _selectedStreamIndex = i),
-                  );
-                }),
-              ),
-              const SizedBox(height: AelSpacing.md),
-            ],
-            AelButton(
-              expanded: true,
-              icon: AelIcons.video,
-              label: _launchingPlayer
-                  ? '正在启动播放器...'
-                  : '播放视频 (${activeStream?.label ?? "回放"})',
-              onPressed: (_launchingPlayer || activeStream == null)
-                  ? null
-                  : () => _launchInAppPlayer(activeStream.url),
             ),
           ] else ...[
             Text(

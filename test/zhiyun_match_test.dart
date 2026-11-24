@@ -17,37 +17,27 @@ void main() {
       expect(ZhiyunService.normalizeCourseName('大学英语(3)'), equals('大学英语3'));
       expect(ZhiyunService.normalizeCourseName('大学英语（三）'), equals('大学英语3'));
       expect(ZhiyunService.normalizeCourseName('大学英语Ⅲ'), equals('大学英语3'));
-      expect(ZhiyunService.normalizeCourseName('面向对象程序设计（Python）'),
-          equals('面向对象程序设计python'));
+      expect(
+        ZhiyunService.normalizeCourseName('面向对象程序设计（Python）'),
+        equals('面向对象程序设计python'),
+      );
       expect(ZhiyunService.normalizeCourseName('微积分（甲）Ⅰ (冬)'), equals('微积分甲1'));
-      expect(ZhiyunService.normalizeCourseName('离散数学 (2026-2027秋冬)'), equals('离散数学'));
+      expect(
+        ZhiyunService.normalizeCourseName('离散数学 (2026-2027秋冬)'),
+        equals('离散数学'),
+      );
     });
 
     test('秋冬/春夏跨学期与冬学期课程智能匹配', () {
-      expect(
-        ZhiyunService.matchesCourseName('微积分（甲）Ⅰ', '微积分(甲)Ⅰ (冬)'),
-        isTrue,
-      );
-      expect(
-        ZhiyunService.matchesCourseName('微积分(甲)Ⅰ (冬)', '微积分（甲）Ⅰ'),
-        isTrue,
-      );
+      expect(ZhiyunService.matchesCourseName('微积分（甲）Ⅰ', '微积分(甲)Ⅰ (冬)'), isTrue);
+      expect(ZhiyunService.matchesCourseName('微积分(甲)Ⅰ (冬)', '微积分（甲）Ⅰ'), isTrue);
       expect(
         ZhiyunService.matchesCourseName('微积分（甲）Ⅰ', '微积分（甲）Ⅰ (2026-2027秋冬)'),
         isTrue,
       );
-      expect(
-        ZhiyunService.matchesCourseName('离散数学', '离散数学 (冬学期)'),
-        isTrue,
-      );
-      expect(
-        ZhiyunService.matchesCourseName('大学物理', '大学物理 (后半学期)'),
-        isTrue,
-      );
-      expect(
-        ZhiyunService.matchesCourseName('大学英语(3)', '大学英语Ⅲ (秋冬)'),
-        isTrue,
-      );
+      expect(ZhiyunService.matchesCourseName('离散数学', '离散数学 (冬学期)'), isTrue);
+      expect(ZhiyunService.matchesCourseName('大学物理', '大学物理 (后半学期)'), isTrue);
+      expect(ZhiyunService.matchesCourseName('大学英语(3)', '大学英语Ⅲ (秋冬)'), isTrue);
     });
 
     test('智云秒级与毫秒级时间戳解析兼容性测试', () {
@@ -55,7 +45,10 @@ void main() {
       final msDt = ZhiyunService.parseZhiyunTimestamp(1731229200000);
       expect(secDt, isNotNull);
       expect(msDt, isNotNull);
-      expect(secDt!.millisecondsSinceEpoch, equals(msDt!.millisecondsSinceEpoch));
+      expect(
+        secDt!.millisecondsSinceEpoch,
+        equals(msDt!.millisecondsSinceEpoch),
+      );
       expect(secDt.year, equals(2024));
     });
 
@@ -80,74 +73,38 @@ void main() {
 
     test('大学英语分级匹配与防串级', () {
       // 相同级别匹配（支持罗马数字、阿拉伯数字、中文数字）
-      expect(
-        ZhiyunService.matchesCourseName('大学英语(3)', '大学英语Ⅲ'),
-        isTrue,
-      );
-      expect(
-        ZhiyunService.matchesCourseName('大学英语(3)', '大学英语（三）'),
-        isTrue,
-      );
-      expect(
-        ZhiyunService.matchesCourseName('大学英语(3)', '大学英语3'),
-        isTrue,
-      );
-      expect(
-        ZhiyunService.matchesCourseName('大学英语(3)', '通用学术英语(3)'),
-        isTrue,
-      );
+      expect(ZhiyunService.matchesCourseName('大学英语(3)', '大学英语Ⅲ'), isTrue);
+      expect(ZhiyunService.matchesCourseName('大学英语(3)', '大学英语（三）'), isTrue);
+      expect(ZhiyunService.matchesCourseName('大学英语(3)', '大学英语3'), isTrue);
+      expect(ZhiyunService.matchesCourseName('大学英语(3)', '通用学术英语(3)'), isTrue);
 
       // 不同级别严格区分，不应串级
-      expect(
-        ZhiyunService.matchesCourseName('大学英语(3)', '大学英语(4)'),
-        isFalse,
-      );
-      expect(
-        ZhiyunService.matchesCourseName('大学英语(1)', '大学英语(2)'),
-        isFalse,
-      );
+      expect(ZhiyunService.matchesCourseName('大学英语(3)', '大学英语(4)'), isFalse);
+      expect(ZhiyunService.matchesCourseName('大学英语(1)', '大学英语(2)'), isFalse);
     });
 
     test('微积分与线性代数智能匹配', () {
-      expect(
-        ZhiyunService.matchesCourseName('微积分(甲)Ⅰ', '微积分'),
-        isTrue,
-      );
-      expect(
-        ZhiyunService.matchesCourseName('线性代数(乙)', '线性代数'),
-        isTrue,
-      );
-      expect(
-        ZhiyunService.matchesCourseName('线性代数', '线性代数(乙)'),
-        isTrue,
-      );
+      expect(ZhiyunService.matchesCourseName('微积分(甲)Ⅰ', '微积分'), isTrue);
+      expect(ZhiyunService.matchesCourseName('线性代数(乙)', '线性代数'), isTrue);
+      expect(ZhiyunService.matchesCourseName('线性代数', '线性代数(乙)'), isTrue);
     });
 
     test('核心课程名称提取与模式修饰去除', () {
       expect(ZhiyunService.extractCoreCourseName('军事理论(网络)'), equals('军事理论'));
       expect(ZhiyunService.extractCoreCourseName('军事理论（01班）'), equals('军事理论'));
-      expect(ZhiyunService.extractCoreCourseName('大学英语(双语)(02)'), equals('大学英语'));
+      expect(
+        ZhiyunService.extractCoreCourseName('大学英语(双语)(02)'),
+        equals('大学英语'),
+      );
       expect(ZhiyunService.extractCoreCourseName('微积分(MOOC)'), equals('微积分'));
       expect(ZhiyunService.extractCoreCourseName('线性代数(线上)'), equals('线性代数'));
     });
 
     test('军事理论与通识理论课程智能匹配', () {
-      expect(
-        ZhiyunService.matchesCourseName('军事理论(网络)', '军事理论'),
-        isTrue,
-      );
-      expect(
-        ZhiyunService.matchesCourseName('军事理论', '军事理论(网络)'),
-        isTrue,
-      );
-      expect(
-        ZhiyunService.matchesCourseName('军事理论（01班）', '军事理论'),
-        isTrue,
-      );
-      expect(
-        ZhiyunService.matchesCourseName('思想道德与法治(01)', '思想道德与法治'),
-        isTrue,
-      );
+      expect(ZhiyunService.matchesCourseName('军事理论(网络)', '军事理论'), isTrue);
+      expect(ZhiyunService.matchesCourseName('军事理论', '军事理论(网络)'), isTrue);
+      expect(ZhiyunService.matchesCourseName('军事理论（01班）', '军事理论'), isTrue);
+      expect(ZhiyunService.matchesCourseName('思想道德与法治(01)', '思想道德与法治'), isTrue);
     });
 
     test('非录播课程自动识别与过滤', () {
@@ -171,22 +128,23 @@ void main() {
       expect(ZhiyunService.extractCourseId('85940'), equals('85940'));
       expect(
         ZhiyunService.extractCourseId(
-            'https://classroom.zju.edu.cn/livingroom?course_id=85940&sub_id=1973989&tenant_code=112'),
+          'https://classroom.zju.edu.cn/livingroom?course_id=85940&sub_id=1973989&tenant_code=112',
+        ),
         equals('85940'),
       );
       expect(
         ZhiyunService.extractCourseId(
-            'https://classroom.zju.edu.cn/coursedetail/86957?tenant_code=112'),
+          'https://classroom.zju.edu.cn/coursedetail/86957?tenant_code=112',
+        ),
         equals('86957'),
       );
       expect(
-        ZhiyunService.extractCourseId('https://classroom.zju.edu.cn/detail/85941'),
+        ZhiyunService.extractCourseId(
+          'https://classroom.zju.edu.cn/detail/85941',
+        ),
         equals('85941'),
       );
-      expect(
-        ZhiyunService.extractCourseId('?cid=86957'),
-        equals('86957'),
-      );
+      expect(ZhiyunService.extractCourseId('?cid=86957'), equals('86957'));
     });
   });
 
@@ -223,8 +181,14 @@ void main() {
         'title': '正在上课',
         'status': '2',
         'status_label': '直播',
-        'start_at': (now.subtract(const Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000).toString(),
-        'end_at': (now.add(const Duration(minutes: 40)).millisecondsSinceEpoch ~/ 1000).toString(),
+        'start_at':
+            (now.subtract(const Duration(minutes: 10)).millisecondsSinceEpoch ~/
+                    1000)
+                .toString(),
+        'end_at':
+            (now.add(const Duration(minutes: 40)).millisecondsSinceEpoch ~/
+                    1000)
+                .toString(),
       };
       expect(ZhiyunService.checkIsLive(item: item), isTrue);
       expect(ZhiyunService.checkHasReplay(item: item), isFalse);
@@ -237,8 +201,14 @@ void main() {
         'title': '已转回放',
         'status': '3',
         'status_label': '回放',
-        'start_at': (now.subtract(const Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000).toString(),
-        'end_at': (now.add(const Duration(minutes: 40)).millisecondsSinceEpoch ~/ 1000).toString(),
+        'start_at':
+            (now.subtract(const Duration(minutes: 10)).millisecondsSinceEpoch ~/
+                    1000)
+                .toString(),
+        'end_at':
+            (now.add(const Duration(minutes: 40)).millisecondsSinceEpoch ~/
+                    1000)
+                .toString(),
         'playback': {'m3u8': 'https://cdn.example.com/live_end.m3u8'},
       };
       expect(ZhiyunService.checkIsLive(item: item), isFalse);
@@ -252,8 +222,14 @@ void main() {
         'title': '第8讲 实时授课',
         'status': '2',
         'live_url': 'https://live.example.com/live/stream.m3u8',
-        'start_at': (now.subtract(const Duration(minutes: 15)).millisecondsSinceEpoch ~/ 1000).toString(),
-        'end_at': (now.add(const Duration(minutes: 30)).millisecondsSinceEpoch ~/ 1000).toString(),
+        'start_at':
+            (now.subtract(const Duration(minutes: 15)).millisecondsSinceEpoch ~/
+                    1000)
+                .toString(),
+        'end_at':
+            (now.add(const Duration(minutes: 30)).millisecondsSinceEpoch ~/
+                    1000)
+                .toString(),
       };
       expect(ZhiyunService.checkIsLive(item: item), isTrue);
       expect(ZhiyunService.checkHasReplay(item: item), isFalse);
@@ -270,7 +246,8 @@ void main() {
                     1000)
                 .toString(),
         'class_end':
-            (now.add(const Duration(minutes: 30)).millisecondsSinceEpoch ~/ 1000)
+            (now.add(const Duration(minutes: 30)).millisecondsSinceEpoch ~/
+                    1000)
                 .toString(),
       };
       final futureItem = <String, dynamic>{
@@ -302,13 +279,11 @@ void main() {
                     1000)
                 .toString(),
         'end_at':
-            (now.add(const Duration(minutes: 40)).millisecondsSinceEpoch ~/ 1000)
+            (now.add(const Duration(minutes: 40)).millisecondsSinceEpoch ~/
+                    1000)
                 .toString(),
       };
-      expect(
-        ZhiyunService.checkIsLive(item: null, targetDate: now),
-        isFalse,
-      );
+      expect(ZhiyunService.checkIsLive(item: null, targetDate: now), isFalse);
       expect(
         ZhiyunService.checkIsLive(item: scheduledItem, targetDate: now),
         isFalse,
@@ -390,20 +365,29 @@ void main() {
       return Course.fromGrsSession(session)..id = id;
     }
 
-    test('无 sub_id 时 buildCourseLivingroomUrl 必须跳转 /coursedetail 避免 /livingroom 报课程已下架', () {
-      expect(
-        ZhiyunService.buildCourseLivingroomUrl('85940'),
-        equals('https://classroom.zju.edu.cn/coursedetail?course_id=85940&tenant_code=112'),
-      );
-      expect(
-        ZhiyunService.buildCourseLivingroomUrl('85940', subId: ''),
-        equals('https://classroom.zju.edu.cn/coursedetail?course_id=85940&tenant_code=112'),
-      );
-      expect(
-        ZhiyunService.buildCourseLivingroomUrl('85940', subId: '1973989'),
-        equals('https://classroom.zju.edu.cn/livingroom?course_id=85940&sub_id=1973989&tenant_code=112'),
-      );
-    });
+    test(
+      '无 sub_id 时 buildCourseLivingroomUrl 必须跳转 /coursedetail 避免 /livingroom 报课程已下架',
+      () {
+        expect(
+          ZhiyunService.buildCourseLivingroomUrl('85940'),
+          equals(
+            'https://classroom.zju.edu.cn/coursedetail?course_id=85940&tenant_code=112',
+          ),
+        );
+        expect(
+          ZhiyunService.buildCourseLivingroomUrl('85940', subId: ''),
+          equals(
+            'https://classroom.zju.edu.cn/coursedetail?course_id=85940&tenant_code=112',
+          ),
+        );
+        expect(
+          ZhiyunService.buildCourseLivingroomUrl('85940', subId: '1973989'),
+          equals(
+            'https://classroom.zju.edu.cn/livingroom?course_id=85940&sub_id=1973989&tenant_code=112',
+          ),
+        );
+      },
+    );
 
     test('inferSemesterHint 与 scoreSemesterMatch 精准区分纯秋、纯冬及秋冬分期课程', () {
       final autumnCourse = makeCourse(
@@ -428,12 +412,18 @@ void main() {
       final autumnHint = ZhiyunService.inferSemesterHint(course: autumnCourse);
       expect(autumnHint.academicYearStart, equals(2026));
       expect(autumnHint.halfTag, equals('autumn'));
-      expect(autumnHint.preferredYearMonths, containsAll(['2026-09', '2026-10']));
+      expect(
+        autumnHint.preferredYearMonths,
+        containsAll(['2026-09', '2026-10']),
+      );
       expect(autumnHint.preferredYearMonths, isNot(contains('2026-11')));
 
       final winterHint = ZhiyunService.inferSemesterHint(course: winterCourse);
       expect(winterHint.halfTag, equals('winter'));
-      expect(winterHint.preferredYearMonths, containsAll(['2026-11', '2026-12', '2027-01']));
+      expect(
+        winterHint.preferredYearMonths,
+        containsAll(['2026-11', '2026-12', '2027-01']),
+      );
 
       final septHint = ZhiyunService.inferSemesterHint(
         course: fullCourse,
@@ -533,31 +523,34 @@ void main() {
       );
     });
 
-    test('extractSubItemsFromResponse 从 get-my-course-day 保留各自的 course_id 防混课', () {
-      final decoded = {
-        'code': 0,
-        'list': [
-          {
-            'id': '85001',
-            'sub_id': '1900001',
-            'title': '第1讲 面向对象',
-            'start_at': '1789440000',
-          },
-          {
-            'id': '85002',
-            'sub_id': '1900002',
-            'title': '其他同时段课程',
-            'start_at': '1789440000',
-          },
-        ],
-      };
-      final extracted = ZhiyunService.extractSubItemsFromResponse(decoded);
-      expect(extracted, hasLength(2));
-      expect(extracted[0]['course_id'], equals('85001'));
-      expect(extracted[0]['sub_id'], equals('1900001'));
-      expect(extracted[1]['course_id'], equals('85002'));
-      expect(extracted[1]['sub_id'], equals('1900002'));
-    });
+    test(
+      'extractSubItemsFromResponse 从 get-my-course-day 保留各自的 course_id 防混课',
+      () {
+        final decoded = {
+          'code': 0,
+          'list': [
+            {
+              'id': '85001',
+              'sub_id': '1900001',
+              'title': '第1讲 面向对象',
+              'start_at': '1789440000',
+            },
+            {
+              'id': '85002',
+              'sub_id': '1900002',
+              'title': '其他同时段课程',
+              'start_at': '1789440000',
+            },
+          ],
+        };
+        final extracted = ZhiyunService.extractSubItemsFromResponse(decoded);
+        expect(extracted, hasLength(2));
+        expect(extracted[0]['course_id'], equals('85001'));
+        expect(extracted[0]['sub_id'], equals('1900001'));
+        expect(extracted[1]['course_id'], equals('85002'));
+        expect(extracted[1]['sub_id'], equals('1900002'));
+      },
+    );
 
     test('Hive 实测：秋冬同名同老师课程同时在列时按学期/日期精确分流且最近观看互不覆盖', () async {
       final tmpDir = Directory.systemTemp.createTempSync('zhiyun_match_test_');
@@ -950,11 +943,26 @@ void main() {
     });
 
     test('inferMimeType 准确识别字幕、压缩包、文档与图片格式', () {
-      expect(FileDownloadShareHelper.inferMimeType('a.TXT'), equals('text/plain'));
-      expect(FileDownloadShareHelper.inferMimeType('ppt.zip'), equals('application/zip'));
-      expect(FileDownloadShareHelper.inferMimeType('handout.pdf'), equals('application/pdf'));
-      expect(FileDownloadShareHelper.inferMimeType('slide.JPG'), equals('image/jpeg'));
-      expect(FileDownloadShareHelper.inferMimeType('diagram.png'), equals('image/png'));
+      expect(
+        FileDownloadShareHelper.inferMimeType('a.TXT'),
+        equals('text/plain'),
+      );
+      expect(
+        FileDownloadShareHelper.inferMimeType('ppt.zip'),
+        equals('application/zip'),
+      );
+      expect(
+        FileDownloadShareHelper.inferMimeType('handout.pdf'),
+        equals('application/pdf'),
+      );
+      expect(
+        FileDownloadShareHelper.inferMimeType('slide.JPG'),
+        equals('image/jpeg'),
+      );
+      expect(
+        FileDownloadShareHelper.inferMimeType('diagram.png'),
+        equals('image/png'),
+      );
       expect(
         FileDownloadShareHelper.inferMimeType('unknown.bin'),
         equals('application/octet-stream'),
@@ -973,5 +981,75 @@ void main() {
       expect(shortened.startsWith('...'), isTrue);
       expect(shortened.length, equals(36));
     });
+  });
+
+  group('ZhiyunService 直播直连流签名保护与当日课节结构解析测试', () {
+    test('livepgc 与 auth_key 自签名直播流绝不被注入 clientUUID 或 t 参数', () {
+      const liveHls =
+          'https://livepgc.cmc.zju.edu.cn/pgc/30210987.m3u8?auth_key=1795499999-0-0-abcdef1234567890';
+      expect(ZhiyunService.isSelfSignedLiveCdnUrl(liveHls), isTrue);
+      expect(ZhiyunService.signPlayUrl(liveHls, isLive: true), equals(liveHls));
+
+      const replayMp4 = 'https://vod.cmc.zju.edu.cn/record/lesson_01.mp4';
+      expect(ZhiyunService.isSelfSignedLiveCdnUrl(replayMp4), isFalse);
+      expect(
+        ZhiyunService.signPlayUrl(replayMp4, isLive: false),
+        contains('clientUUID='),
+      );
+    });
+
+    test(
+      'get-my-course-day 按时段时间戳分组的 list 与 final_sub_setting 准确提取 sub_id',
+      () {
+        final now = DateTime.now();
+        final beginSec =
+            now.subtract(const Duration(minutes: 15)).millisecondsSinceEpoch ~/
+            1000;
+        final endSec =
+            now.add(const Duration(minutes: 75)).millisecondsSinceEpoch ~/ 1000;
+        final dayPayload = {
+          'code': 0,
+          'list': {
+            '$beginSec': {
+              'course': [
+                {
+                  'course_id': '85940',
+                  'sub_id': '1928374',
+                  'sub_title': '第12讲 多元微分',
+                  'course_begin': beginSec,
+                  'course_over': endSec,
+                  'live_status': '2',
+                  'sub_status': '2',
+                  'multi_type': 'course_live',
+                },
+              ],
+            },
+          },
+        };
+        final items = ZhiyunService.extractSubItemsFromResponse(dayPayload);
+        expect(items, hasLength(1));
+        expect(items.first['course_id'], equals('85940'));
+        expect(items.first['sub_id'], equals('1928374'));
+        expect(ZhiyunService.checkIsLive(item: items.first), isTrue);
+
+        final searchLivePayload = {
+          'code': 0,
+          'list': [
+            {
+              'id': '85940',
+              'course_id': '85940',
+              'title': '微积分（甲）Ⅰ',
+              'final_sub_setting': {'id': '1928888', 'sub_status': '2'},
+            },
+          ],
+        };
+        final liveRows = ZhiyunService.extractSubItemsFromResponse(
+          searchLivePayload,
+        );
+        expect(liveRows, hasLength(1));
+        expect(liveRows.first['course_id'], equals('85940'));
+        expect(liveRows.first['sub_id'], equals('1928888'));
+      },
+    );
   });
 }

@@ -126,7 +126,7 @@ class ZhiyunPlayerActivity : Activity() {
     }
 
     private enum class IconKind {
-        BACK, PLAY, PAUSE, FULLSCREEN, FULLSCREEN_EXIT, PIP, ROTATE, MORE
+        BACK, PLAY, PAUSE, FULLSCREEN, FULLSCREEN_EXIT, PIP, ROTATE, REFRESH, MORE
     }
 
     private class VectorIconDrawable(
@@ -227,6 +227,17 @@ class ZhiyunPlayerActivity : Activity() {
                     canvas.drawRoundRect(RectF(9.5f, 7.5f, 14.5f, 16.5f), 1.0f, 1.0f, strokePaint)
                 }
 
+                IconKind.REFRESH -> {
+                    val arcRect = RectF(4.5f, 4.5f, 19.5f, 19.5f)
+                    val p = Path().apply {
+                        arcTo(arcRect, 0f, 310f, true)
+                        moveTo(19.0f, 3.6f)
+                        lineTo(19.0f, 8.2f)
+                        lineTo(14.4f, 8.2f)
+                    }
+                    canvas.drawPath(p, strokePaint)
+                }
+
                 IconKind.MORE -> {
                     canvas.drawCircle(5.5f, 12f, 2.1f, fillPaint)
                     canvas.drawCircle(12f, 12f, 2.1f, fillPaint)
@@ -276,11 +287,15 @@ class ZhiyunPlayerActivity : Activity() {
     private lateinit var centerPlayBtn: ImageView
     private lateinit var forward10Btn: TextView
     private lateinit var bottomPlayBtn: ImageView
+    private lateinit var progressRow: LinearLayout
     private lateinit var timeCurrentView: TextView
     private lateinit var timeDurationView: TextView
     private lateinit var seekBar: SeekBar
     private lateinit var liveSourcePill: TextView
-    private lateinit var followLivePill: TextView
+    private lateinit var followLivePill: LinearLayout
+    private lateinit var liveStatusBadge: LinearLayout
+    private lateinit var liveDotView: View
+    private lateinit var liveStatusTextView: TextView
     private lateinit var webFallbackPill: TextView
     private lateinit var speedPill: TextView
     private lateinit var orientPill: TextView
@@ -659,9 +674,10 @@ class ZhiyunPlayerActivity : Activity() {
             )
         }
 
-        val progressRow = LinearLayout(this).apply {
+        progressRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            visibility = if (isLiveStream) View.GONE else View.VISIBLE
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -740,17 +756,70 @@ class ZhiyunPlayerActivity : Activity() {
             togglePlayPause(showBanner = false)
         }
 
-        followLivePill = makePillButton("跟随直播进度", bgColor = Color.parseColor("#CCFB7299")) {
-            seekToLiveEdge()
-        }.apply {
+        followLivePill = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minHeight = dp(34)
+            setPadding(dp(10), dp(5), dp(12), dp(5))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(17).toFloat()
+                setColor(Color.parseColor("#3DFFFFFF"))
+                setStroke(dp(1), Color.parseColor("#28FFFFFF"))
+            }
+            addView(ImageView(this@ZhiyunPlayerActivity).apply {
+                setImageDrawable(VectorIconDrawable(IconKind.REFRESH, Color.WHITE, dp(16)))
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                layoutParams = LinearLayout.LayoutParams(dp(16), dp(16)).apply {
+                    marginEnd = dp(4)
+                }
+            })
+            addView(TextView(this@ZhiyunPlayerActivity).apply {
+                text = "刷新"
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+            })
             visibility = if (isLiveStream) View.VISIBLE else View.GONE
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply {
-                marginStart = dp(6)
+                marginStart = dp(4)
+                marginEnd = dp(8)
+            }
+            setOnClickListener {
+                scheduleAutoHide()
+                seekToLiveEdge()
+            }
+        }
+
+        liveDotView = View(this).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.parseColor("#FF453A"))
+            }
+            layoutParams = LinearLayout.LayoutParams(dp(7), dp(7)).apply {
+                marginEnd = dp(5)
+            }
+        }
+        liveStatusTextView = TextView(this).apply {
+            text = "直播中"
+            textSize = 12.5f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#EBFFFFFF"))
+        }
+        liveStatusBadge = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            visibility = if (isLiveStream) View.VISIBLE else View.GONE
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
                 marginEnd = dp(6)
             }
+            addView(liveDotView)
+            addView(liveStatusTextView)
         }
 
         val actionSpacer = View(this).apply {
@@ -811,6 +880,7 @@ class ZhiyunPlayerActivity : Activity() {
 
         actionRow.addView(bottomPlayBtn)
         actionRow.addView(followLivePill)
+        actionRow.addView(liveStatusBadge)
         actionRow.addView(actionSpacer)
         actionRow.addView(liveSourcePill)
         actionRow.addView(webFallbackPill)
@@ -983,7 +1053,9 @@ class ZhiyunPlayerActivity : Activity() {
         webBarToggleBtn.visibility = if (isWebCustomFullscreen && !effectiveVisible) View.VISIBLE else View.GONE
 
         if (!isWeb) {
+            progressRow.visibility = if (isLiveStream) View.GONE else View.VISIBLE
             followLivePill.visibility = if (isLiveStream) View.VISIBLE else View.GONE
+            liveStatusBadge.visibility = if (isLiveStream) View.VISIBLE else View.GONE
             liveSourcePill.visibility = if (streamCandidates.size > 1) View.VISIBLE else View.GONE
             webFallbackPill.visibility = if (webFallbackUrl.isNotEmpty()) View.VISIBLE else View.GONE
         }
@@ -1036,9 +1108,9 @@ class ZhiyunPlayerActivity : Activity() {
             }
             player.seekToDefaultPosition()
             player.play()
-            showHud("已跟随最新直播进度")
+            showHud("已刷新至最新直播画面")
         } else {
-            showHud("正在同步最新直播进度...")
+            showHud("正在刷新直播画面...")
             playStreamAt(currentStreamIndex)
         }
         updatePlayPauseIcons()
@@ -1124,14 +1196,16 @@ class ZhiyunPlayerActivity : Activity() {
         rewind10Btn.visibility = if (isExplicitLive) View.GONE else View.VISIBLE
         forward10Btn.visibility = if (isExplicitLive) View.GONE else View.VISIBLE
         speedPill.visibility = if (isExplicitLive) View.GONE else View.VISIBLE
+        progressRow.visibility = if (isExplicitLive || activeWebView != null) View.GONE else View.VISIBLE
         followLivePill.visibility = if (isExplicitLive && activeWebView == null) View.VISIBLE else View.GONE
+        liveStatusBadge.visibility = if (isExplicitLive && activeWebView == null) View.VISIBLE else View.GONE
 
         if (isExplicitLive) {
-            timeCurrentView.text = if (pos > 0) formatMs(pos) else "00:00"
-            timeDurationView.text = "● LIVE"
-            timeDurationView.setTextColor(SAKURA_ACCENT)
-            seekBar.isEnabled = false
-            seekBar.progress = 1000
+            val playing = player.playWhenReady && player.playbackState != Player.STATE_ENDED
+            (liveDotView.background as? GradientDrawable)?.setColor(
+                Color.parseColor(if (playing) "#FF453A" else "#FFB020")
+            )
+            liveStatusTextView.text = if (playing) "直播中" else "已暂停"
         } else {
             val validDur = dur > 0L && dur != C.TIME_UNSET
             seekBar.isEnabled = validDur
@@ -1303,7 +1377,6 @@ class ZhiyunPlayerActivity : Activity() {
 
     private fun startPlayback() {
         val openWebDirectly = preferWeb ||
-            isLiveStream ||
             (rawInitialUrl.isNotEmpty() && !isDirectStreamUrl(rawInitialUrl))
         val fallback = webFallbackUrl.ifEmpty { rawInitialUrl }
         if (openWebDirectly && fallback.isNotEmpty()) {
@@ -1337,12 +1410,15 @@ class ZhiyunPlayerActivity : Activity() {
         gestureLayer.visibility = View.VISIBLE
         bufferingSpinner.visibility = View.VISIBLE
 
+        val lowerStream = streamUrl.lowercase()
+        val isSelfSignedLiveCdn = lowerStream.contains("livepgc.cmc.zju.edu.cn") ||
+            lowerStream.contains("auth_key=")
         val headers = mutableMapOf(
             "Referer" to "https://classroom.zju.edu.cn/",
             "Origin" to "https://classroom.zju.edu.cn",
             "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         )
-        if (token.isNotBlank()) {
+        if (!isSelfSignedLiveCdn && token.isNotBlank()) {
             val phpCookie = buildPhpSerializedToken(token)
             headers["Cookie"] = if (phpCookie.isNotEmpty()) {
                 "_token=$phpCookie; token=$token"
@@ -1452,7 +1528,7 @@ class ZhiyunPlayerActivity : Activity() {
         applyBarSafePadding()
         setControlsVisible(true)
         updatePipParams()
-        player.setPlaybackParameters(PlaybackParameters(speeds[speedIndex]))
+        player.setPlaybackParameters(PlaybackParameters(if (isLiveStream) 1.0f else speeds[speedIndex]))
         player.setMediaItem(mediaBuilder.build())
         player.prepare()
         player.playWhenReady = true
@@ -1538,7 +1614,8 @@ class ZhiyunPlayerActivity : Activity() {
                     "var s=document.createElement('style');s.id='helechron-zy-fix';" +
                     "s.innerHTML='html,body,#app{background:#000!important;margin:0!important;padding:0!important;overflow:hidden!important;width:100vw!important;height:100vh!important;}" +
                     ".header-wrapper,.living-header,.living-right,.right-wrapper,.nav-bar,.catalog-wrapper,.sidebar-wrapper,.chat-wrapper,.danmu-send-wrap{display:none!important;}" +
-                    ".living-room-wrapper,.living-content,.left-wrapper,.player-wrapper,.cmc-player-container,#cmc_player_container,.prism-player,.xgplayer,.dplayer{position:fixed!important;left:0!important;top:0!important;right:0!important;bottom:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;margin:0!important;padding:0!important;z-index:9999!important;background:#000!important;}" +
+                    ".living-room-wrapper,.living-content,.left-wrapper{position:fixed!important;left:0!important;top:0!important;right:0!important;bottom:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;margin:0!important;padding:0!important;z-index:9999!important;background:#000!important;}" +
+                    ".player-wrapper,.cmc-player-container,#cmc_player_container,.prism-player,.xgplayer,.dplayer{width:100%!important;height:100%!important;max-width:100vw!important;max-height:100vh!important;background:#000!important;}" +
                     "video{width:100%!important;height:100%!important;object-fit:contain!important;background:#000!important;}';" +
                     "(document.head||document.documentElement).appendChild(s);" +
                     "};" +
@@ -1603,7 +1680,19 @@ class ZhiyunPlayerActivity : Activity() {
             append("}catch(e){}})();")
         }
 
-        val finalUrl = appendTokenToUrl(targetUrl.trim(), token)
+        val trimmedTarget = targetUrl.trim()
+        val finalUrl = if (cleanSso.isNotEmpty() && trimmedTarget.contains("classroom.zju.edu.cn")) {
+            val cleanForward = trimmedTarget.replace(Regex("([?&])token=[^&]*&?"), "$1")
+                .trimEnd('?', '&')
+            val encodedForward = try {
+                java.net.URLEncoder.encode(cleanForward, "UTF-8")
+            } catch (_: Exception) {
+                cleanForward
+            }
+            "https://tgmedia.cmc.zju.edu.cn/index.php?r=auth/login&auType=cmc&tenant_code=112&forward=$encodedForward"
+        } else {
+            appendTokenToUrl(trimmedTarget, token)
+        }
 
         val wv = WebView(this).apply {
             setBackgroundColor(Color.BLACK)
@@ -1743,7 +1832,7 @@ class ZhiyunPlayerActivity : Activity() {
         val actions = mutableListOf<() -> Unit>()
 
         if (activeWebView == null && isLiveStream) {
-            options.add("跟随直播进度")
+            options.add("刷新直播画面")
             actions.add { seekToLiveEdge() }
         } else if (activeWebView == null && !isLiveStream) {
             options.add("倍速播放（当前 ${speeds[speedIndex]}x）")

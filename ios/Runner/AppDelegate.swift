@@ -317,7 +317,7 @@ private final class ZhiyunAVPlayerViewController: AVPlayerViewController {
     controller: UIViewController
   ) -> Bool {
     var candidates: [URL] = []
-    if !preferWeb && !isLive {
+    if !preferWeb {
       var seen = Set<String>()
       func addCandidate(_ raw: String) {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -349,7 +349,9 @@ private final class ZhiyunAVPlayerViewController: AVPlayerViewController {
           "Referer": "https://classroom.zju.edu.cn/",
           "Origin": "https://classroom.zju.edu.cn"
         ]
-        if let tk = token, !tk.isEmpty {
+        let lowerStream = streamUrl.absoluteString.lowercased()
+        let isSelfSignedLiveCdn = lowerStream.contains("livepgc.cmc.zju.edu.cn") || lowerStream.contains("auth_key=")
+        if !isSelfSignedLiveCdn, let tk = token, !tk.isEmpty {
           let phpCookie = self.buildPhpSerializedToken(tk)
           headers["Cookie"] = "_token=\(phpCookie); token=\(tk)"
           headers["Authorization"] = "Bearer \(tk)"

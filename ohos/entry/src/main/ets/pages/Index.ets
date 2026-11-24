@@ -935,10 +935,12 @@ struct Index {
           this.clearPrepareWatchdog();
           this.videoDuration = player.duration > 0 ? Math.floor(player.duration / 1000) : 0;
           this.videoLoading = false;
-          try {
-            player.setSpeed(this.avSpeed);
-          } catch (speedErr) {
-            hilog.warn(DOMAIN, TAG, `setSpeed failed: ${JSON.stringify(speedErr)}`);
+          if (!this.isLiveStream) {
+            try {
+              player.setSpeed(this.avSpeed);
+            } catch (speedErr) {
+              hilog.warn(DOMAIN, TAG, `setSpeed failed: ${JSON.stringify(speedErr)}`);
+            }
           }
           try {
             await player.play();
@@ -984,7 +986,9 @@ struct Index {
           'Origin': 'https://classroom.zju.edu.cn',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
         };
-        if (this.inAppVideoToken.length > 0) {
+        const lowerTarget = targetUrl.toLowerCase();
+        const isSelfSignedLiveCdn = lowerTarget.indexOf('livepgc.cmc.zju.edu.cn') >= 0 || lowerTarget.indexOf('auth_key=') >= 0;
+        if (!isSelfSignedLiveCdn && this.inAppVideoToken.length > 0) {
           const phpTk = this.buildPhpSerializedToken(this.inAppVideoToken);
           headers['Cookie'] = `_token=${phpTk}; token=${this.inAppVideoToken}`;
           headers['Authorization'] = `Bearer ${this.inAppVideoToken}`;
@@ -1125,7 +1129,7 @@ struct Index {
     this.lastManualPlayToggleMs = Date.now();
     this.manualTargetPlaying = true;
     this.isVideoPlaying = true;
-    this.showHudMessage('正在同步至最新直播进度...');
+    this.showHudMessage('正在刷新直播画面...');
     this.startAvPlayerPlayback(target);
     this.scheduleHideOverlay();
   }
@@ -1194,7 +1198,8 @@ struct Index {
         `var st=document.createElement('style');st.id='celechron_zy_fullscreen_css';` +
         `st.innerHTML='html,body,#app{background:#000 !important;margin:0 !important;padding:0 !important;overflow:hidden !important;width:100vw !important;height:100vh !important;}' +` +
         `'.header-wrapper,.living-header,.living-right,.right-wrapper,.nav-bar,.catalog-wrapper,.sidebar-wrapper,.chat-wrapper,.danmu-send-wrap{display:none !important;}' +` +
-        `'.living-room-wrapper,.living-content,.left-wrapper,.player-wrapper,.cmc-player-container,#cmc_player_container{position:fixed !important;left:0 !important;top:0 !important;right:0 !important;bottom:0 !important;width:100vw !important;height:100vh !important;max-width:100vw !important;max-height:100vh !important;margin:0 !important;padding:0 !important;z-index:9999 !important;background:#000 !important;}' +` +
+        `'.living-room-wrapper,.living-content,.left-wrapper{position:fixed !important;left:0 !important;top:0 !important;right:0 !important;bottom:0 !important;width:100vw !important;height:100vh !important;max-width:100vw !important;max-height:100vh !important;margin:0 !important;padding:0 !important;z-index:9999 !important;background:#000 !important;}' +` +
+        `'.player-wrapper,.cmc-player-container,#cmc_player_container,.prism-player,.xgplayer,.dplayer{width:100% !important;height:100% !important;max-width:100vw !important;max-height:100vh !important;background:#000 !important;}' +` +
         `'video{width:100% !important;height:100% !important;object-fit:contain !important;background:#000 !important;}';` +
         `document.head.appendChild(st);` +
       `}` +
@@ -1278,10 +1283,17 @@ struct Index {
   }
 
   private webFallbackTarget(): string {
-    if (this.inAppVideoLivingroomUrl.length > 0) {
-      return this.appendTokenParam(this.inAppVideoLivingroomUrl);
+    const rawCandidate = this.inAppVideoLivingroomUrl.length > 0
+      ? this.inAppVideoLivingroomUrl.trim()
+      : (!isDirectStreamUrl(this.inAppVideoUrl) ? this.inAppVideoUrl.trim() : '');
+    if (rawCandidate.length === 0) {
+      return '';
     }
-    return !isDirectStreamUrl(this.inAppVideoUrl) ? this.appendTokenParam(this.inAppVideoUrl) : '';
+    if (this.inAppVideoSsoCookie.trim().length > 0 && rawCandidate.indexOf('classroom.zju.edu.cn') >= 0) {
+      const cleanForward = rawCandidate.replace(/([?&])token=[^&]*&?/g, '$1').replace(/[?&]+$/, '');
+      return `https://tgmedia.cmc.zju.edu.cn/index.php?r=auth/login&auType=cmc&tenant_code=112&forward=${encodeURIComponent(cleanForward)}`;
+    }
+    return this.appendTokenParam(rawCandidate);
   }
 
   private switchNextStreamOrWeb(): void {
@@ -1562,17 +1574,26 @@ struct Index {
       }
 
       if (!this.useWebFallback && this.isLiveStream) {
-        Text('跟随直播进度')
-          .fontSize(13.5)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
-          .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-          .borderRadius(10)
-          .backgroundColor('#CCFF6699')
-          .onClick(() => {
-            this.showMoreSheet = false;
-            this.syncToLiveEdge();
-          })
+        Row({ space: 6 }) {
+          this.PlayerVectorIcon(
+            'M 19.5 12 C 19.5 16.14 16.14 19.5 12 19.5 C 7.86 19.5 4.5 16.14 4.5 12 C 4.5 7.86 7.86 4.5 12 4.5 C 14.6 4.5 16.9 5.8 18.5 8.0 M 18.8 3.8 L 18.8 8.2 L 14.4 8.2',
+            false,
+            15,
+            '#FFFFFF'
+          )
+          Text('刷新直播画面')
+            .fontSize(13.5)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+        }
+        .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+        .borderRadius(10)
+        .backgroundColor('#3DFFFFFF')
+        .alignItems(VerticalAlign.Center)
+        .onClick(() => {
+          this.showMoreSheet = false;
+          this.syncToLiveEdge();
+        })
       }
 
       if (!this.useWebFallback && this.videoStreams.length > 1) {
@@ -2193,42 +2214,9 @@ struct Index {
 
                   Blank()
 
-                  // 底部双行渐变控制栏（Row 1: 进度条/直播状态+跟随直播进度；Row 2: 播放/网页版/线路/倍速/横竖屏/全屏）
+                  // 底部控制栏（回放显示进度条+主控栏；直播隐藏无效进度条，主控栏左置播放+刷新+直播状态）
                   Column({ space: 8 }) {
-                    // 第一行：直播状态栏（含一键“跟随直播进度”）或回放进度条
-                    if (this.isLiveStream) {
-                      Row({ space: 8 }) {
-                        Circle({ width: 8, height: 8 }).fill(this.isVideoPlaying ? '#FF4D79' : '#FFB020')
-                        Text(this.isVideoPlaying ? '正在直播 LIVE' : '直播已暂停')
-                          .fontSize(13.5)
-                          .fontWeight(FontWeight.Bold)
-                          .fontColor(this.isVideoPlaying ? '#FF6699' : '#FFD166')
-                        Blank()
-                        Row({ space: 5 }) {
-                          this.PlayerVectorIcon(
-                            'M4.9 8.7 C7.3 3.5 14.3 2.6 18.0 7.0 M18.2 3.4 L18.2 7.2 L14.4 7.0 M19.1 15.3 C16.7 20.5 9.7 21.4 6.0 17.0 M5.8 20.6 L5.8 16.8 L9.6 17.0',
-                            false,
-                            15,
-                            '#FFFFFF'
-                          )
-                          Text('跟随直播进度')
-                            .fontSize(12.5)
-                            .fontWeight(FontWeight.Bold)
-                            .fontColor(Color.White)
-                        }
-                        .height(32)
-                        .padding({ left: 12, right: 12 })
-                        .borderRadius(16)
-                        .backgroundColor('#CCFF6699')
-                        .alignItems(VerticalAlign.Center)
-                        .onClick(() => {
-                          this.syncToLiveEdge();
-                        })
-                      }
-                      .width('100%')
-                      .alignItems(VerticalAlign.Center)
-                      .padding({ left: 4, bottom: 2 })
-                    } else if (this.videoDuration > 0) {
+                    if (!this.isLiveStream && this.videoDuration > 0) {
                       Row({ space: 10 }) {
                         Text(formatVideoTime(this.videoCurrentTime))
                           .fontSize(13)
@@ -2269,7 +2257,7 @@ struct Index {
                           .fontColor('#D9FFFFFF')
                       }
                       .width('100%')
-                    } else {
+                    } else if (!this.isLiveStream) {
                       Row({ space: 10 }) {
                         Text('00:00')
                           .fontSize(13)
@@ -2319,6 +2307,39 @@ struct Index {
                       .onClick(() => {
                         this.togglePlayPause();
                       })
+
+                      if (this.isLiveStream) {
+                        Row({ space: 5 }) {
+                          this.PlayerVectorIcon(
+                            'M 19.5 12 C 19.5 16.14 16.14 19.5 12 19.5 C 7.86 19.5 4.5 16.14 4.5 12 C 4.5 7.86 7.86 4.5 12 4.5 C 14.6 4.5 16.9 5.8 18.5 8.0 M 18.8 3.8 L 18.8 8.2 L 14.4 8.2',
+                            false,
+                            15,
+                            '#FFFFFF'
+                          )
+                          Text('刷新')
+                            .fontSize(13)
+                            .fontWeight(FontWeight.Bold)
+                            .fontColor(Color.White)
+                        }
+                        .height(34)
+                        .padding({ left: 10, right: 12 })
+                        .borderRadius(17)
+                        .backgroundColor('#3DFFFFFF')
+                        .border({ width: 1, color: '#28FFFFFF' })
+                        .alignItems(VerticalAlign.Center)
+                        .onClick(() => {
+                          this.syncToLiveEdge();
+                        })
+
+                        Row({ space: 5 }) {
+                          Circle({ width: 7, height: 7 }).fill(this.isVideoPlaying ? '#FF453A' : '#FFB020')
+                          Text(this.isVideoPlaying ? '直播中' : '已暂停')
+                            .fontSize(12.5)
+                            .fontWeight(FontWeight.Bold)
+                            .fontColor('#EBFFFFFF')
+                        }
+                        .alignItems(VerticalAlign.Center)
+                      }
 
                       if (this.webFallbackTarget().length > 0) {
                         Row({ space: 4 }) {
