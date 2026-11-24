@@ -15,6 +15,8 @@ import 'package:celechron/design/theme/ael_theme.dart';
 import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/http/zjuServices/network_defense.dart';
 import 'package:celechron/design/app_notification.dart';
+import 'package:celechron/model/course.dart';
+import 'package:celechron/model/period.dart';
 import 'package:celechron/services/file_download_share_helper.dart';
 import 'package:celechron/services/ohos_native_service.dart';
 import 'package:celechron/services/zhiyun_service.dart';
@@ -27,6 +29,8 @@ class ZhiyunPlayerPage extends StatefulWidget {
   final String livingroomUrl;
   final List<ZhiyunReplayInfo> replays;
   final bool preferLive;
+  final Course? course;
+  final Period? period;
 
   const ZhiyunPlayerPage({
     super.key,
@@ -37,6 +41,8 @@ class ZhiyunPlayerPage extends StatefulWidget {
     required this.livingroomUrl,
     this.replays = const [],
     this.preferLive = false,
+    this.course,
+    this.period,
   });
 
   @override
@@ -48,8 +54,10 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
   late String _currentTitle;
   late String _currentLivingroomUrl;
   late bool _isLiveMode;
+  late List<ZhiyunReplayInfo> _replays;
 
   bool _loading = true;
+  bool _launchingPlayer = false;
   List<ZhiyunStreamOption> _streams = [];
   int _selectedStreamIndex = 0;
   List<ZhiyunPptSlide> _slides = [];
@@ -61,15 +69,16 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
   @override
   void initState() {
     super.initState();
+    _replays = List<ZhiyunReplayInfo>.from(widget.replays);
     _currentSubId = widget.initialSubId;
     _currentTitle = widget.initialTitle;
     _currentLivingroomUrl = widget.livingroomUrl;
     _isLiveMode =
         widget.preferLive ||
         widget.initialTitle.contains('直播') ||
-        widget.replays.any((r) => r.subId == _currentSubId && r.isLive);
+        _replays.any((r) => r.subId == _currentSubId && r.isLive);
     if ((_currentSubId == null || _currentSubId!.isEmpty) &&
-        widget.replays.isNotEmpty) {
+        _replays.isNotEmpty) {
       final now = DateTime.now();
       bool isNotFuture(ZhiyunReplayInfo r) =>
           r.lessonDate == null ||
@@ -80,17 +89,17 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
       ZhiyunReplayInfo? matched;
       if (_isLiveMode) {
         matched =
-            widget.replays.firstWhereOrNull(
+            _replays.firstWhereOrNull(
               (r) => r.isLive && r.subId?.isNotEmpty == true,
             ) ??
-            widget.replays.firstWhereOrNull(
+            _replays.firstWhereOrNull(
               (r) =>
                   r.subId?.isNotEmpty == true &&
                   r.lessonDate != null &&
                   isSameDay(r.lessonDate!, now),
             );
       } else {
-        final pastWithReplay = widget.replays
+        final pastWithReplay = _replays
             .where(
               (r) =>
                   r.subId?.isNotEmpty == true && r.hasReplay && isNotFuture(r),
@@ -104,7 +113,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
           );
           matched = pastWithReplay.first;
         } else {
-          final pastAny = widget.replays
+          final pastAny = _replays
               .where((r) => r.subId?.isNotEmpty == true && isNotFuture(r))
               .toList();
           if (pastAny.isNotEmpty) {
@@ -126,31 +135,111 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
     _loadLessonData(autoPlayFirstTime: _isLiveMode);
   }
 
+  List<ZhiyunReplayInfo> _buildReplaysFromCatalogue(
+    List<Map<String, dynamic>> rawCat,
+  ) {
+    final list = <ZhiyunReplayInfo>[];
+    for (final item in rawCat) {
+      final sid = item['sub_id']?.toString() ?? item['id']?.toString() ?? '';
+      if (sid.isEmpty) continue;
+      final t =
+          item['title']?.toString() ??
+          item['sub_title']?.toString() ??
+          '课节 $sid';
+      final isLive = ZhiyunService.checkIsLive(item: item);
+      final hasReplay = !isLive && ZhiyunService.checkHasReplay(item: item);
+      final lessonDt = ZhiyunService.parseZhiyunTimestamp(
+        item['start_at'] ?? item['class_begin'] ?? item['course_begin'],
+      );
+      list.add(
+        ZhiyunReplayInfo(
+          courseId: widget.courseId,
+          subId: sid,
+          courseName: widget.courseName,
+          lessonTitle: t,
+          lessonDate: lessonDt,
+          hasReplay: hasReplay,
+          isLive: isLive,
+          isLessonSpecific: true,
+          livingroomUrl: ZhiyunService.buildCourseLivingroomUrl(
+            widget.courseId,
+            subId: sid,
+          ),
+        ),
+      );
+    }
+    return list;
+  }
+
+  Future<void> _loadLiveExtrasInBackground(String? subId) async {
+    try {
+      if (_replays.isEmpty && widget.courseId.isNotEmpty) {
+        final rawCat = await ZhiyunService.fetchCourseCatalogue(
+          widget.courseId,
+          forceRefresh: false,
+        ).timeout(const Duration(seconds: 6), onTimeout: () => const []);
+        if (mounted && rawCat.isNotEmpty) {
+          setState(() {
+            _replays = _buildReplaysFromCatalogue(rawCat);
+          });
+        }
+      }
+      if (subId == null || subId.isEmpty) return;
+      final extras = await Future.wait([
+        ZhiyunService.fetchLessonPptSlides(
+          courseId: widget.courseId,
+          subId: subId,
+        ).timeout(const Duration(seconds: 8), onTimeout: () => const []),
+        ZhiyunService.fetchLessonTranscript(
+          subId: subId,
+        ).timeout(const Duration(seconds: 8), onTimeout: () => const []),
+      ]);
+      if (!mounted || _currentSubId != subId) return;
+      setState(() {
+        _slides = extras[0] as List<ZhiyunPptSlide>;
+        _transcript = extras[1] as List<ZhiyunTranscriptSegment>;
+      });
+    } catch (_) {}
+  }
+
   Future<void> _loadLessonData({bool autoPlayFirstTime = false}) async {
     var subId = _currentSubId;
     if ((subId == null || subId.isEmpty) && widget.courseId.isNotEmpty) {
       final now = DateTime.now();
       if (_isLiveMode) {
-        final activeToday = await ZhiyunService.fetchActiveSubIdForDate(
-          widget.courseId,
-          now,
-        );
-        if (activeToday != null && activeToday.isNotEmpty) {
-          subId = activeToday;
-          _currentSubId = activeToday;
-          _currentLivingroomUrl = ZhiyunService.buildLivingroomUrl(
+        try {
+          final activeToday = await ZhiyunService.fetchActiveSubIdForDate(
             widget.courseId,
-            activeToday,
-          );
-        }
+            now,
+            period: widget.period,
+          ).timeout(const Duration(seconds: 5), onTimeout: () => null);
+          if (activeToday != null && activeToday.isNotEmpty) {
+            subId = activeToday;
+            _currentSubId = activeToday;
+            _currentLivingroomUrl = ZhiyunService.buildLivingroomUrl(
+              widget.courseId,
+              activeToday,
+            );
+          }
+        } catch (_) {}
       }
 
       if (subId == null || subId.isEmpty) {
         // 实时直播常在开课瞬间才生成 sub_id，强制刷新一次课程目录获取最新直播 sub_id
-        final freshCat = await ZhiyunService.fetchCourseCatalogue(
-          widget.courseId,
-          forceRefresh: true,
-        );
+        List<Map<String, dynamic>> freshCat = const [];
+        try {
+          freshCat = await ZhiyunService.fetchCourseCatalogue(
+            widget.courseId,
+            forceRefresh: true,
+          ).timeout(const Duration(seconds: 6), onTimeout: () => const []);
+        } catch (_) {}
+
+        if (mounted && freshCat.isNotEmpty && _replays.isEmpty) {
+          setState(() {
+            _replays = _buildReplaysFromCatalogue(freshCat);
+          });
+        }
+
         bool isItemNotFuture(Map<String, dynamic> item) {
           final dt = ZhiyunService.parseZhiyunTimestamp(
             item['start_at'] ?? item['class_begin'] ?? item['course_begin'],
@@ -171,6 +260,8 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
               ZhiyunService.findBestMatchingCatalogueItem(
                 catalogue: freshCat,
                 targetDate: now,
+                course: widget.course,
+                period: widget.period,
               );
         } else {
           final validPast = freshCat
@@ -208,18 +299,47 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
       }
     }
 
+    if (widget.courseId.isNotEmpty) {
+      _currentLivingroomUrl = ZhiyunService.buildCourseLivingroomUrl(
+        widget.courseId,
+        subId: subId,
+      );
+    }
+
+    // 直播模式：绝不先拉取或尝试直连流媒体，直接以内嵌网页播放器打开直播间；
+    // PPT 切片、语音转写与课节列表在后台异步加载，避免卡住首屏进入。
+    if (_isLiveMode) {
+      if (mounted) {
+        setState(() {
+          _streams = [];
+          _selectedStreamIndex = 0;
+          _loading = false;
+        });
+      }
+      if (subId != null && subId.isNotEmpty) {
+        ZhiyunService.saveLastWatchedReplay(
+          courseName: widget.courseName,
+          lessonTitle: _currentTitle,
+          livingroomUrl: _currentLivingroomUrl,
+          courseId: widget.courseId,
+          subId: subId,
+        );
+      }
+      _loadLiveExtrasInBackground(subId);
+      if (autoPlayFirstTime &&
+          !_autoLaunched &&
+          _currentLivingroomUrl.isNotEmpty) {
+        _autoLaunched = true;
+        await _launchInAppPlayer(_currentLivingroomUrl, preferWeb: true);
+      }
+      return;
+    }
+
     if (subId == null || subId.isEmpty) {
       if (mounted) {
         setState(() {
           _loading = false;
         });
-      }
-      if (autoPlayFirstTime &&
-          _isLiveMode &&
-          !_autoLaunched &&
-          _currentLivingroomUrl.isNotEmpty) {
-        _autoLaunched = true;
-        await _launchInAppPlayer(_currentLivingroomUrl, preferWeb: true);
       }
       return;
     }
@@ -230,24 +350,28 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
       });
     }
 
-    final results = await Future.wait([
-      ZhiyunService.fetchLessonStreams(
-        courseId: widget.courseId,
-        subId: subId,
-        preferLive: _isLiveMode,
-      ),
-      ZhiyunService.fetchLessonPptSlides(
-        courseId: widget.courseId,
-        subId: subId,
-      ),
-      ZhiyunService.fetchLessonTranscript(subId: subId),
-    ]);
+    List<ZhiyunStreamOption> streams = const [];
+    List<ZhiyunPptSlide> slides = const [];
+    List<ZhiyunTranscriptSegment> transcript = const [];
+    try {
+      final results = await Future.wait([
+        ZhiyunService.fetchLessonStreams(
+          courseId: widget.courseId,
+          subId: subId,
+          preferLive: false,
+        ),
+        ZhiyunService.fetchLessonPptSlides(
+          courseId: widget.courseId,
+          subId: subId,
+        ),
+        ZhiyunService.fetchLessonTranscript(subId: subId),
+      ]);
+      streams = results[0] as List<ZhiyunStreamOption>;
+      slides = results[1] as List<ZhiyunPptSlide>;
+      transcript = results[2] as List<ZhiyunTranscriptSegment>;
+    } catch (_) {}
 
     if (!mounted) return;
-    final streams = results[0] as List<ZhiyunStreamOption>;
-    final slides = results[1] as List<ZhiyunPptSlide>;
-    final transcript = results[2] as List<ZhiyunTranscriptSegment>;
-
     setState(() {
       _streams = streams;
       _selectedStreamIndex = 0;
@@ -263,96 +387,127 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
       courseId: widget.courseId,
       subId: subId,
     );
-
-    if (autoPlayFirstTime && _isLiveMode && !_autoLaunched) {
-      _autoLaunched = true;
-      // For live mode, always open the web player (livingroom URL) directly,
-      // matching the same behaviour as replay web playback.
-      final webUrl = _currentLivingroomUrl.isNotEmpty
-          ? _currentLivingroomUrl
-          : (streams.isNotEmpty ? streams.first.url : '');
-      if (webUrl.isNotEmpty) {
-        await _launchInAppPlayer(webUrl, preferWeb: true);
-      }
-    }
   }
 
   Future<void> _launchInAppPlayer(String url, {bool preferWeb = false}) async {
-    final authResults = await Future.wait<String?>([
-      ZhiyunService.ensureValidToken(),
-      ZhiyunService.ensureSsoCookieValue(),
-    ]);
-    final token = authResults[0] ?? ZhiyunService.getCachedZhiyunToken();
-    final ssoCookie = authResults[1];
-    var effectiveLivingroom = _currentLivingroomUrl;
-    if (widget.courseId.isNotEmpty) {
-      effectiveLivingroom = ZhiyunService.buildCourseLivingroomUrl(
-        widget.courseId,
-        subId: _currentSubId,
-      );
+    if (_launchingPlayer) return;
+    if (mounted) {
+      setState(() {
+        _launchingPlayer = true;
+      });
     }
-    effectiveLivingroom = ZhiyunService.appendTokenToUrl(
-      effectiveLivingroom,
-      token,
-    );
-    var rawTargetUrl = url;
-    if (rawTargetUrl.contains('classroom.zju.edu.cn/livingroom') &&
-        !rawTargetUrl.contains('sub_id=') &&
-        widget.courseId.isNotEmpty) {
-      rawTargetUrl = ZhiyunService.buildCourseLivingroomUrl(
-        widget.courseId,
-        subId: _currentSubId,
-      );
-    }
-    final effectiveUrl = rawTargetUrl.contains('classroom.zju.edu.cn')
-        ? ZhiyunService.appendTokenToUrl(rawTargetUrl, token)
-        : rawTargetUrl;
-
-    final lowerUrl = effectiveUrl.toLowerCase();
-    final isDirect =
-        !lowerUrl.contains('livingroom') &&
-        (lowerUrl.contains('.mp4') ||
-            lowerUrl.contains('.m3u8') ||
-            lowerUrl.contains('.flv') ||
-            lowerUrl.contains('.ts'));
-    final openWebDirectly = preferWeb || !isDirect || _isLiveMode;
-
-    final bool streamIsLive =
-        _isLiveMode ||
-        _streams.firstWhereOrNull((s) => s.url == url)?.isLive == true;
-
-    final ok = await OhosNativeService.instance.openInAppVideoPlayer(
-      url: effectiveUrl,
-      title: '${widget.courseName} · $_currentTitle',
-      streams: _streams.map((s) => {'label': s.label, 'url': s.url}).toList(),
-      livingroomUrl: effectiveLivingroom,
-      token: token,
-      ssoCookie: ssoCookie,
-      isLive: streamIsLive,
-      preferWeb: openWebDirectly,
-    );
-    if (!ok && mounted) {
-      showCupertinoDialog(
-        context: context,
-        builder: (ctx) => CupertinoAlertDialog(
-          title: const Text('未能启动内置播放器'),
-          content: const Text('可尝试改用系统浏览器打开智云课堂页面播放。'),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('取消'),
-            ),
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              onPressed: () {
-                Navigator.of(ctx).pop();
-                ZhiyunService.openUrl(_currentLivingroomUrl);
-              },
-              child: const Text('浏览器打开'),
-            ),
-          ],
+    var fallbackOpenUrl = _currentLivingroomUrl.isNotEmpty
+        ? _currentLivingroomUrl
+        : url;
+    try {
+      final authResults = await Future.wait<String?>([
+        ZhiyunService.ensureValidToken().timeout(
+          const Duration(seconds: 4),
+          onTimeout: () => ZhiyunService.getCachedZhiyunToken(),
         ),
+        ZhiyunService.ensureSsoCookieValue().timeout(
+          const Duration(seconds: 4),
+          onTimeout: () => null,
+        ),
+      ]);
+      final token = authResults[0] ?? ZhiyunService.getCachedZhiyunToken();
+      final ssoCookie = authResults[1];
+      var effectiveLivingroom = _currentLivingroomUrl;
+      if (widget.courseId.isNotEmpty) {
+        effectiveLivingroom = ZhiyunService.buildCourseLivingroomUrl(
+          widget.courseId,
+          subId: _currentSubId,
+        );
+      }
+      effectiveLivingroom = ZhiyunService.appendTokenToUrl(
+        effectiveLivingroom,
+        token,
       );
+      if (effectiveLivingroom.isNotEmpty) {
+        fallbackOpenUrl = effectiveLivingroom;
+      }
+
+      var rawTargetUrl = url;
+      if (rawTargetUrl.contains('classroom.zju.edu.cn/livingroom') &&
+          !rawTargetUrl.contains('sub_id=') &&
+          widget.courseId.isNotEmpty) {
+        rawTargetUrl = ZhiyunService.buildCourseLivingroomUrl(
+          widget.courseId,
+          subId: _currentSubId,
+        );
+      }
+      final effectiveUrl = rawTargetUrl.contains('classroom.zju.edu.cn')
+          ? ZhiyunService.appendTokenToUrl(rawTargetUrl, token)
+          : rawTargetUrl;
+
+      final lowerUrl = effectiveUrl.toLowerCase();
+      final isDirect =
+          !lowerUrl.contains('livingroom') &&
+          (lowerUrl.contains('.mp4') ||
+              lowerUrl.contains('.m3u8') ||
+              lowerUrl.contains('.flv') ||
+              lowerUrl.contains('.ts'));
+      final openWebDirectly = preferWeb || !isDirect || _isLiveMode;
+
+      final bool streamIsLive =
+          _isLiveMode ||
+          _streams.firstWhereOrNull((s) => s.url == url)?.isLive == true;
+
+      // 网页模式（含所有实时直播）强制不传直连流列表，并直接以 livingroomUrl 为播放目标，
+      // 确保 Android / iOS / HarmonyOS 三端均直接进入内嵌网页播放器。
+      final launchUrl = openWebDirectly && effectiveLivingroom.isNotEmpty
+          ? effectiveLivingroom
+          : effectiveUrl;
+      final launchStreams = openWebDirectly
+          ? const <Map<String, String>>[]
+          : _streams.map((s) => {'label': s.label, 'url': s.url}).toList();
+
+      final ok = await OhosNativeService.instance.openInAppVideoPlayer(
+        url: launchUrl,
+        title: '${widget.courseName} · $_currentTitle',
+        streams: launchStreams,
+        livingroomUrl: effectiveLivingroom,
+        token: token,
+        ssoCookie: ssoCookie,
+        isLive: streamIsLive,
+        preferWeb: openWebDirectly,
+      );
+      if (!ok && mounted) {
+        showCupertinoDialog(
+          context: context,
+          builder: (ctx) => CupertinoAlertDialog(
+            title: const Text('未能启动内置播放器'),
+            content: const Text('可尝试改用系统浏览器打开智云课堂页面播放。'),
+            actions: [
+              CupertinoDialogAction(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('取消'),
+              ),
+              CupertinoDialogAction(
+                isDefaultAction: true,
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  ZhiyunService.openUrl(fallbackOpenUrl);
+                },
+                child: const Text('浏览器打开'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        AppNotification.error('启动播放器失败', '已尝试为你改用外部浏览器打开');
+      }
+      if (fallbackOpenUrl.isNotEmpty) {
+        await ZhiyunService.openUrl(fallbackOpenUrl);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _launchingPlayer = false;
+        });
+      }
     }
   }
 
@@ -526,13 +681,13 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
   }
 
   void _showLessonPicker(BuildContext context) {
-    if (widget.replays.isEmpty) return;
+    if (_replays.isEmpty) return;
     showCupertinoModalPopup(
       context: context,
       builder: (sheetCtx) {
         return CupertinoActionSheet(
           title: Text('${widget.courseName} · 切换课节'),
-          actions: widget.replays
+          actions: _replays
               .where((r) => r.subId != null && r.subId!.isNotEmpty)
               .map(
                 (r) => CupertinoActionSheetAction(
@@ -543,6 +698,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                       _currentTitle = r.lessonTitle;
                       _currentLivingroomUrl = r.livingroomUrl;
                       _isLiveMode = r.isLive;
+                      _autoLaunched = false;
                     });
                     _loadLessonData(autoPlayFirstTime: false);
                   },
@@ -579,8 +735,8 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
 
     return AelSectionCard(
       title: _currentTitle,
-      icon: AelIcons.video,
-      trailing: widget.replays.length > 1
+      icon: _isLiveMode ? AelIcons.radio : AelIcons.video,
+      trailing: _replays.length > 1
           ? AelChip(
               label: '切换课节',
               tone: AelChipTone.primary,
@@ -599,7 +755,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                     const CupertinoActivityIndicator(),
                     const SizedBox(height: AelSpacing.sm),
                     Text(
-                      '正在解析智云直播/回放流媒体与课堂 PPT...',
+                      _isLiveMode ? '正在连接智云实时直播间...' : '正在解析智云回放流媒体与课堂 PPT...',
                       style: TextStyle(
                         fontSize: 12,
                         color: colors.textSecondary,
@@ -609,7 +765,47 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                 ),
               ),
             )
-          else if (_streams.isNotEmpty) ...[
+          else if (_isLiveMode) ...[
+            Text(
+              '当前课节正在进行实时直播，点击直接进入内置网页播放器观看。',
+              style: TextStyle(fontSize: 12.5, color: colors.textSecondary),
+            ),
+            const SizedBox(height: AelSpacing.md),
+            Row(
+              children: [
+                Expanded(
+                  child: AelButton(
+                    expanded: true,
+                    icon: AelIcons.video,
+                    label: _launchingPlayer ? '正在打开直播间...' : '观看实时直播（网页播放器）',
+                    onPressed: _launchingPlayer
+                        ? null
+                        : () => _launchInAppPlayer(
+                            _currentLivingroomUrl,
+                            preferWeb: true,
+                          ),
+                  ),
+                ),
+                const SizedBox(width: AelSpacing.sm),
+                AelCircleIconButton(
+                  icon: AelIcons.compass,
+                  size: 42,
+                  iconSize: 18,
+                  backgroundColor: colors.tonalTileBg,
+                  iconColor: colors.textPrimary,
+                  elevated: false,
+                  tooltip: '外部浏览器打开',
+                  onPressed: () {
+                    final target = ZhiyunService.appendTokenToUrl(
+                      _currentLivingroomUrl,
+                      ZhiyunService.getCachedZhiyunToken(),
+                    );
+                    ZhiyunService.openUrl(target);
+                  },
+                ),
+              ],
+            ),
+          ] else if (_streams.isNotEmpty) ...[
             if (_streams.length > 1) ...[
               Wrap(
                 spacing: AelSpacing.sm,
@@ -629,17 +825,12 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
             AelButton(
               expanded: true,
               icon: AelIcons.video,
-              label: _isLiveMode
-                  ? '观看实时直播（网页播放器）'
+              label: _launchingPlayer
+                  ? '正在启动播放器...'
                   : '播放视频 (${activeStream?.label ?? "回放"})',
-              onPressed: _isLiveMode
-                  ? () => _launchInAppPlayer(
-                      _currentLivingroomUrl,
-                      preferWeb: true,
-                    )
-                  : (activeStream == null
-                        ? null
-                        : () => _launchInAppPlayer(activeStream.url)),
+              onPressed: (_launchingPlayer || activeStream == null)
+                  ? null
+                  : () => _launchInAppPlayer(activeStream.url),
             ),
           ] else ...[
             Text(
@@ -651,9 +842,13 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
               expanded: true,
               variant: AelButtonVariant.tonal,
               icon: AelIcons.globe,
-              label: '打开网页播放器',
-              onPressed: () =>
-                  _launchInAppPlayer(_currentLivingroomUrl, preferWeb: true),
+              label: _launchingPlayer ? '正在打开...' : '打开网页播放器',
+              onPressed: _launchingPlayer
+                  ? null
+                  : () => _launchInAppPlayer(
+                      _currentLivingroomUrl,
+                      preferWeb: true,
+                    ),
             ),
           ],
         ],

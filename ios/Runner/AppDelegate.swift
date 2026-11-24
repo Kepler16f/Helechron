@@ -128,6 +128,8 @@ private final class ZhiyunAVPlayerViewController: AVPlayerViewController {
            !urlStr.isEmpty {
           let token = args["token"] as? String
           let livingroomUrl = args["livingroomUrl"] as? String
+          let isLive = args["isLive"] as? Bool ?? false
+          let preferWeb = args["preferWeb"] as? Bool ?? false
           let rawStreams = args["streams"] as? [[String: Any]] ?? []
           let streamUrls = rawStreams.compactMap { ($0["url"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
           let ok = self?.openInAppVideoPlayer(
@@ -135,6 +137,8 @@ private final class ZhiyunAVPlayerViewController: AVPlayerViewController {
             streamUrls: streamUrls,
             livingroomUrl: livingroomUrl,
             token: token,
+            isLive: isLive,
+            preferWeb: preferWeb,
             controller: controller
           ) ?? false
           result(ok)
@@ -308,18 +312,22 @@ private final class ZhiyunAVPlayerViewController: AVPlayerViewController {
     streamUrls: [String] = [],
     livingroomUrl: String? = nil,
     token: String? = nil,
+    isLive: Bool = false,
+    preferWeb: Bool = false,
     controller: UIViewController
   ) -> Bool {
     var candidates: [URL] = []
-    var seen = Set<String>()
-    func addCandidate(_ raw: String) {
-      let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !trimmed.isEmpty, isDirectStreamUrl(trimmed), seen.insert(trimmed).inserted,
-            let parsed = URL(string: trimmed) else { return }
-      candidates.append(parsed)
+    if !preferWeb && !isLive {
+      var seen = Set<String>()
+      func addCandidate(_ raw: String) {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, isDirectStreamUrl(trimmed), seen.insert(trimmed).inserted,
+              let parsed = URL(string: trimmed) else { return }
+        candidates.append(parsed)
+      }
+      streamUrls.forEach(addCandidate)
+      addCandidate(urlStr)
     }
-    streamUrls.forEach(addCandidate)
-    addCandidate(urlStr)
 
     let rawFallback = (livingroomUrl?.isEmpty == false ? livingroomUrl : nil) ?? urlStr
     let fallbackStr = appendTokenToUrl(rawFallback, token: token)

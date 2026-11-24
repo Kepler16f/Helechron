@@ -495,6 +495,49 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
     );
   }
 
+  Future<String?> _resolveLiveSubId(
+    String courseId,
+    String? initialSubId,
+  ) async {
+    if (initialSubId != null && initialSubId.isNotEmpty) {
+      return initialSubId;
+    }
+    final now = DateTime.now();
+    try {
+      final active = await ZhiyunService.fetchActiveSubIdForDate(
+        courseId,
+        now,
+        period: widget.period,
+      ).timeout(const Duration(seconds: 5), onTimeout: () => null);
+      if (active != null && active.isNotEmpty) return active;
+    } catch (_) {}
+
+    try {
+      final cat = await ZhiyunService.fetchCourseCatalogue(
+        courseId,
+        forceRefresh: true,
+      ).timeout(const Duration(seconds: 5), onTimeout: () => const []);
+      final liveItem =
+          cat.firstWhereOrNull(
+            (item) =>
+                ZhiyunService.checkIsLive(item: item) &&
+                (item['sub_id']?.toString().isNotEmpty == true ||
+                    item['id']?.toString().isNotEmpty == true),
+          ) ??
+          ZhiyunService.findBestMatchingCatalogueItem(
+            catalogue: cat,
+            targetDate: now,
+            course: widget.course,
+            period: widget.period,
+          );
+      final sid =
+          liveItem?['sub_id']?.toString() ?? liveItem?['id']?.toString();
+      if (sid != null && sid.isNotEmpty) return sid;
+    } catch (_) {}
+
+    return null;
+  }
+
   Future<void> _openAndRecord(
     String url,
     String title, {
@@ -502,117 +545,40 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
     String? subId,
     bool isLive = false,
   }) async {
-    await ZhiyunService.saveLastWatchedReplay(
-      courseName: widget.course.name,
-      lessonTitle: title,
-      livingroomUrl: url,
-      courseId: courseId,
-      subId: subId,
-      courseCode: widget.course.id,
-      scopeKey: _semesterScopeKey,
-    );
-    if (mounted) {
-      setState(() {});
-    }
-
-    final authResults = await Future.wait<String?>([
-      ZhiyunService.ensureValidToken(),
-      ZhiyunService.ensureSsoCookieValue(),
-    ]);
-    final token = authResults[0] ?? ZhiyunService.getCachedZhiyunToken();
-    final ssoCookie = authResults[1];
-
-    var effectiveLivingroom = url;
-    if (courseId != null && courseId.isNotEmpty) {
-      effectiveLivingroom = ZhiyunService.buildCourseLivingroomUrl(
-        courseId,
+    try {
+      await ZhiyunService.saveLastWatchedReplay(
+        courseName: widget.course.name,
+        lessonTitle: title,
+        livingroomUrl: url,
+        courseId: courseId,
         subId: subId,
+        courseCode: widget.course.id,
+        scopeKey: _semesterScopeKey,
       );
-    }
-    effectiveLivingroom = ZhiyunService.appendTokenToUrl(
-      effectiveLivingroom,
-      token,
-    );
+      if (mounted) {
+        setState(() {});
+      }
 
-    final ok = await OhosNativeService.instance.openInAppVideoPlayer(
-      url: effectiveLivingroom,
-      title: '${widget.course.name} · $title',
-      livingroomUrl: effectiveLivingroom,
-      token: token,
-      ssoCookie: ssoCookie,
-      isLive: isLive,
-      preferWeb: true,
-    );
-    if (!ok) {
-      await ZhiyunService.openUrl(effectiveLivingroom);
-    }
-  }
+      String? targetSubId = subId;
+      if (isLive &&
+          (targetSubId == null || targetSubId.isEmpty) &&
+          courseId != null &&
+          courseId.isNotEmpty) {
+        targetSubId = await _resolveLiveSubId(courseId, subId);
+      }
 
-  Future<void> _openInAppPlayer(
-    BuildContext context, {
-    required String url,
-    required String title,
-    String? courseId,
-    String? subId,
-    bool preferLive = false,
-  }) async {
-    await ZhiyunService.saveLastWatchedReplay(
-      courseName: widget.course.name,
-      lessonTitle: title,
-      livingroomUrl: url,
-      courseId: courseId,
-      subId: subId,
-      courseCode: widget.course.id,
-      scopeKey: _semesterScopeKey,
-    );
-    if (mounted) {
-      setState(() {});
-    }
-
-    if (preferLive) {
-      // 直播模式：直接进入播放器界面
       final authResults = await Future.wait<String?>([
-        ZhiyunService.ensureValidToken(),
-        ZhiyunService.ensureSsoCookieValue(),
+        ZhiyunService.ensureValidToken().timeout(
+          const Duration(seconds: 4),
+          onTimeout: () => ZhiyunService.getCachedZhiyunToken(),
+        ),
+        ZhiyunService.ensureSsoCookieValue().timeout(
+          const Duration(seconds: 4),
+          onTimeout: () => null,
+        ),
       ]);
       final token = authResults[0] ?? ZhiyunService.getCachedZhiyunToken();
       final ssoCookie = authResults[1];
-      var targetSubId = subId;
-      if ((targetSubId == null || targetSubId.isEmpty) &&
-          courseId != null &&
-          courseId.isNotEmpty) {
-        final now = DateTime.now();
-        targetSubId = await ZhiyunService.fetchActiveSubIdForDate(
-          courseId,
-          now,
-        );
-        if (targetSubId == null || targetSubId.isEmpty) {
-          final cat = await ZhiyunService.fetchCourseCatalogue(
-            courseId,
-            forceRefresh: true,
-          );
-          final liveItem = cat.firstWhereOrNull(
-            (item) =>
-                ZhiyunService.checkIsLive(item: item) &&
-                (item['sub_id']?.toString().isNotEmpty == true ||
-                    item['id']?.toString().isNotEmpty == true),
-          );
-          targetSubId =
-              liveItem?['sub_id']?.toString() ?? liveItem?['id']?.toString();
-        }
-      }
-
-      List<ZhiyunStreamOption> liveStreams = [];
-      if (courseId != null &&
-          courseId.isNotEmpty &&
-          targetSubId != null &&
-          targetSubId.isNotEmpty) {
-        liveStreams = await ZhiyunService.fetchLessonStreams(
-          courseId: courseId,
-          subId: targetSubId,
-          preferLive: true,
-        );
-      }
 
       var effectiveLivingroom = url;
       if (courseId != null && courseId.isNotEmpty) {
@@ -626,85 +592,89 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
         token,
       );
 
-      final playUrl = liveStreams.isNotEmpty
-          ? liveStreams.first.url
-          : (effectiveLivingroom.contains('classroom.zju.edu.cn')
-                ? ZhiyunService.appendTokenToUrl(effectiveLivingroom, token)
-                : effectiveLivingroom);
-
       final ok = await OhosNativeService.instance.openInAppVideoPlayer(
-        url: playUrl,
+        url: effectiveLivingroom,
         title: '${widget.course.name} · $title',
-        streams: liveStreams
-            .map((s) => {'label': s.label, 'url': s.url})
-            .toList(),
+        streams: const [],
         livingroomUrl: effectiveLivingroom,
         token: token,
         ssoCookie: ssoCookie,
-        isLive: true,
-        preferWeb: liveStreams.isEmpty,
+        isLive: isLive,
+        preferWeb: true,
       );
-      if (!ok && context.mounted) {
-        showCupertinoDialog(
-          context: context,
-          builder: (ctx) => CupertinoAlertDialog(
-            title: const Text('未能启动内置播放器'),
-            content: const Text('可尝试改用系统浏览器打开智云课堂页面播放。'),
-            actions: [
-              CupertinoDialogAction(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('取消'),
-              ),
-              CupertinoDialogAction(
-                isDefaultAction: true,
-                onPressed: () {
-                  Navigator.of(ctx).pop();
-                  ZhiyunService.openUrl(effectiveLivingroom);
-                },
-                child: const Text('浏览器打开'),
-              ),
-            ],
-          ),
-        );
+      if (!ok) {
+        await ZhiyunService.openUrl(effectiveLivingroom);
       }
-      return;
+    } catch (_) {
+      await ZhiyunService.openUrl(url);
     }
+  }
 
-    // 回放模式：进入智云课堂展示页面即可，不直接进入播放器
-    if (courseId != null && courseId.isNotEmpty) {
-      final rawCat = await ZhiyunService.fetchCourseCatalogue(
-        courseId,
-        forceRefresh: false,
+  Future<void> _openInAppPlayer(
+    BuildContext context, {
+    required String url,
+    required String title,
+    String? courseId,
+    String? subId,
+    bool preferLive = false,
+  }) async {
+    try {
+      await ZhiyunService.saveLastWatchedReplay(
+        courseName: widget.course.name,
+        lessonTitle: title,
+        livingroomUrl: url,
+        courseId: courseId,
+        subId: subId,
+        courseCode: widget.course.id,
+        scopeKey: _semesterScopeKey,
       );
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (_) {}
+
+    // 统一架构：有 courseId 时（无论直播还是回放）均进入 ZhiyunPlayerPage；
+    // 直播模式立即跳转零阻塞，在 ZhiyunPlayerPage 内直接以内嵌网页播放器打开直播间。
+    if (courseId != null && courseId.isNotEmpty) {
       final replayList = <ZhiyunReplayInfo>[];
-      for (final item in rawCat) {
-        final sid = item['sub_id']?.toString() ?? item['id']?.toString() ?? '';
-        if (sid.isEmpty) continue;
-        final t =
-            item['title']?.toString() ??
-            item['sub_title']?.toString() ??
-            '课节 $sid';
-        final isLive = ZhiyunService.checkIsLive(item: item);
-        final hasReplay = !isLive && ZhiyunService.checkHasReplay(item: item);
-        final lessonDt = ZhiyunService.parseZhiyunTimestamp(
-          item['start_at'] ?? item['class_begin'] ?? item['course_begin'],
-        );
-        replayList.add(
-          ZhiyunReplayInfo(
-            courseId: courseId,
-            subId: sid,
-            courseName: widget.course.name,
-            lessonTitle: t,
-            lessonDate: lessonDt,
-            hasReplay: hasReplay,
-            isLive: isLive,
-            isLessonSpecific: true,
-            livingroomUrl: ZhiyunService.buildCourseLivingroomUrl(
-              courseId,
-              subId: sid,
-            ),
-          ),
-        );
+      if (!preferLive) {
+        try {
+          final rawCat = await ZhiyunService.fetchCourseCatalogue(
+            courseId,
+            forceRefresh: false,
+          ).timeout(const Duration(seconds: 6), onTimeout: () => const []);
+          for (final item in rawCat) {
+            final sid =
+                item['sub_id']?.toString() ?? item['id']?.toString() ?? '';
+            if (sid.isEmpty) continue;
+            final t =
+                item['title']?.toString() ??
+                item['sub_title']?.toString() ??
+                '课节 $sid';
+            final isLive = ZhiyunService.checkIsLive(item: item);
+            final hasReplay =
+                !isLive && ZhiyunService.checkHasReplay(item: item);
+            final lessonDt = ZhiyunService.parseZhiyunTimestamp(
+              item['start_at'] ?? item['class_begin'] ?? item['course_begin'],
+            );
+            replayList.add(
+              ZhiyunReplayInfo(
+                courseId: courseId,
+                subId: sid,
+                courseName: widget.course.name,
+                lessonTitle: t,
+                lessonDate: lessonDt,
+                hasReplay: hasReplay,
+                isLive: isLive,
+                isLessonSpecific: true,
+                livingroomUrl: ZhiyunService.buildCourseLivingroomUrl(
+                  courseId,
+                  subId: sid,
+                ),
+              ),
+            );
+          }
+        } catch (_) {}
       }
       if (!context.mounted) return;
       Navigator.of(context, rootNavigator: true).push(
@@ -716,27 +686,21 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
             initialTitle: title,
             livingroomUrl: url,
             replays: replayList,
-            preferLive: false,
+            preferLive: preferLive,
+            course: widget.course,
+            period: widget.period,
           ),
         ),
       );
       return;
     }
 
-    final authResults = await Future.wait<String?>([
-      ZhiyunService.ensureValidToken(),
-      ZhiyunService.ensureSsoCookieValue(),
-    ]);
-    final token = authResults[0] ?? ZhiyunService.getCachedZhiyunToken();
-    final ssoCookie = authResults[1];
-    final effectiveUrl = ZhiyunService.appendTokenToUrl(url, token);
-    await OhosNativeService.instance.openInAppVideoPlayer(
-      url: effectiveUrl,
-      title: '${widget.course.name} · $title',
-      livingroomUrl: effectiveUrl,
-      token: token,
-      ssoCookie: ssoCookie,
-      preferWeb: true,
+    await _openAndRecord(
+      url,
+      title,
+      courseId: courseId,
+      subId: subId,
+      isLive: preferLive,
     );
   }
 

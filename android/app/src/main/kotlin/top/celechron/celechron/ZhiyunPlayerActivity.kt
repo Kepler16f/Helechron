@@ -1093,7 +1093,7 @@ class ZhiyunPlayerActivity : Activity() {
                 "if(mt.indexOf('统一身份认证')>=0||mt.indexOf('通行证')>=0||mt.indexOf('未登录')>=0||mt.indexOf('请先登录')>=0||mt.indexOf('跳转')>=0){return 'MODAL';}" +
                 "}" +
                 "}" +
-                "if(document.querySelector('video')||document.querySelector('.cmc-player-container')||document.querySelector('#cmc_player_container')||document.querySelector('.prism-player')){return 'READY';}" +
+                "if(document.querySelector('video')||document.querySelector('canvas')||document.querySelector('.cmc-player-container')||document.querySelector('#cmc_player_container')||document.querySelector('.prism-player')||document.querySelector('.xgplayer')||document.querySelector('.living-room-wrapper')){return 'READY';}" +
                 "var bodyTxt=(document.body&&document.body.innerText||'');" +
                 "if(bodyTxt.indexOf('统一身份认证')>=0||bodyTxt.indexOf('登录浙大通行证')>=0||bodyTxt.indexOf('请先登录')>=0){return 'AUTH';}" +
                 "return bodyTxt.trim().length>20?'READY':'WAIT';" +
@@ -1303,6 +1303,7 @@ class ZhiyunPlayerActivity : Activity() {
 
     private fun startPlayback() {
         val openWebDirectly = preferWeb ||
+            isLiveStream ||
             (rawInitialUrl.isNotEmpty() && !isDirectStreamUrl(rawInitialUrl))
         val fallback = webFallbackUrl.ifEmpty { rawInitialUrl }
         if (openWebDirectly && fallback.isNotEmpty()) {
@@ -1466,7 +1467,7 @@ class ZhiyunPlayerActivity : Activity() {
         videoContainer.removeAllViews()
         gestureLayer.visibility = View.GONE
         bufferingSpinner.visibility = View.GONE
-        startWebAuthCover(9000L)
+        startWebAuthCover(6000L)
 
         val customViewHolder = FrameLayout(this).apply {
             visibility = View.GONE
@@ -1532,11 +1533,12 @@ class ZhiyunPlayerActivity : Activity() {
                 append("document.cookie='token=$escapedToken;path=/';")
             }
             append(
-                "if(location.hostname.indexOf('zjuam.zju.edu.cn')<0&&!document.getElementById('helechron-zy-fix')){" +
+                "var isLivingroomPage=(location.pathname||'').indexOf('livingroom')>=0||(location.href||'').indexOf('livingroom')>=0;" +
+                    "if(location.hostname.indexOf('zjuam.zju.edu.cn')<0&&isLivingroomPage&&!document.getElementById('helechron-zy-fix')){" +
                     "var s=document.createElement('style');s.id='helechron-zy-fix';" +
                     "s.innerHTML='html,body,#app{background:#000!important;margin:0!important;padding:0!important;overflow:hidden!important;width:100vw!important;height:100vh!important;}" +
                     ".header-wrapper,.living-header,.living-right,.right-wrapper,.nav-bar,.catalog-wrapper,.sidebar-wrapper,.chat-wrapper,.danmu-send-wrap{display:none!important;}" +
-                    ".living-room-wrapper,.living-content,.left-wrapper,.player-wrapper,.cmc-player-container,#cmc_player_container,.prism-player{position:fixed!important;left:0!important;top:0!important;right:0!important;bottom:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;margin:0!important;padding:0!important;z-index:9999!important;background:#000!important;}" +
+                    ".living-room-wrapper,.living-content,.left-wrapper,.player-wrapper,.cmc-player-container,#cmc_player_container,.prism-player,.xgplayer,.dplayer{position:fixed!important;left:0!important;top:0!important;right:0!important;bottom:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;margin:0!important;padding:0!important;z-index:9999!important;background:#000!important;}" +
                     "video{width:100%!important;height:100%!important;object-fit:contain!important;background:#000!important;}';" +
                     "(document.head||document.documentElement).appendChild(s);" +
                     "};" +
