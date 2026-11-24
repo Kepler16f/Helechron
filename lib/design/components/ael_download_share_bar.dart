@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 
+import 'package:celechron/design/components/ael_chip.dart';
 import 'package:celechron/design/icons/ael_icons.dart';
-import 'package:celechron/design/theme/ael_theme.dart';
 import 'package:celechron/services/file_download_share_helper.dart';
 
 /// 「下载」与「分享」分离的紧凑操作条。
@@ -76,70 +76,26 @@ class _AelDownloadShareBarState extends State<AelDownloadShareBar> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = AelTheme.colorsOf(context);
-    final pad = EdgeInsets.symmetric(
-      horizontal: widget.compact ? 9 : 12,
-      vertical: widget.compact ? 5 : 7,
-    );
-    Widget pill({
-      required IconData icon,
-      required String label,
-      required Color bg,
-      required Color fg,
-      required VoidCallback? onTap,
-    }) {
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Opacity(
-          opacity: onTap == null ? 0.5 : 1,
-          child: Container(
-            padding: pad,
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 14, color: fg),
-                const SizedBox(width: 4),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: fg,
-                  ),
-                ),
-              ],
-            ),
+    return Opacity(
+      opacity: _busy ? 0.5 : 1,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AelChip(
+            leadingIcon: _downloaded ? AelIcons.check : AelIcons.download,
+            label: _downloaded ? '已下载' : '下载',
+            tone: _downloaded ? AelChipTone.success : AelChipTone.primary,
+            onTap: _busy ? null : () => _run(false),
           ),
-        ),
-      );
-    }
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        pill(
-          icon: _downloaded ? AelIcons.check : AelIcons.download,
-          label: _downloaded ? '已下载' : '下载',
-          bg: _downloaded ? colors.successContainer : colors.primaryContainer,
-          fg: _downloaded
-              ? colors.onSuccessContainer
-              : colors.onPrimaryContainer,
-          onTap: _busy ? null : () => _run(false),
-        ),
-        const SizedBox(width: 6),
-        pill(
-          icon: AelIcons.share,
-          label: '分享',
-          bg: colors.tonalTileBg,
-          fg: colors.textPrimary,
-          onTap: _busy ? null : () => _run(true),
-        ),
-      ],
+          const SizedBox(width: 6),
+          AelChip(
+            leadingIcon: AelIcons.share,
+            label: '分享',
+            tone: AelChipTone.neutral,
+            onTap: _busy ? null : () => _run(true),
+          ),
+        ],
+      ),
     );
   }
 }

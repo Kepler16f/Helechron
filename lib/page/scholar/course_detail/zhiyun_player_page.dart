@@ -762,7 +762,9 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                                 color: AelSemanticPalette.pureBlack.withValues(
                                   alpha: 0.6,
                                 ),
-                                borderRadius: BorderRadius.circular(6),
+                                borderRadius: BorderRadius.circular(
+                                  AelRadius.pill,
+                                ),
                               ),
                               child: const Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -889,21 +891,25 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
+                            DecoratedBox(
+                              decoration: ShapeDecoration(
                                 color: colors.primaryContainer,
-                                borderRadius: BorderRadius.circular(4),
+                                shape: AelShapes.squircle(AelRadius.pill),
                               ),
-                              child: Text(
-                                seg.timeLabel,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontFamily: 'monospace',
-                                  color: colors.onPrimaryContainer,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                child: Text(
+                                  seg.timeLabel,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontFamily: 'monospace',
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.2,
+                                    color: colors.onPrimaryContainer,
+                                  ),
                                 ),
                               ),
                             ),

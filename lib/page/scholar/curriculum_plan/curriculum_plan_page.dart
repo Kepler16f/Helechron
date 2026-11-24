@@ -666,7 +666,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                     children: [
                       Expanded(
                         child: Text(
-                          '第一课堂 ${_c.firstClassroomEarnedCredits.toStringAsFixed(1)}/${_c.firstClassroomRequiredCredits.toStringAsFixed(1)} · 二/三/四课堂 ${_c.practiceEffectiveEarned.toStringAsFixed(1)}/${_c.practiceRequiredTotal.toStringAsFixed(1)}',
+                          '第一课堂 ${_c.firstClassroomEarnedCredits.toStringAsFixed(1)}/${_c.firstClassroomRequiredCredits.toStringAsFixed(1)} · 二/三/四课堂 ${_c.practiceEffectiveEarned.toStringAsFixed(2)}/${_c.practiceRequiredTotal.toStringAsFixed(2)}',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -707,7 +707,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '二课 ${_c.pt2Earned.toStringAsFixed(1)}/${_c.pt2Required.toStringAsFixed(1)} · 三课 ${_c.pt3Earned.toStringAsFixed(1)}/${_c.pt3Required.toStringAsFixed(1)} · 四课 ${_c.pt4Earned.toStringAsFixed(1)}/${_c.pt4Required.toStringAsFixed(1)}',
+                    '二课 ${_c.pt2Earned.toStringAsFixed(2)}/${_c.pt2Required.toStringAsFixed(2)} · 三课 ${_c.pt3Earned.toStringAsFixed(2)}/${_c.pt3Required.toStringAsFixed(2)} · 四课 ${_c.pt4Earned.toStringAsFixed(2)}/${_c.pt4Required.toStringAsFixed(2)}',
                     style: TextStyle(fontSize: 11.5, color: secondary),
                   ),
                 ],
@@ -925,7 +925,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                                 ),
                               ),
                               Text(
-                                '${got.toStringAsFixed(1)}/${req.toStringAsFixed(1)}',
+                                '${got.toStringAsFixed(isPractice ? 2 : 1)}/${req.toStringAsFixed(isPractice ? 2 : 1)}',
                                 style: TextStyle(
                                   fontSize: 12.5,
                                   fontWeight: FontWeight.w700,
@@ -954,8 +954,9 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                             child: Text(
                               [
                                 if (isPractice && rawPracticePts != null)
-                                  '素拓实获 ${rawPracticePts.toStringAsFixed(1)} 分 · 有效计 ${got.toStringAsFixed(1)} 分',
-                                if (gap > 0) '缺口 ${gap.toStringAsFixed(1)} 分',
+                                  '素拓实获 ${rawPracticePts.toStringAsFixed(2)} 分 · 有效计 ${got.toStringAsFixed(2)} 分',
+                                if (gap > 0)
+                                  '缺口 ${gap.toStringAsFixed(isPractice ? 2 : 1)} 分',
                                 if (selNoCredit > 0) '已选/重修未获 $selNoCredit 门',
                                 if (m['choice_rule'] is Map)
                                   '选课约束: ${(m['choice_rule'] as Map)['label'] ?? '选修组'}',
@@ -1361,14 +1362,14 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                       ? reqP
                       : (double.tryParse(sec.creditsRaw) ?? 0.0);
                   badgeText = displayReq > 0
-                      ? '已获 ${gotP.toStringAsFixed(1)}/${displayReq.toStringAsFixed(1)}分'
-                      : '已获 ${gotP.toStringAsFixed(1)}分';
+                      ? '已获 ${gotP.toStringAsFixed(2)}/${displayReq.toStringAsFixed(2)}分'
+                      : '已获 ${gotP.toStringAsFixed(2)}分';
                   badgeColor = displayReq > 0 && gotP >= displayReq
                       ? green
                       : yellow;
                 } else if (practiceIdx == 0) {
                   badgeText =
-                      '已获 ${_c.practiceEffectiveEarned.toStringAsFixed(1)}/${_c.practiceRequiredTotal.toStringAsFixed(1)}分';
+                      '已获 ${_c.practiceEffectiveEarned.toStringAsFixed(2)}/${_c.practiceRequiredTotal.toStringAsFixed(2)}分';
                   badgeColor =
                       _c.practiceRequiredTotal > 0 &&
                           _c.practiceEffectiveEarned >= _c.practiceRequiredTotal
@@ -1485,16 +1486,16 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                                 Expanded(
                                   child: Text(
                                     practiceIdx == 0
-                                        ? '二课 ${_c.pt2Earned.toStringAsFixed(1)} · 三课 ${_c.pt3Earned.toStringAsFixed(1)} · 四课 ${_c.pt4Earned.toStringAsFixed(1)}（已与素拓看板实时同步）'
+                                        ? '二课 ${_c.pt2Earned.toStringAsFixed(2)} · 三课 ${_c.pt3Earned.toStringAsFixed(2)} · 四课 ${_c.pt4Earned.toStringAsFixed(2)}（已与素拓看板实时同步）'
                                         : '第${practiceIdx == 2
                                               ? '二'
                                               : practiceIdx == 3
                                               ? '三'
                                               : '四'}课堂实获 ${practiceIdx == 2
-                                              ? _c.pt2Earned.toStringAsFixed(1)
+                                              ? _c.pt2Earned.toStringAsFixed(2)
                                               : practiceIdx == 3
-                                              ? _c.pt3Earned.toStringAsFixed(1)
-                                              : _c.pt4Earned.toStringAsFixed(1)} 分（已同步素拓看板）',
+                                              ? _c.pt3Earned.toStringAsFixed(2)
+                                              : _c.pt4Earned.toStringAsFixed(2)} 分（已同步素拓看板）',
                                     style: TextStyle(
                                       fontSize: 11.5,
                                       color: secondary,
