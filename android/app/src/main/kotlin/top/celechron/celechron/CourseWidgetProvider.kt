@@ -15,6 +15,32 @@ class CourseWidgetProvider : AppWidgetProvider() {
 
     companion object {
         const val ACTION_REFRESH = "top.celechron.celechron.ACTION_REFRESH_COURSE"
+        private val DEFAULT_ACCENT = Color.parseColor("#007AFF")
+        private val COLOR_ONGOING = Color.parseColor("#16A34A")
+        private val COLOR_URGENT = Color.parseColor("#D97706")
+        private val COLOR_IDLE = Color.parseColor("#6B7280")
+
+        fun resolveAccentColor(rawHex: String?): Int {
+            val cleaned = rawHex?.trim()?.removePrefix("#") ?: ""
+            return try {
+                when (cleaned.length) {
+                    6 -> Color.parseColor("#$cleaned")
+                    8 -> Color.parseColor("#${cleaned.substring(2)}")
+                    else -> DEFAULT_ACCENT
+                }
+            } catch (_: Exception) {
+                DEFAULT_ACCENT
+            }
+        }
+
+        private fun softTintColor(rgbColor: Int): Int {
+            return Color.argb(
+                0x1F,
+                Color.red(rgbColor),
+                Color.green(rgbColor),
+                Color.blue(rgbColor)
+            )
+        }
 
         fun updateAll(context: Context) {
             val appWidgetManager = AppWidgetManager.getInstance(context)
@@ -53,35 +79,53 @@ class CourseWidgetProvider : AppWidgetProvider() {
         val prefs = context.getSharedPreferences(MainActivity.PREFS_NAME, Context.MODE_PRIVATE)
         val coursesJsonStr = prefs.getString("coursesJson", "[]") ?: "[]"
         val leadWindowMinutes = prefs.getInt("leadWindowMinutes", 120)
+        val accentColor = resolveAccentColor(prefs.getString("themePrimaryHex", "#007AFF"))
 
         val now = System.currentTimeMillis()
-        val courseData = resolveCurrentCourse(coursesJsonStr, now, leadWindowMinutes)
+        val courseData = resolveCurrentCourse(coursesJsonStr, now, leadWindowMinutes, accentColor)
+        val combinedStatus = if (courseData.statusTime.isNotEmpty()) {
+            "${courseData.status} · ${courseData.statusTime}"
+        } else {
+            courseData.status
+        }
 
         for (appWidgetId in appWidgetIds) {
             val views = RemoteViews(context.packageName, R.layout.widget_course)
 
+            views.setInt(R.id.widget_brand_dot, "setColorFilter", accentColor)
+            views.setInt(R.id.widget_refresh_bg, "setColorFilter", accentColor)
+            views.setInt(R.id.widget_status_dot, "setColorFilter", courseData.statusColor)
+            views.setInt(
+                R.id.widget_status_pill_bg,
+                "setColorFilter",
+                softTintColor(courseData.statusColor)
+            )
             views.setTextViewText(R.id.widget_course_name, courseData.name)
-            views.setTextViewText(R.id.widget_course_status, courseData.status)
+            views.setTextViewText(R.id.widget_course_status, combinedStatus)
             views.setTextColor(R.id.widget_course_status, courseData.statusColor)
-            views.setTextViewText(R.id.widget_course_status_time, courseData.statusTime)
-            views.setTextColor(R.id.widget_course_status_time, courseData.statusColor)
 
             if (courseData.hasCourse) {
-                views.setViewVisibility(R.id.widget_course_time, View.VISIBLE)
+                views.setViewVisibility(R.id.widget_course_info_group, View.VISIBLE)
+                views.setViewVisibility(R.id.widget_course_empty_hint, View.GONE)
+                views.setInt(R.id.widget_time_bar, "setColorFilter", courseData.statusColor)
                 views.setTextViewText(R.id.widget_course_time, courseData.time)
 
-                if (courseData.location.isNotEmpty()) {
-                    views.setViewVisibility(R.id.widget_course_location, View.VISIBLE)
-                    views.setTextViewText(R.id.widget_course_location, courseData.location)
+                val hasLoc = courseData.location.isNotEmpty()
+                val hasTeacher = courseData.teacher.isNotEmpty()
+                if (hasLoc || hasTeacher) {
+                    views.setViewVisibility(R.id.widget_course_meta_row, View.VISIBLE)
+                    views.setTextViewText(
+                        R.id.widget_course_location,
+                        if (hasLoc) courseData.location else courseData.teacher
+                    )
+                    if (hasLoc && hasTeacher) {
+                        views.setViewVisibility(R.id.widget_course_teacher, View.VISIBLE)
+                        views.setTextViewText(R.id.widget_course_teacher, courseData.teacher)
+                    } else {
+                        views.setViewVisibility(R.id.widget_course_teacher, View.GONE)
+                    }
                 } else {
-                    views.setViewVisibility(R.id.widget_course_location, View.GONE)
-                }
-
-                if (courseData.teacher.isNotEmpty()) {
-                    views.setViewVisibility(R.id.widget_course_teacher, View.VISIBLE)
-                    views.setTextViewText(R.id.widget_course_teacher, courseData.teacher)
-                } else {
-                    views.setViewVisibility(R.id.widget_course_teacher, View.GONE)
+                    views.setViewVisibility(R.id.widget_course_meta_row, View.GONE)
                 }
 
                 if (courseData.showProgress) {
@@ -91,13 +135,11 @@ class CourseWidgetProvider : AppWidgetProvider() {
                     views.setViewVisibility(R.id.widget_course_progress, View.GONE)
                 }
             } else {
-                views.setViewVisibility(R.id.widget_course_time, View.GONE)
-                views.setViewVisibility(R.id.widget_course_location, View.GONE)
-                views.setViewVisibility(R.id.widget_course_teacher, View.GONE)
+                views.setViewVisibility(R.id.widget_course_info_group, View.GONE)
+                views.setViewVisibility(R.id.widget_course_empty_hint, View.VISIBLE)
                 views.setViewVisibility(R.id.widget_course_progress, View.GONE)
             }
 
-            // Click root -> open MainActivity
             val launchIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
@@ -107,7 +149,6 @@ class CourseWidgetProvider : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widget_course_root, pendingLaunch)
 
-            // Click refresh -> broadcast refresh
             val refreshIntent = Intent(context, CourseWidgetProvider::class.java).apply {
                 action = ACTION_REFRESH
             }
@@ -134,7 +175,12 @@ class CourseWidgetProvider : AppWidgetProvider() {
         val hasCourse: Boolean
     )
 
-    private fun resolveCurrentCourse(coursesJsonStr: String, now: Long, leadWindowMinutes: Int): CourseDisplayData {
+    private fun resolveCurrentCourse(
+        coursesJsonStr: String,
+        now: Long,
+        leadWindowMinutes: Int,
+        accentColor: Int
+    ): CourseDisplayData {
         try {
             val jsonArray = JSONArray(coursesJsonStr)
             val courses = mutableListOf<CourseItem>()
@@ -153,7 +199,6 @@ class CourseWidgetProvider : AppWidgetProvider() {
             }
             courses.sortBy { it.s }
 
-            // 1. Check if currently in class
             for (c in courses) {
                 if (now in c.s..c.e) {
                     val remainingMin = Math.max(1, ((c.e - now) / 60000).toInt())
@@ -161,9 +206,9 @@ class CourseWidgetProvider : AppWidgetProvider() {
                     val progress = (((now - c.s) * 100) / totalDuration).toInt().coerceIn(0, 100)
                     return CourseDisplayData(
                         name = c.n,
-                        status = "正在上课",
-                        statusTime = "距下课 $remainingMin 分钟",
-                        statusColor = Color.parseColor("#1E88E5"),
+                        status = "上课中",
+                        statusTime = "剩${remainingMin}分",
+                        statusColor = COLOR_ONGOING,
                         time = c.t,
                         location = c.l,
                         teacher = c.c,
@@ -174,16 +219,25 @@ class CourseWidgetProvider : AppWidgetProvider() {
                 }
             }
 
-            // 2. Check for next upcoming course
             for (c in courses) {
                 if (now < c.s) {
                     val diffMin = ((c.s - now) / 60000).toInt()
-                    val (status, statusTime, color) = if (diffMin <= leadWindowMinutes) {
-                        val timeStr = if (diffMin < 60) "${diffMin}分钟后" else "${diffMin / 60}小时${diffMin % 60}分后"
-                        Triple("下一节", timeStr, Color.parseColor("#E65100"))
-                    } else {
-                        val startTime = c.t.split(" - ").firstOrNull() ?: ""
-                        Triple("今日课程", startTime, Color.parseColor("#2E7D32"))
+                    val (status, statusTime, color) = when {
+                        diffMin <= 0 -> Triple("即将开始", "", accentColor)
+                        diffMin <= 20 -> Triple("${diffMin}分钟后上课", "", COLOR_URGENT)
+                        diffMin <= leadWindowMinutes -> {
+                            val timeStr = if (diffMin < 60) {
+                                "${diffMin}分钟后"
+                            } else {
+                                val m = diffMin % 60
+                                if (m > 0) "${diffMin / 60}小时${m}分后" else "${diffMin / 60}小时后"
+                            }
+                            Triple(timeStr, "", accentColor)
+                        }
+                        else -> {
+                            val startTime = c.t.split(" - ").firstOrNull() ?: ""
+                            Triple("待上课", startTime, accentColor)
+                        }
                     }
                     return CourseDisplayData(
                         name = c.n,
@@ -203,9 +257,9 @@ class CourseWidgetProvider : AppWidgetProvider() {
             val isFinished = courses.isNotEmpty()
             return CourseDisplayData(
                 name = if (isFinished) "今日课程已结束" else "今日暂无课程",
-                status = if (isFinished) "全部结课" else "无日程",
+                status = if (isFinished) "全部结课" else "暂无日程",
                 statusTime = "",
-                statusColor = Color.parseColor("#8E8E93"),
+                statusColor = COLOR_IDLE,
                 time = "",
                 location = "",
                 teacher = "",
@@ -213,12 +267,12 @@ class CourseWidgetProvider : AppWidgetProvider() {
                 progress = 0,
                 hasCourse = false
             )
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             return CourseDisplayData(
                 name = "今日暂无课程",
-                status = "无日程",
+                status = "暂无日程",
                 statusTime = "",
-                statusColor = Color.parseColor("#8E8E93"),
+                statusColor = COLOR_IDLE,
                 time = "",
                 location = "",
                 teacher = "",

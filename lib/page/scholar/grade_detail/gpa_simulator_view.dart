@@ -1,16 +1,11 @@
 import 'package:flutter/cupertino.dart'
     show
-        CupertinoActionSheet,
-        CupertinoActionSheetAction,
-        CupertinoAlertDialog,
         CupertinoButton,
-        CupertinoDialogAction,
         CupertinoPageScaffold,
         CupertinoSlider,
         CupertinoSwitch,
         CupertinoTextField,
-        showCupertinoDialog,
-        showCupertinoModalPopup;
+        OverlayVisibilityMode;
 import 'package:flutter/material.dart' show Divider;
 import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
@@ -404,145 +399,139 @@ class GpaSimulatorPage extends StatelessWidget {
   // ==================== 弹窗交互 ====================
 
   void _showAddCourseDialog(BuildContext context) {
-    final colors = AelTheme.colorsOf(context);
     final nameController = TextEditingController(text: '');
     final creditController = TextEditingController(text: '2.0');
     double selectedScore = 4.5;
 
-    showCupertinoDialog(
+    showAelDialog<void>(
       context: context,
-      builder: (dialogCtx) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return CupertinoAlertDialog(
-              title: const Text('添加模拟课程'),
-              content: Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Column(
-                  children: [
-                    CupertinoTextField(
-                      controller: nameController,
-                      placeholder: '课程名称 (例如: 计算机系统)',
-                      autofocus: true,
-                      style: TextStyle(color: colors.textPrimary),
-                      placeholderStyle: TextStyle(color: colors.textTertiary),
-                      decoration: BoxDecoration(
-                        color: colors.tonalTileBg,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    CupertinoTextField(
-                      controller: creditController,
-                      placeholder: '学分 (例如: 3.5)',
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      style: TextStyle(color: colors.textPrimary),
-                      placeholderStyle: TextStyle(color: colors.textTertiary),
-                      decoration: BoxDecoration(
-                        color: colors.tonalTileBg,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '预估绩点:',
-                          style: TextStyle(color: colors.textPrimary),
-                        ),
-                        Text(
-                          '${selectedScore.toStringAsFixed(1)} (${Grade.fivePointToLetter(selectedScore)})',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: colors.textPrimary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    CupertinoSlider(
-                      value: selectedScore,
-                      min: 0.0,
-                      max: 5.0,
-                      divisions: 10,
-                      activeColor: colors.primary,
-                      onChanged: (v) {
-                        setDialogState(() {
-                          selectedScore = snapToZjuStep(v);
-                        });
-                      },
-                    ),
-                  ],
+      title: '添加模拟课程',
+      content: StatefulBuilder(
+        builder: (dialogCtx, setDialogState) {
+          final colors = AelTheme.colorsOf(dialogCtx);
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              CupertinoTextField(
+                controller: nameController,
+                placeholder: '课程名称 (例如: 计算机系统)',
+                autofocus: true,
+                clearButtonMode: OverlayVisibilityMode.editing,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AelSpacing.md,
+                  vertical: AelSpacing.md,
+                ),
+                style: TextStyle(color: colors.textPrimary, fontSize: 15),
+                placeholderStyle: TextStyle(color: colors.textTertiary),
+                decoration: BoxDecoration(
+                  color: colors.tonalTileBg,
+                  borderRadius: BorderRadius.circular(AelRadius.tile),
                 ),
               ),
-              actions: [
-                CupertinoDialogAction(
-                  isDestructiveAction: true,
-                  onPressed: () => Navigator.of(dialogCtx).pop(),
-                  child: const Text('取消'),
+              const SizedBox(height: AelSpacing.sm + 2),
+              CupertinoTextField(
+                controller: creditController,
+                placeholder: '学分 (例如: 3.5)',
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
                 ),
-                CupertinoDialogAction(
-                  isDefaultAction: true,
-                  onPressed: () {
-                    final name = nameController.text.trim();
-                    final credit =
-                        double.tryParse(creditController.text.trim()) ?? 2.0;
-                    if (name.isNotEmpty) {
-                      _controller.addCustomCourse(
-                        name: name,
-                        credit: credit,
-                        expectedFivePoint: selectedScore,
-                      );
-                    }
-                    Navigator.of(dialogCtx).pop();
-                  },
-                  child: const Text('添加'),
+                clearButtonMode: OverlayVisibilityMode.editing,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AelSpacing.md,
+                  vertical: AelSpacing.md,
                 ),
-              ],
-            );
+                style: TextStyle(color: colors.textPrimary, fontSize: 15),
+                placeholderStyle: TextStyle(color: colors.textTertiary),
+                decoration: BoxDecoration(
+                  color: colors.tonalTileBg,
+                  borderRadius: BorderRadius.circular(AelRadius.tile),
+                ),
+              ),
+              const SizedBox(height: AelSpacing.md + 2),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '预估绩点',
+                    style: TextStyle(fontSize: 14, color: colors.textSecondary),
+                  ),
+                  Text(
+                    '${selectedScore.toStringAsFixed(1)} (${Grade.fivePointToLetter(selectedScore)})',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: colors.primary,
+                    ),
+                  ),
+                ],
+              ),
+              CupertinoSlider(
+                value: selectedScore,
+                min: 0.0,
+                max: 5.0,
+                divisions: 10,
+                activeColor: colors.primary,
+                onChanged: (v) {
+                  setDialogState(() {
+                    selectedScore = snapToZjuStep(v);
+                  });
+                },
+              ),
+            ],
+          );
+        },
+      ),
+      actions: [
+        const AelDialogAction<void>(
+          label: '取消',
+          variant: AelButtonVariant.tonal,
+        ),
+        AelDialogAction<void>(
+          label: '添加',
+          variant: AelButtonVariant.primary,
+          onPressed: () {
+            final name = nameController.text.trim();
+            final credit = double.tryParse(creditController.text.trim()) ?? 2.0;
+            if (name.isNotEmpty) {
+              _controller.addCustomCourse(
+                name: name,
+                credit: credit,
+                expectedFivePoint: selectedScore,
+              );
+            }
           },
-        );
-      },
-    );
+        ),
+      ],
+    ).then((_) {
+      nameController.dispose();
+      creditController.dispose();
+    });
   }
 
   void _showSimulatorResetActionSheet(BuildContext context) {
-    showCupertinoModalPopup(
+    showAelActionSheet<void>(
       context: context,
-      builder: (ctx) => CupertinoActionSheet(
-        title: const Text('重置 GPA 模拟器'),
-        message: const Text('选择重置范围'),
-        actions: [
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              _controller.resetSimulatedScores();
-            },
-            child: const Text('恢复原始预估分'),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              _controller.resetCoursesFromCurrentSemester();
-            },
-            child: const Text('重新读取本学期在读课程'),
-          ),
-          CupertinoActionSheetAction(
-            isDestructiveAction: true,
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              _controller.presetAllScores(5.0);
-            },
-            child: const Text('一键全部拉满 5.0'),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          child: const Text('取消'),
-          onPressed: () => Navigator.of(ctx).pop(),
+      title: '重置 GPA 模拟器',
+      message: '选择重置范围',
+      actions: [
+        AelActionOption<void>(
+          label: '恢复原始预估分',
+          icon: AelIcons.refresh,
+          onTap: () => _controller.resetSimulatedScores(),
         ),
-      ),
+        AelActionOption<void>(
+          label: '重新读取本学期在读课程',
+          icon: AelIcons.book,
+          onTap: () => _controller.resetCoursesFromCurrentSemester(),
+        ),
+        AelActionOption<void>(
+          label: '一键全部拉满 5.0',
+          icon: AelIcons.sparkles,
+          isDestructive: true,
+          onTap: () => _controller.presetAllScores(5.0),
+        ),
+      ],
     );
   }
 

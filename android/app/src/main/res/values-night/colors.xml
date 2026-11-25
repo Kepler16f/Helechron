@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="widget_background">#242426</color>
-    <color name="widget_text_primary">#FFFFFF</color>
-    <color name="widget_text_secondary">#98989D</color>
-    <color name="widget_text_tertiary">#636366</color>
-    <color name="widget_accent">#0A84FF</color>
+    <color name="widget_background">#191C22</color>
+    <color name="widget_tonal_surface">#232730</color>
+    <color name="widget_text_primary">#F3F4F6</color>
+    <color name="widget_text_secondary">#B4BAC6</color>
+    <color name="widget_text_tertiary">#7A8191</color>
+    <color name="widget_accent">#3B82F6</color>
     <color name="widget_button_text">#FFFFFF</color>
-    <color name="widget_progress_track">#3A3A3C</color>
+    <color name="widget_progress_track">#2B2E36</color>
+    <color name="widget_qr_border">#26FFFFFF</color>
 </resources>

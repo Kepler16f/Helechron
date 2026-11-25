@@ -731,37 +731,21 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
     final count = await ZhiyunService.syncFromMyCourses();
     if (context.mounted) {
       if (count > 0) {
-        showCupertinoDialog(
+        showAelAlertDialog(
           context: context,
-          builder: (dialogCtx) => CupertinoAlertDialog(
-            title: const Text('同步完成'),
-            content: Text('已从智云课堂「我的课程」成功同步并智能匹配了 $count 门专属课程。'),
-            actions: [
-              CupertinoDialogAction(
-                child: const Text('好'),
-                onPressed: () => Navigator.of(dialogCtx).pop(),
-              ),
-            ],
-          ),
+          title: '同步完成',
+          message: '已从智云课堂「我的课程」成功同步并智能匹配了 $count 门专属课程。',
+          confirmLabel: '好',
         );
         setState(() {
           _load();
         });
       } else {
-        showCupertinoDialog(
+        showAelAlertDialog(
           context: context,
-          builder: (dialogCtx) => CupertinoAlertDialog(
-            title: const Text('同步提示'),
-            content: const Text(
-              '未获取到课程更新，请确保已登录浙大统一身份认证或稍后重试。您亦可直接输入课程ID完成绑定。',
-            ),
-            actions: [
-              CupertinoDialogAction(
-                child: const Text('好'),
-                onPressed: () => Navigator.of(dialogCtx).pop(),
-              ),
-            ],
-          ),
+          title: '同步提示',
+          message: '未获取到课程更新，请确保已登录浙大统一身份认证或稍后重试。您亦可直接输入课程ID完成绑定。',
+          confirmLabel: '好',
         );
       }
     }
@@ -769,134 +753,101 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
 
   void _showBindDialog(BuildContext context, String currentId) {
     final textController = TextEditingController(text: currentId);
-    showCupertinoDialog(
+    showAelDialog<void>(
       context: context,
-      builder: (dialogCtx) => CupertinoAlertDialog(
-        title: const Text('绑定智云课堂ID'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 8.0),
-          child: Column(
+      title: '绑定智云课堂 ID',
+      message: '在浏览器打开智云课堂对应课程后，复制网页链接或直接输入课程 ID（例如 85940）：',
+      content: Builder(
+        builder: (dialogCtx) {
+          final colors = AelTheme.colorsOf(dialogCtx);
+          return Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                '在浏览器打开智云课堂对应课程后，复制网页链接或直接输入课程ID（例如 85940）：',
-                style: TextStyle(fontSize: 13),
+              CupertinoTextField(
+                controller: textController,
+                placeholder: '85940 或 粘贴课程网页链接',
+                autofocus: true,
+                clearButtonMode: OverlayVisibilityMode.editing,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AelSpacing.md,
+                  vertical: AelSpacing.md,
+                ),
+                style: TextStyle(color: colors.textPrimary, fontSize: 15),
+                placeholderStyle: TextStyle(color: colors.textTertiary),
+                decoration: BoxDecoration(
+                  color: colors.tonalTileBg,
+                  borderRadius: BorderRadius.circular(AelRadius.tile),
+                ),
               ),
-              const SizedBox(height: 8),
-              Builder(
-                builder: (fieldCtx) {
-                  final dialogColors = AelTheme.colorsOf(fieldCtx);
-                  final colors = AelTheme.colorsOf(context);
-                  return Column(
-                    children: [
-                      CupertinoTextField(
-                        controller: textController,
-                        placeholder: '85940 或 粘贴课程网页链接',
-                        autofocus: true,
-                        clearButtonMode: OverlayVisibilityMode.editing,
-                        style: TextStyle(color: dialogColors.textPrimary),
-                        placeholderStyle: TextStyle(
-                          color: dialogColors.textTertiary,
-                        ),
-                        decoration: BoxDecoration(
-                          color: dialogColors.tonalTileBg,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Center(
-                        child: CupertinoButton(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          color: colors.tonalTileBg,
-                          borderRadius: BorderRadius.circular(8),
-                          minimumSize: const Size(32, 32),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                AelIcons.refresh,
-                                size: 14,
-                                color: colors.textPrimary,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '从「我的课程」自动同步匹配',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: colors.textPrimary,
-                                ),
-                              ),
-                            ],
-                          ),
-                          onPressed: () async {
-                            Navigator.of(dialogCtx).pop();
-                            await _handleSyncMyCourses(context);
-                          },
-                        ),
-                      ),
-                    ],
-                  );
+              const SizedBox(height: AelSpacing.md),
+              AelButton(
+                label: '从「我的课程」自动同步匹配',
+                icon: AelIcons.refresh,
+                variant: AelButtonVariant.tonal,
+                expanded: true,
+                onPressed: () async {
+                  Navigator.of(dialogCtx).pop();
+                  await _handleSyncMyCourses(context);
                 },
               ),
             ],
-          ),
-        ),
-        actions: [
-          if (currentId.isNotEmpty)
-            CupertinoDialogAction(
-              isDestructiveAction: true,
-              child: const Text('解绑'),
-              onPressed: () async {
-                Navigator.of(dialogCtx).pop();
-                await ZhiyunService.deleteCourseId(
-                  widget.course.name,
-                  courseCode: widget.course.id,
-                  courseId: currentId,
-                  course: widget.course,
-                  semesterName: widget.semesterName,
-                  preferredHalfTag: widget.preferredHalfTag,
-                  targetDate: widget.period?.startTime,
-                );
-                setState(() {
-                  _load();
-                });
-              },
-            ),
-          CupertinoDialogAction(
-            child: const Text('取消'),
-            onPressed: () => Navigator.of(dialogCtx).pop(),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            child: const Text('确认'),
+          );
+        },
+      ),
+      actions: [
+        if (currentId.isNotEmpty)
+          AelDialogAction<void>(
+            label: '解绑',
+            isDestructive: true,
             onPressed: () async {
-              final raw = textController.text.trim();
-              final cid = ZhiyunService.extractCourseId(raw);
-              if (cid == null || cid.isEmpty) {
-                return;
-              }
-              Navigator.of(dialogCtx).pop();
-              await ZhiyunService.saveCourseId(
+              await ZhiyunService.deleteCourseId(
                 widget.course.name,
-                cid,
                 courseCode: widget.course.id,
+                courseId: currentId,
                 course: widget.course,
                 semesterName: widget.semesterName,
                 preferredHalfTag: widget.preferredHalfTag,
                 targetDate: widget.period?.startTime,
               );
+              if (mounted) {
+                setState(() {
+                  _load();
+                });
+              }
+            },
+          ),
+        const AelDialogAction<void>(
+          label: '取消',
+          variant: AelButtonVariant.tonal,
+        ),
+        AelDialogAction<void>(
+          label: '确认',
+          variant: AelButtonVariant.primary,
+          onPressed: () async {
+            final raw = textController.text.trim();
+            final cid = ZhiyunService.extractCourseId(raw);
+            if (cid == null || cid.isEmpty) {
+              return;
+            }
+            await ZhiyunService.saveCourseId(
+              widget.course.name,
+              cid,
+              courseCode: widget.course.id,
+              course: widget.course,
+              semesterName: widget.semesterName,
+              preferredHalfTag: widget.preferredHalfTag,
+              targetDate: widget.period?.startTime,
+            );
+            if (mounted) {
               setState(() {
                 _load();
               });
-            },
-          ),
-        ],
-      ),
-    );
+            }
+          },
+        ),
+      ],
+    ).then((_) => textController.dispose());
   }
 
   Widget _buildCard({

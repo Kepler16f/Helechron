@@ -23,6 +23,117 @@ class DateTimePair {
   });
 }
 
+Future<void> showDateTimePairEditSheet(
+  BuildContext context, {
+  required DateTimePair val,
+  required ValueChanged<DateTimePair> onChanged,
+}) async {
+  DateTimePair draft = DateTimePair(first: val.first, second: val.second);
+  await showAelBottomSheet<void>(
+    context: context,
+    title: '更改时段',
+    showCloseButton: true,
+    builder: (sheetCtx) {
+      return StatefulBuilder(
+        builder: (sheetCtx, setSheetState) {
+          final colors = AelTheme.colorsOf(sheetCtx);
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AelListRow(
+                title: '开始时间',
+                icon: AelIcons.tabFlow,
+                trailing: Text(
+                  timeToString(draft.first),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: colors.primary,
+                  ),
+                ),
+                onTap: () async {
+                  DateTime temp = draft.first;
+                  final picked = await showAelPickerSheet<DateTime>(
+                    context: sheetCtx,
+                    title: '选择开始时间',
+                    pickerBuilder: (_) => CupertinoDatePicker(
+                      initialDateTime: temp,
+                      use24hFormat: true,
+                      minuteInterval: 1,
+                      mode: CupertinoDatePickerMode.time,
+                      onDateTimeChanged: (t) => temp = t,
+                    ),
+                    onConfirm: () => temp,
+                  );
+                  if (picked != null) {
+                    setSheetState(() => draft.first = picked);
+                  }
+                },
+              ),
+              const SizedBox(height: AelSpacing.sm),
+              AelListRow(
+                title: '结束时间',
+                icon: AelIcons.tabFlow,
+                trailing: Text(
+                  timeToString(draft.second),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: colors.primary,
+                  ),
+                ),
+                onTap: () async {
+                  DateTime temp = draft.second;
+                  final picked = await showAelPickerSheet<DateTime>(
+                    context: sheetCtx,
+                    title: '选择结束时间',
+                    pickerBuilder: (_) => CupertinoDatePicker(
+                      initialDateTime: temp,
+                      use24hFormat: true,
+                      minuteInterval: 1,
+                      mode: CupertinoDatePickerMode.time,
+                      onDateTimeChanged: (t) => temp = t,
+                    ),
+                    onConfirm: () => temp,
+                  );
+                  if (picked != null) {
+                    setSheetState(() => draft.second = picked);
+                  }
+                },
+              ),
+              const SizedBox(height: AelSpacing.lg),
+              Row(
+                children: [
+                  Expanded(
+                    child: AelButton(
+                      label: '取消',
+                      variant: AelButtonVariant.tonal,
+                      expanded: true,
+                      onPressed: () => Navigator.of(sheetCtx).pop(),
+                    ),
+                  ),
+                  const SizedBox(width: AelSpacing.md),
+                  Expanded(
+                    child: AelButton(
+                      label: '确定',
+                      expanded: true,
+                      onPressed: () {
+                        Navigator.of(sheetCtx).pop();
+                        onChanged(draft);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+
 class DateTimePairEditDialog extends StatefulWidget {
   final DateTimePair val;
   final Function(DateTimePair pair)? onChanged;
@@ -47,119 +158,7 @@ class _DateTimePairEditDialogState extends State<DateTimePairEditDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoAlertDialog(
-      title: const Text('更改时段'),
-      content: StatefulBuilder(
-        builder: (BuildContext context, StateSetter setState) {
-          return SizedBox(
-            width: double.maxFinite,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '开始：${timeToString(val.first)}',
-                      style: CupertinoTheme.of(
-                        context,
-                      ).textTheme.textStyle.copyWith(fontSize: 16),
-                    ),
-                    CupertinoButton(
-                      onPressed: () async {
-                        await showCupertinoModalPopup(
-                          context: context,
-                          builder: (BuildContext context) {
-                            return CupertinoPageScaffold(
-                              child: SizedBox(
-                                height:
-                                    MediaQuery.of(
-                                      context,
-                                    ).copyWith().size.height /
-                                    3,
-                                child: CupertinoDatePicker(
-                                  initialDateTime: val.first,
-                                  use24hFormat: true,
-                                  minuteInterval: 1,
-                                  mode: CupertinoDatePickerMode.time,
-                                  onDateTimeChanged: (DateTime newTime) {
-                                    setState(() {
-                                      val.first = newTime;
-                                    });
-                                  },
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                      child: const Text('更改'),
-                    ),
-                  ],
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '结束：${timeToString(val.second)}',
-                      style: CupertinoTheme.of(
-                        context,
-                      ).textTheme.textStyle.copyWith(fontSize: 16),
-                    ),
-                    CupertinoButton(
-                      onPressed: () async {
-                        await showCupertinoModalPopup(
-                          context: context,
-                          builder: (BuildContext context) {
-                            return CupertinoPageScaffold(
-                              child: SizedBox(
-                                height:
-                                    MediaQuery.of(
-                                      context,
-                                    ).copyWith().size.height /
-                                    3,
-                                child: CupertinoDatePicker(
-                                  initialDateTime: val.second,
-                                  use24hFormat: true,
-                                  minuteInterval: 1,
-                                  mode: CupertinoDatePickerMode.time,
-                                  onDateTimeChanged: (DateTime newTime) {
-                                    setState(() {
-                                      val.second = newTime;
-                                    });
-                                  },
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                      child: const Text('更改'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-      actions: [
-        CupertinoDialogAction(
-          child: const Text('取消'),
-          onPressed: () async {
-            Navigator.of(context).pop();
-          },
-        ),
-        CupertinoDialogAction(
-          child: const Text('确定'),
-          onPressed: () async {
-            Navigator.of(context).pop();
-            saveChange();
-          },
-        ),
-      ],
-    );
+    return const SizedBox.shrink();
   }
 }
 
@@ -199,21 +198,10 @@ class _AllowTimeEditPageState extends State<AllowTimeEditPage> {
       var x = now[i];
 
       if (!x.first.isBefore(x.second)) {
-        await showCupertinoDialog(
+        await showAelAlertDialog(
           context: context,
-          builder: (BuildContext context) {
-            return CupertinoAlertDialog(
-              title: const Text('开始时间必须早于结束时间'),
-              actions: [
-                CupertinoDialogAction(
-                  child: const Text('确定'),
-                  onPressed: () async {
-                    Navigator.of(context).pop();
-                  },
-                ),
-              ],
-            );
-          },
+          title: '时间设置无效',
+          message: '开始时间必须早于结束时间',
         );
         getAllowTime();
         return;
@@ -224,21 +212,10 @@ class _AllowTimeEditPageState extends State<AllowTimeEditPage> {
         var y = now[j];
         if ((!x.first.isBefore(y.first) && !x.first.isAfter(y.second)) ||
             (!x.second.isBefore(y.first) && !x.second.isAfter(y.second))) {
-          await showCupertinoDialog(
+          await showAelAlertDialog(
             context: context,
-            builder: (BuildContext context) {
-              return CupertinoAlertDialog(
-                title: const Text('时间段之间不能有重合或直接相邻'),
-                actions: [
-                  CupertinoDialogAction(
-                    child: const Text('确定'),
-                    onPressed: () async {
-                      Navigator.of(context).pop();
-                    },
-                  ),
-                ],
-              );
-            },
+            title: '时间设置冲突',
+            message: '时间段之间不能有重合或直接相邻',
           );
           getAllowTime();
           return;
@@ -316,24 +293,19 @@ class _AllowTimeEditPageState extends State<AllowTimeEditPage> {
                                     elevated: false,
                                     tooltip: '编辑时段',
                                     onPressed: () {
-                                      showCupertinoDialog(
-                                        context: context,
-                                        builder: (context) =>
-                                            DateTimePairEditDialog(
-                                              val: now[index],
-                                              onChanged:
-                                                  (DateTimePair updated) {
-                                                    setState(() {
-                                                      now[index] = DateTimePair(
-                                                        first: updated.first,
-                                                        second: updated.second,
-                                                        isDeleted:
-                                                            updated.isDeleted,
-                                                      );
-                                                      saveAllowTime();
-                                                    });
-                                                  },
-                                            ),
+                                      showDateTimePairEditSheet(
+                                        context,
+                                        val: now[index],
+                                        onChanged: (DateTimePair updated) {
+                                          setState(() {
+                                            now[index] = DateTimePair(
+                                              first: updated.first,
+                                              second: updated.second,
+                                              isDeleted: updated.isDeleted,
+                                            );
+                                            saveAllowTime();
+                                          });
+                                        },
                                       );
                                     },
                                   ),

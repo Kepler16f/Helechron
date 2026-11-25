@@ -2,10 +2,10 @@ import preferences from '@ohos.data.preferences';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { formProvider } from '@kit.FormKit';
 
-const COLOR_ONGOING = '#4CAF50';
-const COLOR_SOON = '#2196F3';
-const COLOR_IDLE = '#888888';
-const COLOR_ENDED = '#9E9E9E';
+const DEFAULT_ACCENT = '#007AFF';
+const COLOR_ONGOING = '#16A34A';
+const COLOR_IDLE = '#6B7280';
+const COLOR_PENDING = '#64748B';
 
 const MIN_NEXT_REFRESH_MINUTES = 5;
 const SIMPLE_BOUNDARY_LEAD_MINUTES = 10;
@@ -22,6 +22,21 @@ interface SimpleCourseItem {
 function getStr(prefs: preferences.Preferences, key: string, def: string): string {
   const v = prefs.getSync(key, def);
   return typeof v === 'string' ? v : def;
+}
+
+function normalizeHex6(raw: string, fallback: string): string {
+  const cleaned = raw.trim().replace('#', '');
+  if (/^[0-9a-fA-F]{6}$/.test(cleaned)) {
+    return `#${cleaned.toUpperCase()}`;
+  }
+  if (/^[0-9a-fA-F]{8}$/.test(cleaned)) {
+    return `#${cleaned.substring(2).toUpperCase()}`;
+  }
+  return fallback;
+}
+
+function resolveAccentHex(prefs: preferences.Preferences): string {
+  return normalizeHex6(getStr(prefs, 'themePrimaryHex', DEFAULT_ACCENT), DEFAULT_ACCENT);
 }
 
 function parseCourses(prefs: preferences.Preferences): SimpleCourseItem[] {
@@ -87,26 +102,31 @@ function buildDateLabel(itemTs: number): string {
   }
 }
 
-function idleState(): Record<string, string> {
+function idleState(accentHex: string): Record<string, string> {
   return {
     'courseName': '今日暂无课程',
+    'courseTime': '',
+    'courseLocation': '',
+    'courseTeacher': '',
     'courseStatus': '全部结课',
     'courseStatusColor': COLOR_IDLE,
+    'accentColor': accentHex,
     'courseDate': '',
     'hasCourse': '0'
   };
 }
 
 export function buildSimpleCourseFormData(prefs: preferences.Preferences): Record<string, string> {
+  const accentHex = resolveAccentHex(prefs);
   const items = parseCourses(prefs);
   const now = Date.now();
   const item = pickCurrentOrNext(items, now);
   if (item === null) {
-    return idleState();
+    return idleState(accentHex);
   }
 
   let status = '';
-  let statusColor = COLOR_SOON;
+  let statusColor = accentHex;
 
   if (now >= item.s && now < item.e) {
     status = '上课中';
@@ -115,13 +135,13 @@ export function buildSimpleCourseFormData(prefs: preferences.Preferences): Recor
     const diffMin = Math.floor((item.s - now) / 60000);
     if (diffMin <= 0) {
       status = '即将开始';
-      statusColor = COLOR_SOON;
-    } else if (diffMin <= 10) {
+      statusColor = accentHex;
+    } else if (diffMin <= 15) {
       status = `${diffMin}分钟后上课`;
-      statusColor = COLOR_SOON;
+      statusColor = accentHex;
     } else {
       status = '待上课';
-      statusColor = COLOR_ENDED;
+      statusColor = COLOR_PENDING;
     }
   }
 
@@ -132,6 +152,7 @@ export function buildSimpleCourseFormData(prefs: preferences.Preferences): Recor
     'courseTeacher': item.c,
     'courseStatus': status,
     'courseStatusColor': statusColor,
+    'accentColor': accentHex,
     'courseDate': buildDateLabel(item.s),
     'hasCourse': '1'
   };
@@ -149,7 +170,7 @@ export function minutesToNextSimpleBoundary(prefs: preferences.Preferences): num
       if (c <= now) {
         continue;
       }
-      const wait = Math.ceil((c - now) / 60000);
+      let wait = Math.ceil((c - now) / 60000);
       if (best === 0 || wait < best) {
         best = wait;
       }

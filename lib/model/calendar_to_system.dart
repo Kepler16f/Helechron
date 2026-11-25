@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:get/get.dart';
 import 'package:celechron/design/app_notification.dart';
+import 'package:celechron/design/components/ael_components.dart';
 import 'package:celechron/model/location_mapper.dart';
 import 'package:celechron/model/option.dart';
 import 'package:celechron/model/period.dart';
@@ -27,8 +28,11 @@ class CalendarToSystemManager {
   CalendarToSystemManager(this._scholarRx);
 
   /// 深色模式自适应的顶部提示（使用统一的 AppNotification 自动适配深浅色模式）。
-  void _showSyncSnackbar(String title, String message,
-      {required Duration duration}) {
+  void _showSyncSnackbar(
+    String title,
+    String message, {
+    required Duration duration,
+  }) {
     if (title.contains('成功')) {
       AppNotification.success(title, message, duration: duration);
     } else if (title.contains('失败') || title.contains('错误')) {
@@ -45,8 +49,8 @@ class CalendarToSystemManager {
   }
 
   Future<bool> requestPermissions() async {
-    final granted =
-        await OhosNativeService.instance.requestCalendarPermission();
+    final granted = await OhosNativeService.instance
+        .requestCalendarPermission();
     hasCalendarPermission.value = granted;
     return granted;
   }
@@ -84,23 +88,26 @@ class CalendarToSystemManager {
       [Duration(hours: 17, minutes: 5), Duration(hours: 17, minutes: 50)], // 10
       [
         Duration(hours: 18, minutes: 50),
-        Duration(hours: 19, minutes: 35)
+        Duration(hours: 19, minutes: 35),
       ], // 11
       [
         Duration(hours: 19, minutes: 40),
-        Duration(hours: 20, minutes: 25)
+        Duration(hours: 20, minutes: 25),
       ], // 12
       [
         Duration(hours: 20, minutes: 30),
-        Duration(hours: 21, minutes: 15)
+        Duration(hours: 21, minutes: 15),
       ], // 13
     ];
 
     // 推算学期开始时间：取当前时间所在周的前几周，或以当前周周一作为基准第 1 周
     final now = DateTime.now();
     // 寻找最近的周一作为参考基准
-    final baseMonday = DateTime(now.year, now.month, now.day)
-        .subtract(Duration(days: now.weekday - 1));
+    final baseMonday = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: now.weekday - 1));
 
     for (final session in semester.sessions) {
       if (session.time.isEmpty) continue;
@@ -128,8 +135,9 @@ class CalendarToSystemManager {
         final startTime = classDate.add(startOffset);
         final endTime = classDate.add(endOffset);
 
-        final mappedLocation =
-            CalendarLocationMapper.mapForCalendar(session.location);
+        final mappedLocation = CalendarLocationMapper.mapForCalendar(
+          session.location,
+        );
 
         list.add({
           'uid':
@@ -148,22 +156,12 @@ class CalendarToSystemManager {
 
   void _showSyncFailureDialog(BuildContext context) {
     final detail = OhosNativeService.instance.lastCalendarError;
-    showCupertinoDialog(
+    showAelAlertDialog(
       context: context,
-      builder: (BuildContext dialogContext) => CupertinoAlertDialog(
-        title: const Text('同步失败'),
-        content: Text(
-          detail == null
-              ? '请确保已授予日历权限，且课程表数据已加载。'
-              : '请确保已授予日历权限，且课程表数据已加载。\n\n错误信息：\n$detail',
-        ),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('确定'),
-            onPressed: () => Get.back(),
-          ),
-        ],
-      ),
+      title: '同步失败',
+      message: detail == null
+          ? '请确保已授予日历权限，且课程表数据已加载。'
+          : '请确保已授予日历权限，且课程表数据已加载。\n\n错误信息：\n$detail',
     );
   }
 
@@ -201,8 +199,9 @@ class CalendarToSystemManager {
       int classPeriodsCount = 0;
       for (final period in periods) {
         if (period.type == PeriodType.virtual) continue;
-        final mappedLocation =
-            CalendarLocationMapper.mapForCalendar(period.location);
+        final mappedLocation = CalendarLocationMapper.mapForCalendar(
+          period.location,
+        );
         events.add({
           'uid': period.uid,
           'summary': '[${semester.name}] ${period.summary}',
@@ -229,10 +228,11 @@ class CalendarToSystemManager {
       // 2. 关键防御兜底：如果 _dayOfWeekToDays 为空导致 periods 中的课程节次为 0，
       // 但 semester.sessions 实际上是有课的，直接基于 semester.sessions 生成课程节次日程！
       if (classPeriodsCount == 0 && semester.sessions.isNotEmpty) {
-        _log('sync',
-            level: CelechronLogLevel.warning,
-            message:
-                '学期 ${semester.name} 的 periods 未产生课程节次，启动基于 sessions 的保底推算');
+        _log(
+          'sync',
+          level: CelechronLogLevel.warning,
+          message: '学期 ${semester.name} 的 periods 未产生课程节次，启动基于 sessions 的保底推算',
+        );
         final fallbackEvents = _generateEventsFromSessions(semester);
         events.addAll(fallbackEvents);
         totalClassSessionCount += fallbackEvents.length;
@@ -293,16 +293,20 @@ class CalendarToSystemManager {
     }
 
     if (events.isEmpty) {
-      _log('sync',
-          level: CelechronLogLevel.error,
-          message: '过滤后没有可同步的日程（学期数=${semesters.length}）');
+      _log(
+        'sync',
+        level: CelechronLogLevel.error,
+        message: '过滤后没有可同步的日程（学期数=${semesters.length}）',
+      );
       return false;
     }
 
     final useAlarm = reminderMode == CalendarReminderMode.alarm;
-    _log('sync',
-        message:
-            '准备同步 ${events.length} 个日程（提醒方式=${useAlarm ? "闹钟" : "通知"}，提前$reminderMinutes分钟）');
+    _log(
+      'sync',
+      message:
+          '准备同步 ${events.length} 个日程（提醒方式=${useAlarm ? "闹钟" : "通知"}，提前$reminderMinutes分钟）',
+    );
 
     final count = await OhosNativeService.instance.syncCalendarEvents(
       events,
@@ -321,10 +325,12 @@ class CalendarToSystemManager {
         duration: const Duration(seconds: 8),
       );
     } else {
-      _log('sync',
-          level: CelechronLogLevel.error,
-          message: '同步失败',
-          error: OhosNativeService.instance.lastCalendarError);
+      _log(
+        'sync',
+        level: CelechronLogLevel.error,
+        message: '同步失败',
+        error: OhosNativeService.instance.lastCalendarError,
+      );
       final selfTest = await OhosNativeService.instance.calendarSelfTest();
       _log('selfTest', message: selfTest);
       _showSyncSnackbar(
@@ -349,54 +355,51 @@ class CalendarToSystemManager {
 
   Map<String, dynamic> getSyncStats() {
     return {
-      'syncedCourseCount':
-          scholar.semesters.fold<int>(0, (sum, s) => sum + s.periods.length),
-      'syncedEventCount':
-          scholar.semesters.fold<int>(0, (sum, s) => sum + s.periods.length),
+      'syncedCourseCount': scholar.semesters.fold<int>(
+        0,
+        (sum, s) => sum + s.periods.length,
+      ),
+      'syncedEventCount': scholar.semesters.fold<int>(
+        0,
+        (sum, s) => sum + s.periods.length,
+      ),
       'calendarId': null,
       'calendarName': 'Helechron课表',
     };
   }
 
   void showCalendarSyncDialog(BuildContext context) {
-    showCupertinoDialog(
+    showAelDialog<void>(
       context: context,
-      builder: (BuildContext context) => CupertinoAlertDialog(
-        title: const Text('同步到系统日历'),
-        content: Text(
-          calendarSyncEnabled.value
-              ? '课程表已同步到系统日历。'
-              : '将课程表同步到系统日历，可在日历应用中查看课程安排。',
+      title: '同步到系统日历',
+      message: calendarSyncEnabled.value
+          ? '课程表已同步到系统日历。'
+          : '将课程表同步到系统日历，可在日历应用中查看课程安排。',
+      actions: [
+        const AelDialogAction<void>(
+          label: '取消',
+          variant: AelButtonVariant.tonal,
         ),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('取消'),
-            onPressed: () => Get.back(),
+        if (calendarSyncEnabled.value)
+          AelDialogAction<void>(
+            label: '取消同步',
+            isDestructive: true,
+            onPressed: () async {
+              await clearSyncedEvents();
+            },
           ),
-          if (calendarSyncEnabled.value)
-            CupertinoDialogAction(
-              isDestructiveAction: true,
-              child: const Text('取消同步'),
-              onPressed: () async {
-                await clearSyncedEvents();
-                Get.back();
-              },
-            ),
-          if (!calendarSyncEnabled.value)
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              child: const Text('同步'),
-              onPressed: () async {
-                final success = await syncScholarToSystemCalendar();
-                Get.back();
-                if (!success && context.mounted) {
-                  _showSyncFailureDialog(context);
-                }
-              },
-            ),
-        ],
-      ),
-      barrierDismissible: true,
+        if (!calendarSyncEnabled.value)
+          AelDialogAction<void>(
+            label: '同步',
+            variant: AelButtonVariant.primary,
+            onPressed: () async {
+              final success = await syncScholarToSystemCalendar();
+              if (!success && context.mounted) {
+                _showSyncFailureDialog(context);
+              }
+            },
+          ),
+      ],
     );
   }
 
@@ -406,8 +409,10 @@ class CalendarToSystemManager {
     // 检测系统中是否存在已同步的 Helechron 日历
     final exists = await OhosNativeService.instance.hasSyncedCalendar();
     calendarSyncEnabled.value = exists;
-    _log('initialStatus',
-        message: 'permission=$hasPermission, calendarExists=$exists');
+    _log(
+      'initialStatus',
+      message: 'permission=$hasPermission, calendarExists=$exists',
+    );
   }
 
   Future<void> toggleCalendarSync(BuildContext context, bool enabled) async {

@@ -4,6 +4,7 @@ export 'ael_download_share_bar.dart';
 export 'ael_empty.dart';
 export 'ael_glass.dart';
 export 'ael_large_title_bar.dart';
+export 'ael_popup.dart';
 export 'ael_section_card.dart';
 export 'ael_segmented.dart';
 export 'ael_shapes.dart';

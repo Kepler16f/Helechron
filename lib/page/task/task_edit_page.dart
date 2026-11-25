@@ -51,21 +51,10 @@ class _TaskEditPageState extends State<TaskEditPage> {
 
   void saveAndExit() {
     if (now.type == TaskType.fixed && !now.startTime.isBefore(now.endTime)) {
-      showCupertinoDialog(
+      showAelAlertDialog(
         context: context,
-        builder: (BuildContext context) {
-          return CupertinoAlertDialog(
-            title: const Text('开始时间必须晚于结束时间'),
-            actions: [
-              CupertinoDialogAction(
-                child: const Text('确定'),
-                onPressed: () async {
-                  Navigator.of(context).pop();
-                },
-              ),
-            ],
-          );
-        },
+        title: '时间设置无效',
+        message: '开始时间必须早于结束时间',
       );
       return;
     }
@@ -73,21 +62,10 @@ class _TaskEditPageState extends State<TaskEditPage> {
     if (now.type == TaskType.fixed &&
         now.repeatType != TaskRepeatType.norepeat &&
         dateOnly(now.startTime).isAfter(dateOnly(now.repeatEndsTime))) {
-      showCupertinoDialog(
+      showAelAlertDialog(
         context: context,
-        builder: (BuildContext context) {
-          return CupertinoAlertDialog(
-            title: const Text('开始时间不能晚于重复截止日期'),
-            actions: [
-              CupertinoDialogAction(
-                child: const Text('确定'),
-                onPressed: () async {
-                  Navigator.of(context).pop();
-                },
-              ),
-            ],
-          );
-        },
+        title: '时间设置无效',
+        message: '开始时间不能晚于重复截止日期',
       );
       return;
     }
@@ -99,21 +77,10 @@ class _TaskEditPageState extends State<TaskEditPage> {
               length > now.repeatPeriod * 24 * 60) ||
           (now.repeatType == TaskRepeatType.month && length > 28 * 24 * 60) ||
           (now.repeatType == TaskRepeatType.year && length > 365 * 24 * 60)) {
-        showCupertinoDialog(
+        showAelAlertDialog(
           context: context,
-          builder: (BuildContext context) {
-            return CupertinoAlertDialog(
-              title: const Text('这个重复日程的持续时间太长'),
-              actions: [
-                CupertinoDialogAction(
-                  child: const Text('确定'),
-                  onPressed: () async {
-                    Navigator.of(context).pop();
-                  },
-                ),
-              ],
-            );
-          },
+          title: '重复日程无效',
+          message: '这个重复日程的持续时间太长',
         );
         return;
       }
@@ -257,35 +224,29 @@ class _TaskEditPageState extends State<TaskEditPage> {
                                 ),
                               ),
                               onTap: () async {
-                                await showCupertinoModalPopup(
-                                  context: context,
-                                  builder: (BuildContext context) {
-                                    return CupertinoPageScaffold(
-                                      backgroundColor: colors.pageBg,
-                                      child: SizedBox(
-                                        height:
-                                            MediaQuery.of(context).size.height /
-                                            3,
-                                        child: CupertinoDatePicker(
-                                          initialDateTime: now.startTime,
-                                          use24hFormat: true,
-                                          minuteInterval: 1,
-                                          mode: CupertinoDatePickerMode
-                                              .dateAndTime,
-                                          onDateTimeChanged:
-                                              (DateTime newTime) {
-                                                setState(() {
-                                                  now.startTime = newTime;
-                                                });
-                                              },
-                                        ),
+                                DateTime temp = now.startTime;
+                                final picked =
+                                    await showAelPickerSheet<DateTime>(
+                                      context: context,
+                                      title: '选择开始时间',
+                                      pickerBuilder: (_) => CupertinoDatePicker(
+                                        initialDateTime: temp,
+                                        use24hFormat: true,
+                                        minuteInterval: 1,
+                                        mode:
+                                            CupertinoDatePickerMode.dateAndTime,
+                                        onDateTimeChanged: (DateTime newTime) {
+                                          temp = newTime;
+                                        },
                                       ),
+                                      onConfirm: () => temp,
                                     );
-                                  },
-                                );
-                                if (now.endTime.isBefore(now.startTime)) {
+                                if (picked != null && mounted) {
                                   setState(() {
-                                    now.endTime = now.startTime;
+                                    now.startTime = picked;
+                                    if (now.endTime.isBefore(now.startTime)) {
+                                      now.endTime = now.startTime;
+                                    }
                                   });
                                 }
                               },
@@ -305,35 +266,30 @@ class _TaskEditPageState extends State<TaskEditPage> {
                               ),
                             ),
                             onTap: () async {
-                              await showCupertinoModalPopup(
+                              DateTime temp = now.endTime;
+                              final picked = await showAelPickerSheet<DateTime>(
                                 context: context,
-                                builder: (BuildContext context) {
-                                  return CupertinoPageScaffold(
-                                    backgroundColor: colors.pageBg,
-                                    child: SizedBox(
-                                      height:
-                                          MediaQuery.of(context).size.height /
-                                          3,
-                                      child: CupertinoDatePicker(
-                                        initialDateTime: now.endTime,
-                                        use24hFormat: true,
-                                        minuteInterval: 1,
-                                        mode:
-                                            CupertinoDatePickerMode.dateAndTime,
-                                        onDateTimeChanged: (DateTime newTime) {
-                                          setState(() {
-                                            now.endTime = newTime;
-                                          });
-                                        },
-                                      ),
-                                    ),
-                                  );
-                                },
+                                title: now.type == TaskType.deadline
+                                    ? '选择截止时间'
+                                    : '选择结束时间',
+                                pickerBuilder: (_) => CupertinoDatePicker(
+                                  initialDateTime: temp,
+                                  use24hFormat: true,
+                                  minuteInterval: 1,
+                                  mode: CupertinoDatePickerMode.dateAndTime,
+                                  onDateTimeChanged: (DateTime newTime) {
+                                    temp = newTime;
+                                  },
+                                ),
+                                onConfirm: () => temp,
                               );
-                              if (now.type == TaskType.fixed &&
-                                  now.startTime.isAfter(now.endTime)) {
+                              if (picked != null && mounted) {
                                 setState(() {
-                                  now.startTime = now.endTime;
+                                  now.endTime = picked;
+                                  if (now.type == TaskType.fixed &&
+                                      now.startTime.isAfter(now.endTime)) {
+                                    now.startTime = now.endTime;
+                                  }
                                 });
                               }
                             },
@@ -358,102 +314,68 @@ class _TaskEditPageState extends State<TaskEditPage> {
                                 ),
                               ),
                               onTap: () async {
-                                await showCupertinoModalPopup(
-                                  context: context,
-                                  builder: (BuildContext context) {
-                                    return CupertinoPageScaffold(
-                                      backgroundColor: colors.pageBg,
-                                      child: SizedBox(
-                                        height:
-                                            MediaQuery.of(context).size.height /
-                                            3,
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            SizedBox(
-                                              width: 150,
-                                              child: CupertinoPicker(
-                                                itemExtent: 32,
-                                                scrollController:
-                                                    FixedExtentScrollController(
-                                                      initialItem: now
-                                                          .timeNeeded
-                                                          .inHours,
-                                                    ),
-                                                onSelectedItemChanged: (value) {
-                                                  now.timeNeeded = Duration(
-                                                    hours: value,
-                                                    minutes:
-                                                        now
-                                                            .timeNeeded
-                                                            .inMinutes %
-                                                        60,
-                                                  );
-                                                  if (now.timeNeeded <=
-                                                      Duration.zero) {
-                                                    now.timeNeeded =
-                                                        const Duration(
-                                                          minutes: 1,
-                                                        );
-                                                  }
-                                                  setState(() {});
-                                                },
-                                                children: List.generate(
-                                                  1000,
-                                                  (index) => Center(
-                                                    child: Text('$index'),
+                                int hours = now.timeNeeded.inHours;
+                                int mins = now.timeNeeded.inMinutes % 60;
+                                final picked =
+                                    await showAelPickerSheet<Duration>(
+                                      context: context,
+                                      title: '设置预期用时',
+                                      pickerBuilder: (_) => Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          SizedBox(
+                                            width: 110,
+                                            child: CupertinoPicker(
+                                              itemExtent: 34,
+                                              scrollController:
+                                                  FixedExtentScrollController(
+                                                    initialItem: hours,
                                                   ),
-                                                ),
+                                              onSelectedItemChanged: (v) =>
+                                                  hours = v,
+                                              children: List.generate(
+                                                1000,
+                                                (i) =>
+                                                    Center(child: Text('$i')),
                                               ),
                                             ),
-                                            const Text('小时'),
-                                            SizedBox(
-                                              width: 150,
-                                              child: CupertinoPicker(
-                                                itemExtent: 32,
-                                                looping: true,
-                                                scrollController:
-                                                    FixedExtentScrollController(
-                                                      initialItem:
-                                                          now
-                                                              .timeNeeded
-                                                              .inMinutes %
-                                                          60,
-                                                    ),
-                                                onSelectedItemChanged: (value) {
-                                                  now.timeNeeded = Duration(
-                                                    hours:
-                                                        now
-                                                            .timeNeeded
-                                                            .inMinutes ~/
-                                                        60,
-                                                    minutes: value,
-                                                  );
-                                                  if (now.timeNeeded <=
-                                                      Duration.zero) {
-                                                    now.timeNeeded =
-                                                        const Duration(
-                                                          minutes: 1,
-                                                        );
-                                                  }
-                                                  setState(() {});
-                                                },
-                                                children: List.generate(
-                                                  60,
-                                                  (index) => Center(
-                                                    child: Text('$index'),
+                                          ),
+                                          const Text('小时'),
+                                          SizedBox(
+                                            width: 110,
+                                            child: CupertinoPicker(
+                                              itemExtent: 34,
+                                              looping: true,
+                                              scrollController:
+                                                  FixedExtentScrollController(
+                                                    initialItem: mins,
                                                   ),
-                                                ),
+                                              onSelectedItemChanged: (v) =>
+                                                  mins = v,
+                                              children: List.generate(
+                                                60,
+                                                (i) =>
+                                                    Center(child: Text('$i')),
                                               ),
                                             ),
-                                            const Text('分钟'),
-                                          ],
-                                        ),
+                                          ),
+                                          const Text('分钟'),
+                                        ],
                                       ),
+                                      onConfirm: () {
+                                        final d = Duration(
+                                          hours: hours,
+                                          minutes: mins,
+                                        );
+                                        return d <= Duration.zero
+                                            ? const Duration(minutes: 1)
+                                            : d;
+                                      },
                                     );
-                                  },
-                                );
+                                if (picked != null && mounted) {
+                                  setState(() => now.timeNeeded = picked);
+                                }
                               },
                             ),
                             const SizedBox(height: AelSpacing.sm),
@@ -467,87 +389,61 @@ class _TaskEditPageState extends State<TaskEditPage> {
                                 ),
                               ),
                               onTap: () async {
-                                await showCupertinoModalPopup(
-                                  context: context,
-                                  builder: (BuildContext context) {
-                                    return CupertinoPageScaffold(
-                                      backgroundColor: colors.pageBg,
-                                      child: SizedBox(
-                                        height:
-                                            MediaQuery.of(context).size.height /
-                                            3,
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            SizedBox(
-                                              width: 150,
-                                              child: CupertinoPicker(
-                                                itemExtent: 32,
-                                                scrollController:
-                                                    FixedExtentScrollController(
-                                                      initialItem:
-                                                          now.timeSpent.inHours,
-                                                    ),
-                                                onSelectedItemChanged: (value) {
-                                                  now.timeSpent = Duration(
-                                                    hours: value,
-                                                    minutes:
-                                                        now
-                                                            .timeSpent
-                                                            .inMinutes %
-                                                        60,
-                                                  );
-                                                  setState(() {});
-                                                },
-                                                children: List.generate(
-                                                  1000,
-                                                  (index) => Center(
-                                                    child: Text('$index'),
+                                int hours = now.timeSpent.inHours;
+                                int mins = now.timeSpent.inMinutes % 60;
+                                final picked =
+                                    await showAelPickerSheet<Duration>(
+                                      context: context,
+                                      title: '设置已经用时',
+                                      pickerBuilder: (_) => Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          SizedBox(
+                                            width: 110,
+                                            child: CupertinoPicker(
+                                              itemExtent: 34,
+                                              scrollController:
+                                                  FixedExtentScrollController(
+                                                    initialItem: hours,
                                                   ),
-                                                ),
+                                              onSelectedItemChanged: (v) =>
+                                                  hours = v,
+                                              children: List.generate(
+                                                1000,
+                                                (i) =>
+                                                    Center(child: Text('$i')),
                                               ),
                                             ),
-                                            const Text('小时'),
-                                            SizedBox(
-                                              width: 150,
-                                              child: CupertinoPicker(
-                                                itemExtent: 32,
-                                                looping: true,
-                                                scrollController:
-                                                    FixedExtentScrollController(
-                                                      initialItem:
-                                                          now
-                                                              .timeSpent
-                                                              .inMinutes %
-                                                          60,
-                                                    ),
-                                                onSelectedItemChanged: (value) {
-                                                  now.timeSpent = Duration(
-                                                    hours:
-                                                        now
-                                                            .timeSpent
-                                                            .inMinutes ~/
-                                                        60,
-                                                    minutes: value,
-                                                  );
-                                                  setState(() {});
-                                                },
-                                                children: List.generate(
-                                                  60,
-                                                  (index) => Center(
-                                                    child: Text('$index'),
+                                          ),
+                                          const Text('小时'),
+                                          SizedBox(
+                                            width: 110,
+                                            child: CupertinoPicker(
+                                              itemExtent: 34,
+                                              looping: true,
+                                              scrollController:
+                                                  FixedExtentScrollController(
+                                                    initialItem: mins,
                                                   ),
-                                                ),
+                                              onSelectedItemChanged: (v) =>
+                                                  mins = v,
+                                              children: List.generate(
+                                                60,
+                                                (i) =>
+                                                    Center(child: Text('$i')),
                                               ),
                                             ),
-                                            const Text('分钟'),
-                                          ],
-                                        ),
+                                          ),
+                                          const Text('分钟'),
+                                        ],
                                       ),
+                                      onConfirm: () =>
+                                          Duration(hours: hours, minutes: mins),
                                     );
-                                  },
-                                );
+                                if (picked != null && mounted) {
+                                  setState(() => now.timeSpent = picked);
+                                }
                               },
                             ),
                             const SizedBox(height: AelSpacing.sm),
@@ -580,26 +476,19 @@ class _TaskEditPageState extends State<TaskEditPage> {
                                 color: colors.textSecondary,
                               ),
                             ),
-                            onTap: () async {
-                              await showCupertinoModalPopup(
+                            onTap: () {
+                              showAelActionSheet<TaskRepeatType>(
                                 context: context,
-                                builder: (BuildContext context) {
-                                  return CupertinoPageScaffold(
-                                    backgroundColor: colors.pageBg,
-                                    child: SizedBox(
-                                      height:
-                                          MediaQuery.of(context).size.height /
-                                          3,
-                                      child: CupertinoPicker(
-                                        itemExtent: 32,
-                                        scrollController:
-                                            FixedExtentScrollController(
-                                              initialItem: now.repeatType.index,
-                                            ),
-                                        onSelectedItemChanged: (int value) {
+                                title: '选择重复方式',
+                                actions: TaskRepeatType.values
+                                    .map(
+                                      (rt) => AelActionOption<TaskRepeatType>(
+                                        value: rt,
+                                        label: deadlineRepeatTypeName[rt]!,
+                                        isSelected: now.repeatType == rt,
+                                        onTap: () {
                                           setState(() {
-                                            now.repeatType =
-                                                TaskRepeatType.values[value];
+                                            now.repeatType = rt;
                                             final baseDate =
                                                 now.type == TaskType.fixed
                                                 ? now.startTime
@@ -617,18 +506,9 @@ class _TaskEditPageState extends State<TaskEditPage> {
                                             }
                                           });
                                         },
-                                        children: List<Widget>.generate(
-                                          deadlineRepeatTypeNameList.length,
-                                          (int index) => Center(
-                                            child: Text(
-                                              deadlineRepeatTypeNameList[index],
-                                            ),
-                                          ),
-                                        ),
                                       ),
-                                    ),
-                                  );
-                                },
+                                    )
+                                    .toList(),
                               );
                             },
                           ),
@@ -644,40 +524,30 @@ class _TaskEditPageState extends State<TaskEditPage> {
                                 ),
                               ),
                               onTap: () async {
-                                await showCupertinoModalPopup(
+                                int tempPeriod = now.repeatPeriod;
+                                final picked = await showAelPickerSheet<int>(
                                   context: context,
-                                  builder: (BuildContext context) {
-                                    return CupertinoPageScaffold(
-                                      backgroundColor: colors.pageBg,
-                                      child: SizedBox(
-                                        height:
-                                            MediaQuery.of(context).size.height /
-                                            3,
-                                        child: CupertinoPicker(
-                                          itemExtent: 32,
-                                          scrollController:
-                                              FixedExtentScrollController(
-                                                initialItem:
-                                                    now.repeatPeriod - 1,
-                                              ),
-                                          onSelectedItemChanged: (int value) {
-                                            setState(() {
-                                              now.repeatPeriod = value + 1;
-                                            });
-                                          },
-                                          children: List<Widget>.generate(
-                                            999,
-                                            (int index) => Center(
-                                              child: Text(
-                                                (index + 1).toString(),
-                                              ),
-                                            ),
-                                          ),
+                                  title: '设置重复周期（天）',
+                                  pickerBuilder: (_) => CupertinoPicker(
+                                    itemExtent: 34,
+                                    scrollController:
+                                        FixedExtentScrollController(
+                                          initialItem: tempPeriod - 1,
                                         ),
-                                      ),
-                                    );
-                                  },
+                                    onSelectedItemChanged: (int value) {
+                                      tempPeriod = value + 1;
+                                    },
+                                    children: List<Widget>.generate(
+                                      999,
+                                      (int index) =>
+                                          Center(child: Text('${index + 1} 天')),
+                                    ),
+                                  ),
+                                  onConfirm: () => tempPeriod,
                                 );
+                                if (picked != null && mounted) {
+                                  setState(() => now.repeatPeriod = picked);
+                                }
                               },
                             ),
                           ],
@@ -693,28 +563,23 @@ class _TaskEditPageState extends State<TaskEditPage> {
                                 ),
                               ),
                               onTap: () async {
-                                await showCupertinoModalPopup(
-                                  context: context,
-                                  builder: (BuildContext context) {
-                                    return CupertinoPageScaffold(
-                                      backgroundColor: colors.pageBg,
-                                      child: SizedBox(
-                                        height:
-                                            MediaQuery.of(context).size.height /
-                                            3,
-                                        child: CupertinoDatePicker(
-                                          mode: CupertinoDatePickerMode.date,
-                                          initialDateTime: now.repeatEndsTime,
-                                          onDateTimeChanged: (value) {
-                                            setState(() {
-                                              now.repeatEndsTime = value;
-                                            });
-                                          },
-                                        ),
+                                DateTime tempDate = now.repeatEndsTime;
+                                final picked =
+                                    await showAelPickerSheet<DateTime>(
+                                      context: context,
+                                      title: '选择重复截止日期',
+                                      pickerBuilder: (_) => CupertinoDatePicker(
+                                        mode: CupertinoDatePickerMode.date,
+                                        initialDateTime: tempDate,
+                                        onDateTimeChanged: (value) {
+                                          tempDate = value;
+                                        },
                                       ),
+                                      onConfirm: () => tempDate,
                                     );
-                                  },
-                                );
+                                if (picked != null && mounted) {
+                                  setState(() => now.repeatEndsTime = picked);
+                                }
                               },
                             ),
                           ],

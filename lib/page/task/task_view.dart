@@ -109,170 +109,147 @@ class TaskPage extends StatelessWidget {
   }
 
   Future<void> showCardDialog(BuildContext context, Task deadline) async {
-    return showCupertinoDialog<void>(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        String titleType;
-        if (deadline.type == TaskType.homework) {
-          titleType = deadline.status == TaskStatus.completed
-              ? '已完成'
-              : (deadline.endTime.isBefore(DateTime.now()) ? '已过期' : '待提交');
-        } else if (deadline.type == TaskType.deadline) {
-          titleType = deadlineStatusName[deadline.status]!;
-        } else if (deadline.type == TaskType.fixed) {
-          titleType = deadlineTypeName[TaskType.fixed]!;
-        } else {
-          titleType = '';
-        }
+    String titleType;
+    if (deadline.type == TaskType.homework) {
+      titleType = deadline.status == TaskStatus.completed
+          ? '已完成'
+          : (deadline.endTime.isBefore(DateTime.now()) ? '已过期' : '待提交');
+    } else if (deadline.type == TaskType.deadline) {
+      titleType = deadlineStatusName[deadline.status]!;
+    } else if (deadline.type == TaskType.fixed) {
+      titleType = deadlineTypeName[TaskType.fixed]!;
+    } else {
+      titleType = '';
+    }
 
-        return CupertinoAlertDialog(
-          title: Text(
-            '${deadline.summary}：$titleType',
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          content: SizedBox(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (deadline.type == TaskType.fixed) ...[
-                    Text('开始于 ${toStringHumanReadable(deadline.startTime)}'),
-                    Text('结束于 ${toStringHumanReadable(deadline.endTime)}'),
-                  ],
-                  if (deadline.type == TaskType.deadline ||
-                      deadline.type == TaskType.homework) ...[
-                    Text(
-                      '截止于 ${toStringHumanReadable(deadline.endTime)}${deadline.endTime.isBefore(DateTime.now()) ? ' - 已过期' : ''}',
-                    ),
-                  ],
-                  if (deadline.type == TaskType.deadline) ...[
-                    Text(deadlineProgress(deadline)),
-                  ],
-                  if (deadline.location.isNotEmpty) ...[
-                    Text('地点：${deadline.location}'),
-                  ],
-                  if (deadline.description.isNotEmpty) ...[
-                    Text('说明：${deadline.description}'),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('返回'),
-            ),
-            if (extractCoursesUrl(deadline.description) != null)
-              CupertinoDialogAction(
-                onPressed: () {
-                  Navigator.of(dialogContext).pop();
-                  String? aid;
-                  if (deadline.fromUid != null &&
-                      deadline.fromUid!.startsWith('courses-todo:')) {
-                    aid = deadline.fromUid!.substring('courses-todo:'.length);
-                  }
-                  showTodoSubmitSheet(
-                    context,
-                    extractCoursesUrl(deadline.description)!,
-                    title: deadline.summary,
-                    activityId: aid,
-                  );
-                },
-                child: const Text('作业选项与状态探测'),
-              ),
-            if (deadline.type == TaskType.homework)
-              CupertinoDialogAction(
-                onPressed: () {
-                  if (deadline.status != TaskStatus.completed) {
-                    deadline.status = TaskStatus.completed;
-                  } else {
-                    deadline.forceRefreshStatus();
-                  }
-                  _taskController.updateDeadlineListTime();
-                  _taskController.taskList.refresh();
-                  Navigator.of(dialogContext).pop();
-                },
-                child: Text(
-                  '标记为${deadline.status == TaskStatus.completed ? '未' : ''}完成',
-                ),
-              ),
-            if (deadline.type == TaskType.deadline &&
-                deadline.timeSpent < deadline.timeNeeded)
-              CupertinoDialogAction(
-                onPressed: () {
-                  if (deadline.status != TaskStatus.completed) {
-                    deadline.status = TaskStatus.completed;
-                  } else {
-                    deadline.forceRefreshStatus();
-                  }
-                  _taskController.updateDeadlineListTime();
-                  _taskController.taskList.refresh();
-                  Navigator.of(dialogContext).pop();
-                },
-                child: Text(
-                  '标记为${deadline.status == TaskStatus.completed ? '未' : ''}完成',
-                ),
-              ),
-            if (deadline.type == TaskType.deadline &&
-                (deadline.status == TaskStatus.running ||
-                    deadline.status == TaskStatus.suspended))
-              CupertinoDialogAction(
-                onPressed: () {
-                  if (deadline.status == TaskStatus.running) {
-                    deadline.status = TaskStatus.suspended;
-                  } else {
-                    deadline.status = TaskStatus.running;
-                  }
-                  _taskController.updateDeadlineListTime();
-                  _taskController.taskList.refresh();
-                  Navigator.of(dialogContext).pop();
-                },
-                child: Text(
-                  deadline.status == TaskStatus.running ? '暂停' : '继续',
-                ),
-              ),
-            if (deadline.type == TaskType.deadline ||
-                deadline.type == TaskType.fixed)
-              CupertinoDialogAction(
-                onPressed: () async {
-                  Navigator.of(dialogContext).pop();
-                  Task res =
-                      await showCupertinoModalPopup(
-                        context: context,
-                        builder: (BuildContext context) {
-                          return TaskEditPage(deadline);
-                        },
-                      ) ??
-                      deadline;
-                  bool needUpdate = deadline.differentForFlow(res);
-                  deadline.copy(res);
-                  _taskController.updateDeadlineList();
-                  if (needUpdate) {
-                    _taskController.updateDeadlineListTime();
-                  }
-                  _taskController.taskList.refresh();
-                  _taskController.saveDeadlineListToDb();
-                },
-                child: const Text('编辑'),
-              ),
-            if (deadline.type == TaskType.fixedlegacy ||
-                deadline.type == TaskType.homework)
-              CupertinoDialogAction(
-                onPressed: () async {
-                  Navigator.of(dialogContext).pop();
-                  deadline.status = TaskStatus.deleted;
-                  _taskController.updateDeadlineList();
-                  _taskController.updateDeadlineListTime();
-                  _taskController.taskList.refresh();
-                },
-                child: const Text('删除'),
-              ),
+    return showAelDialog<void>(
+      context: context,
+      title: '${deadline.summary}：$titleType',
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (deadline.type == TaskType.fixed) ...[
+            Text('开始于 ${toStringHumanReadable(deadline.startTime)}'),
+            Text('结束于 ${toStringHumanReadable(deadline.endTime)}'),
           ],
-        );
-      },
+          if (deadline.type == TaskType.deadline ||
+              deadline.type == TaskType.homework)
+            Text(
+              '截止于 ${toStringHumanReadable(deadline.endTime)}${deadline.endTime.isBefore(DateTime.now()) ? ' - 已过期' : ''}',
+            ),
+          if (deadline.type == TaskType.deadline)
+            Text(deadlineProgress(deadline)),
+          if (deadline.location.isNotEmpty) Text('地点：${deadline.location}'),
+          if (deadline.description.isNotEmpty)
+            Text('说明：${deadline.description}'),
+        ],
+      ),
+      actions: [
+        const AelDialogAction<void>(
+          label: '返回',
+          variant: AelButtonVariant.tonal,
+        ),
+        if (extractCoursesUrl(deadline.description) != null)
+          AelDialogAction<void>(
+            label: '作业选项与状态探测',
+            variant: AelButtonVariant.primary,
+            onPressed: () {
+              String? aid;
+              if (deadline.fromUid != null &&
+                  deadline.fromUid!.startsWith('courses-todo:')) {
+                aid = deadline.fromUid!.substring('courses-todo:'.length);
+              }
+              showTodoSubmitSheet(
+                context,
+                extractCoursesUrl(deadline.description)!,
+                title: deadline.summary,
+                activityId: aid,
+              );
+            },
+          ),
+        if (deadline.type == TaskType.homework)
+          AelDialogAction<void>(
+            label: '标记为${deadline.status == TaskStatus.completed ? '未' : ''}完成',
+            variant: AelButtonVariant.tonal,
+            onPressed: () {
+              if (deadline.status != TaskStatus.completed) {
+                deadline.status = TaskStatus.completed;
+              } else {
+                deadline.forceRefreshStatus();
+              }
+              _taskController.updateDeadlineListTime();
+              _taskController.taskList.refresh();
+            },
+          ),
+        if (deadline.type == TaskType.deadline &&
+            deadline.timeSpent < deadline.timeNeeded)
+          AelDialogAction<void>(
+            label: '标记为${deadline.status == TaskStatus.completed ? '未' : ''}完成',
+            variant: AelButtonVariant.tonal,
+            onPressed: () {
+              if (deadline.status != TaskStatus.completed) {
+                deadline.status = TaskStatus.completed;
+              } else {
+                deadline.forceRefreshStatus();
+              }
+              _taskController.updateDeadlineListTime();
+              _taskController.taskList.refresh();
+            },
+          ),
+        if (deadline.type == TaskType.deadline &&
+            (deadline.status == TaskStatus.running ||
+                deadline.status == TaskStatus.suspended))
+          AelDialogAction<void>(
+            label: deadline.status == TaskStatus.running ? '暂停' : '继续',
+            variant: AelButtonVariant.tonal,
+            onPressed: () {
+              if (deadline.status == TaskStatus.running) {
+                deadline.status = TaskStatus.suspended;
+              } else {
+                deadline.status = TaskStatus.running;
+              }
+              _taskController.updateDeadlineListTime();
+              _taskController.taskList.refresh();
+            },
+          ),
+        if (deadline.type == TaskType.deadline ||
+            deadline.type == TaskType.fixed)
+          AelDialogAction<void>(
+            label: '编辑',
+            variant: AelButtonVariant.primary,
+            onPressed: () async {
+              Task res =
+                  await showAelModalPage<Task>(
+                    context: context,
+                    builder: (BuildContext context) {
+                      return TaskEditPage(deadline);
+                    },
+                  ) ??
+                  deadline;
+              bool needUpdate = deadline.differentForFlow(res);
+              deadline.copy(res);
+              _taskController.updateDeadlineList();
+              if (needUpdate) {
+                _taskController.updateDeadlineListTime();
+              }
+              _taskController.taskList.refresh();
+              _taskController.saveDeadlineListToDb();
+            },
+          ),
+        if (deadline.type == TaskType.fixedlegacy ||
+            deadline.type == TaskType.homework)
+          AelDialogAction<void>(
+            label: '删除',
+            isDestructive: true,
+            onPressed: () async {
+              deadline.status = TaskStatus.deleted;
+              _taskController.updateDeadlineList();
+              _taskController.updateDeadlineListTime();
+              _taskController.taskList.refresh();
+            },
+          ),
+      ],
     );
   }
 
@@ -280,7 +257,7 @@ class TaskPage extends StatelessWidget {
     DateTime time = DateTime.now();
     Task? deadline = Task(endTime: time, startTime: time, repeatEndsTime: time);
     deadline.reset();
-    Task? res = await showCupertinoModalPopup(
+    Task? res = await showAelModalPage<Task>(
       context: context,
       builder: (BuildContext context) {
         return TaskEditPage(deadline);
@@ -707,64 +684,59 @@ class TaskPage extends StatelessWidget {
   }
 
   void _showMoreActions(BuildContext context) {
-    showCupertinoModalPopup(
+    showAelActionSheet<void>(
       context: context,
-      builder: (BuildContext sheetContext) => CupertinoActionSheet(
-        actions: <Widget>[
-          CupertinoActionSheetAction(
-            child: const Text('删除已完成任务'),
-            onPressed: () async {
-              _taskController.removeCompletedDeadline(sheetContext);
-              _taskController.updateDeadlineList();
-              _taskController.taskList.refresh();
-              Navigator.of(sheetContext).pop();
-            },
-          ),
-          CupertinoActionSheetAction(
-            child: const Text('删除已过期任务'),
-            onPressed: () async {
-              _taskController.removeFailedDeadline(sheetContext);
-              _taskController.updateDeadlineList();
-              _taskController.taskList.refresh();
-              Navigator.of(sheetContext).pop();
-            },
-          ),
-          CupertinoActionSheetAction(
-            child: const Text('刷新学在浙大作业'),
-            onPressed: () async {
-              Navigator.of(sheetContext).pop();
-              await _taskController.refreshHomework();
-            },
-          ),
-          CupertinoActionSheetAction(
-            child: const Text('暂停所有任务'),
-            onPressed: () {
-              if (_taskController.suspendAllDeadline(sheetContext) > 0) {
-                _flowController.removeFlowInFlowList();
-                _taskController.updateDeadlineListTime();
-                _taskController.taskList.refresh();
-              }
-              Navigator.of(sheetContext).pop();
-            },
-          ),
-          CupertinoActionSheetAction(
-            child: const Text('继续所有任务'),
-            onPressed: () {
-              if (_taskController.continueAllDeadline(sheetContext) > 0) {
-                _flowController.removeFlowInFlowList();
-                _taskController.updateDeadlineListTime();
-                _taskController.taskList.refresh();
-              }
-              Navigator.of(sheetContext).pop();
-            },
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          isDefaultAction: true,
-          onPressed: () => Navigator.of(sheetContext).pop(),
-          child: const Text('取消'),
+      title: '任务批量操作',
+      actions: [
+        AelActionOption<void>(
+          label: '删除已完成任务',
+          icon: AelIcons.delete,
+          onTap: () {
+            _taskController.removeCompletedDeadline(context);
+            _taskController.updateDeadlineList();
+            _taskController.taskList.refresh();
+          },
         ),
-      ),
+        AelActionOption<void>(
+          label: '删除已过期任务',
+          icon: AelIcons.delete,
+          isDestructive: true,
+          onTap: () {
+            _taskController.removeFailedDeadline(context);
+            _taskController.updateDeadlineList();
+            _taskController.taskList.refresh();
+          },
+        ),
+        AelActionOption<void>(
+          label: '刷新学在浙大作业',
+          icon: AelIcons.refresh,
+          onTap: () async {
+            await _taskController.refreshHomework();
+          },
+        ),
+        AelActionOption<void>(
+          label: '暂停所有任务',
+          icon: AelIcons.bellOff,
+          onTap: () {
+            if (_taskController.suspendAllDeadline(context) > 0) {
+              _flowController.removeFlowInFlowList();
+              _taskController.updateDeadlineListTime();
+              _taskController.taskList.refresh();
+            }
+          },
+        ),
+        AelActionOption<void>(
+          label: '继续所有任务',
+          icon: AelIcons.tabTask,
+          onTap: () {
+            if (_taskController.continueAllDeadline(context) > 0) {
+              _flowController.removeFlowInFlowList();
+              _taskController.updateDeadlineListTime();
+              _taskController.taskList.refresh();
+            }
+          },
+        ),
+      ],
     );
   }
 

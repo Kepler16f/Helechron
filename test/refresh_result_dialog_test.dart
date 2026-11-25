@@ -1,3 +1,4 @@
+import 'package:celechron/design/components/ael_components.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -21,7 +22,7 @@ void main() {
     await tester.tap(find.text('刷新'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(CupertinoAlertDialog), findsNothing);
+    expect(find.byType(AelDialogSurface), findsNothing);
   });
 
   testWidgets('刷新失败仍显示必要错误且不展示诊断标识', (tester) async {
@@ -30,7 +31,7 @@ void main() {
     await tester.tap(find.text('刷新'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(CupertinoAlertDialog), findsOneWidget);
+    expect(find.byType(AelDialogSurface), findsOneWidget);
     expect(find.textContaining('请求超时'), findsOneWidget);
     expect(find.textContaining('refreshId'), findsNothing);
     expect(find.textContaining('总耗时'), findsNothing);

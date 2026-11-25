@@ -69,53 +69,48 @@ class _FlowPageState extends State<FlowPage> {
         return;
       }
       final colors = AelTheme.colorsOf(context);
-      showCupertinoDialog<void>(
+      showAelDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (dialogCtx) => CupertinoAlertDialog(
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                isHomework ? AelIcons.book : AelIcons.warning,
-                size: 19,
-                color: isHomework ? colors.primary : colors.warning,
-              ),
-              const SizedBox(width: 6),
-              Text(isHomework ? '作业状态已变化' : '规划方案已过期'),
-            ],
+        titleIcon: Container(
+          width: 44,
+          height: 44,
+          decoration: ShapeDecoration(
+            color: (isHomework ? colors.primary : colors.warning).withValues(
+              alpha: 0.14,
+            ),
+            shape: AelShapes.squircle(14),
           ),
-          content: Padding(
-            padding: const EdgeInsets.only(top: 8.0),
-            child: Text(
-              isHomework
-                  ? '检测到作业状态已更新，当前规划方案可能需要同步或确认。'
-                  : '任务列表已发生变更，原有的时间规划方案已过期，是否立即重新规划？',
-            ),
+          alignment: Alignment.center,
+          child: Icon(
+            isHomework ? AelIcons.book : AelIcons.warning,
+            size: 22,
+            color: isHomework ? colors.primary : colors.warning,
           ),
-          actions: [
-            CupertinoDialogAction(
-              child: const Text('忽略'),
-              onPressed: () {
-                Navigator.of(dialogCtx).pop();
-                _flowController.updateDeadlineListTime();
-              },
-            ),
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              child: Text(isHomework ? '知道了' : '重新规划'),
-              onPressed: () async {
-                Navigator.of(dialogCtx).pop();
-                if (isHomework) {
-                  _flowController.updateDeadlineListTime();
-                } else {
-                  await newFlowList(context);
-                  _flowController.flowList.refresh();
-                }
-              },
-            ),
-          ],
         ),
+        title: isHomework ? '作业状态已变化' : '规划方案已过期',
+        message: isHomework
+            ? '检测到作业状态已更新，当前规划方案可能需要同步或确认。'
+            : '任务列表已发生变更，原有的时间规划方案已过期，是否立即重新规划？',
+        actions: [
+          AelDialogAction<void>(
+            label: '忽略',
+            variant: AelButtonVariant.tonal,
+            onPressed: () => _flowController.updateDeadlineListTime(),
+          ),
+          AelDialogAction<void>(
+            label: isHomework ? '知道了' : '重新规划',
+            variant: AelButtonVariant.primary,
+            onPressed: () async {
+              if (isHomework) {
+                _flowController.updateDeadlineListTime();
+              } else {
+                await newFlowList(context);
+                _flowController.flowList.refresh();
+              }
+            },
+          ),
+        ],
       ).then((_) {
         _isPromptingOutdated = false;
       });
@@ -374,135 +369,106 @@ class _FlowPageState extends State<FlowPage> {
     DateTime newTime = DateTime.now()
         .add(const Duration(seconds: 90))
         .copyWith(second: 0, millisecond: 0, microsecond: 0);
-    await showCupertinoDialog(
+    await showAelBottomSheet<void>(
       context: context,
-      builder: (BuildContext dialogContext) {
-        return CupertinoAlertDialog(
-          title: const Text('开始规划'),
-          content: StatefulBuilder(
-            builder: (BuildContext context, StateSetter setState) {
-              return SizedBox(
-                width: double.maxFinite,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const SizedBox(height: 8),
-                    const Text('点击修改开始时间'),
-                    CupertinoButton(
-                      onPressed: () async {
-                        await showCupertinoModalPopup(
-                          context: context,
-                          builder: (BuildContext pickerContext) {
-                            return CupertinoPageScaffold(
-                              child: SizedBox(
-                                height:
-                                    MediaQuery.of(
-                                      pickerContext,
-                                    ).copyWith().size.height /
-                                    3,
-                                child: CupertinoDatePicker(
-                                  initialDateTime: newTime,
-                                  use24hFormat: true,
-                                  minuteInterval: 1,
-                                  mode: CupertinoDatePickerMode.dateAndTime,
-                                  onDateTimeChanged: (DateTime val) {
-                                    setState(() {
-                                      newTime = val;
-                                    });
-                                  },
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                      child: Text(TimeHelper.chineseDateTime(newTime)),
+      title: '开始规划',
+      subtitle:
+          '工作 ${durationToString(db.getWorkTime())} - 休息 ${durationToString(db.getRestTime())}',
+      showCloseButton: true,
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (sheetCtx, setSheetState) {
+            final colors = AelTheme.colorsOf(sheetCtx);
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AelListRow(
+                  title: '开始时间',
+                  icon: AelIcons.tabFlow,
+                  trailing: Text(
+                    TimeHelper.chineseDateTime(newTime),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: colors.primary,
                     ),
-                    Text(
-                      '工作 ${durationToString(db.getWorkTime())} - 休息 ${durationToString(db.getRestTime())}',
+                  ),
+                  onTap: () async {
+                    DateTime temp = newTime;
+                    final picked = await showAelPickerSheet<DateTime>(
+                      context: sheetCtx,
+                      title: '选择开始时间',
+                      pickerBuilder: (_) => CupertinoDatePicker(
+                        initialDateTime: temp,
+                        use24hFormat: true,
+                        minuteInterval: 1,
+                        mode: CupertinoDatePickerMode.dateAndTime,
+                        onDateTimeChanged: (val) => temp = val,
+                      ),
+                      onConfirm: () => temp,
+                    );
+                    if (picked != null) {
+                      setSheetState(() => newTime = picked);
+                    }
+                  },
+                ),
+                const SizedBox(height: AelSpacing.lg),
+                Row(
+                  children: [
+                    Expanded(
+                      child: AelButton(
+                        label: '返回',
+                        variant: AelButtonVariant.tonal,
+                        expanded: true,
+                        onPressed: () => Navigator.of(sheetCtx).pop(),
+                      ),
+                    ),
+                    const SizedBox(width: AelSpacing.md),
+                    Expanded(
+                      child: AelButton(
+                        label: '创建',
+                        expanded: true,
+                        onPressed: () async {
+                          if (!newTime.isAfter(DateTime.now())) {
+                            await showAelAlertDialog(
+                              context: sheetCtx,
+                              title: '开始时间必须晚于现在',
+                              message: '请调整开始时间。',
+                            );
+                            return;
+                          }
+                          final ret = _flowController.generateNewFlowList(
+                            newTime,
+                          );
+                          if (ret < 0) {
+                            if (!sheetCtx.mounted) return;
+                            await showAelAlertDialog(
+                              context: sheetCtx,
+                              title: '时间不够了！',
+                              message:
+                                  '即使是完全不休息也有任务无法完成。请压缩任务的预期时间，或者检查是否有任务在规划开始时间之前就结束。',
+                            );
+                          } else if (ret != db.getRestTime().inMinutes) {
+                            if (sheetCtx.mounted) Navigator.of(sheetCtx).pop();
+                            if (!context.mounted) return;
+                            await showAelAlertDialog(
+                              context: context,
+                              title: '休息时间已压缩',
+                              message:
+                                  '因为任务过多，你需要把休息时间压缩到 ${durationToString(Duration(minutes: ret))}才能完成任务。',
+                            );
+                          } else {
+                            if (sheetCtx.mounted) Navigator.of(sheetCtx).pop();
+                          }
+                        },
+                      ),
                     ),
                   ],
                 ),
-              );
-            },
-          ),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => navigator!.pop(),
-              child: const Text('返回'),
-            ),
-            CupertinoDialogAction(
-              onPressed: () {
-                if (newTime.isAfter(DateTime.now())) {
-                  int ret = _flowController.generateNewFlowList(newTime);
-                  if (ret < 0) {
-                    showCupertinoDialog(
-                      context: context,
-                      builder: (BuildContext context) {
-                        return CupertinoAlertDialog(
-                          title: const Text('时间不够了！'),
-                          content: const Text(
-                            '即使是完全不休息也有任务无法完成。请压缩任务的预期时间，或者检查是否有任务在规划开始时间之前就结束。',
-                          ),
-                          actions: [
-                            CupertinoDialogAction(
-                              child: const Text('确定'),
-                              onPressed: () async {
-                                Navigator.of(context).pop();
-                              },
-                            ),
-                          ],
-                        );
-                      },
-                    );
-                  } else if (ret != db.getRestTime().inMinutes) {
-                    navigator!.pop();
-                    showCupertinoDialog(
-                      context: context,
-                      builder: (BuildContext context) {
-                        return CupertinoAlertDialog(
-                          title: const Text('休息时间已压缩'),
-                          content: Text(
-                            '因为任务过多，你需要把休息时间压缩到 ${durationToString(Duration(minutes: ret))}才能完成任务。',
-                          ),
-                          actions: [
-                            CupertinoDialogAction(
-                              child: const Text('确定'),
-                              onPressed: () async {
-                                Navigator.of(context).pop();
-                              },
-                            ),
-                          ],
-                        );
-                      },
-                    );
-                  } else {
-                    navigator!.pop();
-                  }
-                } else {
-                  showCupertinoDialog(
-                    context: context,
-                    builder: (BuildContext context) {
-                      return CupertinoAlertDialog(
-                        title: const Text('开始时间必须晚于现在'),
-                        content: const Text('请调整开始时间。'),
-                        actions: [
-                          CupertinoDialogAction(
-                            child: const Text('确定'),
-                            onPressed: () async {
-                              Navigator.of(context).pop();
-                            },
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                }
-              },
-              child: const Text('创建'),
-            ),
-          ],
+              ],
+            );
+          },
         );
       },
     );

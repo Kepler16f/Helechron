@@ -1049,6 +1049,36 @@ void main() {
         expect(liveRows, hasLength(1));
         expect(liveRows.first['course_id'], equals('85940'));
         expect(liveRows.first['sub_id'], equals('1928888'));
+        expect(ZhiyunService.checkIsLive(item: liveRows.first), isTrue);
+
+        // 课程级排课记录（仅含课程 id、无 sub_id）绝不能将 course_id 误填充为 sub_id
+        final unstartedMonthCoursePayload = {
+          'code': 0,
+          'list': [
+            {
+              'course': [
+                {
+                  'id': '86957',
+                  'title': 'Python程序设计',
+                  'realname': '沈睿',
+                  'course_begin': beginSec,
+                  'course_over': endSec,
+                },
+              ],
+            },
+          ],
+        };
+        final monthItems = ZhiyunService.extractSubItemsFromResponse(
+          unstartedMonthCoursePayload,
+        );
+        expect(monthItems, hasLength(1));
+        expect(monthItems.first['course_id'], equals('86957'));
+        expect(monthItems.first['sub_id'], isNull);
+
+        final cookieHeader = ZhiyunService.buildZhiyunCookieHeader('jwt_demo');
+        expect(cookieHeader, contains('_token='));
+        expect(cookieHeader, contains('token=jwt_demo'));
+        expect(cookieHeader, contains('tenant_code=112'));
       },
     );
   });

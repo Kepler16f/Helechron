@@ -1,3 +1,4 @@
+import 'package:celechron/design/components/ael_components.dart';
 import 'package:celechron/page/option/diagnostic_log_page.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -38,9 +39,7 @@ void main() {
     expect(find.text('刷新成功'), findsOneWidget);
     expect(find.textContaining('2026-07-16'), findsWidgets);
 
-    final semantics = tester.getSemantics(
-      find.bySemanticsLabel('诊断日志显示模式'),
-    );
+    final semantics = tester.getSemantics(find.bySemanticsLabel('诊断日志显示模式'));
     expect(semantics.label, contains('诊断日志显示模式'));
   });
 
@@ -210,9 +209,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(500, 1000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     var clearCalls = 0;
-    await tester.pumpWidget(testApp(
-      clearLogs: () async => clearCalls++,
-    ));
+    await tester.pumpWidget(testApp(clearLogs: () async => clearCalls++));
     await tester.pumpAndSettle();
     await tester.tap(find.text('原始日志'));
     await tester.pumpAndSettle();
@@ -229,11 +226,11 @@ void main() {
 
     await tester.tap(find.text('清空测试日志'));
     await tester.pumpAndSettle();
-    final destructive = tester.widget<CupertinoDialogAction>(
-      find.widgetWithText(CupertinoDialogAction, '清空'),
+    final destructive = tester.widget<AelButton>(
+      find.widgetWithText(AelButton, '清空'),
     );
-    expect(destructive.isDestructiveAction, isTrue);
-    await tester.tap(find.widgetWithText(CupertinoDialogAction, '清空'));
+    expect(destructive.variant, AelButtonVariant.destructive);
+    await tester.tap(find.widgetWithText(AelButton, '清空'));
     await tester.pumpAndSettle();
     expect(clearCalls, 1);
     expect(find.text('已清空'), findsOneWidget);

@@ -272,10 +272,12 @@ class OptionPage extends StatelessWidget {
                 iconBgColor: colors.primaryContainer,
                 iconColor: colors.onPrimaryContainer,
                 onTap: () {
-                  // Pop up a login widget from the bottom of the screen
-                  showCupertinoModalPopup(
+                  showAelBottomSheet<void>(
                     context: context,
-                    builder: (BuildContext context) => LoginForm(),
+                    title: '统一身份认证登录',
+                    subtitle: '绑定浙大通行证以同步课表、成绩与作业',
+                    showCloseButton: true,
+                    builder: (_) => LoginForm(),
                   );
                 },
               ),
@@ -764,112 +766,57 @@ class OptionPage extends StatelessWidget {
   }
 
   Future<void> _confirmLogout(BuildContext context) async {
-    await showCupertinoDialog(
+    final confirmed = await showAelConfirmDialog(
       context: context,
-      builder: (BuildContext dialogContext) {
-        return CupertinoAlertDialog(
-          title: const Text('退出登录'),
-          content: const Text('确定要退出当前账号吗？'),
-          actions: [
-            CupertinoDialogAction(
-              child: const Text('取消'),
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-              },
-            ),
-            CupertinoDialogAction(
-              isDestructiveAction: true,
-              child: const Text('退出'),
-              onPressed: () async {
-                Navigator.of(dialogContext).pop();
-                await _optionController.logout();
-              },
-            ),
-          ],
-        );
-      },
+      title: '退出登录',
+      message: '确定要退出当前账号吗？',
+      confirmLabel: '退出',
+      isDestructive: true,
     );
+    if (confirmed) {
+      await _optionController.logout();
+    }
   }
 
   Future<void> _showWorkTimePicker(BuildContext context) async {
     Duration newWorkTime = _optionController.workTime;
-    await showCupertinoDialog(
+    final confirmed = await showAelPickerSheet<Duration>(
       context: context,
-      builder: (BuildContext context) {
-        return CupertinoAlertDialog(
-          title: const Text('工作段时间长度'),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 200,
-            child: Column(
-              children: [
-                Expanded(
-                  child: CupertinoTimerPicker(
-                    mode: CupertinoTimerPickerMode.hm,
-                    minuteInterval: 5,
-                    initialTimerDuration: newWorkTime,
-                    onTimerDurationChanged: (value) {
-                      if (value >= const Duration(minutes: 5)) {
-                        newWorkTime = value;
-                      } else {
-                        newWorkTime = const Duration(minutes: 5);
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            CupertinoDialogAction(
-              child: const Text('确定'),
-              onPressed: () async {
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
-        );
-      },
+      title: '工作段时间长度',
+      pickerBuilder: (_) => CupertinoTimerPicker(
+        mode: CupertinoTimerPickerMode.hm,
+        minuteInterval: 5,
+        initialTimerDuration: newWorkTime,
+        onTimerDurationChanged: (value) {
+          newWorkTime = value >= const Duration(minutes: 5)
+              ? value
+              : const Duration(minutes: 5);
+        },
+      ),
+      onConfirm: () => newWorkTime,
     );
-    _optionController.workTime = newWorkTime;
+    if (confirmed != null) {
+      _optionController.workTime = confirmed;
+    }
   }
 
   Future<void> _showRestTimePicker(BuildContext context) async {
     Duration newRestTime = _optionController.restTime;
-    await showCupertinoDialog(
+    final confirmed = await showAelPickerSheet<Duration>(
       context: context,
-      builder: (BuildContext context) {
-        return CupertinoAlertDialog(
-          title: const Text('休息段时间长度'),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 200,
-            child: Column(
-              children: [
-                Expanded(
-                  child: CupertinoTimerPicker(
-                    mode: CupertinoTimerPickerMode.hm,
-                    initialTimerDuration: newRestTime,
-                    onTimerDurationChanged: (value) {
-                      newRestTime = value;
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            CupertinoDialogAction(
-              child: const Text('确定'),
-              onPressed: () async {
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
-        );
-      },
+      title: '休息段时间长度',
+      pickerBuilder: (_) => CupertinoTimerPicker(
+        mode: CupertinoTimerPickerMode.hm,
+        initialTimerDuration: newRestTime,
+        onTimerDurationChanged: (value) {
+          newRestTime = value;
+        },
+      ),
+      onConfirm: () => newRestTime,
     );
-    _optionController.restTime = newRestTime;
+    if (confirmed != null) {
+      _optionController.restTime = confirmed;
+    }
   }
 
   String _materialLevelName(int level) {
@@ -887,64 +834,51 @@ class OptionPage extends StatelessWidget {
 
   void _showMaterialLevelPicker(BuildContext context) {
     const levels = <int, String>{10: '跟随系统', 0: '精致', 1: '柔和', 2: '流畅'};
-    showCupertinoModalPopup(
+    final current = _optionController.bottomBarMaterialLevel;
+    showAelActionSheet<int>(
       context: context,
-      builder: (BuildContext context) {
-        return CupertinoActionSheet(
-          actions: levels.entries
-              .map(
-                (entry) => CupertinoActionSheetAction(
-                  onPressed: () {
-                    _optionController.bottomBarMaterialLevel = entry.key;
-                    Navigator.pop(context);
-                  },
-                  child: Text(entry.value),
-                ),
-              )
-              .toList(),
-          cancelButton: CupertinoActionSheetAction(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-        );
-      },
+      title: '选择底栏光感强度',
+      actions: levels.entries
+          .map(
+            (entry) => AelActionOption<int>(
+              value: entry.key,
+              label: entry.value,
+              isSelected: current == entry.key,
+              onTap: () => _optionController.bottomBarMaterialLevel = entry.key,
+            ),
+          )
+          .toList(),
     );
   }
 
   void _showBrightnessPicker(BuildContext context) {
-    showCupertinoModalPopup(
+    final current = _optionController.brightnessMode;
+    showAelActionSheet<BrightnessMode>(
       context: context,
-      builder: (BuildContext context) {
-        return CupertinoActionSheet(
-          actions: <Widget>[
-            CupertinoActionSheetAction(
-              onPressed: () {
-                _optionController.brightnessMode = BrightnessMode.system;
-                Navigator.pop(context);
-              },
-              child: const Text('跟随系统设置'),
-            ),
-            CupertinoActionSheetAction(
-              onPressed: () {
-                _optionController.brightnessMode = BrightnessMode.light;
-                Navigator.pop(context);
-              },
-              child: const Text('亮色模式'),
-            ),
-            CupertinoActionSheetAction(
-              onPressed: () {
-                _optionController.brightnessMode = BrightnessMode.dark;
-                Navigator.pop(context);
-              },
-              child: const Text('暗色模式'),
-            ),
-          ],
-          cancelButton: CupertinoActionSheetAction(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-        );
-      },
+      title: '选择外观模式',
+      actions: [
+        AelActionOption<BrightnessMode>(
+          value: BrightnessMode.system,
+          label: '跟随系统设置',
+          icon: AelIcons.smartphone,
+          isSelected: current == BrightnessMode.system,
+          onTap: () => _optionController.brightnessMode = BrightnessMode.system,
+        ),
+        AelActionOption<BrightnessMode>(
+          value: BrightnessMode.light,
+          label: '亮色模式',
+          icon: AelIcons.sun,
+          isSelected: current == BrightnessMode.light,
+          onTap: () => _optionController.brightnessMode = BrightnessMode.light,
+        ),
+        AelActionOption<BrightnessMode>(
+          value: BrightnessMode.dark,
+          label: '暗色模式',
+          icon: AelIcons.moon,
+          isSelected: current == BrightnessMode.dark,
+          onTap: () => _optionController.brightnessMode = BrightnessMode.dark,
+        ),
+      ],
     );
   }
 
@@ -957,197 +891,111 @@ class OptionPage extends StatelessWidget {
       30: '¥30',
       50: '¥50',
     };
-    showCupertinoModalPopup(
+    final current = _optionController.ecardLowBalanceThreshold;
+    showAelActionSheet<double>(
       context: context,
-      builder: (BuildContext sheetContext) {
-        return CupertinoActionSheet(
-          title: const Text('付款码低余额预警阈值'),
-          message: const Text('当校园卡余额低于设定金额时，在付款码页及桌面大码页显示充值提醒'),
-          actions: [
-            ...presets.entries.map(
-              (entry) => CupertinoActionSheetAction(
-                onPressed: () {
-                  _optionController.ecardLowBalanceThreshold = entry.key;
-                  Navigator.pop(sheetContext);
-                },
-                child: Text(entry.value),
-              ),
-            ),
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(sheetContext);
-                _showCustomThresholdDialog(context);
-              },
-              child: const Text('自定义金额...'),
-            ),
-          ],
-          cancelButton: CupertinoActionSheetAction(
-            onPressed: () => Navigator.pop(sheetContext),
-            child: const Text('取消'),
+      title: '付款码低余额预警阈值',
+      message: '当校园卡余额低于设定金额时，在付款码页及桌面大码页显示充值提醒',
+      actions: [
+        ...presets.entries.map(
+          (entry) => AelActionOption<double>(
+            value: entry.key,
+            label: entry.value,
+            isSelected: current == entry.key,
+            onTap: () => _optionController.ecardLowBalanceThreshold = entry.key,
           ),
-        );
-      },
+        ),
+        AelActionOption<double>(
+          label: '自定义金额...',
+          icon: AelIcons.edit,
+          isSelected: !presets.containsKey(current),
+          onTap: () => _showCustomThresholdDialog(context),
+        ),
+      ],
     );
   }
 
   void _showCustomThresholdDialog(BuildContext context) {
-    final controller = TextEditingController(
-      text: _optionController.ecardLowBalanceThreshold > 0
+    showAelInputDialog(
+      context: context,
+      title: '自定义低余额预警阈值（元）',
+      initialValue: _optionController.ecardLowBalanceThreshold > 0
           ? _optionController.ecardLowBalanceThreshold.toStringAsFixed(0)
           : '15',
-    );
-    showCupertinoDialog(
-      context: context,
-      builder: (dialogContext) {
-        final colors = AelTheme.colorsOf(dialogContext);
-        return CupertinoAlertDialog(
-          title: const Text('自定义低余额预警阈值（元）'),
-          content: Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: CupertinoTextField(
-              controller: controller,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              placeholder: '输入金额（0 表示关闭）',
-              autofocus: true,
-              style: TextStyle(color: colors.textPrimary),
-              placeholderStyle: TextStyle(color: colors.textTertiary),
-              decoration: BoxDecoration(
-                color: colors.tonalTileBg,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          ),
-          actions: [
-            CupertinoDialogAction(
-              child: const Text('取消'),
-              onPressed: () => Navigator.pop(dialogContext),
-            ),
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              child: const Text('确定'),
-              onPressed: () {
-                final val = double.tryParse(controller.text.trim());
-                if (val != null && val >= 0) {
-                  _optionController.ecardLowBalanceThreshold = val;
-                }
-                Navigator.pop(dialogContext);
-              },
-            ),
-          ],
-        );
+      placeholder: '输入金额（0 表示关闭）',
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      validator: (raw) {
+        final val = double.tryParse(raw.trim());
+        if (val == null || val < 0) {
+          return '请输入不小于 0 的有效数字';
+        }
+        return null;
       },
-    ).then((_) => controller.dispose());
+    ).then((result) {
+      if (result == null) return;
+      final val = double.tryParse(result.trim());
+      if (val != null && val >= 0) {
+        _optionController.ecardLowBalanceThreshold = val;
+      }
+    });
   }
 
   void _showDownloadPathPicker(BuildContext context) {
-    showCupertinoModalPopup(
+    showAelActionSheet<void>(
       context: context,
-      builder: (sheetContext) {
-        return CupertinoActionSheet(
-          title: const Text('课件下载保存路径'),
-          message: Text(
-            _optionController.downloadPath.isEmpty
-                ? '当前：应用默认课件目录（支持直接唤起系统“打开方式”）'
-                : '当前：${_optionController.downloadPath}',
+      title: '课件下载保存路径',
+      message: _optionController.downloadPath.isEmpty
+          ? '当前：应用默认课件目录（支持直接唤起系统“打开方式”）'
+          : '当前：${_optionController.downloadPath}',
+      actions: [
+        AelActionOption<void>(
+          label: '通过系统选择器选择文件夹',
+          icon: AelIcons.folder,
+          onTap: () async {
+            // 等待底部弹窗收起动画完成，避免 iOS/HarmonyOS 原生选择器弹出时机冲突
+            await Future<void>.delayed(const Duration(milliseconds: 220));
+            final picked = await OhosNativeService.instance.pickDirectory();
+            if (picked != null && picked.isNotEmpty) {
+              _optionController.downloadPath = picked;
+              return;
+            }
+            final err = OhosNativeService.instance.lastFilePickError;
+            if (err != null && err.isNotEmpty && context.mounted) {
+              await showAelAlertDialog(
+                context: context,
+                title: '无法打开系统文件夹选择器',
+                message: err,
+                confirmLabel: '好',
+              );
+            }
+          },
+        ),
+        AelActionOption<void>(
+          label: '手动输入保存路径...',
+          icon: AelIcons.edit,
+          onTap: () => _showCustomDownloadPathDialog(context),
+        ),
+        if (_optionController.downloadPath.isNotEmpty)
+          AelActionOption<void>(
+            label: '恢复应用默认目录',
+            icon: AelIcons.refresh,
+            isDestructive: true,
+            onTap: () => _optionController.downloadPath = '',
           ),
-          actions: [
-            CupertinoActionSheetAction(
-              onPressed: () async {
-                Navigator.pop(sheetContext);
-                // 等待底部弹窗收起动画完成，避免 iOS/HarmonyOS 原生选择器弹出时机冲突
-                await Future<void>.delayed(const Duration(milliseconds: 220));
-                final picked = await OhosNativeService.instance.pickDirectory();
-                if (picked != null && picked.isNotEmpty) {
-                  _optionController.downloadPath = picked;
-                  return;
-                }
-                final err = OhosNativeService.instance.lastFilePickError;
-                if (err != null && err.isNotEmpty && context.mounted) {
-                  showCupertinoDialog(
-                    context: context,
-                    builder: (ctx) => CupertinoAlertDialog(
-                      title: const Text('无法打开系统文件夹选择器'),
-                      content: Text(err),
-                      actions: [
-                        CupertinoDialogAction(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text('好'),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-              },
-              child: const Text('通过系统选择器选择文件夹'),
-            ),
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(sheetContext);
-                _showCustomDownloadPathDialog(context);
-              },
-              child: const Text('手动输入保存路径...'),
-            ),
-            if (_optionController.downloadPath.isNotEmpty)
-              CupertinoActionSheetAction(
-                isDestructiveAction: true,
-                onPressed: () {
-                  _optionController.downloadPath = '';
-                  Navigator.pop(sheetContext);
-                },
-                child: const Text('恢复应用默认目录'),
-              ),
-          ],
-          cancelButton: CupertinoActionSheetAction(
-            onPressed: () => Navigator.pop(sheetContext),
-            child: const Text('取消'),
-          ),
-        );
-      },
+      ],
     );
   }
 
   void _showCustomDownloadPathDialog(BuildContext context) {
-    final controller = TextEditingController(
-      text: _optionController.downloadPath,
-    );
-    showCupertinoDialog(
+    showAelInputDialog(
       context: context,
-      builder: (dialogContext) {
-        final colors = AelTheme.colorsOf(dialogContext);
-        return CupertinoAlertDialog(
-          title: const Text('设置课件下载目录'),
-          content: Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: CupertinoTextField(
-              controller: controller,
-              placeholder: '留空使用应用默认目录',
-              autofocus: true,
-              style: TextStyle(color: colors.textPrimary),
-              placeholderStyle: TextStyle(color: colors.textTertiary),
-              decoration: BoxDecoration(
-                color: colors.tonalTileBg,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          ),
-          actions: [
-            CupertinoDialogAction(
-              child: const Text('取消'),
-              onPressed: () => Navigator.pop(dialogContext),
-            ),
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              child: const Text('确定'),
-              onPressed: () {
-                _optionController.downloadPath = controller.text.trim();
-                Navigator.pop(dialogContext);
-              },
-            ),
-          ],
-        );
-      },
-    ).then((_) => controller.dispose());
+      title: '设置课件下载目录',
+      initialValue: _optionController.downloadPath,
+      placeholder: '留空使用应用默认目录',
+    ).then((result) {
+      if (result != null) {
+        _optionController.downloadPath = result.trim();
+      }
+    });
   }
 }

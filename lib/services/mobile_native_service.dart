@@ -94,9 +94,13 @@ class MobileNativeService {
       var added = 0;
       for (final e in events) {
         final start = tz.TZDateTime.fromMillisecondsSinceEpoch(
-            tz.UTC, (e['startTime'] as num).toInt());
+          tz.UTC,
+          (e['startTime'] as num).toInt(),
+        );
         final end = tz.TZDateTime.fromMillisecondsSinceEpoch(
-            tz.UTC, (e['endTime'] as num).toInt());
+          tz.UTC,
+          (e['endTime'] as num).toInt(),
+        );
         final event = Event(
           calendarId,
           title: e['summary']?.toString(),
@@ -188,14 +192,21 @@ class MobileNativeService {
     try {
       await _ensureNotificationsInitialized();
       if (Platform.isAndroid) {
-        final impl = _notifications.resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
+        final impl = _notifications
+            .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin
+            >();
         return await impl?.requestNotificationsPermission() ?? false;
       }
-      final impl = _notifications.resolvePlatformSpecificImplementation<
-          IOSFlutterLocalNotificationsPlugin>();
+      final impl = _notifications
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >();
       return await impl?.requestPermissions(
-              alert: true, badge: true, sound: true) ??
+            alert: true,
+            badge: true,
+            sound: true,
+          ) ??
           false;
     } catch (e) {
       debugPrint('requestNotificationPermission failed: $e');
@@ -207,12 +218,16 @@ class MobileNativeService {
     try {
       await _ensureNotificationsInitialized();
       if (Platform.isAndroid) {
-        final impl = _notifications.resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
+        final impl = _notifications
+            .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin
+            >();
         return await impl?.areNotificationsEnabled() ?? false;
       }
-      final impl = _notifications.resolvePlatformSpecificImplementation<
-          IOSFlutterLocalNotificationsPlugin>();
+      final impl = _notifications
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >();
       final p = await impl?.checkPermissions();
       return p?.isEnabled ?? false;
     } catch (_) {
@@ -348,15 +363,13 @@ class MobileNativeService {
     String? mimeType,
   }) async {
     try {
-      final result = await _widgetChannel.invokeMethod<String>(
-        'copyFileToDirectory',
-        {
-          'sourcePath': sourcePath,
-          'targetDir': targetDir,
-          'fileName': fileName,
-          'mimeType': mimeType ?? '',
-        },
-      );
+      final result = await _widgetChannel
+          .invokeMethod<String>('copyFileToDirectory', {
+            'sourcePath': sourcePath,
+            'targetDir': targetDir,
+            'fileName': fileName,
+            'mimeType': mimeType ?? '',
+          });
       if (result != null && result.trim().isNotEmpty) {
         return result.trim();
       }
@@ -380,12 +393,14 @@ class MobileNativeService {
     String? title,
   }) async {
     try {
-      final result =
-          await _widgetChannel.invokeMethod<bool>('openFileWithSystem', {
-        'filePath': filePath,
-        'mimeType': mimeType ?? '',
-        'title': title ?? '',
-      });
+      final result = await _widgetChannel.invokeMethod<bool>(
+        'openFileWithSystem',
+        {
+          'filePath': filePath,
+          'mimeType': mimeType ?? '',
+          'title': title ?? '',
+        },
+      );
       return result ?? false;
     } catch (e) {
       debugPrint('MobileNativeService openFileWithSystem failed: $e');
@@ -400,22 +415,27 @@ class MobileNativeService {
     String? livingroomUrl,
     String? token,
     String? ssoCookie,
+    String? zhiyunCookies,
     bool isLive = false,
     bool preferWeb = false,
   }) async {
     try {
-      final result =
-          await _widgetChannel.invokeMethod<bool>('openInAppVideoPlayer', {
-        'url': url,
-        'title': title,
-        'streams': streams,
-        'isLive': isLive,
-        'preferWeb': preferWeb,
-        if (livingroomUrl != null && livingroomUrl.isNotEmpty)
-          'livingroomUrl': livingroomUrl,
-        if (token != null && token.isNotEmpty) 'token': token,
-        if (ssoCookie != null && ssoCookie.isNotEmpty) 'ssoCookie': ssoCookie,
-      });
+      final result = await _widgetChannel.invokeMethod<bool>(
+        'openInAppVideoPlayer',
+        {
+          'url': url,
+          'title': title,
+          'streams': streams,
+          'isLive': isLive,
+          'preferWeb': preferWeb,
+          if (livingroomUrl != null && livingroomUrl.isNotEmpty)
+            'livingroomUrl': livingroomUrl,
+          if (token != null && token.isNotEmpty) 'token': token,
+          if (ssoCookie != null && ssoCookie.isNotEmpty) 'ssoCookie': ssoCookie,
+          if (zhiyunCookies != null && zhiyunCookies.isNotEmpty)
+            'zhiyunCookies': zhiyunCookies,
+        },
+      );
       return result ?? false;
     } catch (e) {
       debugPrint('MobileNativeService openInAppVideoPlayer failed: $e');
@@ -425,8 +445,9 @@ class MobileNativeService {
 
   // ==================== Desktop Widgets ====================
 
-  static const MethodChannel _widgetChannel =
-      MethodChannel('top.celechron.celechron/widget');
+  static const MethodChannel _widgetChannel = MethodChannel(
+    'top.celechron.celechron/widget',
+  );
   bool _widgetHandlerInstalled = false;
 
   void ensureWidgetHandler(void Function(String target) handler) {
@@ -484,8 +505,9 @@ class MobileNativeService {
 
   Future<String?> consumePendingRoute() async {
     try {
-      final result =
-          await _widgetChannel.invokeMethod<String>('consumePendingRoute');
+      final result = await _widgetChannel.invokeMethod<String>(
+        'consumePendingRoute',
+      );
       return result;
     } on PlatformException catch (_) {
       return null;

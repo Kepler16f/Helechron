@@ -24,7 +24,8 @@ export default class SimpleCourseWidgetExtension extends FormExtensionAbility {
     const empty: Record<string, string> = {
       'courseName': '今日暂无课程',
       'courseStatus': '全部结课',
-      'courseStatusColor': '#888888',
+      'courseStatusColor': '#6B7280',
+      'accentColor': '#007AFF',
       'hasCourse': '0'
     };
     return formBindingData.createFormBindingData(empty);

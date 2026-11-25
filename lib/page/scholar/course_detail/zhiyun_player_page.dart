@@ -176,7 +176,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
     try {
       final rawCat = await ZhiyunService.fetchCourseCatalogue(
         widget.courseId,
-        forceRefresh: false,
+        forceRefresh: _isLiveMode,
       ).timeout(const Duration(seconds: 6), onTimeout: () => const []);
       if (mounted && rawCat.isNotEmpty && _replays.isEmpty) {
         setState(() {
@@ -188,6 +188,10 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
 
   Future<void> _loadLessonData({bool autoPlayFirstTime = false}) async {
     var subId = _currentSubId;
+    if (subId == widget.courseId) {
+      subId = null;
+      _currentSubId = null;
+    }
     if ((subId == null || subId.isEmpty) && widget.courseId.isNotEmpty) {
       final now = DateTime.now();
       if (_isLiveMode) {
@@ -196,8 +200,11 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
             widget.courseId,
             now,
             period: widget.period,
+            bypassCache: true,
           ).timeout(const Duration(seconds: 6), onTimeout: () => null);
-          if (activeToday != null && activeToday.isNotEmpty) {
+          if (activeToday != null &&
+              activeToday.isNotEmpty &&
+              activeToday != widget.courseId) {
             subId = activeToday;
             _currentSubId = activeToday;
             _currentLivingroomUrl = ZhiyunService.buildLivingroomUrl(
@@ -477,6 +484,8 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
           _isLiveMode ||
           _streams.firstWhereOrNull((s) => s.url == url)?.isLive == true;
 
+      final zhiyunCookies = ZhiyunService.buildZhiyunCookieHeader(token);
+
       final ok = await OhosNativeService.instance.openInAppVideoPlayer(
         url: effectiveUrl,
         title: '${widget.courseName} · $_currentTitle',
@@ -484,30 +493,26 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
         livingroomUrl: effectiveLivingroom,
         token: token,
         ssoCookie: ssoCookie,
+        zhiyunCookies: zhiyunCookies,
         isLive: streamIsLive,
         preferWeb: openWebDirectly,
       );
       if (!ok && mounted) {
-        showCupertinoDialog(
+        showAelDialog<void>(
           context: context,
-          builder: (ctx) => CupertinoAlertDialog(
-            title: const Text('未能启动内置播放器'),
-            content: const Text('可尝试改用系统浏览器打开智云课堂页面播放。'),
-            actions: [
-              CupertinoDialogAction(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('取消'),
-              ),
-              CupertinoDialogAction(
-                isDefaultAction: true,
-                onPressed: () {
-                  Navigator.of(ctx).pop();
-                  ZhiyunService.openUrl(fallbackOpenUrl);
-                },
-                child: const Text('浏览器打开'),
-              ),
-            ],
-          ),
+          title: '未能启动内置播放器',
+          message: '可尝试改用系统浏览器打开智云课堂页面播放。',
+          actions: [
+            const AelDialogAction<void>(
+              label: '取消',
+              variant: AelButtonVariant.tonal,
+            ),
+            AelDialogAction<void>(
+              label: '浏览器打开',
+              variant: AelButtonVariant.primary,
+              onPressed: () => ZhiyunService.openUrl(fallbackOpenUrl),
+            ),
+          ],
         );
       }
     } catch (_) {
@@ -697,47 +702,43 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
 
   void _showLessonPicker(BuildContext context) {
     if (_replays.isEmpty) return;
-    showCupertinoModalPopup(
+    showAelActionSheet<void>(
       context: context,
-      builder: (sheetCtx) {
-        return CupertinoActionSheet(
-          title: Text('${widget.courseName} · 切换课节'),
-          actions: _replays
-              .where((r) => r.subId != null && r.subId!.isNotEmpty)
-              .map(
-                (r) => CupertinoActionSheetAction(
-                  onPressed: () {
-                    Navigator.pop(sheetCtx);
-                    setState(() {
-                      _currentSubId = r.subId;
-                      _currentTitle = r.lessonTitle;
-                      _currentLivingroomUrl = r.livingroomUrl;
-                      _isLiveMode = r.isLive;
-                      _autoLaunched = false;
-                    });
-                    _loadLessonData(autoPlayFirstTime: false);
-                  },
-                  child: Text(
-                    '${r.lessonTitle}${r.isLive
-                        ? " [直播中]"
-                        : r.hasReplay
-                        ? " [有回放]"
-                        : ""}',
-                    style: TextStyle(
-                      fontWeight: r.subId == _currentSubId
-                          ? FontWeight.bold
-                          : FontWeight.normal,
-                    ),
-                  ),
-                ),
-              )
-              .toList(),
-          cancelButton: CupertinoActionSheetAction(
-            onPressed: () => Navigator.pop(sheetCtx),
-            child: const Text('取消'),
-          ),
-        );
-      },
+      title: '${widget.courseName} · 切换课节',
+      actions: _replays
+          .where((r) => r.subId != null && r.subId!.isNotEmpty)
+          .map(
+            (r) => AelActionOption<void>(
+              label: r.lessonTitle,
+              subtitle: r.isLive ? '正在直播' : (r.hasReplay ? '已有回放录像' : null),
+              icon: r.isLive ? AelIcons.radio : AelIcons.video,
+              isSelected: r.subId == _currentSubId,
+              onTap: () {
+                final now = DateTime.now();
+                final isTodayActiveWindow =
+                    !r.hasReplay &&
+                    r.lessonDate != null &&
+                    r.lessonDate!.year == now.year &&
+                    r.lessonDate!.month == now.month &&
+                    r.lessonDate!.day == now.day &&
+                    now.isAfter(
+                      r.lessonDate!.subtract(const Duration(minutes: 20)),
+                    ) &&
+                    now.isBefore(
+                      r.lessonDate!.add(const Duration(minutes: 150)),
+                    );
+                setState(() {
+                  _currentSubId = r.subId;
+                  _currentTitle = r.lessonTitle;
+                  _currentLivingroomUrl = r.livingroomUrl;
+                  _isLiveMode = r.isLive || isTodayActiveWindow;
+                  _autoLaunched = false;
+                });
+                _loadLessonData(autoPlayFirstTime: _isLiveMode);
+              },
+            ),
+          )
+          .toList(),
     );
   }
 

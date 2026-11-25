@@ -40,9 +40,11 @@ export default class PaymentCodeWidgetExtension extends FormExtensionAbility {
       // 1. 立即给卡片推送“刷新中...”反馈，确保墓碑唤醒或后台点击时有即时视觉响应
       if (prefs !== null) {
         const curCode = (prefs.getSync('paymentCode', '') as string) || '';
+        const accent = this.resolveAccentHex(prefs);
         const pendingData: Record<string, string> = {
           'paymentCode': curCode,
           'displayName': '刷新中...',
+          'accentColor': accent,
           'hasCode': curCode.length > 0 ? '1' : '0'
         };
         formProvider.updateForm(formId, formBindingData.createFormBindingData(pendingData)).catch(() => {});
@@ -83,6 +85,20 @@ export default class PaymentCodeWidgetExtension extends FormExtensionAbility {
     return ECardNativeHelper.getFreshPrefs(this.context);
   }
 
+  private resolveAccentHex(prefs: preferences.Preferences | null): string {
+    if (prefs === null) {
+      return '#007AFF';
+    }
+    const raw = ((prefs.getSync('themePrimaryHex', '#007AFF') as string) || '#007AFF').trim().replace('#', '');
+    if (/^[0-9a-fA-F]{6}$/.test(raw)) {
+      return `#${raw.toUpperCase()}`;
+    }
+    if (/^[0-9a-fA-F]{8}$/.test(raw)) {
+      return `#${raw.substring(2).toUpperCase()}`;
+    }
+    return '#007AFF';
+  }
+
   private buildData(prefs: preferences.Preferences | null): Record<string, string> {
     let code = '';
     let name = '付款码';
@@ -93,6 +109,7 @@ export default class PaymentCodeWidgetExtension extends FormExtensionAbility {
     const data: Record<string, string> = {
       'paymentCode': code,
       'displayName': name,
+      'accentColor': this.resolveAccentHex(prefs),
       'hasCode': code.length > 0 ? '1' : '0'
     };
     return data;
@@ -137,6 +154,7 @@ export default class PaymentCodeWidgetExtension extends FormExtensionAbility {
       const noAuthData: Record<string, string> = {
         'paymentCode': curCode,
         'displayName': '请打开应用登录',
+        'accentColor': this.resolveAccentHex(prefs),
         'hasCode': curCode.length > 0 ? '1' : '0'
       };
       formProvider.updateForm(formId, formBindingData.createFormBindingData(noAuthData)).catch(() => {});

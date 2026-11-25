@@ -124,160 +124,82 @@ class AppearanceSection extends StatelessWidget {
   }
 
   void _showSourcePicker(BuildContext context, bool monetSupported) {
-    showCupertinoModalPopup<void>(
+    showAelActionSheet<ThemeColorSource>(
       context: context,
-      builder: (BuildContext sheetContext) {
-        return CupertinoActionSheet(
-          title: const Text('选择主题色来源'),
-          actions: ThemeColorSource.values.map((value) {
-            final unavailable =
-                value == ThemeColorSource.monet && !monetSupported;
-            return CupertinoActionSheetAction(
-              isDefaultAction: value == _controller.themeColorSource,
-              onPressed: () {
-                _controller.themeColorSource = value;
-                Navigator.pop(sheetContext);
-              },
-              child: Text(
-                unavailable ? '${value.label}（当前系统不支持，将回退默认蓝）' : value.label,
-              ),
-            );
-          }).toList(),
-          cancelButton: CupertinoActionSheetAction(
-            onPressed: () => Navigator.pop(sheetContext),
-            child: const Text('取消'),
-          ),
+      title: '选择主题色来源',
+      actions: ThemeColorSource.values.map((value) {
+        final unavailable = value == ThemeColorSource.monet && !monetSupported;
+        return AelActionOption<ThemeColorSource>(
+          value: value,
+          label: value.label,
+          subtitle: unavailable ? '当前系统不支持，将回退默认蓝' : null,
+          isSelected: value == _controller.themeColorSource,
+          onTap: () => _controller.themeColorSource = value,
         );
-      },
+      }).toList(),
     );
   }
 
   void _showStylePicker(BuildContext context) {
-    showCupertinoModalPopup<void>(
+    showAelActionSheet<ThemePaletteStyle>(
       context: context,
-      builder: (BuildContext sheetContext) {
-        return CupertinoActionSheet(
-          title: const Text('选择配色风格'),
-          actions: ThemePaletteStyle.values
-              .map(
-                (value) => CupertinoActionSheetAction(
-                  isDefaultAction: value == _controller.themePaletteStyle,
-                  onPressed: () {
-                    _controller.themePaletteStyle = value;
-                    Navigator.pop(sheetContext);
-                  },
-                  child: Text(value.label),
-                ),
-              )
-              .toList(),
-          cancelButton: CupertinoActionSheetAction(
-            onPressed: () => Navigator.pop(sheetContext),
-            child: const Text('取消'),
-          ),
-        );
-      },
+      title: '选择配色风格',
+      actions: ThemePaletteStyle.values
+          .map(
+            (value) => AelActionOption<ThemePaletteStyle>(
+              value: value,
+              label: value.label,
+              isSelected: value == _controller.themePaletteStyle,
+              onTap: () => _controller.themePaletteStyle = value,
+            ),
+          )
+          .toList(),
     );
   }
 
   void _showContrastPicker(BuildContext context) {
-    showCupertinoModalPopup<void>(
+    showAelActionSheet<ThemeContrastLevel>(
       context: context,
-      builder: (BuildContext sheetContext) {
-        return CupertinoActionSheet(
-          title: const Text('选择对比度'),
-          actions: ThemeContrastLevel.values
-              .map(
-                (value) => CupertinoActionSheetAction(
-                  isDefaultAction: value == _controller.themeContrastLevel,
-                  onPressed: () {
-                    _controller.themeContrastLevel = value;
-                    Navigator.pop(sheetContext);
-                  },
-                  child: Text(value.label),
-                ),
-              )
-              .toList(),
-          cancelButton: CupertinoActionSheetAction(
-            onPressed: () => Navigator.pop(sheetContext),
-            child: const Text('取消'),
-          ),
-        );
-      },
+      title: '选择对比度',
+      actions: ThemeContrastLevel.values
+          .map(
+            (value) => AelActionOption<ThemeContrastLevel>(
+              value: value,
+              label: value.label,
+              isSelected: value == _controller.themeContrastLevel,
+              onTap: () => _controller.themeContrastLevel = value,
+            ),
+          )
+          .toList(),
     );
   }
 
   void _showHexDialog(BuildContext context, int currentValue) {
     final rgb = currentValue & 0x00FFFFFF;
-    final textController = TextEditingController(
-      text: rgb.toRadixString(16).padLeft(6, '0').toUpperCase(),
-    );
-    showCupertinoDialog<void>(
+    final initialHex = rgb.toRadixString(16).padLeft(6, '0').toUpperCase();
+    showAelInputDialog(
       context: context,
-      builder: (BuildContext dialogContext) {
-        String? error;
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setState) {
-            final colors = AelTheme.colorsOf(context);
-            return CupertinoAlertDialog(
-              title: const Text('自定义主题色'),
-              content: Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Column(
-                  children: [
-                    CupertinoTextField(
-                      controller: textController,
-                      prefix: Padding(
-                        padding: const EdgeInsets.only(left: 8),
-                        child: Text(
-                          '#',
-                          style: TextStyle(color: colors.textSecondary),
-                        ),
-                      ),
-                      placeholder: 'RRGGBB',
-                      maxLength: 6,
-                      autocorrect: false,
-                      style: TextStyle(color: colors.textPrimary),
-                      placeholderStyle: TextStyle(color: colors.textTertiary),
-                    ),
-                    if (error != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          error!,
-                          style: TextStyle(color: colors.error, fontSize: 13),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              actions: [
-                CupertinoDialogAction(
-                  child: const Text('取消'),
-                  onPressed: () => Navigator.pop(dialogContext),
-                ),
-                CupertinoDialogAction(
-                  isDefaultAction: true,
-                  child: const Text('应用'),
-                  onPressed: () {
-                    final parsed = int.tryParse(
-                      textController.text.trim().replaceAll('#', ''),
-                      radix: 16,
-                    );
-                    if (parsed == null ||
-                        textController.text.trim().length != 6) {
-                      setState(() => error = '请输入 6 位十六进制色值，例如 007AFF');
-                      return;
-                    }
-                    _controller.themeSeedColorValue = 0xFF000000 | parsed;
-                    Navigator.pop(dialogContext);
-                  },
-                ),
-              ],
-            );
-          },
-        );
+      title: '自定义主题色',
+      message: '请输入 6 位十六进制色值（不含 #），例如 007AFF',
+      initialValue: initialHex,
+      placeholder: 'RRGGBB',
+      confirmLabel: '应用',
+      validator: (raw) {
+        final normalized = raw.trim().replaceAll('#', '');
+        final parsed = int.tryParse(normalized, radix: 16);
+        if (parsed == null || normalized.length != 6) {
+          return '请输入 6 位十六进制色值，例如 007AFF';
+        }
+        return null;
       },
-    ).then((_) => textController.dispose());
+    ).then((result) {
+      if (result == null) return;
+      final normalized = result.trim().replaceAll('#', '');
+      final parsed = int.tryParse(normalized, radix: 16);
+      if (parsed != null && normalized.length == 6) {
+        _controller.themeSeedColorValue = 0xFF000000 | parsed;
+      }
+    });
   }
 }
 

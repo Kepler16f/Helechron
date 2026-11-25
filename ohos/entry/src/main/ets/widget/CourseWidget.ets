@@ -24,10 +24,12 @@ export default class CourseWidgetExtension extends FormExtensionAbility {
     const empty: Record<string, string> = {
       'courseName': '今日暂无课程',
       'courseStatus': '全部结课',
-      'courseStatusColor': '#888888',
+      'courseStatusColor': '#6B7280',
+      'statusBadgeBg': '#1A6B7280',
+      'accentColor': '#007AFF',
       'courseStatusTime': '',
       'progressPercent': '0',
-      'progressColor': '#1E88E5',
+      'progressColor': '#007AFF',
       'showProgress': '0',
       'hasCourse': '0'
     };

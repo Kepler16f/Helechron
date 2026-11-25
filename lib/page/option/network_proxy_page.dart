@@ -165,24 +165,11 @@ class _NetworkProxyPageState extends State<NetworkProxyPage> {
 
   void _copyToClipboard(String content, String title) {
     Clipboard.setData(ClipboardData(text: content));
-    showCupertinoDialog<void>(
+    showAelAlertDialog(
       context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: Text(title),
-        content: const Padding(
-          padding: EdgeInsets.only(top: 8.0),
-          child: Text(
-            '规则内容已复制到剪贴板，请前往您的代理客户端（如 Clash、Sing-box 等）粘贴到分流规则列表中并置于最前。',
-          ),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('好的'),
-          ),
-        ],
-      ),
+      title: title,
+      message: '规则内容已复制到剪贴板，请前往您的代理客户端（如 Clash、Sing-box 等）粘贴到分流规则列表中并置于最前。',
+      confirmLabel: '好的',
     );
   }
 

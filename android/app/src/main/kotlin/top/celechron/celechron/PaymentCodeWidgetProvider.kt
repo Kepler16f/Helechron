@@ -55,7 +55,7 @@ class PaymentCodeWidgetProvider : AppWidgetProvider() {
                 val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
                 bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
                 bitmap
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 null
             }
         }
@@ -76,14 +76,19 @@ class PaymentCodeWidgetProvider : AppWidgetProvider() {
         val prefs = context.getSharedPreferences(MainActivity.PREFS_NAME, Context.MODE_PRIVATE)
         val paymentCode = prefs.getString("paymentCode", "") ?: ""
         val displayName = prefs.getString("displayName", "付款码") ?: "付款码"
+        val accentColor = CourseWidgetProvider.resolveAccentColor(
+            prefs.getString("themePrimaryHex", "#007AFF")
+        )
 
         val qrBitmap = if (paymentCode.isNotEmpty()) generateQrBitmap(paymentCode, 400) else null
 
         for (appWidgetId in appWidgetIds) {
             val views = RemoteViews(context.packageName, R.layout.widget_payment_code)
             views.setTextViewText(R.id.widget_payment_title, displayName)
+            views.setInt(R.id.widget_payment_dot, "setColorFilter", accentColor)
+            views.setInt(R.id.widget_payment_refresh_bg, "setColorFilter", accentColor)
+            views.setTextColor(R.id.widget_payment_empty_title, accentColor)
 
-            // Setup click intent to open ecardpaypage in MainActivity
             val openIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 putExtra(MainActivity.EXTRA_TARGET, "ecardpaypage")
@@ -93,7 +98,6 @@ class PaymentCodeWidgetProvider : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            // Setup refresh button
             val refreshIntent = Intent(context, PaymentCodeWidgetProvider::class.java).apply {
                 action = ACTION_REFRESH
             }
@@ -104,6 +108,7 @@ class PaymentCodeWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(R.id.widget_payment_refresh, pendingRefresh)
 
             if (qrBitmap != null && paymentCode.isNotEmpty()) {
+                views.setViewVisibility(R.id.widget_payment_qr_pad, View.VISIBLE)
                 views.setViewVisibility(R.id.widget_payment_qr, View.VISIBLE)
                 views.setViewVisibility(R.id.widget_payment_code_text, View.VISIBLE)
                 views.setViewVisibility(R.id.widget_payment_empty_layout, View.GONE)
@@ -116,6 +121,7 @@ class PaymentCodeWidgetProvider : AppWidgetProvider() {
                 views.setOnClickPendingIntent(R.id.widget_payment_qr_card, pendingOpen)
                 views.setOnClickPendingIntent(R.id.widget_payment_root, pendingOpen)
             } else {
+                views.setViewVisibility(R.id.widget_payment_qr_pad, View.GONE)
                 views.setViewVisibility(R.id.widget_payment_qr, View.GONE)
                 views.setViewVisibility(R.id.widget_payment_code_text, View.GONE)
                 views.setViewVisibility(R.id.widget_payment_empty_layout, View.VISIBLE)

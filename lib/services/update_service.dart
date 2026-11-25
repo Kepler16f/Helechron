@@ -6,7 +6,9 @@ import 'package:get/get.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:celechron/database/database_helper.dart';
-import 'package:celechron/design/custom_colors.dart';
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/services/mobile_native_service.dart';
 import 'package:celechron/worker/fuse.dart';
 
@@ -79,10 +81,14 @@ class UpdateService {
 
       final request = await _httpClient.getUrl(Uri.parse(apiUrl));
       request.headers.set(HttpHeaders.userAgentHeader, 'Helechron');
-      request.headers
-          .set(HttpHeaders.acceptHeader, 'application/vnd.github+json');
+      request.headers.set(
+        HttpHeaders.acceptHeader,
+        'application/vnd.github+json',
+      );
 
-      final response = await request.close().timeout(const Duration(seconds: 10));
+      final response = await request.close().timeout(
+        const Duration(seconds: 10),
+      );
       if (response.statusCode != HttpStatus.ok) {
         return null;
       }
@@ -94,14 +100,16 @@ class UpdateService {
       final tagName = data['tag_name']?.toString() ?? '';
       final title = data['name']?.toString() ?? tagName;
       final body = data['body']?.toString() ?? '暂无更新日志说明';
-      final htmlUrl = data['html_url']?.toString() ??
+      final htmlUrl =
+          data['html_url']?.toString() ??
           'https://github.com/Kepler16f/Helechron/releases';
       final publishedAt = data['published_at']?.toString();
       final isPrerelease = data['prerelease'] == true;
 
       // 解析版本与构建号，例如 v0.1.8+102 或 0.1.8_dev2
-      final tagMatch =
-          RegExp(r'^v?(\d+)\.(\d+)\.(\d+)(?:[+_](?:dev)?(\d+))?').firstMatch(tagName);
+      final tagMatch = RegExp(
+        r'^v?(\d+)\.(\d+)\.(\d+)(?:[+_](?:dev)?(\d+))?',
+      ).firstMatch(tagName);
       List<int> remoteVer = [0, 0, 0];
       int remoteBuild = 0;
       if (tagMatch != null) {
@@ -246,21 +254,19 @@ class UpdateService {
     bool silentIfNoUpdate = false,
   }) async {
     if (showLoading) {
-      showCupertinoDialog<void>(
+      showAelDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (_) => const CupertinoAlertDialog(
-          title: Text('检查更新'),
-          content: Padding(
-            padding: EdgeInsets.only(top: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CupertinoActivityIndicator(),
-                SizedBox(width: 12),
-                Text('正在获取最新版本信息...'),
-              ],
-            ),
+        title: '检查更新',
+        content: const Padding(
+          padding: EdgeInsets.only(top: AelSpacing.sm),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CupertinoActivityIndicator(),
+              SizedBox(width: AelSpacing.md),
+              Text('正在获取最新版本信息...'),
+            ],
           ),
         ),
       );
@@ -276,18 +282,10 @@ class UpdateService {
 
     if (release == null) {
       if (!silentIfNoUpdate) {
-        showCupertinoDialog<void>(
+        showAelAlertDialog(
           context: context,
-          builder: (ctx) => CupertinoAlertDialog(
-            title: const Text('检查更新'),
-            content: const Text('检查更新失败，请确保网络通畅后重试。'),
-            actions: [
-              CupertinoDialogAction(
-                child: const Text('确定'),
-                onPressed: () => Navigator.of(ctx).pop(),
-              ),
-            ],
-          ),
+          title: '检查更新',
+          message: '检查更新失败，请确保网络通畅后重试。',
         );
       }
       return;
@@ -295,18 +293,10 @@ class UpdateService {
 
     if (!release.hasUpdate) {
       if (!silentIfNoUpdate) {
-        showCupertinoDialog<void>(
+        showAelAlertDialog(
           context: context,
-          builder: (ctx) => CupertinoAlertDialog(
-            title: const Text('检查更新'),
-            content: Text('当前已是最新版本 (${Fuse().displayVersion})'),
-            actions: [
-              CupertinoDialogAction(
-                child: const Text('确定'),
-                onPressed: () => Navigator.of(ctx).pop(),
-              ),
-            ],
-          ),
+          title: '检查更新',
+          message: '当前已是最新版本 (${Fuse().displayVersion})',
         );
       }
       return;
@@ -317,68 +307,55 @@ class UpdateService {
   }
 
   void _showUpdateDialog(BuildContext context, ReleaseInfo release) {
-    showCupertinoDialog<void>(
+    showAelDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogCtx) => CupertinoAlertDialog(
-        title: Text('发现新版本 ${release.cleanVersion}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 8),
-            Text(
-              '当前版本：${Fuse().displayVersion}',
-              style: TextStyle(
-                fontSize: 12,
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.secondaryLabel, context),
-              ),
+      title: '发现新版本 ${release.cleanVersion}',
+      message: '当前版本：${Fuse().displayVersion}',
+      content: Builder(
+        builder: (dialogCtx) {
+          final colors = AelTheme.colorsOf(dialogCtx);
+          return Container(
+            constraints: const BoxConstraints(maxHeight: 200),
+            padding: const EdgeInsets.all(AelSpacing.md),
+            decoration: ShapeDecoration(
+              color: colors.tonalTileBg,
+              shape: AelShapes.squircle(AelRadius.tile),
             ),
-            const SizedBox(height: 10),
-            Container(
-              constraints: const BoxConstraints(maxHeight: 180),
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.tertiarySystemFill, context),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: SingleChildScrollView(
-                child: Text(
-                  release.body.trim().isEmpty ? '性能优化与问题修复' : release.body.trim(),
-                  style: const TextStyle(fontSize: 13, height: 1.4),
+            child: SingleChildScrollView(
+              child: Text(
+                release.body.trim().isEmpty ? '性能优化与问题修复' : release.body.trim(),
+                style: TextStyle(
+                  fontSize: 13.5,
+                  height: 1.45,
+                  color: colors.textPrimary,
                 ),
               ),
             ),
-          ],
-        ),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('稍后'),
-            onPressed: () => Navigator.of(dialogCtx).pop(),
-          ),
-          if (Platform.isAndroid && release.apkDownloadUrl != null)
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              child: const Text('立即更新'),
-              onPressed: () {
-                Navigator.of(dialogCtx).pop();
-                _startDownloadAndInstall(context, release);
-              },
-            )
-          else
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              child: const Text('前往下载'),
-              onPressed: () {
-                Navigator.of(dialogCtx).pop();
-                launchUrl(Uri.parse(release.htmlUrl),
-                    mode: LaunchMode.externalApplication);
-              },
-            ),
-        ],
+          );
+        },
       ),
+      actions: [
+        const AelDialogAction<void>(
+          label: '稍后',
+          variant: AelButtonVariant.tonal,
+        ),
+        if (Platform.isAndroid && release.apkDownloadUrl != null)
+          AelDialogAction<void>(
+            label: '立即更新',
+            variant: AelButtonVariant.primary,
+            onPressed: () => _startDownloadAndInstall(context, release),
+          )
+        else
+          AelDialogAction<void>(
+            label: '前往下载',
+            variant: AelButtonVariant.primary,
+            onPressed: () => launchUrl(
+              Uri.parse(release.htmlUrl),
+              mode: LaunchMode.externalApplication,
+            ),
+          ),
+      ],
     );
   }
 
@@ -390,59 +367,72 @@ class UpdateService {
     final totalBytes = (release.apkSize ?? 0).obs;
     final isDone = false.obs;
 
-    showCupertinoDialog<void>(
+    showAelDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (progCtx) => Obx(() {
+      title: '下载更新包',
+      content: Obx(() {
         final rec = receivedBytes.value;
         final tot = totalBytes.value;
         final progress = tot > 0 ? (rec / tot).clamp(0.0, 1.0) : 0.0;
         final recMb = (rec / (1024 * 1024)).toStringAsFixed(1);
-        final totMb = tot > 0
-            ? (tot / (1024 * 1024)).toStringAsFixed(1)
-            : '未知';
+        final totMb = tot > 0 ? (tot / (1024 * 1024)).toStringAsFixed(1) : '未知';
 
-        return CupertinoAlertDialog(
-          title: Text(isDone.value ? '下载完成' : '正在下载更新包...'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 16),
-              LinearProgressIndicator(
-                value: tot > 0 ? progress : null,
-                backgroundColor: CupertinoDynamicColor.resolve(
-                    CupertinoColors.tertiarySystemFill, context),
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  CupertinoDynamicColor.resolve(
-                      CustomCupertinoDynamicColors.sakura, context),
+        return Builder(
+          builder: (progCtx) {
+            final colors = AelTheme.colorsOf(progCtx);
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  isDone.value ? '下载完成' : '正在下载更新包...',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: colors.textPrimary,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                tot > 0
-                    ? '$recMb MB / $totMb MB (${(progress * 100).toStringAsFixed(0)}%)'
-                    : '$recMb MB',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.secondaryLabel, context),
+                const SizedBox(height: AelSpacing.md),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    value: tot > 0 ? progress : null,
+                    backgroundColor: colors.tonalTileBg,
+                    valueColor: AlwaysStoppedAnimation<Color>(colors.primary),
+                  ),
                 ),
-              ),
-              if (isDone.value) ...[
-                const SizedBox(height: 8),
-                const Text('正在启动系统安装程序，请按提示完成安装...'),
+                const SizedBox(height: AelSpacing.md),
+                Text(
+                  tot > 0
+                      ? '$recMb MB / $totMb MB (${(progress * 100).toStringAsFixed(0)}%)'
+                      : '$recMb MB',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12.5, color: colors.textSecondary),
+                ),
+                if (isDone.value) ...[
+                  const SizedBox(height: AelSpacing.sm),
+                  Text(
+                    '正在启动系统安装程序，请按提示完成安装...',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ],
               ],
-            ],
-          ),
-          actions: [
-            if (!isDone.value)
-              CupertinoDialogAction(
-                child: const Text('取消'),
-                onPressed: () => Navigator.of(progCtx).pop(),
-              ),
-          ],
+            );
+          },
         );
       }),
+      actions: [
+        const AelDialogAction<void>(
+          label: '取消',
+          variant: AelButtonVariant.tonal,
+        ),
+      ],
     );
 
     downloadApk(
@@ -460,54 +450,49 @@ class UpdateService {
         final ok = await installApk(apkFile.path);
         if (!ok && context.mounted) {
           // 若直接安装调起失败，提示手动打开或通过系统打开方式安装
-          showCupertinoDialog<void>(
+          showAelDialog<void>(
             context: context,
-            builder: (ctx) => CupertinoAlertDialog(
-              title: const Text('安装提示'),
-              content: Text(
-                  '更新包已下载至：\n${apkFile.path}\n如果未自动弹出安装界面，请在文件管理器中点击该安装包进行安装。'),
-              actions: [
-                CupertinoDialogAction(
-                  child: const Text('选择打开方式'),
-                  onPressed: () {
-                    Navigator.of(ctx).pop();
-                    MobileNativeService.instance.openFileWithSystem(
-                      apkFile.path,
-                      mimeType: 'application/vnd.android.package-archive',
-                      title: '安装更新',
-                    );
-                  },
-                ),
-                CupertinoDialogAction(
-                  child: const Text('确定'),
-                  onPressed: () => Navigator.of(ctx).pop(),
-                ),
-              ],
-            ),
+            title: '安装提示',
+            message:
+                '更新包已下载至：\n${apkFile.path}\n如果未自动弹出安装界面，请在文件管理器中点击该安装包进行安装。',
+            actions: [
+              AelDialogAction<void>(
+                label: '选择打开方式',
+                variant: AelButtonVariant.tonal,
+                onPressed: () {
+                  MobileNativeService.instance.openFileWithSystem(
+                    apkFile.path,
+                    mimeType: 'application/vnd.android.package-archive',
+                    title: '安装更新',
+                  );
+                },
+              ),
+              const AelDialogAction<void>(
+                label: '确定',
+                variant: AelButtonVariant.primary,
+              ),
+            ],
           );
         }
       } else if (context.mounted) {
-        showCupertinoDialog<void>(
+        showAelDialog<void>(
           context: context,
-          builder: (ctx) => CupertinoAlertDialog(
-            title: const Text('下载失败'),
-            content: const Text('下载更新包时遇到问题，您可选择前往 GitHub 页面手动下载。'),
-            actions: [
-              CupertinoDialogAction(
-                child: const Text('取消'),
-                onPressed: () => Navigator.of(ctx).pop(),
+          title: '下载失败',
+          message: '下载更新包时遇到问题，您可选择前往 GitHub 页面手动下载。',
+          actions: [
+            const AelDialogAction<void>(
+              label: '取消',
+              variant: AelButtonVariant.tonal,
+            ),
+            AelDialogAction<void>(
+              label: '前往 GitHub',
+              variant: AelButtonVariant.primary,
+              onPressed: () => launchUrl(
+                Uri.parse(release.htmlUrl),
+                mode: LaunchMode.externalApplication,
               ),
-              CupertinoDialogAction(
-                isDefaultAction: true,
-                child: const Text('前往 GitHub'),
-                onPressed: () {
-                  Navigator.of(ctx).pop();
-                  launchUrl(Uri.parse(release.htmlUrl),
-                      mode: LaunchMode.externalApplication);
-                },
-              ),
-            ],
-          ),
+            ),
+          ],
         );
       }
     });

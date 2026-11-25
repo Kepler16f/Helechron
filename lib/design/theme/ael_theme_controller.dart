@@ -68,19 +68,24 @@ class AelThemeController extends GetxController {
     );
   }
 
-  /// 将当前生效的主色同步到鸿蒙 ArkTS 原生底栏（去重避免重复调用通道）。
+  /// 将当前生效的主色同步到原生端底栏与桌面小组件（去重避免重复调用通道）。
   void syncNativeAccent(Option option, ResolvedAelThemeBundle bundle) {
-    if (!PlatformFeatures.isOhos) return;
     final hex = bundle.aelTheme.colors.primaryHex;
     if (_lastSyncedPrimaryHex == hex) return;
     _lastSyncedPrimaryHex = hex;
-    unawaited(
-      OhosNativeService.instance.setBottomBarStyle(
-        floating: option.bottomBarFloating.value,
-        immersiveLight: option.bottomBarImmersiveLight.value,
-        materialLevel: option.bottomBarMaterialLevel.value,
-        primaryColorHex: hex,
-      ),
-    );
+    if (PlatformFeatures.isOhos) {
+      unawaited(
+        OhosNativeService.instance.setBottomBarStyle(
+          floating: option.bottomBarFloating.value,
+          immersiveLight: option.bottomBarImmersiveLight.value,
+          materialLevel: option.bottomBarMaterialLevel.value,
+          primaryColorHex: hex,
+        ),
+      );
+    } else {
+      unawaited(
+        OhosNativeService.instance.setWidgetData('themePrimaryHex', hex),
+      );
+    }
   }
 }

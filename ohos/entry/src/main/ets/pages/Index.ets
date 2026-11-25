@@ -107,11 +107,13 @@ struct Index {
   @StorageLink('bottomBarHidden') bottomBarHidden: boolean = false;
   @StorageLink('bottomBarCurrentTab') @Watch('onCurrentTabChanged') bottomBarCurrentTab: number = 0;
   @StorageLink('inAppVideoVisible') @Watch('onVideoOverlayChanged') inAppVideoVisible: boolean = false;
-  @StorageLink('inAppVideoUrl') @Watch('onVideoOverlayChanged') inAppVideoUrl: string = '';
+  @StorageLink('inAppVideoUrl') inAppVideoUrl: string = '';
+  @StorageLink('inAppVideoSessionSeq') @Watch('onVideoOverlayChanged') inAppVideoSessionSeq: number = 0;
   @StorageLink('inAppVideoTitle') inAppVideoTitle: string = '智云课堂';
   @StorageLink('inAppVideoLivingroomUrl') inAppVideoLivingroomUrl: string = '';
   @StorageLink('inAppVideoToken') inAppVideoToken: string = '';
   @StorageLink('inAppVideoSsoCookie') inAppVideoSsoCookie: string = '';
+  @StorageLink('inAppVideoZhiyunCookies') inAppVideoZhiyunCookies: string = '';
   @StorageLink('inAppVideoStreamsJson') inAppVideoStreamsJson: string = '[]';
   @StorageLink('inAppVideoIsLive') inAppVideoIsLive: boolean = false;
   @StorageLink('inAppVideoPreferWeb') inAppVideoPreferWeb: boolean = false;
@@ -874,7 +876,7 @@ struct Index {
     this.enterMiniWindow();
   }
 
-  private async startAvPlayerPlayback(targetUrl: string): Promise<void> {
+  private async startAvPlayerPlayback(targetUrl: string, preferPlainUrl: boolean = false): Promise<void> {
     if (!this.inAppVideoVisible || this.useWebFallback || targetUrl.length === 0 || this.xComponentSurfaceId.length === 0) {
       return;
     }
@@ -887,14 +889,21 @@ struct Index {
         return;
       }
       this.avPlayer = player;
+      const lowerTarget = targetUrl.toLowerCase();
+      const isSelfSignedLiveCdn = lowerTarget.indexOf('livepgc.cmc.zju.edu.cn') >= 0 || lowerTarget.indexOf('auth_key=') >= 0;
       this.clearPrepareWatchdog();
+      const watchdogMs = this.isLiveStream ? 5500 : 8000;
       this.prepareWatchdogTimer = setTimeout(() => {
         this.prepareWatchdogTimer = -1;
         if (this.avPlayer === player && this.videoLoading && !this.useWebFallback) {
-          hilog.warn(DOMAIN, TAG, 'AVPlayer prepare watchdog timeout (8s), switching to next stream or web');
-          this.switchNextStreamOrWeb();
+          hilog.warn(DOMAIN, TAG, `AVPlayer prepare watchdog timeout (${watchdogMs}ms), switching stream or web`);
+          if (!preferPlainUrl && isSelfSignedLiveCdn) {
+            this.startAvPlayerPlayback(targetUrl, true);
+          } else {
+            this.switchNextStreamOrWeb();
+          }
         }
-      }, 8000);
+      }, watchdogMs);
       player.on('videoSizeChange', (width: number, height: number) => {
         if (this.avPlayer !== player) return;
         if (width > 0 && height > 0) {
@@ -916,6 +925,10 @@ struct Index {
         if (this.avPlayer !== player) return;
         this.clearPrepareWatchdog();
         hilog.warn(DOMAIN, TAG, `AVPlayer error ${err.code}: ${err.message}`);
+        if (!preferPlainUrl && isSelfSignedLiveCdn) {
+          this.startAvPlayerPlayback(targetUrl, true);
+          return;
+        }
         this.switchNextStreamOrWeb();
       });
       player.on('stateChange', async (state: string) => {
@@ -929,6 +942,10 @@ struct Index {
           } catch (prepErr) {
             this.clearPrepareWatchdog();
             hilog.warn(DOMAIN, TAG, `AVPlayer prepare failed: ${JSON.stringify(prepErr)}`);
+            if (!preferPlainUrl && isSelfSignedLiveCdn) {
+              this.startAvPlayerPlayback(targetUrl, true);
+              return;
+            }
             this.switchNextStreamOrWeb();
           }
         } else if (state === 'prepared') {
@@ -980,27 +997,37 @@ struct Index {
       });
 
       let sourceAssigned = false;
-      try {
-        const headers: Record<string, string> = {
-          'Referer': 'https://classroom.zju.edu.cn/',
-          'Origin': 'https://classroom.zju.edu.cn',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-        };
-        const lowerTarget = targetUrl.toLowerCase();
-        const isSelfSignedLiveCdn = lowerTarget.indexOf('livepgc.cmc.zju.edu.cn') >= 0 || lowerTarget.indexOf('auth_key=') >= 0;
-        if (!isSelfSignedLiveCdn && this.inAppVideoToken.length > 0) {
-          const phpTk = this.buildPhpSerializedToken(this.inAppVideoToken);
-          headers['Cookie'] = `_token=${phpTk}; token=${this.inAppVideoToken}`;
-          headers['Authorization'] = `Bearer ${this.inAppVideoToken}`;
+      if (!preferPlainUrl) {
+        try {
+          const headers: Record<string, string> = {
+            'Referer': 'https://classroom.zju.edu.cn/',
+            'Origin': 'https://classroom.zju.edu.cn',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+          };
+          if (!isSelfSignedLiveCdn && this.inAppVideoToken.length > 0) {
+            if (this.inAppVideoZhiyunCookies.trim().length > 0) {
+              headers['Cookie'] = this.inAppVideoZhiyunCookies.trim();
+            } else {
+              const phpTk = this.buildPhpSerializedToken(this.inAppVideoToken);
+              headers['Cookie'] = `_token=${phpTk}; token=${this.inAppVideoToken}`;
+            }
+            headers['Authorization'] = `Bearer ${this.inAppVideoToken}`;
+          }
+          const mediaSource: media.MediaSource = media.createMediaSourceWithUrl(targetUrl, headers);
+          if (lowerTarget.indexOf('.m3u8') >= 0) {
+            try {
+              mediaSource.setMimeType(media.AVMimeTypes.APPLICATION_M3U8);
+            } catch (_) {
+            }
+          }
+          const strategy: media.PlaybackStrategy = {
+            preferredBufferDuration: this.isLiveStream ? 2 : 6
+          };
+          await player.setMediaSource(mediaSource, strategy);
+          sourceAssigned = true;
+        } catch (srcErr) {
+          hilog.warn(DOMAIN, TAG, `createMediaSourceWithUrl failed, using url: ${JSON.stringify(srcErr)}`);
         }
-        const mediaSource: media.MediaSource = media.createMediaSourceWithUrl(targetUrl, headers);
-        const strategy: media.PlaybackStrategy = {
-          preferredBufferDuration: this.isLiveStream ? 2 : 6
-        };
-        await player.setMediaSource(mediaSource, strategy);
-        sourceAssigned = true;
-      } catch (srcErr) {
-        hilog.warn(DOMAIN, TAG, `createMediaSourceWithUrl failed, using url: ${JSON.stringify(srcErr)}`);
       }
       if (!sourceAssigned) {
         player.url = targetUrl;
@@ -1144,33 +1171,49 @@ struct Index {
 
   private preConfigureWebCookies(): void {
     try {
+      const hosts = [
+        'https://classroom.zju.edu.cn',
+        'https://yjapi.cmc.zju.edu.cn',
+        'https://tgmedia.cmc.zju.edu.cn',
+        'https://livingroom.cmc.zju.edu.cn'
+      ];
+      const rawJar = this.inAppVideoZhiyunCookies.trim();
+      if (rawJar.length > 0) {
+        const pairs = rawJar.split(';');
+        for (let p = 0; p < pairs.length; p++) {
+          const kv = pairs[p].trim();
+          if (kv.indexOf('=') <= 0) continue;
+          for (let i = 0; i < hosts.length; i++) {
+            webview.WebCookieManager.configCookieSync(hosts[i], `${kv}; Path=/`);
+            webview.WebCookieManager.configCookieSync(hosts[i], `${kv}; Domain=.zju.edu.cn; Path=/`);
+          }
+        }
+      }
       const rawTk = this.inAppVideoToken.trim();
       if (rawTk.length > 0) {
         const phpTk = this.buildPhpSerializedToken(rawTk);
-        const hosts = [
-          'https://classroom.zju.edu.cn',
-          'https://yjapi.cmc.zju.edu.cn',
-          'https://tgmedia.cmc.zju.edu.cn',
-          'https://livingroom.cmc.zju.edu.cn'
-        ];
         for (let i = 0; i < hosts.length; i++) {
-          webview.WebCookieManager.configCookieSync(hosts[i], `_token=${phpTk}; Path=/`);
-          webview.WebCookieManager.configCookieSync(hosts[i], `_token=${phpTk}; Domain=.zju.edu.cn; Path=/`);
-          webview.WebCookieManager.configCookieSync(hosts[i], `_token=${phpTk}; Domain=classroom.zju.edu.cn; Path=/`);
+          if (rawJar.indexOf('_token=') < 0) {
+            webview.WebCookieManager.configCookieSync(hosts[i], `_token=${phpTk}; Path=/`);
+            webview.WebCookieManager.configCookieSync(hosts[i], `_token=${phpTk}; Domain=.zju.edu.cn; Path=/`);
+            webview.WebCookieManager.configCookieSync(hosts[i], `_token=${phpTk}; Domain=classroom.zju.edu.cn; Path=/`);
+          }
           webview.WebCookieManager.configCookieSync(hosts[i], `token=${rawTk}; Path=/`);
           webview.WebCookieManager.configCookieSync(hosts[i], `token=${rawTk}; Domain=.zju.edu.cn; Path=/`);
         }
       }
       const rawSso = this.inAppVideoSsoCookie.trim();
       if (rawSso.length > 0) {
+        // ZJUAM CAS 回调包含 http://zjuam.zju.edu.cn/cas/oauth2.0/callbackAuthorize，严禁附加 Secure 导致明文回调丢失 Cookie
         const ssoHosts = [
           'https://zjuam.zju.edu.cn',
+          'http://zjuam.zju.edu.cn',
           'https://classroom.zju.edu.cn',
           'https://tgmedia.cmc.zju.edu.cn'
         ];
         for (let i = 0; i < ssoHosts.length; i++) {
-          webview.WebCookieManager.configCookieSync(ssoHosts[i], `iPlanetDirectoryPro=${rawSso}; Path=/; Secure`);
-          webview.WebCookieManager.configCookieSync(ssoHosts[i], `iPlanetDirectoryPro=${rawSso}; Domain=.zju.edu.cn; Path=/; Secure`);
+          webview.WebCookieManager.configCookieSync(ssoHosts[i], `iPlanetDirectoryPro=${rawSso}; Path=/`);
+          webview.WebCookieManager.configCookieSync(ssoHosts[i], `iPlanetDirectoryPro=${rawSso}; Domain=.zju.edu.cn; Path=/`);
         }
       }
     } catch (err) {
@@ -1289,7 +1332,9 @@ struct Index {
     if (rawCandidate.length === 0) {
       return '';
     }
-    if (this.inAppVideoSsoCookie.trim().length > 0 && rawCandidate.indexOf('classroom.zju.edu.cn') >= 0) {
+    const hasFullZhiyunSession = this.inAppVideoZhiyunCookies.indexOf('JWTUser=') >= 0 &&
+      this.inAppVideoToken.trim().length > 0;
+    if (!hasFullZhiyunSession && this.inAppVideoSsoCookie.trim().length > 0 && rawCandidate.indexOf('classroom.zju.edu.cn') >= 0) {
       const cleanForward = rawCandidate.replace(/([?&])token=[^&]*&?/g, '$1').replace(/[?&]+$/, '');
       return `https://tgmedia.cmc.zju.edu.cn/index.php?r=auth/login&auType=cmc&tenant_code=112&forward=${encodeURIComponent(cleanForward)}`;
     }
@@ -1906,6 +1951,14 @@ struct Index {
                     })
                     .onPageBegin((event) => {
                       const pageUrl = event?.url ?? '';
+                      if (pageUrl.indexOf('http://zjuam.zju.edu.cn/cas/oauth2.0/callbackAuthorize') === 0) {
+                        const upgraded = 'https://' + pageUrl.substring(7);
+                        try {
+                          this.webController.loadUrl(upgraded);
+                          return;
+                        } catch (_) {
+                        }
+                      }
                       if (this.isWebAuthUrl(pageUrl)) {
                         this.startWebAuthCover(10000);
                       }

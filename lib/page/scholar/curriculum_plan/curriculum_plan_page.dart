@@ -1976,61 +1976,34 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
 
   void _showPlanSelector(BuildContext context) {
     _c.searchQuery.value = '';
-    showCupertinoModalPopup(
+    showAelBottomSheet<void>(
       context: context,
-      builder: (modalCtx) => Container(
-        height: MediaQuery.of(context).size.height * 0.72,
-        decoration: BoxDecoration(
-          color: AelTheme.colorsOf(context).cardBg,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
-        ),
-        child: Column(
+      title: '全校培养方案检索与切换',
+      showCloseButton: true,
+      maxHeightFactor: 0.78,
+      contentPadding: EdgeInsets.zero,
+      trailing: AelButton(
+        label: '恢复推荐',
+        variant: AelButtonVariant.tonal,
+        onPressed: () {
+          Navigator.of(context, rootNavigator: true).pop();
+          _c.resetToAutoMatch();
+        },
+      ),
+      builder: (modalCtx) {
+        final colors = AelTheme.colorsOf(modalCtx);
+        return Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-              child: Row(
-                children: [
-                  const Text(
-                    '全校培养方案检索与切换',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                  ),
-                  const Spacer(),
-                  CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    minSize: 28,
-                    onPressed: () {
-                      Navigator.of(modalCtx).pop();
-                      _c.resetToAutoMatch();
-                    },
-                    child: Text(
-                      '恢复推荐',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: _sakuraInk(context),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    minSize: 28,
-                    onPressed: () => Navigator.of(modalCtx).pop(),
-                    child: const Text('关闭', style: TextStyle(fontSize: 13)),
-                  ),
-                ],
+              padding: const EdgeInsets.symmetric(
+                horizontal: AelSpacing.lg,
+                vertical: AelSpacing.xs,
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: CupertinoSearchTextField(
                 placeholder: '搜索专业名称、学院、年级或计划号',
-                style: TextStyle(
-                  color: AelTheme.colorsOf(modalCtx).textPrimary,
-                ),
-                placeholderStyle: TextStyle(
-                  color: AelTheme.colorsOf(modalCtx).textTertiary,
-                ),
+                style: TextStyle(color: colors.textPrimary),
+                placeholderStyle: TextStyle(color: colors.textTertiary),
+                backgroundColor: colors.tonalTileBg,
                 onChanged: (v) => _c.searchQuery.value = v,
               ),
             ),
@@ -2044,18 +2017,16 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                       children: [
                         Text(
                           _c.catalog.isEmpty ? '暂无培养方案缓存' : '未匹配到相关培养方案',
-                          style: TextStyle(
-                            color: AelTheme.colorsOf(context).textSecondary,
-                          ),
+                          style: TextStyle(color: colors.textSecondary),
                         ),
                         if (_c.catalog.isEmpty) ...[
                           const SizedBox(height: 12),
-                          CupertinoButton.filled(
+                          AelButton(
+                            label: '从教务系统拉取全校方案',
                             onPressed: () {
                               Navigator.of(modalCtx).pop();
                               _c.syncCatalog(silent: false);
                             },
-                            child: const Text('从教务系统拉取全校方案'),
                           ),
                         ],
                       ],
@@ -2064,7 +2035,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                 }
                 final limited = filtered.take(150).toList();
                 return ListView.separated(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(AelSpacing.md),
                   itemCount: limited.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 6),
                   itemBuilder: (ctx, idx) {
@@ -2081,14 +2052,16 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                           horizontal: 12,
                           vertical: 10,
                         ),
-                        decoration: BoxDecoration(
+                        decoration: ShapeDecoration(
                           color: isCurrent
                               ? accent.withValues(alpha: 0.14)
-                              : AelTheme.colorsOf(context).cardBg,
-                          borderRadius: BorderRadius.circular(10),
-                          border: isCurrent
-                              ? Border.all(color: accent, width: 1)
-                              : null,
+                              : colors.tonalTileBg,
+                          shape: AelShapes.squircle(
+                            AelRadius.tile,
+                            side: isCurrent
+                                ? BorderSide(color: accent, width: 1)
+                                : BorderSide.none,
+                          ),
                         ),
                         child: Row(
                           children: [
@@ -2101,9 +2074,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                                     style: TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
-                                      color: AelTheme.colorsOf(
-                                        context,
-                                      ).textPrimary,
+                                      color: colors.textPrimary,
                                     ),
                                   ),
                                   const SizedBox(height: 2),
@@ -2111,9 +2082,7 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                                     '${item.xymc} · ${item.dlbsmc} · ${item.creditsLabel}',
                                     style: TextStyle(
                                       fontSize: 11.5,
-                                      color: AelTheme.colorsOf(
-                                        context,
-                                      ).textSecondary,
+                                      color: colors.textSecondary,
                                     ),
                                   ),
                                 ],
@@ -2130,8 +2099,8 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
               }),
             ),
           ],
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -2139,103 +2108,103 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
     final ctrl = TextEditingController(
       text: _c.effectiveGraduationCredits.toStringAsFixed(1),
     );
-    showCupertinoDialog(
+    showAelDialog<void>(
       context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('自定义毕业要求总学分'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 12),
-          child: CupertinoTextField(
+      title: '自定义毕业要求总学分',
+      content: Builder(
+        builder: (ctx) {
+          final colors = AelTheme.colorsOf(ctx);
+          return CupertinoTextField(
             controller: ctrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             placeholder: '例如 160 或 156.5',
-            style: TextStyle(color: AelTheme.colorsOf(ctx).textPrimary),
-            placeholderStyle: TextStyle(
-              color: AelTheme.colorsOf(ctx).textTertiary,
+            autofocus: true,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AelSpacing.md,
+              vertical: AelSpacing.md,
             ),
+            style: TextStyle(color: colors.textPrimary, fontSize: 15),
+            placeholderStyle: TextStyle(color: colors.textTertiary),
             decoration: BoxDecoration(
-              color: AelTheme.colorsOf(ctx).tonalTileBg,
-              borderRadius: BorderRadius.circular(8),
+              color: colors.tonalTileBg,
+              borderRadius: BorderRadius.circular(AelRadius.tile),
             ),
-          ),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              _c.setCustomGraduationCredits(null);
-            },
-            child: const Text('恢复默认'),
-          ),
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () {
-              final v = double.tryParse(ctrl.text.trim());
-              if (v != null && v > 0) {
-                _c.setCustomGraduationCredits(v);
-              }
-              Navigator.of(ctx).pop();
-            },
-            child: const Text('确定'),
-          ),
-        ],
+          );
+        },
       ),
-    );
+      actions: [
+        AelDialogAction<void>(
+          label: '恢复默认',
+          variant: AelButtonVariant.tonal,
+          onPressed: () => _c.setCustomGraduationCredits(null),
+        ),
+        const AelDialogAction<void>(
+          label: '取消',
+          variant: AelButtonVariant.tonal,
+        ),
+        AelDialogAction<void>(
+          label: '确定',
+          variant: AelButtonVariant.primary,
+          onPressed: () {
+            final v = double.tryParse(ctrl.text.trim());
+            if (v != null && v > 0) {
+              _c.setCustomGraduationCredits(v);
+            }
+          },
+        ),
+      ],
+    ).then((_) => ctrl.dispose());
   }
 
   void _showEditForeignCreditsDialog(BuildContext context) {
     final ctrl = TextEditingController(
       text: _c.effectiveForeignCredits.toStringAsFixed(1),
     );
-    showCupertinoDialog(
+    showAelDialog<void>(
       context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('自定义外语模块应修学分'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 12),
-          child: CupertinoTextField(
+      title: '自定义外语模块应修学分',
+      content: Builder(
+        builder: (ctx) {
+          final colors = AelTheme.colorsOf(ctx);
+          return CupertinoTextField(
             controller: ctrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             placeholder: '0 表示免修',
-            style: TextStyle(color: AelTheme.colorsOf(ctx).textPrimary),
-            placeholderStyle: TextStyle(
-              color: AelTheme.colorsOf(ctx).textTertiary,
+            autofocus: true,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AelSpacing.md,
+              vertical: AelSpacing.md,
             ),
+            style: TextStyle(color: colors.textPrimary, fontSize: 15),
+            placeholderStyle: TextStyle(color: colors.textTertiary),
             decoration: BoxDecoration(
-              color: AelTheme.colorsOf(ctx).tonalTileBg,
-              borderRadius: BorderRadius.circular(8),
+              color: colors.tonalTileBg,
+              borderRadius: BorderRadius.circular(AelRadius.tile),
             ),
-          ),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              _c.setCustomForeignCredits(null);
-            },
-            child: const Text('按年级自动'),
-          ),
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () {
-              final v = double.tryParse(ctrl.text.trim());
-              if (v != null && v >= 0) {
-                _c.setCustomForeignCredits(v);
-              }
-              Navigator.of(ctx).pop();
-            },
-            child: const Text('确定'),
-          ),
-        ],
+          );
+        },
       ),
-    );
+      actions: [
+        AelDialogAction<void>(
+          label: '按年级自动',
+          variant: AelButtonVariant.tonal,
+          onPressed: () => _c.setCustomForeignCredits(null),
+        ),
+        const AelDialogAction<void>(
+          label: '取消',
+          variant: AelButtonVariant.tonal,
+        ),
+        AelDialogAction<void>(
+          label: '确定',
+          variant: AelButtonVariant.primary,
+          onPressed: () {
+            final v = double.tryParse(ctrl.text.trim());
+            if (v != null && v >= 0) {
+              _c.setCustomForeignCredits(v);
+            }
+          },
+        ),
+      ],
+    ).then((_) => ctrl.dispose());
   }
 }

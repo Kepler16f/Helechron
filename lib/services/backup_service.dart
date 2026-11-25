@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:celechron/database/database_helper.dart';
+import 'package:celechron/design/components/ael_components.dart';
 import 'package:celechron/model/option.dart';
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/model/task.dart';
@@ -30,7 +31,10 @@ class BackupService {
 
   /// 组装备份数据（导出与测试共用）。
   static Map<String, dynamic> buildBundle(
-      DatabaseHelper db, Scholar scholar, Option option) {
+    DatabaseHelper db,
+    Scholar scholar,
+    Option option,
+  ) {
     final allowTime = <Map<String, String>>[];
     option.allowTime.forEach((start, end) {
       allowTime.add({
@@ -54,8 +58,9 @@ class BackupService {
         'pushOnDdlReminder': option.pushOnDdlReminder.value,
         'hideHomeGpa': option.hideHomeGpa.value,
         'asyncRefresh': option.asyncRefresh.value,
-        'courseIdMappingList':
-            option.courseIdMappingList.map((e) => e.toJson()).toList(),
+        'courseIdMappingList': option.courseIdMappingList
+            .map((e) => e.toJson())
+            .toList(),
         'customGpa': db.getCustomGpa(),
         'weightedGpa': db.getWeightedGpa(),
       },
@@ -73,11 +78,15 @@ class BackupService {
       final directory = await getApplicationDocumentsDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final file = File('${directory.path}/helechron_backup_$timestamp.json');
-      await file.writeAsString(const JsonEncoder.withIndent('  ').convert(bundle));
+      await file.writeAsString(
+        const JsonEncoder.withIndent('  ').convert(bundle),
+      );
 
-      await Share.shareXFiles([XFile(file.path)],
-          subject: 'Helechron 备份',
-          text: 'Helechron 数据备份，可在「设置 → 备份与恢复」中导入恢复。');
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        subject: 'Helechron 备份',
+        text: 'Helechron 数据备份，可在「设置 → 备份与恢复」中导入恢复。',
+      );
 
       _showAlert('成功', '备份已导出，请选择保存位置或分享');
     } catch (e) {
@@ -91,26 +100,14 @@ class BackupService {
   static Future<void> importBackup() async {
     final picked = await _pickTextFile();
     if (picked == null) return;
-    final confirmed = await Get.dialog<bool>(
-      CupertinoAlertDialog(
-        title: const Text('恢复备份'),
-        content: Text(
-            '将从「${picked.name}」恢复备份。\n\n当前的学业数据、任务列表与相关配置将被覆盖，且不可撤销。'),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('取消'),
-            onPressed: () => Get.back(result: false),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            child: const Text('覆盖恢复'),
-            onPressed: () => Get.back(result: true),
-          ),
-        ],
-      ),
+    final confirmed = await showAelConfirmDialog(
+      title: '恢复备份',
+      message: '将从「${picked.name}」恢复备份。\n\n当前的学业数据、任务列表与相关配置将被覆盖，且不可撤销。',
+      confirmLabel: '覆盖恢复',
+      isDestructive: true,
       barrierDismissible: false,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
 
     final error = await restoreFromContent(picked.content);
     if (error == null) {
@@ -189,7 +186,9 @@ class BackupService {
   }
 
   static Future<void> _restoreOptions(
-      DatabaseHelper db, Map<String, dynamic> options) async {
+    DatabaseHelper db,
+    Map<String, dynamic> options,
+  ) async {
     final option = Get.find<Option>(tag: 'option');
 
     final workTimeMinutes = asInt(options['workTimeMinutes']);
@@ -246,7 +245,8 @@ class BackupService {
     }
 
     final courseMappings = <CourseIdMap>[];
-    for (final raw in asDynamicList(options['courseIdMappingList']) ?? const []) {
+    for (final raw
+        in asDynamicList(options['courseIdMappingList']) ?? const []) {
       final map = asStringMap(raw);
       if (map == null) continue;
       try {
@@ -322,33 +322,23 @@ class BackupService {
     }
 
     if (freshTasks.isEmpty) {
-      _showAlert('结果',
-          '没有新的日程可导入（重复 $duplicateCount 条，已过期 $skippedPastCount 条）');
+      _showAlert(
+        '结果',
+        '没有新的日程可导入（重复 $duplicateCount 条，已过期 $skippedPastCount 条）',
+      );
       return;
     }
 
-    final confirmed = await Get.dialog<bool>(
-      CupertinoAlertDialog(
-        title: const Text('导入日程'),
-        content: Text(
-            '从「${picked.name}」解析出 ${freshTasks.length} 个可导入的日程/DDL。\n\n'
-            '跳过：重复 $duplicateCount 条，已过期 $skippedPastCount 条。\n'
-            '导入的日程会出现在「接下来」和日历中。'),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('取消'),
-            onPressed: () => Get.back(result: false),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            child: const Text('导入'),
-            onPressed: () => Get.back(result: true),
-          ),
-        ],
-      ),
+    final confirmed = await showAelConfirmDialog(
+      title: '导入日程',
+      message:
+          '从「${picked.name}」解析出 ${freshTasks.length} 个可导入的日程/DDL。\n\n'
+          '跳过：重复 $duplicateCount 条，已过期 $skippedPastCount 条。\n'
+          '导入的日程会出现在「接下来」和日历中。',
+      confirmLabel: '导入',
       barrierDismissible: false,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
 
     taskList.addAll(freshTasks);
     final db = Get.find<DatabaseHelper>(tag: 'db');
@@ -363,9 +353,10 @@ class BackupService {
   /// 导入去重哨兵：uid 已存在时返回它以区分「跳过」与「过期」。
   @visibleForTesting
   static final Task duplicateSentinel = Task(
-      endTime: DateTime.fromMicrosecondsSinceEpoch(0),
-      startTime: DateTime.fromMicrosecondsSinceEpoch(0),
-      repeatEndsTime: DateTime.fromMicrosecondsSinceEpoch(0));
+    endTime: DateTime.fromMicrosecondsSinceEpoch(0),
+    startTime: DateTime.fromMicrosecondsSinceEpoch(0),
+    repeatEndsTime: DateTime.fromMicrosecondsSinceEpoch(0),
+  );
 
   /// 把 iCal 条目映射为任务。返回 null 表示已过期应跳过；
   /// 返回 [duplicateSentinel] 表示与现有任务重复应跳过。
@@ -379,8 +370,7 @@ class BackupService {
     // 全天事件（VALUE=DATE）的 DTEND 是次日零点（排他语义），正常情况不会
     // 走到这里；缺 DTEND 时补足时长：全天补一天，否则补一小时
     if (!end.isAfter(start)) {
-      final allDay =
-          start.hour == 0 && start.minute == 0 && start.second == 0;
+      final allDay = start.hour == 0 && start.minute == 0 && start.second == 0;
       end = allDay
           ? start.add(const Duration(days: 1))
           : start.add(const Duration(hours: 1));
@@ -435,17 +425,10 @@ class BackupService {
   }
 
   static void _showAlert(String title, String message, {bool isError = false}) {
-    Get.dialog(
-      CupertinoAlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('确定'),
-            onPressed: () => Get.back(),
-          ),
-        ],
-      ),
+    showAelAlertDialog(
+      title: title,
+      message: message,
+      isDestructive: isError,
       barrierDismissible: !isError,
     );
   }

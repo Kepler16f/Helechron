@@ -9,32 +9,44 @@
       "value": "#FFFFFF"
     },
     {
+      "name": "widget_tonal_surface",
+      "value": "#F2F3F7"
+    },
+    {
       "name": "widget_text_primary",
-      "value": "#1A1A1A"
+      "value": "#181A20"
     },
     {
       "name": "widget_text_secondary",
-      "value": "#666666"
+      "value": "#525866"
     },
     {
       "name": "widget_text_tertiary",
-      "value": "#999999"
+      "value": "#8A909E"
     },
     {
       "name": "widget_accent",
-      "value": "#1E88E5"
+      "value": "#007AFF"
+    },
+    {
+      "name": "widget_accent_soft",
+      "value": "#1A007AFF"
     },
     {
       "name": "widget_qr_background",
       "value": "#FFFFFF"
     },
     {
-      "name": "widget_badge_background",
+      "name": "widget_qr_border",
       "value": "#12000000"
     },
     {
+      "name": "widget_badge_background",
+      "value": "#F2F3F7"
+    },
+    {
       "name": "widget_progress_track",
-      "value": "#14000000"
+      "value": "#E6E8EF"
     },
     {
       "name": "widget_button_text",

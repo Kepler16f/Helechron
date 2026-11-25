@@ -31,6 +31,7 @@ private final class ZhiyunAVPlayerViewController: AVPlayerViewController {
   private var documentInteractionController: UIDocumentInteractionController?
   private weak var presentingVideoHostController: UIViewController?
   private var activePipPlayerController: AVPlayerViewController?
+  private var activeItemStatusObservation: NSKeyValueObservation?
   private var pendingDirPickResult: FlutterResult?
 
   override func application(
@@ -127,6 +128,7 @@ private final class ZhiyunAVPlayerViewController: AVPlayerViewController {
            let urlStr = args["url"] as? String,
            !urlStr.isEmpty {
           let token = args["token"] as? String
+          let zhiyunCookies = args["zhiyunCookies"] as? String
           let livingroomUrl = args["livingroomUrl"] as? String
           let isLive = args["isLive"] as? Bool ?? false
           let preferWeb = args["preferWeb"] as? Bool ?? false
@@ -137,6 +139,7 @@ private final class ZhiyunAVPlayerViewController: AVPlayerViewController {
             streamUrls: streamUrls,
             livingroomUrl: livingroomUrl,
             token: token,
+            zhiyunCookies: zhiyunCookies,
             isLive: isLive,
             preferWeb: preferWeb,
             controller: controller
@@ -312,6 +315,7 @@ private final class ZhiyunAVPlayerViewController: AVPlayerViewController {
     streamUrls: [String] = [],
     livingroomUrl: String? = nil,
     token: String? = nil,
+    zhiyunCookies: String? = nil,
     isLive: Bool = false,
     preferWeb: Bool = false,
     controller: UIViewController
@@ -335,9 +339,29 @@ private final class ZhiyunAVPlayerViewController: AVPlayerViewController {
       return false
     }
 
+    func makePlayerItem(for streamUrl: URL) -> AVPlayerItem {
+      var headers = [
+        "Referer": "https://classroom.zju.edu.cn/",
+        "Origin": "https://classroom.zju.edu.cn"
+      ]
+      let lowerStream = streamUrl.absoluteString.lowercased()
+      let isSelfSignedLiveCdn = lowerStream.contains("livepgc.cmc.zju.edu.cn") || lowerStream.contains("auth_key=")
+      if !isSelfSignedLiveCdn, let tk = token, !tk.isEmpty {
+        if let jar = zhiyunCookies, !jar.isEmpty {
+          headers["Cookie"] = jar
+        } else {
+          let phpCookie = self.buildPhpSerializedToken(tk)
+          headers["Cookie"] = "_token=\(phpCookie); token=\(tk)"
+        }
+        headers["Authorization"] = "Bearer \(tk)"
+      }
+      let asset = AVURLAsset(url: streamUrl, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
+      return AVPlayerItem(asset: asset)
+    }
+
     DispatchQueue.main.async { [weak self] in
       guard let self = self else { return }
-      if let streamUrl = candidates.first {
+      if !candidates.isEmpty {
         do {
           let session = AVAudioSession.sharedInstance()
           try session.setCategory(.playback, mode: .moviePlayback, options: [.allowAirPlay])
@@ -345,21 +369,8 @@ private final class ZhiyunAVPlayerViewController: AVPlayerViewController {
         } catch {
           // ignore audio session warning
         }
-        var headers = [
-          "Referer": "https://classroom.zju.edu.cn/",
-          "Origin": "https://classroom.zju.edu.cn"
-        ]
-        let lowerStream = streamUrl.absoluteString.lowercased()
-        let isSelfSignedLiveCdn = lowerStream.contains("livepgc.cmc.zju.edu.cn") || lowerStream.contains("auth_key=")
-        if !isSelfSignedLiveCdn, let tk = token, !tk.isEmpty {
-          let phpCookie = self.buildPhpSerializedToken(tk)
-          headers["Cookie"] = "_token=\(phpCookie); token=\(tk)"
-          headers["Authorization"] = "Bearer \(tk)"
-        }
-        let asset = AVURLAsset(url: streamUrl, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
-        let item = AVPlayerItem(asset: asset)
-        let player = AVPlayer(playerItem: item)
         let playerVC = ZhiyunAVPlayerViewController()
+        let player = AVPlayer()
         playerVC.player = player
         playerVC.allowsPictureInPicturePlayback = true
         if #available(iOS 14.2, *) {
@@ -370,8 +381,33 @@ private final class ZhiyunAVPlayerViewController: AVPlayerViewController {
         playerVC.delegate = self
         self.presentingVideoHostController = controller
         self.activePipPlayerController = playerVC
-        controller.present(playerVC, animated: true) {
+
+        func loadCandidate(at idx: Int) {
+          guard idx < candidates.count else {
+            self.activeItemStatusObservation = nil
+            if let webUrl = URL(string: fallbackStr) {
+              playerVC.dismiss(animated: false) {
+                let safariVC = SFSafariViewController(url: webUrl)
+                controller.present(safariVC, animated: true)
+              }
+            }
+            return
+          }
+          let item = makePlayerItem(for: candidates[idx])
+          self.activeItemStatusObservation = item.observe(\.status, options: [.new]) { [weak self] observed, _ in
+            guard self != nil else { return }
+            if observed.status == .failed {
+              DispatchQueue.main.async {
+                loadCandidate(at: idx + 1)
+              }
+            }
+          }
+          player.replaceCurrentItem(with: item)
           player.play()
+        }
+
+        controller.present(playerVC, animated: true) {
+          loadCandidate(at: 0)
         }
       } else if let webUrl = URL(string: fallbackStr) {
         let safariVC = SFSafariViewController(url: webUrl)

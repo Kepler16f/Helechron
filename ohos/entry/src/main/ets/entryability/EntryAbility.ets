@@ -14,7 +14,7 @@ import bundleManager from '@ohos.bundle.bundleManager';
 import hilog from '@ohos.hilog';
 import preferences from '@ohos.data.preferences';
 import { buildCourseFormData, scheduleNextBoundary, refreshLiveMarker, PRECISION_EXACT } from '../widget/CourseStateHelper';
-import { buildSimpleCourseFormData } from '../widget/SimpleCourseStateHelper';
+import { buildSimpleCourseFormData, scheduleSimpleBoundary } from '../widget/SimpleCourseStateHelper';
 
 const DOMAIN = 0x0000;
 const TAG = 'HelechronNative';
@@ -674,6 +674,7 @@ export default class EntryAbility extends FlutterAbility {
       const livingroomUrl = (call.argument('livingroomUrl') as string) || '';
       const token = (call.argument('token') as string) || '';
       const ssoCookie = (call.argument('ssoCookie') as string) || '';
+      const zhiyunCookies = (call.argument('zhiyunCookies') as string) || '';
       const streamsJsonArg = (call.argument('streamsJson') as string) || '[]';
       const isLiveArg = (call.argument('isLive') as boolean) || false;
       const preferWebArg = (call.argument('preferWeb') as boolean) || false;
@@ -681,15 +682,18 @@ export default class EntryAbility extends FlutterAbility {
         result.success(false);
         return;
       }
+      const prevSeq = (AppStorage.get('inAppVideoSessionSeq') as number) || 0;
       AppStorage.setOrCreate('inAppVideoTitle', title);
       AppStorage.setOrCreate('inAppVideoLivingroomUrl', livingroomUrl);
       AppStorage.setOrCreate('inAppVideoToken', token);
       AppStorage.setOrCreate('inAppVideoSsoCookie', ssoCookie);
+      AppStorage.setOrCreate('inAppVideoZhiyunCookies', zhiyunCookies);
       AppStorage.setOrCreate('inAppVideoStreamsJson', streamsJsonArg);
       AppStorage.setOrCreate('inAppVideoIsLive', isLiveArg);
       AppStorage.setOrCreate('inAppVideoPreferWeb', preferWebArg);
       AppStorage.setOrCreate('inAppVideoUrl', url.length > 0 ? url : livingroomUrl);
       AppStorage.setOrCreate('inAppVideoVisible', true);
+      AppStorage.setOrCreate('inAppVideoSessionSeq', prevSeq + 1);
       result.success(true);
     } catch (err) {
       hilog.error(DOMAIN, TAG, `openInAppVideoPlayer failed: ${JSON.stringify(err)}`);
@@ -1398,6 +1402,49 @@ export default class EntryAbility extends FlutterAbility {
     }
   }
 
+  private resolveWidgetAccentHex(prefs: preferences.Preferences): string {
+    const raw = ((prefs.getSync('themePrimaryHex', '#007AFF') as string) || '#007AFF').trim().replace('#', '');
+    if (/^[0-9a-fA-F]{6}$/.test(raw)) {
+      return `#${raw.toUpperCase()}`;
+    }
+    if (/^[0-9a-fA-F]{8}$/.test(raw)) {
+      return `#${raw.substring(2).toUpperCase()}`;
+    }
+    return '#007AFF';
+  }
+
+  private async pushAllWidgetsThemeAndCourse(prefs: preferences.Preferences, scheduleBoundaries: boolean): Promise<void> {
+    const formIdsStr = (await prefs.get('course_form_ids', '')) as string;
+    if (formIdsStr.length > 0) {
+      const formIds = formIdsStr.split(',').filter(id => id.length > 0);
+      const data = buildCourseFormData(prefs, PRECISION_EXACT);
+      const bindingData = formBindingData.createFormBindingData(data);
+      for (const id of formIds) {
+        formProvider.updateForm(id, bindingData).catch((err: BusinessError) => {
+          hilog.warn(DOMAIN, TAG, `updateForm course failed for ${id}: ${err.message}`);
+        });
+        if (scheduleBoundaries) {
+          scheduleNextBoundary(id, prefs);
+        }
+      }
+    }
+
+    const simpleIdsStr = (await prefs.get('simple_course_form_ids', '')) as string;
+    if (simpleIdsStr.length > 0) {
+      const simpleIds = simpleIdsStr.split(',').filter(id => id.length > 0);
+      const simpleData = buildSimpleCourseFormData(prefs);
+      const simpleBinding = formBindingData.createFormBindingData(simpleData);
+      for (const id of simpleIds) {
+        formProvider.updateForm(id, simpleBinding).catch((err: BusinessError) => {
+          hilog.warn(DOMAIN, TAG, `updateForm simpleCourse failed for ${id}: ${err.message}`);
+        });
+        if (scheduleBoundaries) {
+          scheduleSimpleBoundary(id, prefs);
+        }
+      }
+    }
+  }
+
   private async updatePaymentCodeWidget(call: MethodCall, result: MethodResult): Promise<void> {
     try {
       const code = (call.argument('paymentCode') as string) || '';
@@ -1415,6 +1462,7 @@ export default class EntryAbility extends FlutterAbility {
         const data: Record<string, string> = {
           'paymentCode': code,
           'displayName': name,
+          'accentColor': this.resolveWidgetAccentHex(prefs),
           'hasCode': code.length > 0 ? '1' : '0'
         };
         const bindingData = formBindingData.createFormBindingData(data);
@@ -1449,22 +1497,7 @@ export default class EntryAbility extends FlutterAbility {
         await prefs.flush();
       }
 
-      // 主动推送到当前所有课程小组件（状态/倒计时由 CourseStateHelper 计算）。
-      // 数据未变化时跳过落盘与刷新调度，避免高频推送造成无谓开销。
-      const formIdsStr = (await prefs.get('course_form_ids', '')) as string;
-      if (formIdsStr.length > 0) {
-        const formIds = formIdsStr.split(',').filter(id => id.length > 0);
-        const data = buildCourseFormData(prefs, PRECISION_EXACT);
-        const bindingData = formBindingData.createFormBindingData(data);
-        for (const id of formIds) {
-          formProvider.updateForm(id, bindingData).catch((err: BusinessError) => {
-            hilog.warn(DOMAIN, TAG, `updateForm course failed for ${id}: ${err.message}`);
-          });
-          if (changed) {
-            scheduleNextBoundary(id, prefs);
-          }
-        }
-      }
+      await this.pushAllWidgetsThemeAndCourse(prefs, changed);
       result.success(true);
     } catch (e) {
       hilog.error(DOMAIN, TAG, `updateCourseWidget failed: ${JSON.stringify(e)}`);
@@ -1521,14 +1554,35 @@ export default class EntryAbility extends FlutterAbility {
       const materialLevel = typeof levelArg === 'number' ? levelArg : 10;
       const primaryHexArg = call.argument('primaryColorHex') as string | undefined;
       const prefs = await this.getWidgetPrefs();
+      const prevPrimaryHex = (await prefs.get('themePrimaryHex', '')) as string;
       await prefs.put('bottomBarFloating', floating ? '1' : '0');
       await prefs.put('bottomBarImmersiveLight', immersiveLight ? '1' : '0');
       await prefs.put('bottomBarMaterialLevel', materialLevel);
+      let primaryChanged = false;
       if (typeof primaryHexArg === 'string' && primaryHexArg.length > 0) {
+        primaryChanged = prevPrimaryHex !== primaryHexArg;
         await prefs.put('themePrimaryHex', primaryHexArg);
         AppStorage.setOrCreate('themePrimaryHex', primaryHexArg);
       }
       await prefs.flush();
+      if (primaryChanged) {
+        await this.pushAllWidgetsThemeAndCourse(prefs, false);
+        const payIdsStr = (await prefs.get('payment_form_ids', '')) as string;
+        if (payIdsStr.length > 0) {
+          const payIds = payIdsStr.split(',').filter(id => id.length > 0);
+          const code = (await prefs.get('paymentCode', '')) as string;
+          const name = (await prefs.get('displayName', '付款码')) as string;
+          const payBinding = formBindingData.createFormBindingData({
+            'paymentCode': code,
+            'displayName': name,
+            'accentColor': this.resolveWidgetAccentHex(prefs),
+            'hasCode': code.length > 0 ? '1' : '0'
+          });
+          for (const pid of payIds) {
+            formProvider.updateForm(pid, payBinding).catch(() => {});
+          }
+        }
+      }
       AppStorage.setOrCreate('bottomBarFloating', floating);
       AppStorage.setOrCreate('bottomBarImmersiveLight', immersiveLight && floating);
       AppStorage.setOrCreate('bottomBarMaterialLevel', materialLevel);

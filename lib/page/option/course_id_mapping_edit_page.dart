@@ -28,107 +28,75 @@ class CourseIdMappingEditForm extends StatelessWidget {
     final colors = AelTheme.colorsOf(context);
     Widget buildField(String label, TextEditingController controller) {
       return SizedBox(
-        height: 48,
+        height: 50,
         child: CupertinoTextField(
           controller: controller,
-          style: TextStyle(color: colors.textPrimary),
+          style: TextStyle(color: colors.textPrimary, fontSize: 15.5),
           placeholderStyle: TextStyle(color: colors.textTertiary),
-          prefix: Container(
-            padding: const EdgeInsets.only(left: 12),
-            child: Text(label, style: TextStyle(color: colors.textPrimary)),
+          prefix: Padding(
+            padding: const EdgeInsets.only(left: AelSpacing.lg),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: colors.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.symmetric(horizontal: AelSpacing.md),
           decoration: BoxDecoration(
-            color: colors.cardBg,
-            borderRadius: BorderRadius.circular(12),
+            color: colors.tonalTileBg,
+            borderRadius: BorderRadius.circular(AelRadius.tile),
           ),
         ),
       );
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        color: colors.pageBg,
-      ),
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-        left: 16,
-        right: 16,
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12, top: 18),
-              child: Text(
-                title,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: colors.textPrimary,
-                ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        buildField('原课号', oldIdController),
+        const SizedBox(height: AelSpacing.md),
+        buildField('新课号', newIdController),
+        const SizedBox(height: AelSpacing.md),
+        buildField('备注名', commentController),
+        const SizedBox(height: AelSpacing.lg),
+        AelButton(
+          expanded: true,
+          icon: AelIcons.check,
+          label: '保存',
+          onPressed: () async {
+            if (oldIdController.text.isEmpty ||
+                newIdController.text.isEmpty ||
+                commentController.text.isEmpty) {
+              await showAelAlertDialog(
+                context: context,
+                title: '错误',
+                message: '请填写所有字段',
+              );
+              return;
+            }
+            courseIdMappingList.removeWhere(
+              (element) =>
+                  element.id1 == oldIdController.text ||
+                  element.id2 == oldIdController.text ||
+                  element.id1 == newIdController.text ||
+                  element.id2 == newIdController.text,
+            );
+            courseIdMappingList.add(
+              CourseIdMap(
+                id1: oldIdController.text,
+                id2: newIdController.text,
+                comment: commentController.text,
               ),
-            ),
-            buildField('原课号', oldIdController),
-            const SizedBox(height: 12),
-            buildField('新课号', newIdController),
-            const SizedBox(height: 12),
-            buildField('备注名', commentController),
-            const SizedBox(height: 16),
-            AelButton(
-              expanded: true,
-              icon: AelIcons.check,
-              label: '保存',
-              onPressed: () async {
-                if (oldIdController.text.isEmpty ||
-                    newIdController.text.isEmpty ||
-                    commentController.text.isEmpty) {
-                  showCupertinoDialog(
-                    context: context,
-                    builder: (BuildContext context) {
-                      return CupertinoAlertDialog(
-                        title: const Text('错误'),
-                        content: const Text('请填写所有字段'),
-                        actions: [
-                          CupertinoDialogAction(
-                            child: const Text('确定'),
-                            onPressed: () {
-                              Navigator.pop(context);
-                            },
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                  return;
-                }
-                courseIdMappingList.removeWhere(
-                  (element) =>
-                      element.id1 == oldIdController.text ||
-                      element.id2 == oldIdController.text ||
-                      element.id1 == newIdController.text ||
-                      element.id2 == newIdController.text,
-                );
-                courseIdMappingList.add(
-                  CourseIdMap(
-                    id1: oldIdController.text,
-                    id2: newIdController.text,
-                    comment: commentController.text,
-                  ),
-                );
-                Navigator.pop(context);
-                await scholar.value.recalculateGpa();
-                scholar.refresh();
-              },
-            ),
-            const SizedBox(height: 12),
-          ],
+            );
+            if (context.mounted) Navigator.pop(context);
+            await scholar.value.recalculateGpa();
+            scholar.refresh();
+          },
         ),
-      ),
+      ],
     );
   }
 }
@@ -248,11 +216,12 @@ class CourseIdMappingEditPage extends StatelessWidget {
                   icon: AelIcons.add,
                   label: '添加新的映射关系',
                   onPressed: () {
-                    showCupertinoModalPopup(
+                    showAelBottomSheet<void>(
                       context: context,
-                      builder: (BuildContext context) {
-                        return CourseIdMappingEditForm(title: '添加新的映射关系');
-                      },
+                      title: '添加新的映射关系',
+                      showCloseButton: true,
+                      builder: (_) =>
+                          CourseIdMappingEditForm(title: '添加新的映射关系'),
                     );
                   },
                 ),

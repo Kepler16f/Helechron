@@ -111,41 +111,18 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
   }
 
   Future<void> _confirmClear() async {
-    final confirmed = await showCupertinoDialog<bool>(
+    final confirmed = await showAelConfirmDialog(
       context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('确定清空测试日志？'),
-        content: const Text('清空后，当前保存的诊断记录将无法在 App 内恢复。'),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('清空'),
-          ),
-        ],
-      ),
+      title: '确定清空测试日志？',
+      message: '清空后，当前保存的诊断记录将无法在 App 内恢复。',
+      confirmLabel: '清空',
+      isDestructive: true,
     );
-    if (confirmed == true && mounted) await _clear();
+    if (confirmed && mounted) await _clear();
   }
 
   Future<void> _showMessage(String title, String message) {
-    return showCupertinoDialog<void>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('确定'),
-          ),
-        ],
-      ),
-    );
+    return showAelAlertDialog(context: context, title: title, message: message);
   }
 
   void _setMode(int value) {

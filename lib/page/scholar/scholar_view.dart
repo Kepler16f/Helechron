@@ -48,50 +48,34 @@ Future<void> showRefreshResultDialog(
     return line.length <= 100 ? line : '${line.substring(0, 100)}…';
   }).toList();
 
-  await showCupertinoDialog<void>(
+  await showAelDialog<void>(
     context: context,
-    builder: (dialogContext) => CupertinoAlertDialog(
-      title: Text('刷新遇到问题：${degraded.length} 项降级，${failures.length} 项失败'),
-      content: Text(summaryLines.join('\n')),
-      actions: [
-        if (messages.isNotEmpty)
-          CupertinoDialogAction(
-            child: const Text('查看详情'),
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-              showCupertinoDialog<void>(
-                context: context,
-                builder: (detailContext) => CupertinoAlertDialog(
-                  title: const Text('刷新详情'),
-                  content: SingleChildScrollView(
-                    child: Text(
-                      messages
-                          .map((error) {
-                            final short = shortErrorText(error);
-                            final details = detailedErrorText(error);
-                            return details == short
-                                ? short
-                                : '$short\n$details';
-                          })
-                          .join('\n\n'),
-                    ),
-                  ),
-                  actions: [
-                    CupertinoDialogAction(
-                      child: const Text('确定'),
-                      onPressed: () => Navigator.of(detailContext).pop(),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        CupertinoDialogAction(
-          child: const Text('确定'),
-          onPressed: () => Navigator.of(dialogContext).pop(),
+    title: '刷新遇到问题：${degraded.length} 项降级，${failures.length} 项失败',
+    message: summaryLines.join('\n'),
+    actions: [
+      if (messages.isNotEmpty)
+        AelDialogAction<void>(
+          label: '查看详情',
+          variant: AelButtonVariant.tonal,
+          onPressed: () {
+            showAelAlertDialog(
+              context: context,
+              title: '刷新详情',
+              message: messages
+                  .map((error) {
+                    final short = shortErrorText(error);
+                    final details = detailedErrorText(error);
+                    return details == short ? short : '$short\n$details';
+                  })
+                  .join('\n\n'),
+            );
+          },
         ),
-      ],
-    ),
+      const AelDialogAction<void>(
+        label: '确定',
+        variant: AelButtonVariant.primary,
+      ),
+    ],
   );
 }
 

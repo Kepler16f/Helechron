@@ -29,64 +29,80 @@ class CalendarPage extends StatelessWidget {
   final deadlineList = Get.find<RxList<Task>>(tag: 'taskList');
 
   void _showJumpToDatePicker(BuildContext context) {
-    final colors = AelTheme.colorsOf(context);
     DateTime tempDate = _calendarController.selectedDay.value;
-    showCupertinoModalPopup(
+    showAelBottomSheet<void>(
       context: context,
-      builder: (BuildContext ctx) {
-        return Container(
-          height: 280,
-          color: colors.cardBg,
-          child: SafeArea(
-            top: false,
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    CupertinoButton(
-                      child: const Text('回到今天'),
-                      onPressed: () {
-                        final now = DateTime.now();
-                        _calendarController.focusedDay.value = now;
-                        _calendarController.selectedDay.value = now;
-                        _calendarController.focusedDay.refresh();
-                        Navigator.of(ctx).pop();
-                      },
+      title: '跳转日期',
+      builder: (sheetCtx) {
+        final colors = AelTheme.colorsOf(sheetCtx);
+        final brightness = CupertinoTheme.brightnessOf(sheetCtx);
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              height: 216,
+              decoration: ShapeDecoration(
+                color: colors.tonalTileBg,
+                shape: AelShapes.squircle(AelRadius.card - 4),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: CupertinoTheme(
+                data: CupertinoThemeData(
+                  brightness: brightness,
+                  primaryColor: colors.primary,
+                  textTheme: CupertinoTextThemeData(
+                    dateTimePickerTextStyle: TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.w500,
+                      color: colors.textPrimary,
                     ),
-                    Text(
-                      '跳转日期',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: colors.textPrimary,
-                      ),
-                    ),
-                    CupertinoButton(
-                      child: const Text('确定'),
-                      onPressed: () {
-                        _calendarController.focusedDay.value = tempDate;
-                        _calendarController.selectedDay.value = tempDate;
-                        _calendarController.focusedDay.refresh();
-                        Navigator.of(ctx).pop();
-                      },
-                    ),
-                  ],
+                  ),
                 ),
+                child: CupertinoDatePicker(
+                  mode: CupertinoDatePickerMode.date,
+                  initialDateTime: tempDate,
+                  minimumDate: DateTime(2022, 9, 1),
+                  maximumDate: DateTime(2030, 12, 31),
+                  onDateTimeChanged: (DateTime newDate) {
+                    tempDate = newDate;
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: AelSpacing.lg),
+            Row(
+              children: [
                 Expanded(
-                  child: CupertinoDatePicker(
-                    mode: CupertinoDatePickerMode.date,
-                    initialDateTime: _calendarController.selectedDay.value,
-                    minimumDate: DateTime(2022, 9, 1),
-                    maximumDate: DateTime(2030, 12, 31),
-                    onDateTimeChanged: (DateTime newDate) {
-                      tempDate = newDate;
+                  child: AelButton(
+                    label: '回到今天',
+                    variant: AelButtonVariant.tonal,
+                    expanded: true,
+                    onPressed: () {
+                      final now = DateTime.now();
+                      _calendarController.focusedDay.value = now;
+                      _calendarController.selectedDay.value = now;
+                      _calendarController.focusedDay.refresh();
+                      Navigator.of(sheetCtx).pop();
+                    },
+                  ),
+                ),
+                const SizedBox(width: AelSpacing.md),
+                Expanded(
+                  child: AelButton(
+                    label: '确定',
+                    expanded: true,
+                    onPressed: () {
+                      _calendarController.focusedDay.value = tempDate;
+                      _calendarController.selectedDay.value = tempDate;
+                      _calendarController.focusedDay.refresh();
+                      Navigator.of(sheetCtx).pop();
                     },
                   ),
                 ),
               ],
             ),
-          ),
+          ],
         );
       },
     );
@@ -500,7 +516,7 @@ class CalendarPage extends StatelessWidget {
     deadline.repeatEndsTime = time.copyWith();
     deadline.type = TaskType.fixed;
     deadline.status = TaskStatus.running;
-    Task? res = await showCupertinoModalPopup(
+    Task? res = await showAelModalPage<Task>(
       context: context,
       builder: (BuildContext context) {
         return TaskEditPage(deadline);
@@ -516,79 +532,67 @@ class CalendarPage extends StatelessWidget {
   }
 
   Future<void> showCardDialog(BuildContext context, Task deadline) async {
-    return showCupertinoDialog<void>(
+    return showAelDialog<void>(
       context: context,
-      builder: (BuildContext context) {
-        return CupertinoAlertDialog(
-          title: Text(deadline.summary),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (deadline.repeatType != TaskRepeatType.norepeat) ...[
-                  const Text('重复日程，接下来的时段：'),
-                ],
-                Text('开始于 ${toStringHumanReadable(deadline.startTime)}'),
-                Text('结束于 ${toStringHumanReadable(deadline.endTime)}'),
-                if (deadline.location.isNotEmpty) ...[
-                  Text('地点：${deadline.location}'),
-                ],
-                if (deadline.description.isNotEmpty) ...[
-                  Text('说明：${deadline.description}'),
-                ],
-              ],
-            ),
+      title: deadline.summary,
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (deadline.repeatType != TaskRepeatType.norepeat)
+            const Text('重复日程，接下来的时段：'),
+          Text('开始于 ${toStringHumanReadable(deadline.startTime)}'),
+          Text('结束于 ${toStringHumanReadable(deadline.endTime)}'),
+          if (deadline.location.isNotEmpty) Text('地点：${deadline.location}'),
+          if (deadline.description.isNotEmpty)
+            Text('说明：${deadline.description}'),
+        ],
+      ),
+      actions: [
+        const AelDialogAction<void>(
+          label: '返回',
+          variant: AelButtonVariant.tonal,
+        ),
+        if (deadline.type == TaskType.fixed)
+          AelDialogAction<void>(
+            label: '编辑',
+            variant: AelButtonVariant.primary,
+            onPressed: () async {
+              Task res =
+                  await showAelModalPage<Task>(
+                    context: context,
+                    builder: (BuildContext context) {
+                      return TaskEditPage(deadline);
+                    },
+                  ) ??
+                  deadline;
+              deadline.copy(res);
+              _taskController.updateDeadlineList();
+              _taskController.updateDeadlineListTime();
+              _flowController.removeFlowInFlowList();
+              DateTime now = DateTime.now();
+              DateTime startsAt = DateTime(
+                now.year,
+                now.month,
+                now.day,
+                now.hour,
+                now.minute,
+              );
+              _flowController.generateNewFlowList(startsAt);
+              _taskController.taskList.refresh();
+            },
           ),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('返回'),
-            ),
-            if (deadline.type == TaskType.fixed)
-              CupertinoDialogAction(
-                onPressed: () async {
-                  Navigator.of(context).pop();
-                  Task res =
-                      await showCupertinoModalPopup(
-                        context: context,
-                        builder: (BuildContext context) {
-                          return TaskEditPage(deadline);
-                        },
-                      ) ??
-                      deadline;
-                  deadline.copy(res);
-                  _taskController.updateDeadlineList();
-                  _taskController.updateDeadlineListTime();
-                  _flowController.removeFlowInFlowList();
-                  DateTime now = DateTime.now();
-                  DateTime startsAt = DateTime(
-                    now.year,
-                    now.month,
-                    now.day,
-                    now.hour,
-                    now.minute,
-                  );
-                  _flowController.generateNewFlowList(startsAt);
-                  _taskController.taskList.refresh();
-                },
-                child: const Text('编辑'),
-              ),
-            if (deadline.type == TaskType.fixedlegacy)
-              CupertinoDialogAction(
-                onPressed: () async {
-                  Navigator.of(context).pop();
-                  deadline.status = TaskStatus.deleted;
-                  _taskController.updateDeadlineList();
-                  _taskController.taskList.refresh();
-                },
-                child: const Text('删除'),
-              ),
-          ],
-        );
-      },
+        if (deadline.type == TaskType.fixedlegacy)
+          AelDialogAction<void>(
+            label: '删除',
+            isDestructive: true,
+            onPressed: () async {
+              deadline.status = TaskStatus.deleted;
+              _taskController.updateDeadlineList();
+              _taskController.taskList.refresh();
+            },
+          ),
+      ],
     );
   }
 

@@ -1,11 +1,9 @@
 import 'package:flutter/cupertino.dart'
     show
-        CupertinoAlertDialog,
-        CupertinoDialogAction,
         CupertinoPageScaffold,
         CupertinoPageRoute,
         CupertinoTextField,
-        showCupertinoDialog;
+        OverlayVisibilityMode;
 import 'package:flutter/material.dart' show Divider;
 import 'package:flutter/widgets.dart';
 
@@ -144,60 +142,60 @@ class _PracticeScorePageState extends State<PracticeScorePage> {
   };
 
   void _showSetTargetDialog(int catId) {
-    final colors = AelTheme.colorsOf(context);
     final currentTarget = PracticeTargetHelper.getTarget(catId);
     final textController = TextEditingController(
       text: currentTarget > 0 ? currentTarget.toStringAsFixed(2) : '',
     );
 
-    showCupertinoDialog<void>(
+    showAelDialog<void>(
       context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: Text('设置${_getCategoryTitle(catId)}目标记点'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 12),
-          child: CupertinoTextField(
+      title: '设置${_getCategoryTitle(catId)}目标记点',
+      content: Builder(
+        builder: (ctx) {
+          final colors = AelTheme.colorsOf(ctx);
+          return CupertinoTextField(
             controller: textController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             placeholder: '如: 4.0',
             autofocus: true,
-            style: TextStyle(color: colors.textPrimary),
+            clearButtonMode: OverlayVisibilityMode.editing,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AelSpacing.md,
+              vertical: AelSpacing.md,
+            ),
+            style: TextStyle(color: colors.textPrimary, fontSize: 15),
             placeholderStyle: TextStyle(color: colors.textTertiary),
             decoration: BoxDecoration(
               color: colors.tonalTileBg,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AelRadius.tile),
             ),
-          ),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () async {
-              final nav = Navigator.of(ctx);
-              await PracticeTargetHelper.setTarget(catId, 0.0);
-              if (mounted) setState(() {});
-              nav.pop();
-            },
-            child: const Text('清除目标'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () async {
-              final nav = Navigator.of(ctx);
-              final val = double.tryParse(textController.text.trim()) ?? 0.0;
-              await PracticeTargetHelper.setTarget(catId, val);
-              if (mounted) setState(() {});
-              nav.pop();
-            },
-            child: const Text('保存'),
-          ),
-        ],
+          );
+        },
       ),
-    );
+      actions: [
+        const AelDialogAction<void>(
+          label: '取消',
+          variant: AelButtonVariant.tonal,
+        ),
+        AelDialogAction<void>(
+          label: '清除目标',
+          isDestructive: true,
+          onPressed: () async {
+            await PracticeTargetHelper.setTarget(catId, 0.0);
+            if (mounted) setState(() {});
+          },
+        ),
+        AelDialogAction<void>(
+          label: '保存',
+          variant: AelButtonVariant.primary,
+          onPressed: () async {
+            final val = double.tryParse(textController.text.trim()) ?? 0.0;
+            await PracticeTargetHelper.setTarget(catId, val);
+            if (mounted) setState(() {});
+          },
+        ),
+      ],
+    ).then((_) => textController.dispose());
   }
 
   Widget _buildCategorySegment() {

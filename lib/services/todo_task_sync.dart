@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:celechron/database/database_helper.dart';
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/http/zjuServices/courses.dart';
 import 'package:celechron/http/zjuServices/network_defense.dart';
 import 'package:celechron/model/scholar.dart';
@@ -185,7 +187,8 @@ class TodoTaskSync {
 
       final recorded = getHomeworkStatus(todo.id);
       final isQuiz = todo.isQuiz || (recorded?['is_quiz'] == true);
-      final isSubmitted = todo.isSubmitted ||
+      final isSubmitted =
+          todo.isSubmitted ||
           recorded?['completeness'] == 'full' ||
           recorded?['score'] != null;
 
@@ -252,8 +255,8 @@ class TodoTaskSync {
         final taskStatus = isSubmitted
             ? TaskStatus.completed
             : (todo.endTime!.isBefore(now)
-                ? TaskStatus.failed
-                : TaskStatus.running);
+                  ? TaskStatus.failed
+                  : TaskStatus.running);
 
         final newTask = Task(
           uid: const Uuid().v4(),
@@ -326,20 +329,18 @@ class TodoTaskSync {
     String? title,
   }) async {
     // 显示加载弹窗
-    showCupertinoDialog<void>(
+    showAelDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const CupertinoAlertDialog(
-        content: Padding(
-          padding: EdgeInsets.symmetric(vertical: 12.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CupertinoActivityIndicator(radius: 14),
-              SizedBox(height: 12),
-              Text('正在向学在浙大探测作业状态...'),
-            ],
-          ),
+      content: const Padding(
+        padding: EdgeInsets.symmetric(vertical: AelSpacing.md),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CupertinoActivityIndicator(radius: 14),
+            SizedBox(height: AelSpacing.md),
+            Text('正在向学在浙大探测作业状态...'),
+          ],
         ),
       ),
     );
@@ -350,8 +351,10 @@ class TodoTaskSync {
     try {
       final client = HttpClient()
         ..connectionTimeout = const Duration(seconds: 8);
-      applyZjuNetworkDefense(client,
-          connectionTimeout: const Duration(seconds: 8));
+      applyZjuNetworkDefense(
+        client,
+        connectionTimeout: const Duration(seconds: 8),
+      );
 
       final res = await Courses.fetchActivityReadsForCourse(client, courseId);
       if (res != null) {
@@ -389,7 +392,8 @@ class TodoTaskSync {
       final isSubmitted =
           (score != null) || (completeness == 'full' && !isDraft);
 
-      final isQuiz = (title?.contains('小测') == true) ||
+      final isQuiz =
+          (title?.contains('小测') == true) ||
           (title?.contains('测验') == true) ||
           (title?.toLowerCase().contains('quiz') == true);
 
@@ -466,40 +470,19 @@ class TodoTaskSync {
         resultDesc = '学在浙大记录显示当前尚未${isQuiz ? '完成该测验' : '提交该作业'}，请在截止时间前完成。';
       }
 
-      showCupertinoDialog<void>(
+      showAelAlertDialog(
         context: context,
-        builder: (ctx) => CupertinoAlertDialog(
-          title: Text(resultTitle),
-          content: Padding(
-            padding: const EdgeInsets.only(top: 8.0),
-            child: Text(resultDesc),
-          ),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('我知道了'),
-            ),
-          ],
-        ),
+        title: resultTitle,
+        message: resultDesc,
+        confirmLabel: '我知道了',
       );
     } else {
-      showCupertinoDialog<void>(
+      showAelAlertDialog(
         context: context,
-        builder: (ctx) => CupertinoAlertDialog(
-          title: const Text('探测未能获取到数据'),
-          content: Padding(
-            padding: const EdgeInsets.only(top: 8.0),
-            child: Text(errorMsg != null
-                ? '网络请求异常：$errorMsg'
-                : '未能从课程活动中匹配到此项作业，或学在浙大会话已过期。请在学业页面下拉刷新建立登录态后再试。'),
-          ),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('确定'),
-            ),
-          ],
-        ),
+        title: '探测未能获取到数据',
+        message: errorMsg != null
+            ? '网络请求异常：$errorMsg'
+            : '未能从课程活动中匹配到此项作业，或学在浙大会话已过期。请在学业页面下拉刷新建立登录态后再试。',
       );
     }
 

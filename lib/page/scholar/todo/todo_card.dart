@@ -304,76 +304,53 @@ void showTodoSubmitSheet(
     }
   }
 
-  showCupertinoModalPopup<void>(
+  showAelActionSheet<void>(
     context: context,
-    builder: (ctx) => CupertinoActionSheet(
-      title: Text(title ?? '学在浙大作业'),
-      message: Text(url, maxLines: 2, overflow: TextOverflow.ellipsis),
-      actions: [
-        if (aid != null)
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              Navigator.of(context, rootNavigator: true).push(
-                CupertinoPageRoute(
-                  builder: (context) => HomeworkSubmissionPage(
-                    activityId: aid,
-                    courseId: cid,
-                    title: title,
-                    submitUrl: url,
-                  ),
+    title: title ?? '学在浙大作业',
+    message: url,
+    actions: [
+      if (aid != null)
+        AelActionOption<void>(
+          label: '应用内查看与提交',
+          icon: AelIcons.edit,
+          isDefault: true,
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).push(
+              CupertinoPageRoute(
+                builder: (context) => HomeworkSubmissionPage(
+                  activityId: aid,
+                  courseId: cid,
+                  title: title,
+                  submitUrl: url,
                 ),
-              );
-            },
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(AelIcons.edit, size: 18),
-                SizedBox(width: 6),
-                Text('应用内查看与提交'),
-              ],
-            ),
-          ),
-        if (cid != null && aid != null)
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              TodoTaskSync.probeSingleHomework(
-                context,
-                courseId: cid!,
-                activityId: aid!,
-                title: title,
-              );
-            },
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(AelIcons.search, size: 18),
-                SizedBox(width: 6),
-                Text('探测作业提交状态'),
-              ],
-            ),
-          ),
-        CupertinoActionSheetAction(
-          onPressed: () {
-            Navigator.of(ctx).pop();
-            launchUrlString(url, mode: LaunchMode.externalApplication);
+              ),
+            );
           },
-          child: const Text('打开网页提交页面'),
         ),
-        CupertinoActionSheetAction(
-          onPressed: () {
-            Navigator.of(ctx).pop();
-            Clipboard.setData(ClipboardData(text: url));
+      if (cid != null && aid != null)
+        AelActionOption<void>(
+          label: '探测作业提交状态',
+          icon: AelIcons.search,
+          onTap: () {
+            TodoTaskSync.probeSingleHomework(
+              context,
+              courseId: cid!,
+              activityId: aid!,
+              title: title,
+            );
           },
-          child: const Text('复制提交链接'),
         ),
-      ],
-      cancelButton: CupertinoActionSheetAction(
-        onPressed: () => Navigator.of(ctx).pop(),
-        child: const Text('取消'),
+      AelActionOption<void>(
+        label: '打开网页提交页面',
+        icon: AelIcons.externalLink,
+        onTap: () => launchUrlString(url, mode: LaunchMode.externalApplication),
       ),
-    ),
+      AelActionOption<void>(
+        label: '复制提交链接',
+        icon: AelIcons.copy,
+        onTap: () => Clipboard.setData(ClipboardData(text: url)),
+      ),
+    ],
   );
 }
 

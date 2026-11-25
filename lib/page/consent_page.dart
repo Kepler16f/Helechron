@@ -211,48 +211,32 @@ class _ConsentPageState extends State<ConsentPage> {
         return;
       }
       setState(() => _busy = false);
-      await showCupertinoDialog<void>(
+      await showAelDialog<void>(
         context: context,
-        builder: (context) => CupertinoAlertDialog(
-          title: const Text('启动失败'),
-          content: Text('$error\n\n请尝试重新打开应用。'),
-          actions: [
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              child: const Text('退出'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                SystemNavigator.pop();
-              },
-            ),
-          ],
-        ),
+        title: '启动失败',
+        message: '$error\n\n请尝试重新打开应用。',
+        actions: [
+          AelDialogAction<void>(
+            label: '退出',
+            variant: AelButtonVariant.primary,
+            onPressed: () => SystemNavigator.pop(),
+          ),
+        ],
       );
     }
   }
 
   Future<void> _deny() async {
-    final shouldExit = await showCupertinoDialog<bool>(
+    final shouldExit = await showAelConfirmDialog(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('无法继续使用'),
-        content: const Text('未同意隐私政策，我们不会处理你的个人信息，你将无法使用 Helechron。'),
-        actions: [
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            child: const Text('返回阅读'),
-            onPressed: () => Navigator.of(context).pop(false),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            child: const Text('退出应用'),
-            onPressed: () => Navigator.of(context).pop(true),
-          ),
-        ],
-      ),
+      title: '无法继续使用',
+      message: '未同意隐私政策，我们不会处理你的个人信息，你将无法使用 Helechron。',
+      cancelLabel: '返回阅读',
+      confirmLabel: '退出应用',
+      isDestructive: true,
     );
 
-    if (shouldExit != true || !mounted) {
+    if (!shouldExit || !mounted) {
       return;
     }
 
@@ -264,19 +248,11 @@ class _ConsentPageState extends State<ConsentPage> {
     if (!mounted) {
       return;
     }
-    await showCupertinoDialog<void>(
+    await showAelAlertDialog(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('请关闭应用'),
-        content: const Text('请从系统后台关闭 Helechron，或重新打开应用后选择同意。'),
-        actions: [
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            child: const Text('我知道了'),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ],
-      ),
+      title: '请关闭应用',
+      message: '请从系统后台关闭 Helechron，或重新打开应用后选择同意。',
+      confirmLabel: '我知道了',
     );
   }
 

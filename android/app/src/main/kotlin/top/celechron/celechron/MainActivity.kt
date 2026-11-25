@@ -85,6 +85,10 @@ class MainActivity : FlutterActivity() {
                     val value = call.argument<String>("value")
                     if (key != null && value != null) {
                         prefs.edit().putString(key, value).apply()
+                        if (key == "themePrimaryHex") {
+                            CourseWidgetProvider.updateAll(context)
+                            PaymentCodeWidgetProvider.updateAll(context)
+                        }
                     }
                     result.success(true)
                 }
@@ -113,6 +117,7 @@ class MainActivity : FlutterActivity() {
                     val livingroomUrl = call.argument<String>("livingroomUrl") ?: ""
                     val token = call.argument<String>("token") ?: ""
                     val ssoCookie = call.argument<String>("ssoCookie") ?: ""
+                    val zhiyunCookies = call.argument<String>("zhiyunCookies") ?: ""
                     val isLive = call.argument<Boolean>("isLive") ?: false
                     val preferWeb = call.argument<Boolean>("preferWeb") ?: false
                     result.success(
@@ -124,7 +129,8 @@ class MainActivity : FlutterActivity() {
                             token,
                             isLive,
                             ssoCookie,
-                            preferWeb
+                            preferWeb,
+                            zhiyunCookies
                         )
                     )
                 }
@@ -408,7 +414,8 @@ class MainActivity : FlutterActivity() {
         token: String = "",
         isLive: Boolean = false,
         ssoCookie: String = "",
-        preferWeb: Boolean = false
+        preferWeb: Boolean = false,
+        zhiyunCookies: String = ""
     ): Boolean {
         if (url.isEmpty() && livingroomUrl.isEmpty() && streams.isEmpty()) return false
         return try {
@@ -420,6 +427,7 @@ class MainActivity : FlutterActivity() {
                 putExtra(ZhiyunPlayerActivity.EXTRA_LIVINGROOM_URL, livingroomUrl)
                 putExtra(ZhiyunPlayerActivity.EXTRA_TOKEN, token)
                 putExtra(ZhiyunPlayerActivity.EXTRA_SSO_COOKIE, ssoCookie)
+                putExtra(ZhiyunPlayerActivity.EXTRA_ZHIYUN_COOKIES, zhiyunCookies)
                 putExtra(ZhiyunPlayerActivity.EXTRA_IS_LIVE, isLive)
                 putExtra(ZhiyunPlayerActivity.EXTRA_PREFER_WEB, preferWeb)
                 putStringArrayListExtra(ZhiyunPlayerActivity.EXTRA_STREAM_LABELS, labels)

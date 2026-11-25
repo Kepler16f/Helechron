@@ -25,124 +25,106 @@ class ImageCodePortal {
     Uint8List currentImage = imageBytes;
     _inputController.clear();
 
-    showCupertinoModalPopup(
+    final result = await showAelBottomSheet<String>(
       context: context,
-      barrierDismissible: false, // 强制用户点击按钮
-      builder: (context) {
+      title: '安全验证',
+      subtitle: '输入下方图形验证码以继续',
+      isDismissible: false,
+      builder: (sheetContext) {
         return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final colors = AelTheme.colorsOf(context);
-            return CupertinoPopupSurface(
-              child: Container(
-                color: colors.pageBg,
-                width: double.infinity,
-                padding: EdgeInsets.only(
-                  left: 24,
-                  right: 24,
-                  top: 20,
-                  bottom: MediaQuery.of(context).viewInsets.bottom + 40,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '安全验证',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                        color: colors.textPrimary,
+          builder: (sheetContext, setDialogState) {
+            final colors = AelTheme.colorsOf(sheetContext);
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: GestureDetector(
+                    onTap: () async {
+                      final newImage = await onRefresh();
+                      setDialogState(() => currentImage = newImage);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(AelSpacing.sm),
+                      decoration: ShapeDecoration(
+                        color: colors.tonalTileBg,
+                        shape: AelShapes.squircle(AelRadius.tile),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // 图片展示与刷新
-                    GestureDetector(
-                      onTap: () async {
-                        final newImage = await onRefresh();
-                        setDialogState(() => currentImage = newImage);
-                      },
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(AelRadius.sm),
                         child: Image.memory(
                           currentImage,
                           height: 60,
-                          width: 160,
+                          width: 168,
                           fit: BoxFit.cover,
                           errorBuilder: (c, e, s) =>
                               Icon(AelIcons.refresh, color: colors.primary),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '点击图片刷新',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: AelSpacing.xs + 2),
+                Center(
+                  child: Text(
+                    '点击图片刷新',
+                    style: TextStyle(fontSize: 12, color: colors.textSecondary),
+                  ),
+                ),
+                const SizedBox(height: AelSpacing.lg),
+                CupertinoTextField(
+                  controller: _inputController,
+                  placeholder: '请输入验证码',
+                  autofocus: true,
+                  padding: const EdgeInsets.symmetric(
+                    vertical: AelSpacing.md,
+                    horizontal: AelSpacing.md,
+                  ),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, color: colors.textPrimary),
+                  placeholderStyle: TextStyle(
+                    fontSize: 15,
+                    color: colors.textTertiary,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.tonalTileBg,
+                    borderRadius: BorderRadius.circular(AelRadius.tile),
+                  ),
+                  onSubmitted: (val) => Navigator.of(sheetContext).pop(val),
+                ),
+                const SizedBox(height: AelSpacing.lg),
+                Row(
+                  children: [
+                    Expanded(
+                      child: AelButton(
+                        variant: AelButtonVariant.tonal,
+                        expanded: true,
+                        label: '取消',
+                        onPressed: () => Navigator.of(sheetContext).pop(null),
                       ),
                     ),
-
-                    const SizedBox(height: 20),
-
-                    // 输入框
-                    CupertinoTextField(
-                      controller: _inputController,
-                      placeholder: '请输入验证码',
-                      autofocus: true,
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 12,
-                        horizontal: 10,
+                    const SizedBox(width: AelSpacing.md),
+                    Expanded(
+                      child: AelButton(
+                        expanded: true,
+                        label: '确定',
+                        onPressed: () => Navigator.of(
+                          sheetContext,
+                        ).pop(_inputController.text),
                       ),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: colors.textPrimary),
-                      placeholderStyle: TextStyle(color: colors.textTertiary),
-                      decoration: BoxDecoration(
-                        color: colors.cardBg,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // 按钮组
-                    Row(
-                      children: [
-                        Expanded(
-                          child: AelButton(
-                            variant: AelButtonVariant.tonal,
-                            label: '取消',
-                            onPressed: () {
-                              Navigator.pop(context);
-                              if (!completer.isCompleted) {
-                                completer.complete(null);
-                              }
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: AelSpacing.sm),
-                        Expanded(
-                          child: AelButton(
-                            label: '确定',
-                            onPressed: () {
-                              final text = _inputController.text;
-                              Navigator.pop(context);
-                              if (!completer.isCompleted) {
-                                completer.complete(text);
-                              }
-                            },
-                          ),
-                        ),
-                      ],
                     ),
                   ],
                 ),
-              ),
+              ],
             );
           },
         );
       },
     );
 
+    if (!completer.isCompleted) {
+      completer.complete(result);
+    }
     return completer.future;
   }
 }

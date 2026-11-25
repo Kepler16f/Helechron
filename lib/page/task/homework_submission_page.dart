@@ -703,21 +703,11 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
   Future<void> _submitHomework() async {
     final comment = _commentController.text.trim();
     if (_selectedAttachments.isEmpty && comment.isEmpty) {
-      showCupertinoDialog<void>(
+      showAelAlertDialog(
         context: context,
-        builder: (ctx) => CupertinoAlertDialog(
-          title: const Text('提示'),
-          content: const Padding(
-            padding: EdgeInsets.only(top: 8.0),
-            child: Text('请先选择要上传的文件附件，或在留言框中输入作业内容后再提交。'),
-          ),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('好的'),
-            ),
-          ],
-        ),
+        title: '提示',
+        message: '请先选择要上传的文件附件，或在留言框中输入作业内容后再提交。',
+        confirmLabel: '好的',
       );
       return;
     }
@@ -731,33 +721,17 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
           '待上传附件 (${_selectedAttachments.length} 个)：\n$listStr\n\n';
     }
 
-    final confirmed = await showCupertinoDialog<bool>(
+    final confirmed = await showAelConfirmDialog(
       context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('确认提交作业'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 8.0),
-          child: Text(
-            '确定要向学在浙大提交此项作业吗？\n\n'
-            '$confirmFileList'
-            '提交后将自动同步任务完成状态。',
-          ),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('确定提交'),
-          ),
-        ],
-      ),
+      title: '确认提交作业',
+      message:
+          '确定要向学在浙大提交此项作业吗？\n\n'
+          '$confirmFileList'
+          '提交后将自动同步任务完成状态。',
+      confirmLabel: '确定提交',
     );
 
-    if (confirmed != true) return;
+    if (!confirmed) return;
 
     final hasAttachments = _selectedAttachments.isNotEmpty;
     final totalBytes = _selectedAttachments.fold<int>(0, (sum, f) {
@@ -904,22 +878,11 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
         _syncTaskStatusLocally(true, null);
 
         if (mounted) {
-          await showCupertinoDialog<void>(
+          await showAelAlertDialog(
             context: context,
-            builder: (ctx) => CupertinoAlertDialog(
-              title: const Text('🎉 提交成功'),
-              content: const Padding(
-                padding: EdgeInsets.only(top: 8.0),
-                child: Text('作业已成功提交至学在浙大，任务状态已自动同步为已完成！'),
-              ),
-              actions: [
-                CupertinoDialogAction(
-                  isDefaultAction: true,
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('好的'),
-                ),
-              ],
-            ),
+            title: '提交成功',
+            message: '作业已成功提交至学在浙大，任务状态已自动同步为已完成！',
+            confirmLabel: '好的',
           );
           _loadData();
         }
@@ -934,31 +897,26 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
           _submitProgress = 0.0;
           _submittingStatusText = null;
         });
-        showCupertinoDialog<void>(
+        showAelDialog<void>(
           context: context,
-          builder: (ctx) => CupertinoAlertDialog(
-            title: const Text('提交失败'),
-            content: Padding(
-              padding: const EdgeInsets.only(top: 8.0),
-              child: Text('$e\n\n您也可以点击右上角在外部浏览器中完成提交。'),
+          title: '提交失败',
+          message: '$e\n\n您也可以点击右上角在外部浏览器中完成提交。',
+          actions: [
+            const AelDialogAction<void>(
+              label: '我知道了',
+              variant: AelButtonVariant.tonal,
             ),
-            actions: [
-              CupertinoDialogAction(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('我知道了'),
-              ),
-              CupertinoDialogAction(
-                child: const Text('在浏览器打开'),
-                onPressed: () {
-                  Navigator.of(ctx).pop();
-                  launchUrlString(
-                    _resolvedSubmitUrl,
-                    mode: LaunchMode.externalApplication,
-                  );
-                },
-              ),
-            ],
-          ),
+            AelDialogAction<void>(
+              label: '在浏览器打开',
+              variant: AelButtonVariant.primary,
+              onPressed: () {
+                launchUrlString(
+                  _resolvedSubmitUrl,
+                  mode: LaunchMode.externalApplication,
+                );
+              },
+            ),
+          ],
         );
       }
     }
@@ -966,29 +924,15 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
 
   /// 撤回提交流程
   Future<void> _retractHomework() async {
-    final confirmed = await showCupertinoDialog<bool>(
+    final confirmed = await showAelConfirmDialog(
       context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('确认撤回作业'),
-        content: const Padding(
-          padding: EdgeInsets.only(top: 8.0),
-          child: Text('确定要撤回已提交的作业吗？撤回后您可以重新修改附件并再次提交。'),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('撤回提交'),
-          ),
-        ],
-      ),
+      title: '确认撤回作业',
+      message: '确定要撤回已提交的作业吗？撤回后您可以重新修改附件并再次提交。',
+      confirmLabel: '撤回提交',
+      isDestructive: true,
     );
 
-    if (confirmed != true) return;
+    if (!confirmed) return;
 
     setState(() => _isSubmitting = true);
 
@@ -1019,22 +963,11 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
 
         if (mounted) {
           setState(() => _isSubmitting = false);
-          await showCupertinoDialog<void>(
+          await showAelAlertDialog(
             context: context,
-            builder: (ctx) => CupertinoAlertDialog(
-              title: const Text('已撤回'),
-              content: const Padding(
-                padding: EdgeInsets.only(top: 8.0),
-                child: Text('作业已成功撤回，任务状态已重置为待提交。'),
-              ),
-              actions: [
-                CupertinoDialogAction(
-                  isDefaultAction: true,
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('我知道了'),
-                ),
-              ],
-            ),
+            title: '已撤回',
+            message: '作业已成功撤回，任务状态已重置为待提交。',
+            confirmLabel: '我知道了',
           );
           _loadData();
         }
@@ -1045,21 +978,11 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
       client.close(force: true);
       if (mounted) {
         setState(() => _isSubmitting = false);
-        showCupertinoDialog<void>(
+        showAelAlertDialog(
           context: context,
-          builder: (ctx) => CupertinoAlertDialog(
-            title: const Text('撤回失败'),
-            content: Padding(
-              padding: const EdgeInsets.only(top: 8.0),
-              child: Text('$e'),
-            ),
-            actions: [
-              CupertinoDialogAction(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('好的'),
-              ),
-            ],
-          ),
+          title: '撤回失败',
+          message: '$e',
+          confirmLabel: '好的',
         );
       }
     }
@@ -1554,22 +1477,11 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
             label: '复制作答直达链接',
             onPressed: () {
               Clipboard.setData(ClipboardData(text: _resolvedSubmitUrl));
-              showCupertinoDialog<void>(
+              showAelAlertDialog(
                 context: context,
-                builder: (ctx) => CupertinoAlertDialog(
-                  title: const Text('已复制作答链接'),
-                  content: const Padding(
-                    padding: EdgeInsets.only(top: 8.0),
-                    child: Text('测验作答链接已复制到剪贴板，您可以发送到电脑端或平板端浏览器中作答。'),
-                  ),
-                  actions: [
-                    CupertinoDialogAction(
-                      isDefaultAction: true,
-                      onPressed: () => Navigator.of(ctx).pop(),
-                      child: const Text('好的'),
-                    ),
-                  ],
-                ),
+                title: '已复制作答链接',
+                message: '测验作答链接已复制到剪贴板，您可以发送到电脑端或平板端浏览器中作答。',
+                confirmLabel: '好的',
               );
             },
           ),

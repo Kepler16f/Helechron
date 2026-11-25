@@ -331,69 +331,39 @@ class GradeDetailPage extends StatelessWidget {
   }
 
   void _showMoreActions(BuildContext context) {
-    showCupertinoModalPopup<void>(
+    showAelActionSheet<void>(
       context: context,
-      builder: (BuildContext sheetCtx) => CupertinoActionSheet(
-        title: const Text('成绩分析与工具'),
-        actions: <CupertinoActionSheetAction>[
-          CupertinoActionSheetAction(
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(AelIcons.activity, size: 20),
-                SizedBox(width: 8),
-                Text('加权成绩分析'),
-              ],
-            ),
-            onPressed: () {
-              Navigator.of(sheetCtx).pop();
-              Navigator.of(
-                context,
-              ).push(CupertinoPageRoute(builder: (_) => WeightedGpaPage()));
-            },
-          ),
-          CupertinoActionSheetAction(
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(AelIcons.filter, size: 20),
-                SizedBox(width: 8),
-                Text('GPA 模拟器'),
-              ],
-            ),
-            onPressed: () {
-              Navigator.of(sheetCtx).pop();
-              Navigator.of(
-                context,
-              ).push(CupertinoPageRoute(builder: (_) => GpaSimulatorPage()));
-            },
-          ),
-          CupertinoActionSheetAction(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(AelIcons.sparkles, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  _gradeDetailController.showTrendChart.value
-                      ? '隐藏学期走势折线图'
-                      : '展示学期走势折线图',
-                ),
-              ],
-            ),
-            onPressed: () {
-              Navigator.of(sheetCtx).pop();
-              _gradeDetailController.showTrendChart.value =
-                  !_gradeDetailController.showTrendChart.value;
-            },
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          isDefaultAction: true,
-          child: const Text('取消'),
-          onPressed: () => Navigator.of(sheetCtx).pop(),
+      title: '成绩分析与工具',
+      actions: [
+        AelActionOption<void>(
+          label: '加权成绩分析',
+          icon: AelIcons.activity,
+          onTap: () {
+            Navigator.of(
+              context,
+            ).push(CupertinoPageRoute(builder: (_) => WeightedGpaPage()));
+          },
         ),
-      ),
+        AelActionOption<void>(
+          label: 'GPA 模拟器',
+          icon: AelIcons.filter,
+          onTap: () {
+            Navigator.of(
+              context,
+            ).push(CupertinoPageRoute(builder: (_) => GpaSimulatorPage()));
+          },
+        ),
+        AelActionOption<void>(
+          label: _gradeDetailController.showTrendChart.value
+              ? '隐藏学期走势折线图'
+              : '展示学期走势折线图',
+          icon: AelIcons.sparkles,
+          onTap: () {
+            _gradeDetailController.showTrendChart.value =
+                !_gradeDetailController.showTrendChart.value;
+          },
+        ),
+      ],
     );
   }
 

@@ -2,6 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:celechron/design/app_notification.dart';
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/http/zjuServices/courses.dart';
 import 'package:celechron/model/option.dart';
 import 'package:celechron/services/ohos_native_service.dart';
@@ -130,36 +133,24 @@ class FileDownloadShareHelper {
         : await resolveDefaultSaveDir();
     if (!context.mounted) return null;
 
-    final choice = await showCupertinoDialog<String>(
+    final choice = await showAelDialog<String>(
       context: context,
-      builder: (dialogCtx) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Text(
-            '${fileLabel != null && fileLabel.isNotEmpty ? "文件：$fileLabel\n" : ""}当前默认保存路径：\n${formatDirShort(fallbackDir)}\n\n下载完成后将自动拉起系统原生分享。',
-            style: TextStyle(
-              fontSize: 13,
-              color: CupertinoColors.secondaryLabel.resolveFrom(dialogCtx),
-            ),
-          ),
+      title: title,
+      message:
+          '${fileLabel != null && fileLabel.isNotEmpty ? "文件：$fileLabel\n" : ""}当前默认保存路径：\n${formatDirShort(fallbackDir)}\n\n下载完成后将自动拉起系统原生分享。',
+      actions: const [
+        AelDialogAction<String>(label: '取消', variant: AelButtonVariant.tonal),
+        AelDialogAction<String>(
+          label: '选择保存文件夹',
+          value: 'pick',
+          variant: AelButtonVariant.tonal,
         ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogCtx).pop(),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogCtx).pop('pick'),
-            child: const Text('选择保存文件夹'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.of(dialogCtx).pop('default'),
-            child: const Text('使用当前目录'),
-          ),
-        ],
-      ),
+        AelDialogAction<String>(
+          label: '使用当前目录',
+          value: 'default',
+          variant: AelButtonVariant.primary,
+        ),
+      ],
     );
 
     if (choice == null) return null;
@@ -190,63 +181,48 @@ class FileDownloadShareHelper {
     final safeDefault = sanitizeFileName(defaultFileName);
     final nameCtrl = TextEditingController(text: safeDefault);
 
-    final choice = await showCupertinoDialog<String>(
+    final choice = await showAelDialog<String>(
       context: context,
-      builder: (dialogCtx) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 10),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${description != null && description.isNotEmpty ? "$description\n" : ""}保存路径：${formatDirShort(fallbackDir)}\n${confirmHint ?? "可自定义文件名，下载完成后自动调起原生分享："}',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  color: CupertinoColors.secondaryLabel.resolveFrom(dialogCtx),
-                ),
-              ),
-              const SizedBox(height: 8),
-              CupertinoTextField(
-                controller: nameCtrl,
-                autofocus: true,
-                clearButtonMode: OverlayVisibilityMode.editing,
-                placeholder: fileNamePlaceholder,
-                style: TextStyle(
-                  fontSize: 13.5,
-                  color: CupertinoColors.label.resolveFrom(dialogCtx),
-                ),
-                placeholderStyle: TextStyle(
-                  fontSize: 13,
-                  color: CupertinoColors.placeholderText.resolveFrom(dialogCtx),
-                ),
-                decoration: BoxDecoration(
-                  color: CupertinoColors.tertiarySystemFill.resolveFrom(
-                    dialogCtx,
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogCtx).pop(),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogCtx).pop('pick'),
-            child: const Text('选择保存文件夹'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.of(dialogCtx).pop('default'),
-            child: const Text('使用当前目录'),
-          ),
-        ],
+      title: title,
+      message:
+          '${description != null && description.isNotEmpty ? "$description\n" : ""}保存路径：${formatDirShort(fallbackDir)}\n${confirmHint ?? "可自定义文件名，下载完成后自动调起原生分享："}',
+      content: Builder(
+        builder: (dialogCtx) {
+          final colors = AelTheme.colorsOf(dialogCtx);
+          return CupertinoTextField(
+            controller: nameCtrl,
+            autofocus: true,
+            clearButtonMode: OverlayVisibilityMode.editing,
+            placeholder: fileNamePlaceholder,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AelSpacing.md,
+              vertical: AelSpacing.md,
+            ),
+            style: TextStyle(fontSize: 14, color: colors.textPrimary),
+            placeholderStyle: TextStyle(
+              fontSize: 13.5,
+              color: colors.textTertiary,
+            ),
+            decoration: BoxDecoration(
+              color: colors.tonalTileBg,
+              borderRadius: BorderRadius.circular(AelRadius.tile),
+            ),
+          );
+        },
       ),
+      actions: const [
+        AelDialogAction<String>(label: '取消', variant: AelButtonVariant.tonal),
+        AelDialogAction<String>(
+          label: '选择保存文件夹',
+          value: 'pick',
+          variant: AelButtonVariant.tonal,
+        ),
+        AelDialogAction<String>(
+          label: '使用当前目录',
+          value: 'default',
+          variant: AelButtonVariant.primary,
+        ),
+      ],
     );
 
     final finalFileName = resolveFinalFileName(

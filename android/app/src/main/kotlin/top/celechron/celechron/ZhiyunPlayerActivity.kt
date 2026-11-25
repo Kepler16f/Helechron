@@ -80,6 +80,7 @@ class ZhiyunPlayerActivity : Activity() {
         const val EXTRA_LIVINGROOM_URL = "livingroomUrl"
         const val EXTRA_TOKEN = "token"
         const val EXTRA_SSO_COOKIE = "ssoCookie"
+        const val EXTRA_ZHIYUN_COOKIES = "zhiyunCookies"
         const val EXTRA_STREAM_LABELS = "streamLabels"
         const val EXTRA_STREAM_URLS = "streamUrls"
         const val EXTRA_IS_LIVE = "isLive"
@@ -268,6 +269,7 @@ class ZhiyunPlayerActivity : Activity() {
     private var rawInitialUrl: String = ""
     private var token: String = ""
     private var ssoCookie: String = ""
+    private var zhiyunCookies: String = ""
     private var preferWeb: Boolean = false
     private var titleText: String = "智云课堂"
 
@@ -389,6 +391,7 @@ class ZhiyunPlayerActivity : Activity() {
         val rawLivingroom = intent?.getStringExtra(EXTRA_LIVINGROOM_URL) ?: ""
         token = intent?.getStringExtra(EXTRA_TOKEN) ?: ""
         ssoCookie = intent?.getStringExtra(EXTRA_SSO_COOKIE) ?: ""
+        zhiyunCookies = intent?.getStringExtra(EXTRA_ZHIYUN_COOKIES) ?: ""
         preferWeb = intent?.getBooleanExtra(EXTRA_PREFER_WEB, false) == true
         isLiveStream = intent?.getBooleanExtra(EXTRA_IS_LIVE, false) == true ||
             titleText.contains("直播") ||
@@ -1420,10 +1423,10 @@ class ZhiyunPlayerActivity : Activity() {
         )
         if (!isSelfSignedLiveCdn && token.isNotBlank()) {
             val phpCookie = buildPhpSerializedToken(token)
-            headers["Cookie"] = if (phpCookie.isNotEmpty()) {
-                "_token=$phpCookie; token=$token"
-            } else {
-                "_token=$token; token=$token"
+            headers["Cookie"] = when {
+                zhiyunCookies.isNotBlank() -> zhiyunCookies.trim()
+                phpCookie.isNotEmpty() -> "_token=$phpCookie; token=$token"
+                else -> "_token=$token; token=$token"
             }
             headers["Authorization"] = "Bearer $token"
         }
@@ -1532,7 +1535,7 @@ class ZhiyunPlayerActivity : Activity() {
         player.setMediaItem(mediaBuilder.build())
         player.prepare()
         player.playWhenReady = true
-        mainHandler.postDelayed(prepareWatchdogRunnable, 8000L)
+        mainHandler.postDelayed(prepareWatchdogRunnable, if (isLiveStream) 5500L else 8000L)
     }
 
     private fun attachWebView(targetUrl: String) {
@@ -1556,17 +1559,28 @@ class ZhiyunPlayerActivity : Activity() {
 
         val cookieManager = CookieManager.getInstance()
         cookieManager.setAcceptCookie(true)
+        val hosts = listOf(
+            "https://classroom.zju.edu.cn",
+            "https://livingroom.cmc.zju.edu.cn",
+            "https://yjapi.cmc.zju.edu.cn",
+            "https://tgmedia.cmc.zju.edu.cn",
+            "https://www.zju.edu.cn"
+        )
+        val rawJar = zhiyunCookies.trim()
+        if (rawJar.isNotEmpty()) {
+            for (part in rawJar.split(";")) {
+                val kv = part.trim()
+                if (!kv.contains("=")) continue
+                for (h in hosts) {
+                    cookieManager.setCookie(h, "$kv; Path=/")
+                    cookieManager.setCookie(h, "$kv; Domain=.zju.edu.cn; Path=/")
+                }
+            }
+        }
         val phpCookie = buildPhpSerializedToken(token)
         if (token.isNotBlank()) {
-            val hosts = listOf(
-                "https://classroom.zju.edu.cn",
-                "https://livingroom.cmc.zju.edu.cn",
-                "https://yjapi.cmc.zju.edu.cn",
-                "https://tgmedia.cmc.zju.edu.cn",
-                "https://www.zju.edu.cn"
-            )
             for (h in hosts) {
-                if (phpCookie.isNotEmpty()) {
+                if (!rawJar.contains("_token=") && phpCookie.isNotEmpty()) {
                     cookieManager.setCookie(h, "_token=$phpCookie; Path=/")
                     cookieManager.setCookie(h, "_token=$phpCookie; Domain=.zju.edu.cn; Path=/")
                 }
@@ -1576,14 +1590,16 @@ class ZhiyunPlayerActivity : Activity() {
         }
         val cleanSso = ssoCookie.trim()
         if (cleanSso.isNotEmpty()) {
+            // ZJUAM CAS 回调包含 http://zjuam.zju.edu.cn/cas/oauth2.0/callbackAuthorize，严禁附加 Secure 导致明文回调丢失 Cookie
             val ssoHosts = listOf(
                 "https://zjuam.zju.edu.cn",
+                "http://zjuam.zju.edu.cn",
                 "https://classroom.zju.edu.cn",
                 "https://tgmedia.cmc.zju.edu.cn"
             )
             for (h in ssoHosts) {
-                cookieManager.setCookie(h, "iPlanetDirectoryPro=$cleanSso; Path=/; Secure")
-                cookieManager.setCookie(h, "iPlanetDirectoryPro=$cleanSso; Domain=.zju.edu.cn; Path=/; Secure")
+                cookieManager.setCookie(h, "iPlanetDirectoryPro=$cleanSso; Path=/")
+                cookieManager.setCookie(h, "iPlanetDirectoryPro=$cleanSso; Domain=.zju.edu.cn; Path=/")
             }
         }
         cookieManager.flush()
@@ -1681,7 +1697,8 @@ class ZhiyunPlayerActivity : Activity() {
         }
 
         val trimmedTarget = targetUrl.trim()
-        val finalUrl = if (cleanSso.isNotEmpty() && trimmedTarget.contains("classroom.zju.edu.cn")) {
+        val hasFullZhiyunSession = rawJar.contains("JWTUser=") && token.isNotBlank()
+        val finalUrl = if (!hasFullZhiyunSession && cleanSso.isNotEmpty() && trimmedTarget.contains("classroom.zju.edu.cn")) {
             val cleanForward = trimmedTarget.replace(Regex("([?&])token=[^&]*&?"), "$1")
                 .trimEnd('?', '&')
             val encodedForward = try {
@@ -1802,6 +1819,10 @@ class ZhiyunPlayerActivity : Activity() {
                     request: WebResourceRequest?
                 ): Boolean {
                     val nextUrl = request?.url?.toString() ?: return false
+                    if (nextUrl.startsWith("http://zjuam.zju.edu.cn/cas/oauth2.0/callbackAuthorize")) {
+                        view?.loadUrl("https://" + nextUrl.substring(7))
+                        return true
+                    }
                     return !(nextUrl.startsWith("http://") || nextUrl.startsWith("https://"))
                 }
             }

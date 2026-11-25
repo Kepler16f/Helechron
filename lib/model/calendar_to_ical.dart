@@ -3,12 +3,13 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/icons/ael_icons.dart';
 import 'package:celechron/model/location_mapper.dart';
 import 'package:celechron/model/period.dart';
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/model/semester.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:get/get.dart';
 
 class CalendarToIcal {
   static String _toISOString(DateTime dateTime) {
@@ -29,8 +30,9 @@ class CalendarToIcal {
         '${DateTime.now().toUtc().toIso8601String().replaceAll(RegExp(r'[-:]'), '').split('.')[0]}Z';
     final startStr = _toISOString(period.startTime);
     final endStr = _toISOString(period.endTime);
-    final mappedLocation =
-        CalendarLocationMapper.mapForCalendar(period.location);
+    final mappedLocation = CalendarLocationMapper.mapForCalendar(
+      period.location,
+    );
 
     final hash = _generateHash(period);
 
@@ -72,8 +74,9 @@ class CalendarToIcal {
   }
 
   static String _generateHash(Period period) {
-    final mappedLocation =
-        CalendarLocationMapper.mapForCalendar(period.location);
+    final mappedLocation = CalendarLocationMapper.mapForCalendar(
+      period.location,
+    );
     final content =
         '${period.description}${period.summary}$mappedLocation${_toISOString(period.startTime)}';
     final bytes = utf8.encode(content);
@@ -117,19 +120,7 @@ class CalendarToIcal {
   }
 
   static void _showAlert(String title, String message, {bool isError = false}) {
-    Get.dialog(
-      CupertinoAlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('确定'),
-            onPressed: () => Get.back(),
-          ),
-        ],
-      ),
-      barrierDismissible: true,
-    );
+    showAelAlertDialog(title: title, message: message, isDestructive: isError);
   }
 
   static String generateIcalFromScholar({
@@ -276,83 +267,56 @@ class CalendarToIcal {
   }
 
   static void showExportDialog(BuildContext context, Scholar scholar) {
-    showCupertinoModalPopup(
+    showAelActionSheet<void>(
       context: context,
-      builder: (BuildContext popupContext) => CupertinoActionSheet(
-        title: const Text('导出课程表'),
-        message: const Text('选择导出方式'),
-        actions: [
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(popupContext);
-              exportIcsFile(scholar, context: popupContext);
-            },
-            child: const Text('导出当前学期'),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(popupContext);
-              _showSemesterSelectionDialog(context, scholar);
-            },
-            child: const Text('选择学期导出'),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.pop(popupContext),
-          child: const Text('取消'),
+      title: '导出课程表',
+      message: '选择导出方式',
+      actions: [
+        AelActionOption<void>(
+          label: '导出当前学期',
+          icon: AelIcons.tabCalendar,
+          onTap: () => exportIcsFile(scholar, context: context),
         ),
-      ),
+        AelActionOption<void>(
+          label: '选择学期导出',
+          icon: AelIcons.layers,
+          onTap: () => _showSemesterSelectionDialog(context, scholar),
+        ),
+      ],
     );
   }
 
   static void _showSemesterSelectionDialog(
-      BuildContext context, Scholar scholar) {
+    BuildContext context,
+    Scholar scholar,
+  ) {
     final semesters = getAvailableSemesters(scholar);
 
     if (semesters.isEmpty) {
-      showCupertinoDialog(
-        context: context,
-        builder: (BuildContext dialogContext) => CupertinoAlertDialog(
-          title: const Text('提示'),
-          content: const Text('没有可导出的课程表数据'),
-          actions: [
-            CupertinoDialogAction(
-              child: const Text('确定'),
-              onPressed: () => Navigator.pop(dialogContext),
-            ),
-          ],
-        ),
-      );
+      showAelAlertDialog(context: context, title: '提示', message: '没有可导出的课程表数据');
       return;
     }
 
-    showCupertinoModalPopup(
+    showAelActionSheet<void>(
       context: context,
-      builder: (BuildContext popupContext) => CupertinoActionSheet(
-        title: const Text('选择学期'),
-        message: const Text('选择要导出的学期'),
-        actions: [
-          ...semesters.map((semester) => CupertinoActionSheetAction(
-                onPressed: () {
-                  Navigator.pop(popupContext);
-                  exportSpecificSemester(scholar, semester,
-                      context: popupContext);
-                },
-                child: Text(semester),
-              )),
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(popupContext);
-              exportAllSemesters(scholar, context: popupContext);
-            },
-            child: const Text('导出所有学期'),
+      title: '选择学期',
+      message: '选择要导出的学期',
+      actions: [
+        ...semesters.map(
+          (semester) => AelActionOption<void>(
+            label: semester,
+            icon: AelIcons.book,
+            onTap: () =>
+                exportSpecificSemester(scholar, semester, context: context),
           ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.pop(popupContext),
-          child: const Text('取消'),
         ),
-      ),
+        AelActionOption<void>(
+          label: '导出所有学期',
+          icon: AelIcons.download,
+          isDefault: true,
+          onTap: () => exportAllSemesters(scholar, context: context),
+        ),
+      ],
     );
   }
 

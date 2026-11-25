@@ -1,3 +1,5 @@
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/icons/ael_icons.dart';
 import 'package:celechron/design/theme/ael_theme.dart';
 import 'package:celechron/page/scholar/course_detail/course_detail_view.dart';
 import 'package:flutter/cupertino.dart';
@@ -95,53 +97,27 @@ class _SessionCardState extends State<SessionCard>
             ),
           );
         } else {
-          await showCupertinoDialog(
+          await showAelActionSheet<void>(
             context: context,
-            builder: (BuildContext context) {
-              return CupertinoAlertDialog(
-                title: const Text('要查看哪一个？'),
-                content: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    for (var s in widget.sessionList)
-                      CupertinoButton(
-                        minSize: 22.0,
-                        padding: const EdgeInsets.fromLTRB(
-                          16.0,
-                          16.0,
-                          16.0,
-                          0.0,
+            title: '要查看哪一门课程？',
+            actions: [
+              for (final s in widget.sessionList)
+                AelActionOption<void>(
+                  label: s.name,
+                  icon: AelIcons.book,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      CupertinoPageRoute(
+                        builder: (context) => CourseDetailPage(
+                          courseId: s.id,
+                          preferredHalfTag: widget.preferredHalfTag,
                         ),
-                        child: Text(
-                          s.name,
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            CupertinoPageRoute(
-                              builder: (context) => CourseDetailPage(
-                                courseId: s.id,
-                                preferredHalfTag: widget.preferredHalfTag,
-                              ),
-                              title: s.name,
-                            ),
-                          );
-                        },
+                        title: s.name,
                       ),
-                  ],
+                    );
+                  },
                 ),
-                actions: [
-                  CupertinoDialogAction(
-                    child: const Text('返回'),
-                    onPressed: () async {
-                      Navigator.of(context).pop();
-                    },
-                  ),
-                ],
-              );
-            },
+            ],
           );
         }
       },

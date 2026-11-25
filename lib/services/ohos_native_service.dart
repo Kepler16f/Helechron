@@ -9,8 +9,9 @@ class OhosNativeService {
   OhosNativeService._();
   static final OhosNativeService instance = OhosNativeService._();
 
-  static const MethodChannel _channel =
-      MethodChannel('top.celechron.helechron/native');
+  static const MethodChannel _channel = MethodChannel(
+    'top.celechron.helechron/native',
+  );
 
   /// 最近一次日历同步失败的原生错误信息，用于诊断与向用户展示
   String? lastCalendarError;
@@ -19,7 +20,9 @@ class OhosNativeService {
   String? lastFilePickError;
 
   /// Flutter 侧底栏显隐通知（用于 Android/iOS 自绘悬浮/原生底栏在路由/弹窗时平滑升降）
-  final ValueNotifier<bool> bottomBarVisibleNotifier = ValueNotifier<bool>(true);
+  final ValueNotifier<bool> bottomBarVisibleNotifier = ValueNotifier<bool>(
+    true,
+  );
 
   // ==================== Calendar ====================
 
@@ -29,8 +32,9 @@ class OhosNativeService {
       return MobileNativeService.instance.checkCalendarPermission();
     }
     try {
-      final result =
-          await _channel.invokeMethod<bool>('checkCalendarPermission');
+      final result = await _channel.invokeMethod<bool>(
+        'checkCalendarPermission',
+      );
       return result ?? false;
     } on PlatformException catch (e) {
       debugPrint('checkCalendarPermission failed: $e');
@@ -46,8 +50,9 @@ class OhosNativeService {
       return MobileNativeService.instance.requestCalendarPermission();
     }
     try {
-      final result =
-          await _channel.invokeMethod<bool>('requestCalendarPermission');
+      final result = await _channel.invokeMethod<bool>(
+        'requestCalendarPermission',
+      );
       return result ?? false;
     } on PlatformException catch (e) {
       debugPrint('requestCalendarPermission failed: $e');
@@ -68,22 +73,20 @@ class OhosNativeService {
   }) async {
     if (PlatformFeatures.usesFlutterPlugins) {
       final count = await MobileNativeService.instance.syncCalendarEvents(
-          events,
-          reminderMinutes: reminderMinutes,
-          useAlarm: useAlarm);
+        events,
+        reminderMinutes: reminderMinutes,
+        useAlarm: useAlarm,
+      );
       lastCalendarError = MobileNativeService.instance.lastCalendarError;
       return count;
     }
     try {
       lastCalendarError = null;
-      final result = await _channel.invokeMethod<int>(
-        'syncCalendarEvents',
-        {
-          'events': events,
-          'reminderMinutes': reminderMinutes,
-          'useAlarm': useAlarm,
-        },
-      );
+      final result = await _channel.invokeMethod<int>('syncCalendarEvents', {
+        'events': events,
+        'reminderMinutes': reminderMinutes,
+        'useAlarm': useAlarm,
+      });
       return result ?? 0;
     } on PlatformException catch (e) {
       lastCalendarError = '${e.code}: ${e.message} ${e.details ?? ''}';
@@ -203,8 +206,11 @@ class OhosNativeService {
     String? additionalText,
   }) async {
     if (PlatformFeatures.usesFlutterPlugins) {
-      return MobileNativeService.instance
-          .showNotification(id: id, title: title, text: text);
+      return MobileNativeService.instance.showNotification(
+        id: id,
+        title: title,
+        text: text,
+      );
     }
     try {
       final result = await _channel.invokeMethod<bool>('showNotification', {
@@ -247,8 +253,9 @@ class OhosNativeService {
       return MobileNativeService.instance.cancelAllNotifications();
     }
     try {
-      final result =
-          await _channel.invokeMethod<bool>('cancelAllNotifications');
+      final result = await _channel.invokeMethod<bool>(
+        'cancelAllNotifications',
+      );
       return result ?? false;
     } on PlatformException catch (e) {
       debugPrint('cancelAllNotifications failed: $e');
@@ -408,8 +415,9 @@ class OhosNativeService {
       return MobileNativeService.instance.pickTextFile();
     }
     try {
-      final result =
-          await _channel.invokeMethod<Map<Object, Object?>>('pickTextFile');
+      final result = await _channel.invokeMethod<Map<Object, Object?>>(
+        'pickTextFile',
+      );
       if (result == null) return null;
       final name = result['name'];
       final content = result['content'];
@@ -436,8 +444,9 @@ class OhosNativeService {
       return list.isEmpty ? null : list.first;
     }
     try {
-      final result =
-          await _channel.invokeMethod<Map<Object, Object?>>('pickAnyFile');
+      final result = await _channel.invokeMethod<Map<Object, Object?>>(
+        'pickAnyFile',
+      );
       if (result == null) return null;
       final name = result['name']?.toString() ?? '';
       final size = (result['size'] as num?)?.toInt() ?? 0;
@@ -546,15 +555,13 @@ class OhosNativeService {
       );
     }
     try {
-      final result = await _channel.invokeMethod<String>(
-        'copyFileToDirectory',
-        {
-          'sourcePath': sourcePath,
-          'targetDir': targetDir,
-          'fileName': fileName,
-          'mimeType': mimeType ?? '',
-        },
-      );
+      final result = await _channel
+          .invokeMethod<String>('copyFileToDirectory', {
+            'sourcePath': sourcePath,
+            'targetDir': targetDir,
+            'fileName': fileName,
+            'mimeType': mimeType ?? '',
+          });
       if (result != null && result.trim().isNotEmpty) {
         return result.trim();
       }
@@ -608,6 +615,7 @@ class OhosNativeService {
     String? livingroomUrl,
     String? token,
     String? ssoCookie,
+    String? zhiyunCookies,
     bool isLive = false,
     bool preferWeb = false,
   }) async {
@@ -619,13 +627,13 @@ class OhosNativeService {
         livingroomUrl: livingroomUrl,
         token: token,
         ssoCookie: ssoCookie,
+        zhiyunCookies: zhiyunCookies,
         isLive: isLive,
         preferWeb: preferWeb,
       );
     }
     try {
-      final result =
-          await _channel.invokeMethod<bool>('openInAppVideoPlayer', {
+      final result = await _channel.invokeMethod<bool>('openInAppVideoPlayer', {
         'url': url,
         'title': title,
         'streams': streams,
@@ -636,6 +644,8 @@ class OhosNativeService {
           'livingroomUrl': livingroomUrl,
         if (token != null && token.isNotEmpty) 'token': token,
         if (ssoCookie != null && ssoCookie.isNotEmpty) 'ssoCookie': ssoCookie,
+        if (zhiyunCookies != null && zhiyunCookies.isNotEmpty)
+          'zhiyunCookies': zhiyunCookies,
       });
       return result ?? false;
     } on PlatformException catch (e) {
@@ -698,7 +708,8 @@ class OhosNativeService {
           return false;
         default:
           throw MissingPluginException(
-              'Unsupported native method: ${call.method}');
+            'Unsupported native method: ${call.method}',
+          );
       }
     });
   }

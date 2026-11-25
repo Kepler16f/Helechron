@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
+import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/icons/ael_icons.dart';
 import 'package:celechron/model/semester.dart';
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/model/exam.dart';
@@ -134,39 +136,30 @@ class ExamListController extends GetxController {
     final parts = fullAddress.split(',');
     final searchKeyword = parts.length > 1 ? parts[1].trim() : raw;
 
-    showCupertinoModalPopup(
+    showAelActionSheet<void>(
       context: context,
-      builder: (ctx) => CupertinoActionSheet(
-        title: Text('考场地点：$raw'),
-        message: Text(parts.length > 1
-            ? '高德识别地址：$searchKeyword'
-            : '选择高德导航或复制考场详细信息'),
-        actions: [
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              final url =
-                  'https://uri.amap.com/search?keyword=${Uri.encodeComponent(searchKeyword)}';
-              launchUrlString(url, mode: LaunchMode.externalApplication);
-            },
-            child: const Text('高德地图搜索楼宇'),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              final textToCopy =
-                  '考试：${exam.name}\n地点：$raw\n座位：${exam.seat ?? "未分配"}\n时间：${exam.chineseTime}';
-              Clipboard.setData(ClipboardData(text: textToCopy));
-            },
-            child: const Text('复制考场与座位信息'),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          isDefaultAction: true,
-          onPressed: () => Navigator.of(ctx).pop(),
-          child: const Text('取消'),
+      title: '考场地点：$raw',
+      message: parts.length > 1 ? '高德识别地址：$searchKeyword' : '选择高德导航或复制考场详细信息',
+      actions: [
+        AelActionOption<void>(
+          label: '高德地图搜索楼宇',
+          icon: AelIcons.location,
+          onTap: () {
+            final url =
+                'https://uri.amap.com/search?keyword=${Uri.encodeComponent(searchKeyword)}';
+            launchUrlString(url, mode: LaunchMode.externalApplication);
+          },
         ),
-      ),
+        AelActionOption<void>(
+          label: '复制考场与座位信息',
+          icon: AelIcons.copy,
+          onTap: () {
+            final textToCopy =
+                '考试：${exam.name}\n地点：$raw\n座位：${exam.seat ?? "未分配"}\n时间：${exam.chineseTime}';
+            Clipboard.setData(ClipboardData(text: textToCopy));
+          },
+        ),
+      ],
     );
   }
 
@@ -196,8 +189,9 @@ class ExamListController extends GetxController {
     super.onReady();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       currentTime.value = DateTime.now();
-      _durationToLastUpdate.value =
-          DateTime.now().difference(_scholar.value.lastUpdateTimeCourse);
+      _durationToLastUpdate.value = DateTime.now().difference(
+        _scholar.value.lastUpdateTimeCourse,
+      );
     });
   }
 
@@ -207,4 +201,3 @@ class ExamListController extends GetxController {
     super.onClose();
   }
 }
-

@@ -3,11 +3,25 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { formProvider } from '@kit.FormKit';
 
 const DEFAULT_LEAD_MINUTES = 120;
-const COLOR_ONGOING = '#4CAF50';
-const COLOR_SOON = '#2196F3';
-const COLOR_URGENT = '#FF9800';
-const COLOR_IDLE = '#888888';
-const COLOR_PROGRESS_DEFAULT = '#1E88E5';
+const DEFAULT_ACCENT = '#007AFF';
+const COLOR_ONGOING = '#16A34A';
+const COLOR_URGENT = '#D97706';
+const COLOR_IDLE = '#6B7280';
+
+function normalizeHex6(raw: string, fallback: string): string {
+  const cleaned = raw.trim().replace('#', '');
+  if (/^[0-9a-fA-F]{6}$/.test(cleaned)) {
+    return `#${cleaned.toUpperCase()}`;
+  }
+  if (/^[0-9a-fA-F]{8}$/.test(cleaned)) {
+    return `#${cleaned.substring(2).toUpperCase()}`;
+  }
+  return fallback;
+}
+
+function softTintHex(hex6: string): string {
+  return `#1A${hex6.replace('#', '')}`;
+}
 
 /// 系统"下次刷新"最小间隔（分钟），由系统限制
 const MIN_NEXT_REFRESH_MINUTES = 5;
@@ -36,6 +50,8 @@ export interface CourseItem {
 export interface CourseState {
   status: string;
   statusColor: string;
+  statusBadgeBg: string;
+  accentColor: string;
   countdown: string;
   progress: string;
   progressColor: string;
@@ -147,13 +163,15 @@ function resolvePrecision(prefs: preferences.Preferences, now: number, forcedPre
   return PRECISION_FUZZY;
 }
 
-function idleState(): CourseState {
+function idleState(accentHex: string): CourseState {
   const idle: CourseState = {
     status: '全部结课',
     statusColor: COLOR_IDLE,
+    statusBadgeBg: softTintHex(COLOR_IDLE),
+    accentColor: accentHex,
     countdown: '',
     progress: '0',
-    progressColor: COLOR_PROGRESS_DEFAULT,
+    progressColor: accentHex,
     showProgress: '0',
     hasCourse: '0',
     name: '今日暂无课程',
@@ -166,18 +184,19 @@ function idleState(): CourseState {
 
 /// 依据课程时间表与当前时间计算状态、倒计时与进度。
 export function computeCourseState(prefs: preferences.Preferences, forcedPrecision?: string): CourseState {
+  const accentHex = normalizeHex6(getStr(prefs, 'themePrimaryHex', DEFAULT_ACCENT), DEFAULT_ACCENT);
   const items = parseCourses(prefs);
   const leadMin = getNum(prefs, 'leadWindowMinutes', DEFAULT_LEAD_MINUTES);
   const now = Date.now();
   const item = pickCurrentOrNext(items, now);
   if (item === null) {
-    return idleState();
+    return idleState(accentHex);
   }
 
   const precision = resolvePrecision(prefs, now, forcedPrecision);
 
   let status = '';
-  let statusColor = COLOR_SOON;
+  let statusColor = accentHex;
   let progress = 0;
   let showProgress = '1';
   let countdown = '';
@@ -190,21 +209,17 @@ export function computeCourseState(prefs: preferences.Preferences, forcedPrecisi
     statusColor = COLOR_ONGOING;
     const remainMs = item.e - now;
     if (precision === PRECISION_EXACT) {
-      // 准确时间：桌面小卡片点击刷新、应用内点击刷新、应用存活时 5s 自动刷新
       status = '上课中';
       const remainMin = Math.floor(remainMs / 60000);
       countdown = `${pad2(Math.floor(remainMin / 60))}:${pad2(remainMin % 60)}`;
     } else {
-      // 模糊时间：后台预调度边界自动刷新 / 系统定时唤醒
-      status = `距离下课还有${fuzzyRemainText(remainMs)}`;
+      status = `距下课${fuzzyRemainText(remainMs)}`;
       countdown = '';
     }
   } else {
-    // 开课前：只显示状态文案，不再重复 HH:MM
     const remainMs = item.s - now;
     const remainMin = Math.floor(remainMs / 60000);
 
-    // 进度条：距开课 >2h 隐藏，≤2h 线性渐进
     if (remainMin > leadMin) {
       showProgress = '0';
       progress = 0;
@@ -218,23 +233,21 @@ export function computeCourseState(prefs: preferences.Preferences, forcedPrecisi
 
     if (remainMin <= 0) {
       status = '即将开始';
-      statusColor = COLOR_SOON;
+      statusColor = accentHex;
       countdown = '';
     } else {
       if (precision === PRECISION_EXACT) {
-        // 准确时间：桌面小卡片点击刷新、应用内点击刷新、应用存活时 5s 自动刷新
         const h = Math.floor(remainMin / 60);
         const m = remainMin % 60;
         if (h > 0) {
-          status = m > 0 ? `开始还有 ${h} 小时 ${m} 分` : `开始还有 ${h} 小时`;
+          status = m > 0 ? `${h}小时${m}分后` : `${h}小时后上课`;
         } else {
-          status = `开始还有 ${m} 分`;
+          status = `${m}分钟后上课`;
         }
       } else {
-        // 模糊时间：后台预调度边界自动刷新 / 系统定时唤醒，不足 15 分钟显示"即将开始"
-        status = remainMin < 15 ? '即将开始' : `开始还有${fuzzyRemainText(remainMs)}`;
+        status = remainMin < 15 ? '即将开始' : `${fuzzyRemainText(remainMs)}后`;
       }
-      statusColor = remainMin <= 30 ? COLOR_URGENT : COLOR_SOON;
+      statusColor = remainMin <= 20 ? COLOR_URGENT : accentHex;
       countdown = '';
     }
   }
@@ -249,6 +262,8 @@ export function computeCourseState(prefs: preferences.Preferences, forcedPrecisi
   const result: CourseState = {
     status: status,
     statusColor: statusColor,
+    statusBadgeBg: softTintHex(statusColor),
+    accentColor: accentHex,
     countdown: countdown,
     progress: Math.round(progress).toString(),
     progressColor: statusColor,
@@ -272,6 +287,8 @@ export function buildCourseFormData(prefs: preferences.Preferences, forcedPrecis
     'courseTeacher': state.teacher,
     'courseStatus': state.status,
     'courseStatusColor': state.statusColor,
+    'statusBadgeBg': state.statusBadgeBg,
+    'accentColor': state.accentColor,
     'courseStatusTime': state.countdown,
     'progressPercent': state.progress,
     'progressColor': state.progressColor,
