@@ -22,7 +22,7 @@ class MainActivity : FlutterActivity() {
     companion object {
         const val WIDGET_CHANNEL = "top.celechron.celechron/widget"
         const val PREFS_NAME = "HelechronWidgetPrefs"
-        private const val EXTRA_TARGET = "target"
+        const val EXTRA_TARGET = "target"
         private const val REQ_PICK_DIRECTORY = 4201
         private const val REQ_FULLSCREEN_VIDEO = 4202
         private const val PREF_DIR_URI_MAP = "pickedDirTreeUriMap"
