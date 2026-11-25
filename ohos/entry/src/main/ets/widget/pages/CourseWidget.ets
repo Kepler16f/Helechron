@@ -72,9 +72,9 @@ struct CourseWidget {
 
       // 课程标题：严格单行自适应显示
       Text(this.courseName)
+        .fontSize(17)
         .maxFontSize(17)
         .minFontSize(13)
-        .heightAdaptivePolicy(TextHeightAdaptivePolicy.MIN_FONT_SIZE_FIRST)
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.widget_text_primary'))
         .maxLines(1)

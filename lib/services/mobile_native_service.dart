@@ -443,6 +443,52 @@ class MobileNativeService {
     }
   }
 
+  Future<Map<String, dynamic>?> openFullscreenVideoPlayer({
+    required String url,
+    required String title,
+    List<Map<String, String>> streams = const [],
+    String? livingroomUrl,
+    String? token,
+    String? ssoCookie,
+    String? zhiyunCookies,
+    bool isLive = false,
+    bool preferWeb = false,
+    int initialPositionMs = 0,
+    int initialStreamIndex = 0,
+    int initialSpeedIndex = 1,
+    bool autoPlay = true,
+  }) async {
+    try {
+      final result = await _widgetChannel.invokeMethod<dynamic>(
+        'openFullscreenVideoPlayer',
+        {
+          'url': url,
+          'title': title,
+          'streams': streams,
+          'isLive': isLive,
+          'preferWeb': preferWeb,
+          'initialPositionMs': initialPositionMs,
+          'initialStreamIndex': initialStreamIndex,
+          'initialSpeedIndex': initialSpeedIndex,
+          'autoPlay': autoPlay,
+          if (livingroomUrl != null && livingroomUrl.isNotEmpty)
+            'livingroomUrl': livingroomUrl,
+          if (token != null && token.isNotEmpty) 'token': token,
+          if (ssoCookie != null && ssoCookie.isNotEmpty) 'ssoCookie': ssoCookie,
+          if (zhiyunCookies != null && zhiyunCookies.isNotEmpty)
+            'zhiyunCookies': zhiyunCookies,
+        },
+      );
+      if (result is Map) {
+        return Map<String, dynamic>.from(result);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('MobileNativeService openFullscreenVideoPlayer failed: $e');
+      return null;
+    }
+  }
+
   // ==================== Desktop Widgets ====================
 
   static const MethodChannel _widgetChannel = MethodChannel(

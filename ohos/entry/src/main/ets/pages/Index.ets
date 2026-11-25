@@ -117,6 +117,13 @@ struct Index {
   @StorageLink('inAppVideoStreamsJson') inAppVideoStreamsJson: string = '[]';
   @StorageLink('inAppVideoIsLive') inAppVideoIsLive: boolean = false;
   @StorageLink('inAppVideoPreferWeb') inAppVideoPreferWeb: boolean = false;
+  @StorageLink('inAppVideoInline') inAppVideoInline: boolean = false;
+  @StorageLink('inAppVideoInlineLeft') inAppVideoInlineLeft: number = 0;
+  @StorageLink('inAppVideoInlineTop') inAppVideoInlineTop: number = 0;
+  @StorageLink('inAppVideoInlineWidth') inAppVideoInlineWidth: number = 0;
+  @StorageLink('inAppVideoInlineHeight') inAppVideoInlineHeight: number = 0;
+  @StorageLink('inAppVideoInlineRadius') inAppVideoInlineRadius: number = 18;
+  @StorageLink('inAppVideoInlineSuspended') inAppVideoInlineSuspended: boolean = false;
   @State private safeBottom: number = 24;
   @State private safeTop: number = 36;
   @State private safeLeft: number = 0;
@@ -254,8 +261,18 @@ struct Index {
     return this.isFloatingWindow || this.isSplitWindow;
   }
 
+  private isInlineCardActive(): boolean {
+    return this.inAppVideoVisible
+      && this.inAppVideoInline
+      && this.inAppVideoInlineWidth > 0
+      && this.inAppVideoInlineHeight > 0
+      && !this.isPlayerFullscreen
+      && !this.isPlayerMiniWindow
+      && !this.isSystemPipActive;
+  }
+
   private isCompactSmallWindow(): boolean {
-    if (this.isSystemMultiWindow()) {
+    if (this.isSystemMultiWindow() || this.isInlineCardActive()) {
       return true;
     }
     return this.winWidthVp > 0 && this.winWidthVp < 420 && this.winHeightVp > 0 && this.winHeightVp < 560;
@@ -1053,8 +1070,14 @@ struct Index {
     this.setLandscapeMultiWindowEnabled(false);
     this.releaseSystemPip();
     this.releaseAvPlayer();
+    this.inAppVideoInline = false;
+    this.inAppVideoInlineSuspended = false;
     this.inAppVideoVisible = false;
     this.applyPlayerWindowMode(window.Orientation.UNSPECIFIED, false);
+    try {
+      this.context.eventHub.emit('inAppVideoClosed');
+    } catch (_) {
+    }
   }
 
   private enterLandscapeFullscreen(): void {
@@ -1779,19 +1802,30 @@ struct Index {
       }
 
       if (this.inAppVideoVisible && (this.inAppVideoUrl.length > 0 || this.inAppVideoLivingroomUrl.length > 0)) {
-        Stack({ alignContent: this.isPlayerMiniWindow ? Alignment.BottomEnd : Alignment.Center }) {
+        Stack({
+          alignContent: this.isPlayerMiniWindow
+            ? Alignment.BottomEnd
+            : (this.isInlineCardActive() ? Alignment.TopStart : Alignment.Center)
+        }) {
           Stack({ alignContent: Alignment.Center }) {
             // 底层：统一 XComponent（支持应用外系统 PiPWindow + 应用内无重加载切小窗）或 WebView
             if (this.useWebFallback && this.webFallbackTarget().length > 0) {
               Column() {
                 if (!this.isPlayerMiniWindow) {
-                  Row({ space: 10 }) {
+                  Row({ space: this.isInlineCardActive() ? 6 : 10 }) {
                     Stack() {
-                      this.PlayerVectorIcon('M15 4.5 L7.5 12 L15 19.5', false, 26, '#FFFFFF')
+                      this.PlayerVectorIcon(
+                        this.isInlineCardActive()
+                          ? 'M6 6 L18 18 M18 6 L6 18'
+                          : 'M15 4.5 L7.5 12 L15 19.5',
+                        false,
+                        this.isInlineCardActive() ? 18 : 26,
+                        '#FFFFFF'
+                      )
                     }
-                    .width(46)
-                    .height(46)
-                    .borderRadius(23)
+                    .width(this.isInlineCardActive() ? 34 : 46)
+                    .height(this.isInlineCardActive() ? 34 : 46)
+                    .borderRadius(this.isInlineCardActive() ? 17 : 23)
                     .backgroundColor('#4DFFFFFF')
                     .onClick(() => {
                       if (this.isPlayerFullscreen) {
@@ -1802,7 +1836,7 @@ struct Index {
                     })
 
                     Text(this.inAppVideoTitle)
-                      .fontSize(15.5)
+                      .fontSize(this.isInlineCardActive() ? 13 : 15.5)
                       .fontWeight(FontWeight.Medium)
                       .fontColor(Color.White)
                       .maxLines(1)
@@ -1812,13 +1846,13 @@ struct Index {
                     if (this.videoStreams.length > 0 || isDirectStreamUrl(this.inAppVideoUrl)) {
                       Row({ space: 5 }) {
                         Text('原生流')
-                          .fontSize(13)
+                          .fontSize(12.5)
                           .fontWeight(FontWeight.Bold)
                           .fontColor(Color.White)
                       }
-                      .height(38)
-                      .padding({ left: 12, right: 12 })
-                      .borderRadius(19)
+                      .height(this.isInlineCardActive() ? 32 : 38)
+                      .padding({ left: 10, right: 10 })
+                      .borderRadius(16)
                       .backgroundColor('#CCFF6699')
                       .alignItems(VerticalAlign.Center)
                       .onClick(() => {
@@ -1834,48 +1868,38 @@ struct Index {
                       })
                     }
 
-                    Row({ space: 5 }) {
-                      this.PlayerPipIcon(18, '#FFFFFF')
-                      Text('小窗')
-                        .fontSize(13)
-                        .fontWeight(FontWeight.Medium)
-                        .fontColor(Color.White)
+                    Stack() {
+                      this.PlayerPipIcon(this.isInlineCardActive() ? 16 : 18, '#FFFFFF')
                     }
-                    .height(38)
-                    .padding({ left: 11, right: 11 })
-                    .borderRadius(19)
+                    .width(this.isInlineCardActive() ? 34 : 38)
+                    .height(this.isInlineCardActive() ? 34 : 38)
+                    .borderRadius(17)
                     .backgroundColor('#33FFFFFF')
-                    .alignItems(VerticalAlign.Center)
                     .onClick(() => {
                       this.triggerPipOrMiniWindow();
                     })
 
-                    Row({ space: 5 }) {
+                    Stack() {
                       if (this.isPlayerFullscreen) {
                         this.PlayerVectorIcon(
                           'M9 3.5 L9 9 L3.5 9 M15 3.5 L15 9 L20.5 9 M15 20.5 L15 15 L20.5 15 M9 20.5 L9 15 L3.5 15',
                           false,
-                          18,
+                          this.isInlineCardActive() ? 18 : 20,
                           '#FFFFFF'
                         )
                       } else {
                         this.PlayerVectorIcon(
                           'M3.5 9 L3.5 3.5 L9 3.5 M15 3.5 L20.5 3.5 L20.5 9 M20.5 15 L20.5 20.5 L15 20.5 M9 20.5 L3.5 20.5 L3.5 15',
                           false,
-                          18,
+                          this.isInlineCardActive() ? 18 : 20,
                           '#FFFFFF'
                         )
                       }
-                      Text(this.isPlayerFullscreen ? '竖屏' : '横屏')
-                        .fontSize(13)
-                        .fontWeight(FontWeight.Bold)
-                        .fontColor(Color.White)
                     }
-                    .height(38)
-                    .padding({ left: 12, right: 12 })
-                    .borderRadius(19)
+                    .width(this.isInlineCardActive() ? 34 : 38)
+                    .height(this.isInlineCardActive() ? 34 : 38)
+                    .borderRadius(17)
                     .backgroundColor('#33FFFFFF')
-                    .alignItems(VerticalAlign.Center)
                     .onClick(() => {
                       if (this.isPlayerFullscreen) {
                         this.exitLandscapeFullscreen();
@@ -1887,9 +1911,9 @@ struct Index {
                     Stack() {
                       this.PlayerMoreDotsIcon('#FFFFFF')
                     }
-                    .width(46)
-                    .height(46)
-                    .borderRadius(23)
+                    .width(this.isInlineCardActive() ? 34 : 46)
+                    .height(this.isInlineCardActive() ? 34 : 46)
+                    .borderRadius(this.isInlineCardActive() ? 17 : 23)
                     .backgroundColor('#33FFFFFF')
                     .onClick(() => {
                       this.showMoreSheet = !this.showMoreSheet;
@@ -1897,10 +1921,10 @@ struct Index {
                   }
                   .width('100%')
                   .padding({
-                    left: Math.max(12, this.safeLeft + 8),
-                    right: Math.max(12, this.safeRight + 8),
-                    top: this.isPlayerFullscreen ? 8 : Math.max(10, this.safeTop + 4),
-                    bottom: 8
+                    left: this.isInlineCardActive() ? 8 : Math.max(12, this.safeLeft + 8),
+                    right: this.isInlineCardActive() ? 8 : Math.max(12, this.safeRight + 8),
+                    top: this.isInlineCardActive() ? 6 : (this.isPlayerFullscreen ? 8 : Math.max(10, this.safeTop + 4)),
+                    bottom: this.isInlineCardActive() ? 6 : 8
                   })
                   .backgroundColor('#141418')
                 }
@@ -2117,7 +2141,7 @@ struct Index {
 
               if (!this.useWebFallback && this.controlsVisible && !this.videoLoading) {
                 Row({ space: this.isCompactSmallWindow() ? 16 : 28 }) {
-                  if (!this.isLiveStream && this.videoDuration > 0) {
+                  if (!this.isInlineCardActive() && !this.isLiveStream && this.videoDuration > 0) {
                     Stack() {
                       Text('-10s')
                         .fontSize(this.isCompactSmallWindow() ? 12 : 14)
@@ -2139,28 +2163,28 @@ struct Index {
                       this.PlayerVectorIcon(
                         'M6 4.5 L10 4.5 L10 19.5 L6 19.5 Z M14 4.5 L18 4.5 L18 19.5 L14 19.5 Z',
                         true,
-                        this.isCompactSmallWindow() ? 30 : 38,
+                        this.isCompactSmallWindow() ? 26 : 38,
                         '#FFFFFF'
                       )
                     } else {
                       this.PlayerVectorIcon(
                         'M7 4.2 L20.2 12 L7 19.8 Z',
                         true,
-                        this.isCompactSmallWindow() ? 30 : 38,
+                        this.isCompactSmallWindow() ? 26 : 38,
                         '#FFFFFF'
                       )
                     }
                   }
-                  .width(this.isCompactSmallWindow() ? 58 : 76)
-                  .height(this.isCompactSmallWindow() ? 58 : 76)
-                  .borderRadius(this.isCompactSmallWindow() ? 29 : 38)
+                  .width(this.isCompactSmallWindow() ? 50 : 76)
+                  .height(this.isCompactSmallWindow() ? 50 : 76)
+                  .borderRadius(this.isCompactSmallWindow() ? 25 : 38)
                   .backgroundColor('#88000000')
                   .border({ width: 1.0, color: '#4DFFFFFF' })
                   .onClick(() => {
                     this.togglePlayPause();
                   })
 
-                  if (!this.isLiveStream && this.videoDuration > 0) {
+                  if (!this.isInlineCardActive() && !this.isLiveStream && this.videoDuration > 0) {
                     Stack() {
                       Text('+10s')
                         .fontSize(this.isCompactSmallWindow() ? 12 : 14)
@@ -2183,16 +2207,16 @@ struct Index {
               if (this.hudText.length > 0) {
                 Column() {
                   Text(this.hudText)
-                    .fontSize(14)
+                    .fontSize(this.isInlineCardActive() ? 12.5 : 14)
                     .fontWeight(FontWeight.Medium)
                     .fontColor(Color.White)
-                    .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+                    .padding({ left: 14, right: 14, top: 6, bottom: 6 })
                     .borderRadius(20)
                     .backgroundColor('#D91C1C1E')
                 }
                 .width('100%')
                 .height('100%')
-                .padding({ top: (this.isPlayerFullscreen ? 18 : this.safeTop + 16) + 60 })
+                .padding({ top: this.isInlineCardActive() ? 42 : ((this.isPlayerFullscreen ? 18 : this.safeTop + 16) + 60) })
                 .alignItems(HorizontalAlign.Center)
                 .justifyContent(FlexAlign.Start)
                 .hitTestBehavior(HitTestMode.None)
@@ -2201,14 +2225,21 @@ struct Index {
               // 原生流播放器悬浮渐隐工具栏（顶部 + 底部双行，参考 Bilibili/主流移动端播放器设计）
               if (!this.useWebFallback && this.controlsVisible) {
                 Column() {
-                  // 顶部渐变控制栏：返回 + 标题 + 小窗胶囊 + 更多
-                  Row({ space: 10 }) {
+                  // 顶部渐变控制栏：返回/关闭 + 标题 + 小窗 + 更多
+                  Row({ space: this.isInlineCardActive() ? 8 : 10 }) {
                     Stack() {
-                      this.PlayerVectorIcon('M15 4.5 L7.5 12 L15 19.5', false, 26, '#FFFFFF')
+                      this.PlayerVectorIcon(
+                        this.isInlineCardActive()
+                          ? 'M6 6 L18 18 M18 6 L6 18'
+                          : 'M15 4.5 L7.5 12 L15 19.5',
+                        false,
+                        this.isInlineCardActive() ? 18 : 26,
+                        '#FFFFFF'
+                      )
                     }
-                    .width(48)
-                    .height(48)
-                    .borderRadius(24)
+                    .width(this.isInlineCardActive() ? 34 : 48)
+                    .height(this.isInlineCardActive() ? 34 : 48)
+                    .borderRadius(this.isInlineCardActive() ? 17 : 24)
                     .backgroundColor('#66000000')
                     .onClick(() => {
                       if (this.isPlayerFullscreen) {
@@ -2219,7 +2250,7 @@ struct Index {
                     })
 
                     Text(this.inAppVideoTitle)
-                      .fontSize(16)
+                      .fontSize(this.isInlineCardActive() ? 13 : 16)
                       .fontWeight(FontWeight.Medium)
                       .fontColor(Color.White)
                       .maxLines(1)
@@ -2227,15 +2258,17 @@ struct Index {
                       .layoutWeight(1)
 
                     Row({ space: 6 }) {
-                      this.PlayerPipIcon(20, '#FFFFFF')
-                      Text('小窗')
-                        .fontSize(13.5)
-                        .fontWeight(FontWeight.Medium)
-                        .fontColor(Color.White)
+                      this.PlayerPipIcon(this.isInlineCardActive() ? 16 : 20, '#FFFFFF')
+                      if (!this.isInlineCardActive()) {
+                        Text('小窗')
+                          .fontSize(13.5)
+                          .fontWeight(FontWeight.Medium)
+                          .fontColor(Color.White)
+                      }
                     }
-                    .height(40)
-                    .padding({ left: 12, right: 12 })
-                    .borderRadius(20)
+                    .height(this.isInlineCardActive() ? 34 : 40)
+                    .padding({ left: this.isInlineCardActive() ? 9 : 12, right: this.isInlineCardActive() ? 9 : 12 })
+                    .borderRadius(this.isInlineCardActive() ? 17 : 20)
                     .backgroundColor('#66000000')
                     .alignItems(VerticalAlign.Center)
                     .onClick(() => {
@@ -2245,9 +2278,9 @@ struct Index {
                     Stack() {
                       this.PlayerMoreDotsIcon('#FFFFFF')
                     }
-                    .width(48)
-                    .height(48)
-                    .borderRadius(24)
+                    .width(this.isInlineCardActive() ? 34 : 48)
+                    .height(this.isInlineCardActive() ? 34 : 48)
+                    .borderRadius(this.isInlineCardActive() ? 17 : 24)
                     .backgroundColor('#66000000')
                     .onClick(() => {
                       this.showMoreSheet = !this.showMoreSheet;
@@ -2255,10 +2288,10 @@ struct Index {
                   }
                   .width('100%')
                   .padding({
-                    left: Math.max(14, this.safeLeft + 10),
-                    right: Math.max(14, this.safeRight + 10),
-                    top: this.isPlayerFullscreen ? 12 : Math.max(14, this.safeTop + 8),
-                    bottom: 16
+                    left: this.isInlineCardActive() ? 10 : Math.max(14, this.safeLeft + 10),
+                    right: this.isInlineCardActive() ? 10 : Math.max(14, this.safeRight + 10),
+                    top: this.isInlineCardActive() ? 8 : (this.isPlayerFullscreen ? 12 : Math.max(14, this.safeTop + 8)),
+                    bottom: this.isInlineCardActive() ? 10 : 16
                   })
                   .linearGradient({
                     angle: 180,
@@ -2394,7 +2427,7 @@ struct Index {
                         .alignItems(VerticalAlign.Center)
                       }
 
-                      if (this.webFallbackTarget().length > 0) {
+                      if (this.webFallbackTarget().length > 0 && !this.isInlineCardActive()) {
                         Row({ space: 4 }) {
                           Text('网页版')
                             .fontSize(13.5)
@@ -2419,7 +2452,7 @@ struct Index {
 
                       Blank()
 
-                      if (this.videoStreams.length > 1) {
+                      if (this.videoStreams.length > 1 && !this.isInlineCardActive()) {
                         Row() {
                           Text(`线路 ${this.activeStreamIndex + 1}/${this.videoStreams.length}`)
                             .fontSize(13.5)
@@ -2439,12 +2472,12 @@ struct Index {
                       if (!this.isLiveStream && this.videoDuration > 0) {
                         Row() {
                           Text(this.videoSpeedLabel)
-                            .fontSize(13.5)
+                            .fontSize(this.isInlineCardActive() ? 12.5 : 13.5)
                             .fontWeight(FontWeight.Bold)
                             .fontColor(Color.White)
                         }
-                        .height(38)
-                        .padding({ left: 13, right: 13 })
+                        .height(this.isInlineCardActive() ? 32 : 38)
+                        .padding({ left: this.isInlineCardActive() ? 10 : 13, right: this.isInlineCardActive() ? 10 : 13 })
                         .borderRadius(19)
                         .backgroundColor('#4DFFFFFF')
                         .alignItems(VerticalAlign.Center)
@@ -2453,51 +2486,26 @@ struct Index {
                         })
                       }
 
-                      Row({ space: 5 }) {
-                        this.PlayerVectorIcon(
-                          'M4.9 8.7 C7.3 3.5 14.3 2.6 18.0 7.0 M18.2 3.4 L18.2 7.2 L14.4 7.0 M19.1 15.3 C16.7 20.5 9.7 21.4 6.0 17.0 M5.8 20.6 L5.8 16.8 L9.6 17.0',
-                          false,
-                          18,
-                          '#FFFFFF'
-                        )
-                        Text(this.isPlayerFullscreen ? '竖屏' : '横屏')
-                          .fontSize(13.5)
-                          .fontWeight(FontWeight.Bold)
-                          .fontColor(Color.White)
-                      }
-                      .height(40)
-                      .padding({ left: 13, right: 13 })
-                      .borderRadius(20)
-                      .backgroundColor('#80FF6699')
-                      .alignItems(VerticalAlign.Center)
-                      .onClick(() => {
-                        if (this.isPlayerFullscreen) {
-                          this.exitLandscapeFullscreen();
-                        } else {
-                          this.enterLandscapeFullscreen();
-                        }
-                      })
-
                       Stack() {
                         if (this.isPlayerFullscreen) {
                           this.PlayerVectorIcon(
                             'M9 3.5 L9 9 L3.5 9 M15 3.5 L15 9 L20.5 9 M15 20.5 L15 15 L20.5 15 M9 20.5 L9 15 L3.5 15',
                             false,
-                            24,
+                            this.isCompactSmallWindow() ? 20 : 24,
                             '#FFFFFF'
                           )
                         } else {
                           this.PlayerVectorIcon(
                             'M3.5 9 L3.5 3.5 L9 3.5 M15 3.5 L20.5 3.5 L20.5 9 M20.5 15 L20.5 20.5 L15 20.5 M9 20.5 L3.5 20.5 L3.5 15',
                             false,
-                            24,
+                            this.isCompactSmallWindow() ? 20 : 24,
                             '#FFFFFF'
                           )
                         }
                       }
-                      .width(this.isCompactSmallWindow() ? 40 : 46)
-                      .height(this.isCompactSmallWindow() ? 40 : 46)
-                      .borderRadius(this.isCompactSmallWindow() ? 20 : 23)
+                      .width(this.isCompactSmallWindow() ? 36 : 46)
+                      .height(this.isCompactSmallWindow() ? 36 : 46)
+                      .borderRadius(this.isCompactSmallWindow() ? 18 : 23)
                       .backgroundColor('#59000000')
                       .onClick(() => {
                         if (this.isPlayerFullscreen) {
@@ -2512,10 +2520,10 @@ struct Index {
                   }
                   .width('100%')
                   .padding({
-                    left: Math.max(14, this.safeLeft + 10),
-                    right: Math.max(14, this.safeRight + 10),
-                    top: 16,
-                    bottom: this.isPlayerFullscreen ? Math.max(14, this.safeBottom + 8) : Math.max(16, this.safeBottom + 10)
+                    left: this.isInlineCardActive() ? 10 : Math.max(14, this.safeLeft + 10),
+                    right: this.isInlineCardActive() ? 10 : Math.max(14, this.safeRight + 10),
+                    top: this.isInlineCardActive() ? 8 : 16,
+                    bottom: this.isInlineCardActive() ? 8 : (this.isPlayerFullscreen ? Math.max(14, this.safeBottom + 8) : Math.max(16, this.safeBottom + 10))
                   })
                   .linearGradient({
                     angle: 0,
@@ -2536,8 +2544,8 @@ struct Index {
                 .justifyContent(FlexAlign.Start)
                 .alignItems(HorizontalAlign.End)
                 .padding({
-                  top: (this.isPlayerFullscreen ? 14 : Math.max(16, this.safeTop + 8)) + 56,
-                  right: Math.max(14, this.safeRight + 10)
+                  top: this.isInlineCardActive() ? 46 : ((this.isPlayerFullscreen ? 14 : Math.max(16, this.safeTop + 8)) + 56),
+                  right: this.isInlineCardActive() ? 8 : Math.max(14, this.safeRight + 10)
                 })
                 .backgroundColor('#4D000000')
                 .onClick(() => {
@@ -2547,18 +2555,32 @@ struct Index {
               }
             }
           }
-          .width(this.isSystemPipActive ? 1 : (this.isPlayerMiniWindow ? this.getMiniWindowWidth() : '100%'))
-          .height(this.isSystemPipActive ? 1 : (this.isPlayerMiniWindow ? this.getMiniWindowHeight() : '100%'))
-          .borderRadius(this.isPlayerMiniWindow && !this.isSystemPipActive ? 12 : 0)
-          .clip(this.isPlayerMiniWindow && !this.isSystemPipActive)
-          .opacity(this.isSystemPipActive ? 0.01 : 1)
+          .width(this.isSystemPipActive || (this.isInlineCardActive() && this.inAppVideoInlineSuspended)
+            ? 1
+            : (this.isPlayerMiniWindow
+              ? this.getMiniWindowWidth()
+              : (this.isInlineCardActive() ? this.inAppVideoInlineWidth : '100%')))
+          .height(this.isSystemPipActive || (this.isInlineCardActive() && this.inAppVideoInlineSuspended)
+            ? 1
+            : (this.isPlayerMiniWindow
+              ? this.getMiniWindowHeight()
+              : (this.isInlineCardActive() ? this.inAppVideoInlineHeight : '100%')))
+          .borderRadius(this.isPlayerMiniWindow && !this.isSystemPipActive
+            ? 12
+            : (this.isInlineCardActive() && !this.inAppVideoInlineSuspended ? this.inAppVideoInlineRadius : 0))
+          .clip((this.isPlayerMiniWindow || this.isInlineCardActive()) && !this.isSystemPipActive)
+          .opacity(this.isSystemPipActive || (this.isInlineCardActive() && this.inAppVideoInlineSuspended) ? 0.01 : 1)
           .backgroundColor(this.isSystemPipActive ? Color.Transparent : Color.Black)
           .border(this.isPlayerMiniWindow && !this.isSystemPipActive ? { width: 0.8, color: '#44FFFFFF' } : { width: 0 })
           .shadow(this.isPlayerMiniWindow && !this.isSystemPipActive ? { radius: 18, color: '#66000000', offsetX: 0, offsetY: 6 } : { radius: 0 })
-          .margin(this.isPlayerMiniWindow && !this.isSystemPipActive ? { right: Math.max(12, this.safeRight + 8), bottom: this.safeBottom + 72 } : { right: 0, bottom: 0 })
+          .margin(this.isPlayerMiniWindow && !this.isSystemPipActive
+            ? { right: Math.max(12, this.safeRight + 8), bottom: this.safeBottom + 72 }
+            : (this.isInlineCardActive() && !this.inAppVideoInlineSuspended && !this.isSystemPipActive
+              ? { left: this.inAppVideoInlineLeft, top: this.inAppVideoInlineTop }
+              : { right: 0, bottom: 0 }))
           .translate(this.isPlayerMiniWindow && !this.isSystemPipActive ? { x: this.miniOffsetX, y: this.miniOffsetY } : { x: 0, y: 0 })
           .onAreaChange((_oldArea: Area, newArea: Area) => {
-            if (this.isSystemPipActive) return;
+            if (this.isSystemPipActive || (this.isInlineCardActive() && this.inAppVideoInlineSuspended)) return;
             const w = Number(newArea.width);
             const h = Number(newArea.height);
             if (w > 0 && h > 0) {
@@ -2583,7 +2605,11 @@ struct Index {
         }
         .width('100%')
         .height('100%')
-        .hitTestBehavior(this.isSystemPipActive ? HitTestMode.None : (this.isPlayerMiniWindow ? HitTestMode.Transparent : HitTestMode.Default))
+        .hitTestBehavior(
+          this.isSystemPipActive || (this.isInlineCardActive() && this.inAppVideoInlineSuspended)
+            ? HitTestMode.None
+            : ((this.isPlayerMiniWindow || this.isInlineCardActive()) ? HitTestMode.Transparent : HitTestMode.Default)
+        )
       }
     }
     .width('100%')
@@ -2599,11 +2625,18 @@ struct Index {
       if (this.showMoreSheet) {
         this.showMoreSheet = false;
         this.scheduleHideOverlay();
-      } else if (this.isPlayerFullscreen) {
-        this.exitLandscapeFullscreen();
-      } else {
-        this.closeVideoOverlay();
+        return true;
       }
+      if (this.isPlayerFullscreen) {
+        this.exitLandscapeFullscreen();
+        return true;
+      }
+      if (this.isInlineCardActive()) {
+        // 竖屏卡片内嵌模式下按系统返回：交由 Flutter 路由返回上一页并自动释放播放器
+        this.context.eventHub.emit(EVENT_BACK_PRESS);
+        return true;
+      }
+      this.closeVideoOverlay();
       return true;
     }
     this.context.eventHub.emit(EVENT_BACK_PRESS);

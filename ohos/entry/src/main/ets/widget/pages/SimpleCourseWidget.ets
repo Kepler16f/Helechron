@@ -43,9 +43,9 @@ struct SimpleCourseWidget {
 
       // 核心状态标题：严格单行 + 自适应字号，绝不换行断字
       Text(this.courseStatus)
-        .maxFontSize(17)
+        .fontSize(16)
+        .maxFontSize(16)
         .minFontSize(11)
-        .heightAdaptivePolicy(TextHeightAdaptivePolicy.MIN_FONT_SIZE_FIRST)
         .fontWeight(FontWeight.Bold)
         .fontColor(this.courseStatusColor)
         .maxLines(1)
@@ -55,9 +55,9 @@ struct SimpleCourseWidget {
 
       // 课程名称：严格单行显示
       Text(this.courseName)
+        .fontSize(14)
         .maxFontSize(14)
         .minFontSize(11.5)
-        .heightAdaptivePolicy(TextHeightAdaptivePolicy.MIN_FONT_SIZE_FIRST)
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.widget_text_primary'))
         .maxLines(1)

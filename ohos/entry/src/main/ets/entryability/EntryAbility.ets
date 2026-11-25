@@ -93,6 +93,15 @@ export default class EntryAbility extends FlutterAbility {
       hilog.warn(DOMAIN, TAG, `eventHub.on EVENT_BACK_PRESS failed: ${JSON.stringify(e)}`);
     }
 
+    // 监听应用内播放器关闭事件并同步通知 Flutter 收起卡片内嵌播放槽
+    try {
+      this.context.eventHub.on('inAppVideoClosed', () => {
+        this.methodChannel?.invokeMethod('onInAppVideoClosed', null);
+      });
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, `eventHub.on inAppVideoClosed failed: ${JSON.stringify(e)}`);
+    }
+
     // 冷启动时若由小组件拉起，记录目标路由，等待 Dart 侧主动领取
     this.captureRouteFromWant(this.launchWant);
   }
@@ -678,6 +687,12 @@ export default class EntryAbility extends FlutterAbility {
       const streamsJsonArg = (call.argument('streamsJson') as string) || '[]';
       const isLiveArg = (call.argument('isLive') as boolean) || false;
       const preferWebArg = (call.argument('preferWeb') as boolean) || false;
+      const inlineMode = (call.argument('inlineMode') as boolean) || false;
+      const inlineLeft = (call.argument('inlineLeft') as number) || 0;
+      const inlineTop = (call.argument('inlineTop') as number) || 0;
+      const inlineWidth = (call.argument('inlineWidth') as number) || 0;
+      const inlineHeight = (call.argument('inlineHeight') as number) || 0;
+      const inlineRadius = (call.argument('inlineRadius') as number) || 18;
       if (url.length === 0 && livingroomUrl.length === 0) {
         result.success(false);
         return;
@@ -691,12 +706,58 @@ export default class EntryAbility extends FlutterAbility {
       AppStorage.setOrCreate('inAppVideoStreamsJson', streamsJsonArg);
       AppStorage.setOrCreate('inAppVideoIsLive', isLiveArg);
       AppStorage.setOrCreate('inAppVideoPreferWeb', preferWebArg);
+      AppStorage.setOrCreate('inAppVideoInline', inlineMode);
+      AppStorage.setOrCreate('inAppVideoInlineLeft', inlineLeft);
+      AppStorage.setOrCreate('inAppVideoInlineTop', inlineTop);
+      AppStorage.setOrCreate('inAppVideoInlineWidth', inlineWidth);
+      AppStorage.setOrCreate('inAppVideoInlineHeight', inlineHeight);
+      AppStorage.setOrCreate('inAppVideoInlineRadius', inlineRadius);
+      AppStorage.setOrCreate('inAppVideoInlineSuspended', false);
       AppStorage.setOrCreate('inAppVideoUrl', url.length > 0 ? url : livingroomUrl);
       AppStorage.setOrCreate('inAppVideoVisible', true);
       AppStorage.setOrCreate('inAppVideoSessionSeq', prevSeq + 1);
       result.success(true);
     } catch (err) {
       hilog.error(DOMAIN, TAG, `openInAppVideoPlayer failed: ${JSON.stringify(err)}`);
+      result.success(false);
+    }
+  }
+
+  private updateInAppVideoInlineBounds(call: MethodCall, result: MethodResult): void {
+    try {
+      const left = (call.argument('left') as number) || 0;
+      const top = (call.argument('top') as number) || 0;
+      const width = (call.argument('width') as number) || 0;
+      const height = (call.argument('height') as number) || 0;
+      const radius = (call.argument('radius') as number) || 18;
+      AppStorage.setOrCreate('inAppVideoInlineLeft', left);
+      AppStorage.setOrCreate('inAppVideoInlineTop', top);
+      AppStorage.setOrCreate('inAppVideoInlineWidth', width);
+      AppStorage.setOrCreate('inAppVideoInlineHeight', height);
+      AppStorage.setOrCreate('inAppVideoInlineRadius', radius);
+      result.success(true);
+    } catch (_) {
+      result.success(false);
+    }
+  }
+
+  private setInAppVideoInlineSuspended(call: MethodCall, result: MethodResult): void {
+    try {
+      const suspended = (call.argument('suspended') as boolean) || false;
+      AppStorage.setOrCreate('inAppVideoInlineSuspended', suspended);
+      result.success(true);
+    } catch (_) {
+      result.success(false);
+    }
+  }
+
+  private closeInAppVideoPlayer(result: MethodResult): void {
+    try {
+      AppStorage.setOrCreate('inAppVideoInline', false);
+      AppStorage.setOrCreate('inAppVideoInlineSuspended', false);
+      AppStorage.setOrCreate('inAppVideoVisible', false);
+      result.success(true);
+    } catch (_) {
       result.success(false);
     }
   }
@@ -784,6 +845,15 @@ export default class EntryAbility extends FlutterAbility {
         break;
       case 'openInAppVideoPlayer':
         this.openInAppVideoPlayer(call, result);
+        break;
+      case 'updateInAppVideoInlineBounds':
+        this.updateInAppVideoInlineBounds(call, result);
+        break;
+      case 'setInAppVideoInlineSuspended':
+        this.setInAppVideoInlineSuspended(call, result);
+        break;
+      case 'closeInAppVideoPlayer':
+        this.closeInAppVideoPlayer(result);
         break;
       case 'exitApp':
         hilog.info(DOMAIN, TAG, 'exitApp requested from Dart');

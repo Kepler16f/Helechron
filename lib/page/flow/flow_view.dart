@@ -11,6 +11,7 @@ import 'package:celechron/design/theme/ael_theme.dart';
 import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/model/period.dart';
 import 'package:celechron/page/scholar/course_detail/course_detail_view.dart';
+import 'package:celechron/utils/period_icon_helper.dart';
 import 'package:celechron/utils/time_helper.dart';
 import 'package:celechron/utils/utils.dart';
 
@@ -129,16 +130,6 @@ class _FlowPageState extends State<FlowPage> {
     return colors.info;
   }
 
-  IconData _periodIcon(PeriodType type) {
-    return switch (type) {
-      PeriodType.classes => AelIcons.tabScholar,
-      PeriodType.test => AelIcons.exam,
-      PeriodType.flow => AelIcons.tabFlow,
-      PeriodType.user => AelIcons.tabTask,
-      PeriodType.virtual => AelIcons.sparkles,
-    };
-  }
-
   String _periodTypeLabel(PeriodType type) {
     return switch (type) {
       PeriodType.classes => '课程',
@@ -185,7 +176,7 @@ class _FlowPageState extends State<FlowPage> {
           Row(
             children: [
               AelIconBadge(
-                icon: _periodIcon(period.type),
+                icon: resolvePeriodIcon(period),
                 style: AelIconBadgeStyle.cookie,
                 size: 46,
                 iconSize: 21,
@@ -355,7 +346,7 @@ class _FlowPageState extends State<FlowPage> {
     return AelListRow(
       title: period.summary,
       subtitle: subtitleParts.join(' · '),
-      icon: _periodIcon(period.type),
+      icon: resolvePeriodIcon(period),
       iconBgColor: accent.withValues(alpha: colors.isDark ? 0.22 : 0.14),
       iconColor: accent,
       showChevron: period.type == PeriodType.classes,

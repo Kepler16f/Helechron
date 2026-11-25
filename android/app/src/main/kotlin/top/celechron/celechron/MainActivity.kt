@@ -22,8 +22,9 @@ class MainActivity : FlutterActivity() {
     companion object {
         const val WIDGET_CHANNEL = "top.celechron.celechron/widget"
         const val PREFS_NAME = "HelechronWidgetPrefs"
-        const val EXTRA_TARGET = "target"
+        private const val EXTRA_TARGET = "target"
         private const val REQ_PICK_DIRECTORY = 4201
+        private const val REQ_FULLSCREEN_VIDEO = 4202
         private const val PREF_DIR_URI_MAP = "pickedDirTreeUriMap"
         private const val PREF_FILE_URI_MAP = "pickedFileUriMap"
     }
@@ -31,6 +32,7 @@ class MainActivity : FlutterActivity() {
     private var widgetChannel: MethodChannel? = null
     private var pendingRoute: String? = null
     private var pendingDirPickResult: MethodChannel.Result? = null
+    private var pendingFullscreenVideoResult: MethodChannel.Result? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -54,6 +56,10 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        flutterEngine.platformViewsController.registry.registerViewFactory(
+            "helechron/zhiyun_inline_player",
+            ZhiyunInlinePlayerFactory(flutterEngine.dartExecutor.binaryMessenger)
+        )
         val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, WIDGET_CHANNEL)
         widgetChannel = channel
 
@@ -132,6 +138,44 @@ class MainActivity : FlutterActivity() {
                             preferWeb,
                             zhiyunCookies
                         )
+                    )
+                }
+                "openFullscreenVideoPlayer" -> {
+                    val url = call.argument<String>("url") ?: ""
+                    val title = call.argument<String>("title") ?: "智云课堂"
+                    val rawStreams = call.argument<List<Map<String, Any?>>>("streams") ?: emptyList()
+                    val streams = rawStreams.mapNotNull { item ->
+                        val sUrl = item["url"]?.toString()?.trim() ?: ""
+                        if (sUrl.isEmpty()) null else Pair(
+                            item["label"]?.toString()?.trim()?.ifEmpty { "视频源" } ?: "视频源",
+                            sUrl
+                        )
+                    }
+                    val livingroomUrl = call.argument<String>("livingroomUrl") ?: ""
+                    val token = call.argument<String>("token") ?: ""
+                    val ssoCookie = call.argument<String>("ssoCookie") ?: ""
+                    val zhiyunCookies = call.argument<String>("zhiyunCookies") ?: ""
+                    val isLive = call.argument<Boolean>("isLive") ?: false
+                    val preferWeb = call.argument<Boolean>("preferWeb") ?: false
+                    val initialPositionMs = call.argument<Number>("initialPositionMs")?.toLong() ?: 0L
+                    val initialStreamIndex = call.argument<Number>("initialStreamIndex")?.toInt() ?: 0
+                    val initialSpeedIndex = call.argument<Number>("initialSpeedIndex")?.toInt() ?: 1
+                    val autoPlay = call.argument<Boolean>("autoPlay") ?: true
+                    launchFullscreenVideoForResult(
+                        url = url,
+                        title = title,
+                        streams = streams,
+                        livingroomUrl = livingroomUrl,
+                        token = token,
+                        isLive = isLive,
+                        ssoCookie = ssoCookie,
+                        preferWeb = preferWeb,
+                        zhiyunCookies = zhiyunCookies,
+                        initialPositionMs = initialPositionMs,
+                        initialStreamIndex = initialStreamIndex,
+                        initialSpeedIndex = initialSpeedIndex,
+                        autoPlay = autoPlay,
+                        result = result
                     )
                 }
                 "installApk" -> {
@@ -265,6 +309,24 @@ class MainActivity : FlutterActivity() {
             val displayPath = resolveReadablePathFromTreeUri(treeUri)
             saveJsonStringMapEntry(PREF_DIR_URI_MAP, displayPath, treeUri.toString())
             pending?.success(displayPath)
+            return
+        }
+        if (requestCode == REQ_FULLSCREEN_VIDEO) {
+            val pending = pendingFullscreenVideoResult
+            pendingFullscreenVideoResult = null
+            if (resultCode == Activity.RESULT_OK && data != null) {
+                pending?.success(
+                    mapOf(
+                        "positionMs" to data.getLongExtra(ZhiyunPlayerActivity.RESULT_POSITION_MS, 0L),
+                        "streamIndex" to data.getIntExtra(ZhiyunPlayerActivity.RESULT_STREAM_INDEX, 0),
+                        "speedIndex" to data.getIntExtra(ZhiyunPlayerActivity.RESULT_SPEED_INDEX, 1),
+                        "wasPlaying" to data.getBooleanExtra(ZhiyunPlayerActivity.RESULT_WAS_PLAYING, false),
+                        "isWebMode" to data.getBooleanExtra(ZhiyunPlayerActivity.RESULT_IS_WEB_MODE, false)
+                    )
+                )
+            } else {
+                pending?.success(null)
+            }
             return
         }
         super.onActivityResult(requestCode, resultCode, data)
@@ -403,6 +465,57 @@ class MainActivity : FlutterActivity() {
             true
         } catch (e: Exception) {
             false
+        }
+    }
+
+    private fun launchFullscreenVideoForResult(
+        url: String,
+        title: String,
+        streams: List<Pair<String, String>>,
+        livingroomUrl: String,
+        token: String,
+        isLive: Boolean,
+        ssoCookie: String,
+        preferWeb: Boolean,
+        zhiyunCookies: String,
+        initialPositionMs: Long,
+        initialStreamIndex: Int,
+        initialSpeedIndex: Int,
+        autoPlay: Boolean,
+        result: MethodChannel.Result
+    ) {
+        if (url.isEmpty() && livingroomUrl.isEmpty() && streams.isEmpty()) {
+            result.success(null)
+            return
+        }
+        pendingFullscreenVideoResult?.success(null)
+        pendingFullscreenVideoResult = result
+        try {
+            val labels = ArrayList<String>(streams.map { it.first })
+            val urls = ArrayList<String>(streams.map { it.second })
+            val playerIntent = Intent(this, ZhiyunPlayerActivity::class.java).apply {
+                putExtra(ZhiyunPlayerActivity.EXTRA_URL, url)
+                putExtra(ZhiyunPlayerActivity.EXTRA_TITLE, title)
+                putExtra(ZhiyunPlayerActivity.EXTRA_LIVINGROOM_URL, livingroomUrl)
+                putExtra(ZhiyunPlayerActivity.EXTRA_TOKEN, token)
+                putExtra(ZhiyunPlayerActivity.EXTRA_SSO_COOKIE, ssoCookie)
+                putExtra(ZhiyunPlayerActivity.EXTRA_ZHIYUN_COOKIES, zhiyunCookies)
+                putExtra(ZhiyunPlayerActivity.EXTRA_IS_LIVE, isLive)
+                putExtra(ZhiyunPlayerActivity.EXTRA_PREFER_WEB, preferWeb)
+                putExtra(ZhiyunPlayerActivity.EXTRA_START_FULLSCREEN, true)
+                putExtra(ZhiyunPlayerActivity.EXTRA_RETURN_TO_INLINE, true)
+                putExtra(ZhiyunPlayerActivity.EXTRA_INITIAL_POSITION_MS, initialPositionMs)
+                putExtra(ZhiyunPlayerActivity.EXTRA_INITIAL_STREAM_INDEX, initialStreamIndex)
+                putExtra(ZhiyunPlayerActivity.EXTRA_INITIAL_SPEED_INDEX, initialSpeedIndex)
+                putExtra(ZhiyunPlayerActivity.EXTRA_AUTO_PLAY, autoPlay)
+                putStringArrayListExtra(ZhiyunPlayerActivity.EXTRA_STREAM_LABELS, labels)
+                putStringArrayListExtra(ZhiyunPlayerActivity.EXTRA_STREAM_URLS, urls)
+            }
+            startActivityForResult(playerIntent, REQ_FULLSCREEN_VIDEO)
+        } catch (e: Exception) {
+            val pending = pendingFullscreenVideoResult
+            pendingFullscreenVideoResult = null
+            pending?.success(null)
         }
     }
 

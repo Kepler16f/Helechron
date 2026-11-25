@@ -58,8 +58,11 @@ final class AelIcons {
 
   // 校园与业务语义
   static const IconData book = LucideIcons.bookOpen;
+  static const IconData sport = LucideIcons.dumbbell;
   static const IconData award = LucideIcons.award;
   static const IconData exam = LucideIcons.clipboardList;
+  static const IconData fullscreen = LucideIcons.maximize;
+  static const IconData fullscreenExit = LucideIcons.minimize;
   static const IconData homework = LucideIcons.filePenLine;
   static const IconData video = LucideIcons.play;
   static const IconData qrCode = LucideIcons.qrCode;

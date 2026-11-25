@@ -607,7 +607,7 @@ class OhosNativeService {
     }
   }
 
-  /// 在应用内打开原生视频/直播播放器浮层
+  /// 在应用内打开原生视频/直播播放器浮层（或鸿蒙内联上方卡片槽位）
   Future<bool> openInAppVideoPlayer({
     required String url,
     required String title,
@@ -618,6 +618,9 @@ class OhosNativeService {
     String? zhiyunCookies,
     bool isLive = false,
     bool preferWeb = false,
+    bool inlineMode = false,
+    Rect? inlineBounds,
+    double inlineRadius = 18,
   }) async {
     if (PlatformFeatures.usesFlutterPlugins) {
       return MobileNativeService.instance.openInAppVideoPlayer(
@@ -640,6 +643,14 @@ class OhosNativeService {
         'streamsJson': jsonEncode(streams),
         'isLive': isLive,
         'preferWeb': preferWeb,
+        'inlineMode': inlineMode,
+        if (inlineBounds != null) ...{
+          'inlineLeft': inlineBounds.left,
+          'inlineTop': inlineBounds.top,
+          'inlineWidth': inlineBounds.width,
+          'inlineHeight': inlineBounds.height,
+          'inlineRadius': inlineRadius,
+        },
         if (livingroomUrl != null && livingroomUrl.isNotEmpty)
           'livingroomUrl': livingroomUrl,
         if (token != null && token.isNotEmpty) 'token': token,
@@ -656,11 +667,89 @@ class OhosNativeService {
     }
   }
 
+  /// 更新鸿蒙内联播放器的屏幕坐标与尺寸
+  Future<void> updateInAppVideoInlineBounds({
+    required double left,
+    required double top,
+    required double width,
+    required double height,
+    double radius = 18,
+  }) async {
+    if (PlatformFeatures.usesFlutterPlugins) return;
+    try {
+      await _channel.invokeMethod('updateInAppVideoInlineBounds', {
+        'left': left,
+        'top': top,
+        'width': width,
+        'height': height,
+        'radius': radius,
+      });
+    } on PlatformException {
+    } on MissingPluginException {}
+  }
+
+  /// 临时挂起/恢复鸿蒙内联播放器浮层（例如打开全屏 PPT 浏览时避免遮挡）
+  Future<void> setInAppVideoInlineSuspended(bool suspended) async {
+    if (PlatformFeatures.usesFlutterPlugins) return;
+    try {
+      await _channel.invokeMethod('setInAppVideoInlineSuspended', {
+        'suspended': suspended,
+      });
+    } on PlatformException {
+    } on MissingPluginException {}
+  }
+
+  /// 关闭原生内联播放器浮层
+  Future<void> closeInAppVideoPlayer() async {
+    if (PlatformFeatures.usesFlutterPlugins) return;
+    try {
+      await _channel.invokeMethod('closeInAppVideoPlayer');
+    } on PlatformException {
+    } on MissingPluginException {}
+  }
+
+  /// Android/iOS 从内联播放器切换至横屏全屏播放器，退出后返回最新进度与线路索引
+  Future<Map<String, dynamic>?> openFullscreenVideoPlayer({
+    required String url,
+    required String title,
+    List<Map<String, String>> streams = const [],
+    String? livingroomUrl,
+    String? token,
+    String? ssoCookie,
+    String? zhiyunCookies,
+    bool isLive = false,
+    bool preferWeb = false,
+    int initialPositionMs = 0,
+    int initialStreamIndex = 0,
+    int initialSpeedIndex = 1,
+    bool autoPlay = true,
+  }) async {
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.openFullscreenVideoPlayer(
+        url: url,
+        title: title,
+        streams: streams,
+        livingroomUrl: livingroomUrl,
+        token: token,
+        ssoCookie: ssoCookie,
+        zhiyunCookies: zhiyunCookies,
+        isLive: isLive,
+        preferWeb: preferWeb,
+        initialPositionMs: initialPositionMs,
+        initialStreamIndex: initialStreamIndex,
+        initialSpeedIndex: initialSpeedIndex,
+        autoPlay: autoPlay,
+      );
+    }
+    return null;
+  }
+
   // ==================== Widget Routes & Native Tab ====================
 
   static void Function(String target)? _widgetRouteHandler;
   static void Function(int index)? _nativeTabHandler;
   static Future<bool> Function()? _backPressedHandler;
+  static void Function()? _inAppVideoClosedHandler;
   static bool _routeHandlerInstalled = false;
 
   /// 注册小组件点击跳转回调（原生 -> Dart）。
@@ -681,6 +770,12 @@ class OhosNativeService {
   /// 注册返回手势回调（原生 -> Dart），返回 true 表示已消费（如关闭弹窗/回到上一级），false 表示在顶层允许退出应用。
   void installBackPressedHandler(Future<bool> Function() handler) {
     _backPressedHandler = handler;
+    _ensureIncomingHandlerInstalled();
+  }
+
+  /// 注册原生内联播放器关闭回调（原生 -> Dart）。
+  void installInAppVideoClosedHandler(void Function()? handler) {
+    _inAppVideoClosedHandler = handler;
     _ensureIncomingHandlerInstalled();
   }
 
@@ -706,6 +801,9 @@ class OhosNativeService {
             return await _backPressedHandler!();
           }
           return false;
+        case 'onInAppVideoClosed':
+          _inAppVideoClosedHandler?.call();
+          return null;
         default:
           throw MissingPluginException(
             'Unsupported native method: ${call.method}',

@@ -20,6 +20,7 @@ import 'package:celechron/model/period.dart';
 import 'package:celechron/services/file_download_share_helper.dart';
 import 'package:celechron/services/ohos_native_service.dart';
 import 'package:celechron/services/zhiyun_service.dart';
+import 'package:celechron/utils/platform_features.dart';
 
 class ZhiyunPlayerPage extends StatefulWidget {
   final String courseName;
@@ -49,7 +50,8 @@ class ZhiyunPlayerPage extends StatefulWidget {
   State<ZhiyunPlayerPage> createState() => _ZhiyunPlayerPageState();
 }
 
-class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
+class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage>
+    with WidgetsBindingObserver {
   String? _currentSubId;
   late String _currentTitle;
   late String _currentLivingroomUrl;
@@ -66,9 +68,23 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
   String _searchKeyword = '';
   bool _autoLaunched = false;
 
+  bool _inlinePlayerActive = false;
+  final GlobalKey _inlineSlotKey = GlobalKey();
+  Rect? _lastOhosInlineBounds;
+  Map<String, dynamic>? _inlinePayload;
+  MethodChannel? _androidInlineChannel;
+  int _androidInlineRevision = 0;
+  bool _openingAndroidFullscreen = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    if (!PlatformFeatures.usesFlutterPlugins) {
+      OhosNativeService.instance.installInAppVideoClosedHandler(
+        _handleOhosInlineClosed,
+      );
+    }
     _replays = List<ZhiyunReplayInfo>.from(widget.replays);
     _currentSubId = widget.initialSubId;
     _currentTitle = widget.initialTitle;
@@ -133,6 +149,139 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
       }
     }
     _loadLessonData(autoPlayFirstTime: _isLiveMode);
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    if (_inlinePlayerActive && !PlatformFeatures.usesFlutterPlugins) {
+      _scheduleSyncOhosInlineBounds();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _androidInlineChannel?.setMethodCallHandler(null);
+    _androidInlineChannel = null;
+    if (!PlatformFeatures.usesFlutterPlugins) {
+      OhosNativeService.instance.installInAppVideoClosedHandler(null);
+      if (_inlinePlayerActive) {
+        OhosNativeService.instance.closeInAppVideoPlayer();
+      }
+    }
+    super.dispose();
+  }
+
+  void _handleOhosInlineClosed() {
+    if (!mounted) return;
+    setState(() {
+      _inlinePlayerActive = false;
+      _lastOhosInlineBounds = null;
+    });
+  }
+
+  Rect? _measureInlineSlotRect() {
+    final renderObj = _inlineSlotKey.currentContext?.findRenderObject();
+    if (renderObj is! RenderBox || !renderObj.hasSize) return null;
+    final size = renderObj.size;
+    if (size.width <= 1 || size.height <= 1) return null;
+    final offset = renderObj.localToGlobal(Offset.zero);
+    return offset & size;
+  }
+
+  void _scheduleSyncOhosInlineBounds() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !_inlinePlayerActive ||
+          PlatformFeatures.usesFlutterPlugins) {
+        return;
+      }
+      final rect = _measureInlineSlotRect();
+      if (rect == null) return;
+      final prev = _lastOhosInlineBounds;
+      if (prev != null &&
+          (prev.left - rect.left).abs() < 0.5 &&
+          (prev.top - rect.top).abs() < 0.5 &&
+          (prev.width - rect.width).abs() < 0.5 &&
+          (prev.height - rect.height).abs() < 0.5) {
+        return;
+      }
+      _lastOhosInlineBounds = rect;
+      OhosNativeService.instance.updateInAppVideoInlineBounds(
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+        radius: AelRadius.button,
+      );
+    });
+  }
+
+  void _onAndroidInlineViewCreated(int viewId) {
+    final ch = MethodChannel('helechron/zhiyun_inline_player_$viewId');
+    _androidInlineChannel?.setMethodCallHandler(null);
+    _androidInlineChannel = ch;
+    ch.setMethodCallHandler((call) async {
+      if (call.method == 'onFullscreenRequested') {
+        await _handleAndroidFullscreenRequest(call.arguments);
+      }
+      return null;
+    });
+  }
+
+  Future<void> _handleAndroidFullscreenRequest(dynamic rawArgs) async {
+    if (_openingAndroidFullscreen || _inlinePayload == null) return;
+    _openingAndroidFullscreen = true;
+    try {
+      final args = rawArgs is Map
+          ? Map<String, dynamic>.from(rawArgs)
+          : const <String, dynamic>{};
+      final posMs = (args['positionMs'] as num?)?.toInt() ?? 0;
+      final streamIdx =
+          (args['streamIndex'] as num?)?.toInt() ?? _selectedStreamIndex;
+      final speedIdx = (args['speedIndex'] as num?)?.toInt() ?? 1;
+      final wasPlaying = args['wasPlaying'] != false;
+
+      final payload = _inlinePayload!;
+      final rawStreams = payload['streams'];
+      final streamsList = rawStreams is List
+          ? rawStreams
+                .whereType<Map>()
+                .map(
+                  (m) => {
+                    'label': m['label']?.toString() ?? '',
+                    'url': m['url']?.toString() ?? '',
+                  },
+                )
+                .toList()
+          : const <Map<String, String>>[];
+
+      final result = await OhosNativeService.instance.openFullscreenVideoPlayer(
+        url: payload['url']?.toString() ?? '',
+        title: payload['title']?.toString() ?? _currentTitle,
+        streams: streamsList,
+        livingroomUrl: payload['livingroomUrl']?.toString(),
+        token: payload['token']?.toString(),
+        ssoCookie: payload['ssoCookie']?.toString(),
+        zhiyunCookies: payload['zhiyunCookies']?.toString(),
+        isLive: payload['isLive'] == true,
+        preferWeb: payload['preferWeb'] == true,
+        initialPositionMs: posMs,
+        initialStreamIndex: streamIdx,
+        initialSpeedIndex: speedIdx,
+        autoPlay: wasPlaying,
+      );
+      if (mounted && result != null) {
+        final nextIdx = (result['streamIndex'] as num?)?.toInt();
+        if (nextIdx != null && nextIdx >= 0 && nextIdx < _streams.length) {
+          setState(() => _selectedStreamIndex = nextIdx);
+        }
+        await _androidInlineChannel?.invokeMethod('syncState', result);
+      }
+    } finally {
+      _openingAndroidFullscreen = false;
+    }
   }
 
   List<ZhiyunReplayInfo> _buildReplaysFromCatalogue(
@@ -485,11 +634,90 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
           _streams.firstWhereOrNull((s) => s.url == url)?.isLive == true;
 
       final zhiyunCookies = ZhiyunService.buildZhiyunCookieHeader(token);
+      final streamsPayload = _streams
+          .map((s) => {'label': s.label, 'url': s.url})
+          .toList();
+      final playerTitle = '${widget.courseName} · $_currentTitle';
+      final useInlineCard =
+          Platform.isAndroid || !PlatformFeatures.usesFlutterPlugins;
+
+      if (useInlineCard) {
+        final payload = <String, dynamic>{
+          'url': effectiveUrl,
+          'title': playerTitle,
+          'streams': streamsPayload,
+          'livingroomUrl': effectiveLivingroom,
+          if (token != null && token.isNotEmpty) 'token': token,
+          if (ssoCookie != null && ssoCookie.isNotEmpty) 'ssoCookie': ssoCookie,
+          if (zhiyunCookies.isNotEmpty) 'zhiyunCookies': zhiyunCookies,
+          'isLive': streamIsLive,
+          'preferWeb': openWebDirectly,
+          'initialStreamIndex': _selectedStreamIndex,
+        };
+        if (mounted) {
+          setState(() {
+            _inlinePayload = payload;
+            _inlinePlayerActive = true;
+            _lastOhosInlineBounds = null;
+          });
+        }
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted || !_inlinePlayerActive) return;
+
+        if (Platform.isAndroid) {
+          if (_androidInlineChannel != null) {
+            await _androidInlineChannel!.invokeMethod('loadLesson', payload);
+          }
+          return;
+        }
+
+        final rect = _measureInlineSlotRect();
+        final ok = await OhosNativeService.instance.openInAppVideoPlayer(
+          url: effectiveUrl,
+          title: playerTitle,
+          streams: streamsPayload,
+          livingroomUrl: effectiveLivingroom,
+          token: token,
+          ssoCookie: ssoCookie,
+          zhiyunCookies: zhiyunCookies,
+          isLive: streamIsLive,
+          preferWeb: openWebDirectly,
+          inlineMode: true,
+          inlineBounds: rect,
+          inlineRadius: AelRadius.button,
+        );
+        if (rect != null) {
+          _lastOhosInlineBounds = rect;
+        }
+        if (!ok && mounted) {
+          setState(() {
+            _inlinePlayerActive = false;
+            _lastOhosInlineBounds = null;
+          });
+          showAelDialog<void>(
+            context: context,
+            title: '未能启动内置播放器',
+            message: '可尝试改用系统浏览器打开智云课堂页面播放。',
+            actions: [
+              const AelDialogAction<void>(
+                label: '取消',
+                variant: AelButtonVariant.tonal,
+              ),
+              AelDialogAction<void>(
+                label: '浏览器打开',
+                variant: AelButtonVariant.primary,
+                onPressed: () => ZhiyunService.openUrl(fallbackOpenUrl),
+              ),
+            ],
+          );
+        }
+        return;
+      }
 
       final ok = await OhosNativeService.instance.openInAppVideoPlayer(
         url: effectiveUrl,
-        title: '${widget.courseName} · $_currentTitle',
-        streams: _streams.map((s) => {'label': s.label, 'url': s.url}).toList(),
+        title: playerTitle,
+        streams: streamsPayload,
         livingroomUrl: effectiveLivingroom,
         token: token,
         ssoCookie: ssoCookie,
@@ -687,9 +915,15 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
     );
   }
 
-  void _showFullscreenSlide(int index) {
+  Future<void> _showFullscreenSlide(int index) async {
     if (index < 0 || index >= _slides.length) return;
-    Navigator.of(context, rootNavigator: true).push(
+    final suspendOhosInline =
+        !PlatformFeatures.usesFlutterPlugins && _inlinePlayerActive;
+    if (suspendOhosInline) {
+      await OhosNativeService.instance.setInAppVideoInlineSuspended(true);
+    }
+    if (!mounted) return;
+    await Navigator.of(context, rootNavigator: true).push(
       CupertinoPageRoute(
         builder: (ctx) => _FullscreenPptViewer(
           slides: _slides,
@@ -698,6 +932,11 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
         ),
       ),
     );
+    if (mounted && suspendOhosInline && _inlinePlayerActive) {
+      await OhosNativeService.instance.setInAppVideoInlineSuspended(false);
+      _lastOhosInlineBounds = null;
+      _scheduleSyncOhosInlineBounds();
+    }
   }
 
   void _showLessonPicker(BuildContext context) {
@@ -727,12 +966,20 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
                     now.isBefore(
                       r.lessonDate!.add(const Duration(minutes: 150)),
                     );
+                if (!PlatformFeatures.usesFlutterPlugins &&
+                    _inlinePlayerActive) {
+                  OhosNativeService.instance.closeInAppVideoPlayer();
+                }
                 setState(() {
                   _currentSubId = r.subId;
                   _currentTitle = r.lessonTitle;
                   _currentLivingroomUrl = r.livingroomUrl;
                   _isLiveMode = r.isLive || isTodayActiveWindow;
                   _autoLaunched = false;
+                  _inlinePlayerActive = false;
+                  _inlinePayload = null;
+                  _lastOhosInlineBounds = null;
+                  _androidInlineRevision++;
                 });
                 _loadLessonData(autoPlayFirstTime: _isLiveMode);
               },
@@ -1150,9 +1397,188 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage> {
     );
   }
 
+  Widget _buildInlineTopBar(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AelSpacing.lg,
+        AelSpacing.xs,
+        AelSpacing.lg,
+        AelSpacing.xs,
+      ),
+      child: Row(
+        children: [
+          AelCircleIconButton(
+            icon: AelIcons.back,
+            size: 36,
+            iconSize: 18,
+            backgroundColor: colors.tonalTileBg,
+            iconColor: colors.textPrimary,
+            elevated: false,
+            tooltip: '返回',
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+          const SizedBox(width: AelSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.courseName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, color: colors.textSecondary),
+                ),
+                Text(
+                  _currentTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: colors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_replays.length > 1) ...[
+            const SizedBox(width: AelSpacing.sm),
+            AelChip(
+              label: '切换课节',
+              tone: AelChipTone.primary,
+              onTap: () => _showLessonPicker(context),
+            ),
+          ],
+          if (_currentLivingroomUrl.isNotEmpty) ...[
+            const SizedBox(width: AelSpacing.xs),
+            AelCircleIconButton(
+              icon: AelIcons.compass,
+              size: 36,
+              iconSize: 17,
+              backgroundColor: colors.tonalTileBg,
+              iconColor: colors.textPrimary,
+              elevated: false,
+              tooltip: '外部浏览器打开',
+              onPressed: () {
+                final target = ZhiyunService.appendTokenToUrl(
+                  _currentLivingroomUrl,
+                  ZhiyunService.getCachedZhiyunToken(),
+                );
+                ZhiyunService.openUrl(target);
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInlinePlayerCard(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
+    Widget inner;
+    if (Platform.isAndroid && _inlinePayload != null) {
+      inner = AndroidView(
+        key: ValueKey('zhiyun-inline-$_androidInlineRevision'),
+        viewType: 'helechron/zhiyun_inline_player',
+        creationParams: _inlinePayload,
+        creationParamsCodec: const StandardMessageCodec(),
+        onPlatformViewCreated: _onAndroidInlineViewCreated,
+      );
+    } else {
+      _scheduleSyncOhosInlineBounds();
+      inner = Container(
+        key: _inlineSlotKey,
+        color: colors.tonalTileBg,
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CupertinoActivityIndicator(),
+            const SizedBox(height: AelSpacing.sm),
+            Text(
+              '正在加载播放器...',
+              style: TextStyle(fontSize: 12, color: colors.textSecondary),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AelSpacing.lg,
+        vertical: AelSpacing.xs,
+      ),
+      child: AspectRatio(
+        aspectRatio: 16 / 9,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AelRadius.button),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: colors.tonalTileBg,
+              borderRadius: BorderRadius.circular(AelRadius.button),
+              border: Border.all(color: colors.divider, width: 0.6),
+            ),
+            child: inner,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = AelTheme.colorsOf(context);
+    if (_inlinePlayerActive) {
+      return CupertinoPageScaffold(
+        backgroundColor: colors.pageBg,
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              _buildInlineTopBar(context),
+              _buildInlinePlayerCard(context),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AelSpacing.lg,
+                  vertical: AelSpacing.sm,
+                ),
+                child: AelSegmented<int>(
+                  stackedIcon: false,
+                  value: _tabIndex,
+                  items: [
+                    AelSegmentItem(
+                      value: 0,
+                      label: '课堂 PPT (${_slides.length})',
+                    ),
+                    AelSegmentItem(
+                      value: 1,
+                      label: '语音字幕 (${_transcript.length})',
+                    ),
+                  ],
+                  onChanged: (val) => setState(() => _tabIndex = val),
+                ),
+              ),
+              Expanded(
+                child: CustomScrollView(
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: _tabIndex == 0
+                          ? _buildSlidesView(context)
+                          : _buildTranscriptView(context),
+                    ),
+                    const SliverToBoxAdapter(child: NativeBottomBarSpacer()),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return CupertinoPageScaffold(
       backgroundColor: colors.pageBg,
       child: SafeArea(

@@ -19,10 +19,6 @@ private final class ZhiyunAVPlayerViewController: AVPlayerViewController {
   override var shouldAutorotate: Bool {
     return true
   }
-
-  override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation {
-    return .landscapeRight
-  }
 }
 
 @main
@@ -376,7 +372,7 @@ private final class ZhiyunAVPlayerViewController: AVPlayerViewController {
         if #available(iOS 14.2, *) {
           playerVC.canStartPictureInPictureAutomaticallyFromInline = true
         }
-        playerVC.entersFullScreenWhenPlaybackBegins = true
+        playerVC.entersFullScreenWhenPlaybackBegins = false
         playerVC.exitsFullScreenWhenPlaybackEnds = false
         playerVC.delegate = self
         self.presentingVideoHostController = controller

@@ -15,6 +15,7 @@ import 'package:celechron/page/flow/flow_controller.dart';
 import 'package:celechron/page/scholar/course_detail/course_detail_view.dart';
 import 'package:celechron/page/task/task_controller.dart';
 import 'package:celechron/page/task/task_edit_page.dart';
+import 'package:celechron/utils/period_icon_helper.dart';
 import 'package:celechron/utils/swap_day_helper.dart';
 import 'package:celechron/utils/utils.dart';
 
@@ -450,16 +451,6 @@ class CalendarPage extends StatelessWidget {
     return colors.textTertiary;
   }
 
-  IconData _periodIcon(PeriodType type) {
-    return switch (type) {
-      PeriodType.classes => AelIcons.tabScholar,
-      PeriodType.test => AelIcons.exam,
-      PeriodType.user => AelIcons.tabTask,
-      PeriodType.flow => AelIcons.tabFlow,
-      PeriodType.virtual => AelIcons.sparkles,
-    };
-  }
-
   Widget _buildEventRow(
     BuildContext context,
     Period period,
@@ -497,7 +488,7 @@ class CalendarPage extends StatelessWidget {
     return AelListRow(
       title: period.summary,
       subtitle: subtitleParts.join(' · '),
-      icon: _periodIcon(period.type),
+      icon: resolvePeriodIcon(period),
       iconBgColor: accent.withValues(alpha: colors.isDark ? 0.22 : 0.14),
       iconColor: accent,
       showChevron: onTap != null,

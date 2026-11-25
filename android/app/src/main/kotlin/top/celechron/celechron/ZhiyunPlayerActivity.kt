@@ -85,6 +85,18 @@ class ZhiyunPlayerActivity : Activity() {
         const val EXTRA_STREAM_URLS = "streamUrls"
         const val EXTRA_IS_LIVE = "isLive"
         const val EXTRA_PREFER_WEB = "preferWeb"
+        const val EXTRA_START_FULLSCREEN = "startFullscreen"
+        const val EXTRA_RETURN_TO_INLINE = "returnToInline"
+        const val EXTRA_INITIAL_POSITION_MS = "initialPositionMs"
+        const val EXTRA_INITIAL_STREAM_INDEX = "initialStreamIndex"
+        const val EXTRA_INITIAL_SPEED_INDEX = "initialSpeedIndex"
+        const val EXTRA_AUTO_PLAY = "autoPlay"
+
+        const val RESULT_POSITION_MS = "positionMs"
+        const val RESULT_STREAM_INDEX = "streamIndex"
+        const val RESULT_SPEED_INDEX = "speedIndex"
+        const val RESULT_WAS_PLAYING = "wasPlaying"
+        const val RESULT_IS_WEB_MODE = "isWebMode"
 
         private val SAKURA_ACCENT = Color.parseColor("#FB7299")
 
@@ -300,7 +312,6 @@ class ZhiyunPlayerActivity : Activity() {
     private lateinit var liveStatusTextView: TextView
     private lateinit var webFallbackPill: TextView
     private lateinit var speedPill: TextView
-    private lateinit var orientPill: TextView
     private lateinit var fullscreenBtn: ImageView
     private lateinit var bufferingSpinner: ProgressBar
     private lateinit var webAuthOverlay: LinearLayout
@@ -312,6 +323,12 @@ class ZhiyunPlayerActivity : Activity() {
     private var currentStreamIndex = 0
     private val speeds = floatArrayOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
     private var speedIndex = 1 // 1.0x
+
+    private var startFullscreen = false
+    private var returnToInline = false
+    private var initialStreamIndex = 0
+    private var pendingInitialSeekMs = 0L
+    private var pendingAutoPlay = true
 
     private var controlsVisible = true
     private var isFullscreen = false
@@ -367,8 +384,15 @@ class ZhiyunPlayerActivity : Activity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         parseIntentExtras(intent)
         buildUi()
+        speedPill.text = "${speeds[speedIndex]}x"
         setupWindowInsets()
         setupSensorRotation()
+        if (startFullscreen) {
+            isFullscreenLocked = true
+            currentRequestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            applyFullscreenChrome(true)
+        }
         updatePipParams()
         startPlayback()
         mainHandler.postDelayed(progressRunnable, 500L)
@@ -379,6 +403,13 @@ class ZhiyunPlayerActivity : Activity() {
         setIntent(intent)
         parseIntentExtras(intent)
         titleView.text = titleText
+        speedPill.text = "${speeds[speedIndex]}x"
+        if (startFullscreen) {
+            isFullscreenLocked = true
+            currentRequestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            applyFullscreenChrome(true)
+        }
         startPlayback()
     }
 
@@ -393,6 +424,12 @@ class ZhiyunPlayerActivity : Activity() {
         ssoCookie = intent?.getStringExtra(EXTRA_SSO_COOKIE) ?: ""
         zhiyunCookies = intent?.getStringExtra(EXTRA_ZHIYUN_COOKIES) ?: ""
         preferWeb = intent?.getBooleanExtra(EXTRA_PREFER_WEB, false) == true
+        startFullscreen = intent?.getBooleanExtra(EXTRA_START_FULLSCREEN, false) == true
+        returnToInline = intent?.getBooleanExtra(EXTRA_RETURN_TO_INLINE, false) == true
+        pendingInitialSeekMs = (intent?.getLongExtra(EXTRA_INITIAL_POSITION_MS, 0L) ?: 0L).coerceAtLeast(0L)
+        initialStreamIndex = (intent?.getIntExtra(EXTRA_INITIAL_STREAM_INDEX, 0) ?: 0).coerceAtLeast(0)
+        speedIndex = (intent?.getIntExtra(EXTRA_INITIAL_SPEED_INDEX, 1) ?: 1).coerceIn(0, speeds.lastIndex)
+        pendingAutoPlay = intent?.getBooleanExtra(EXTRA_AUTO_PLAY, true) != false
         isLiveStream = intent?.getBooleanExtra(EXTRA_IS_LIVE, false) == true ||
             titleText.contains("直播") ||
             rawUrl.contains("/live/") ||
@@ -554,7 +591,9 @@ class ZhiyunPlayerActivity : Activity() {
         }
 
         val backBtn = makeIconBtn(IconKind.BACK, sizeDp = 48, padDp = 11) {
-            if (isFullscreen) {
+            if (returnToInline) {
+                finishWithPlaybackResult()
+            } else if (isFullscreen) {
                 toggleLandscapeFullscreen()
             } else {
                 finish()
@@ -866,17 +905,6 @@ class ZhiyunPlayerActivity : Activity() {
             }
         }
 
-        orientPill = makePillButton("横屏") {
-            toggleLandscapeFullscreen()
-        }.apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                marginEnd = dp(4)
-            }
-        }
-
         fullscreenBtn = makeIconBtn(IconKind.FULLSCREEN, sizeDp = 46, padDp = 10) {
             toggleLandscapeFullscreen()
         }
@@ -888,7 +916,6 @@ class ZhiyunPlayerActivity : Activity() {
         actionRow.addView(liveSourcePill)
         actionRow.addView(webFallbackPill)
         actionRow.addView(speedPill)
-        actionRow.addView(orientPill)
         actionRow.addView(fullscreenBtn)
 
         bottomBar.addView(progressRow)
@@ -1268,6 +1295,10 @@ class ZhiyunPlayerActivity : Activity() {
     }
 
     private fun toggleLandscapeFullscreen() {
+        if (returnToInline && isFullscreen) {
+            finishWithPlaybackResult()
+            return
+        }
         if (!isFullscreen) {
             isFullscreenLocked = true
             currentRequestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -1281,9 +1312,23 @@ class ZhiyunPlayerActivity : Activity() {
         }
     }
 
+    private fun finishWithPlaybackResult() {
+        val player = activePlayer
+        val resultIntent = Intent().apply {
+            putExtra(RESULT_POSITION_MS, (player?.currentPosition ?: 0L).coerceAtLeast(0L))
+            putExtra(RESULT_STREAM_INDEX, currentStreamIndex)
+            putExtra(RESULT_SPEED_INDEX, speedIndex)
+            putExtra(RESULT_WAS_PLAYING, player?.playWhenReady == true || player?.isPlaying == true)
+            putExtra(RESULT_IS_WEB_MODE, activeWebView != null)
+        }
+        setResult(RESULT_OK, resultIntent)
+        currentRequestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        finish()
+    }
+
     private fun applyFullscreenChrome(fullscreen: Boolean) {
         isFullscreen = fullscreen
-        orientPill.text = if (fullscreen) "竖屏" else "横屏"
         webOrientPill.text = if (fullscreen) "竖屏" else "横屏"
         fullscreenBtn.setImageDrawable(
             VectorIconDrawable(if (fullscreen) IconKind.FULLSCREEN_EXIT else IconKind.FULLSCREEN, Color.WHITE, dp(26))
@@ -1385,7 +1430,7 @@ class ZhiyunPlayerActivity : Activity() {
         if (openWebDirectly && fallback.isNotEmpty()) {
             attachWebView(fallback)
         } else if (streamCandidates.isNotEmpty()) {
-            playStreamAt(0)
+            playStreamAt(initialStreamIndex.coerceIn(0, streamCandidates.lastIndex))
         } else if (fallback.isNotEmpty()) {
             attachWebView(fallback)
         }
@@ -1533,8 +1578,13 @@ class ZhiyunPlayerActivity : Activity() {
         updatePipParams()
         player.setPlaybackParameters(PlaybackParameters(if (isLiveStream) 1.0f else speeds[speedIndex]))
         player.setMediaItem(mediaBuilder.build())
+        if (pendingInitialSeekMs > 0L && !isLiveStream) {
+            player.seekTo(pendingInitialSeekMs)
+            pendingInitialSeekMs = 0L
+        }
         player.prepare()
-        player.playWhenReady = true
+        player.playWhenReady = pendingAutoPlay
+        pendingAutoPlay = true
         mainHandler.postDelayed(prepareWatchdogRunnable, if (isLiveStream) 5500L else 8000L)
     }
 
@@ -1954,6 +2004,14 @@ class ZhiyunPlayerActivity : Activity() {
 
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
+        if (returnToInline) {
+            if (customViewExitCallback != null) {
+                exitWebFullscreen?.invoke()
+            } else {
+                finishWithPlaybackResult()
+            }
+            return
+        }
         if (isFullscreen) {
             if (customViewExitCallback != null) {
                 exitWebFullscreen?.invoke()
