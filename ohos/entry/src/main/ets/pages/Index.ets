@@ -139,7 +139,7 @@ struct Index {
   @State private isLiveStream: boolean = false;
   @State private isPlayerFullscreen: boolean = false;
   @State private isPlayerMiniWindow: boolean = false;
-  @State private isSystemPipActive: boolean = false;
+  @State @Watch('onSystemPipActiveChanged') private isSystemPipActive: boolean = false;
   @State private isFloatingWindow: boolean = false;
   @State private isSplitWindow: boolean = false;
   @State private isFreeWindowMode: boolean = false;
@@ -189,9 +189,49 @@ struct Index {
   aboutToAppear(): void {
     this.loadSafeArea();
     this.resolveMaterialCapability();
+    try {
+      this.context.eventHub.on('inAppVideoRestoreFromPip', () => {
+        this.restoreFromSystemPip();
+      });
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, `eventHub.on inAppVideoRestoreFromPip failed: ${JSON.stringify(e)}`);
+    }
+  }
+
+  /// 系统画中画状态变化时通知 Flutter，便于原位置展示“画中画播放中”占位而不是“正在加载”。
+  onSystemPipActiveChanged(): void {
+    try {
+      this.context.eventHub.emit('inAppVideoPipChanged', this.isSystemPipActive);
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, `emit inAppVideoPipChanged failed: ${JSON.stringify(e)}`);
+    }
+  }
+
+  /// 从系统画中画回到应用内原位置（由 Flutter 占位卡片“回到此处”触发）。
+  private async restoreFromSystemPip(): Promise<void> {
+    const pip = this.pipController;
+    if (pip === undefined || !this.isSystemPipActive) {
+      this.isSystemPipActive = false;
+      return;
+    }
+    this.pipRestoring = true;
+    this.isSystemPipActive = false;
+    this.controlsVisible = true;
+    this.syncLandscapeMultiWindow();
+    this.scheduleHideOverlay();
+    try {
+      await pip.stopPiP();
+    } catch (e) {
+      this.pipRestoring = false;
+      hilog.warn(DOMAIN, TAG, `restoreFromSystemPip stopPiP failed: ${JSON.stringify(e)}`);
+    }
   }
 
   aboutToDisappear(): void {
+    try {
+      this.context.eventHub.off('inAppVideoRestoreFromPip');
+    } catch (_) {
+    }
     this.stopGravitySensor();
     this.clearOverlayTimers();
     this.setLandscapeMultiWindowEnabled(false);
@@ -805,6 +845,14 @@ struct Index {
           }
           this.syncLandscapeMultiWindow();
           this.scheduleHideOverlay();
+          // 保险：若系统未在恢复后及时关闭画中画窗口，主动停止，避免回到原位后仍停留在画中画
+          setTimeout(() => {
+            const stale = this.pipController;
+            if (this.pipRestoring && stale !== undefined && !this.isSystemPipActive) {
+              stale.stopPiP().catch((_: Object) => {
+              });
+            }
+          }, 1500);
         } else if (state === PiPWindow.PiPState.ABOUT_TO_STOP) {
           if (!this.pipRestoring) {
             this.isSystemPipActive = false;

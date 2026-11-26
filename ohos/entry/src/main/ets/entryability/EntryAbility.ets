@@ -98,6 +98,9 @@ export default class EntryAbility extends FlutterAbility {
       this.context.eventHub.on('inAppVideoClosed', () => {
         this.methodChannel?.invokeMethod('onInAppVideoClosed', null);
       });
+      this.context.eventHub.on('inAppVideoPipChanged', (active: boolean) => {
+        this.methodChannel?.invokeMethod('onInAppVideoPipChanged', { active: active === true });
+      });
     } catch (e) {
       hilog.warn(DOMAIN, TAG, `eventHub.on inAppVideoClosed failed: ${JSON.stringify(e)}`);
     }
@@ -854,6 +857,14 @@ export default class EntryAbility extends FlutterAbility {
         break;
       case 'closeInAppVideoPlayer':
         this.closeInAppVideoPlayer(result);
+        break;
+      case 'restoreInAppVideoFromPip':
+        try {
+          this.context.eventHub.emit('inAppVideoRestoreFromPip');
+          result.success(true);
+        } catch (_) {
+          result.success(false);
+        }
         break;
       case 'exitApp':
         hilog.info(DOMAIN, TAG, 'exitApp requested from Dart');

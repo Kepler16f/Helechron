@@ -750,6 +750,7 @@ class OhosNativeService {
   static void Function(int index)? _nativeTabHandler;
   static Future<bool> Function()? _backPressedHandler;
   static void Function()? _inAppVideoClosedHandler;
+  static void Function(bool active)? _inAppVideoPipHandler;
   static bool _routeHandlerInstalled = false;
 
   /// 注册小组件点击跳转回调（原生 -> Dart）。
@@ -779,6 +780,24 @@ class OhosNativeService {
     _ensureIncomingHandlerInstalled();
   }
 
+  /// 注册原生系统画中画状态回调（原生 -> Dart）。
+  void installInAppVideoPipHandler(void Function(bool active)? handler) {
+    _inAppVideoPipHandler = handler;
+    _ensureIncomingHandlerInstalled();
+  }
+
+  /// 从系统画中画回到应用内原位置。
+  Future<void> restoreInAppVideoFromPip() async {
+    if (PlatformFeatures.usesFlutterPlugins) return;
+    try {
+      await _channel.invokeMethod('restoreInAppVideoFromPip');
+    } on PlatformException {
+      // ignore
+    } on MissingPluginException {
+      // ignore
+    }
+  }
+
   static void _ensureIncomingHandlerInstalled() {
     if (_routeHandlerInstalled) return;
     _routeHandlerInstalled = true;
@@ -803,6 +822,12 @@ class OhosNativeService {
           return false;
         case 'onInAppVideoClosed':
           _inAppVideoClosedHandler?.call();
+          return null;
+        case 'onInAppVideoPipChanged':
+          final pipArgs = call.arguments;
+          if (pipArgs is Map) {
+            _inAppVideoPipHandler?.call(pipArgs['active'] == true);
+          }
           return null;
         default:
           throw MissingPluginException(

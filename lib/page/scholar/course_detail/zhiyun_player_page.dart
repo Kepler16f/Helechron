@@ -75,6 +75,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage>
   MethodChannel? _androidInlineChannel;
   int _androidInlineRevision = 0;
   bool _openingAndroidFullscreen = false;
+  bool _ohosPipActive = false;
 
   @override
   void initState() {
@@ -83,6 +84,9 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage>
     if (!PlatformFeatures.usesFlutterPlugins) {
       OhosNativeService.instance.installInAppVideoClosedHandler(
         _handleOhosInlineClosed,
+      );
+      OhosNativeService.instance.installInAppVideoPipHandler(
+        _handleOhosPipChanged,
       );
     }
     _replays = List<ZhiyunReplayInfo>.from(widget.replays);
@@ -166,6 +170,7 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage>
     _androidInlineChannel = null;
     if (!PlatformFeatures.usesFlutterPlugins) {
       OhosNativeService.instance.installInAppVideoClosedHandler(null);
+      OhosNativeService.instance.installInAppVideoPipHandler(null);
       if (_inlinePlayerActive) {
         OhosNativeService.instance.closeInAppVideoPlayer();
       }
@@ -173,10 +178,21 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage>
     super.dispose();
   }
 
+  void _handleOhosPipChanged(bool active) {
+    if (!mounted || _ohosPipActive == active) return;
+    setState(() => _ohosPipActive = active);
+    if (!active && _inlinePlayerActive) {
+      // 从画中画回到原位后重新对齐原生播放器与卡片槽位，确保回到普通内联播放。
+      _lastOhosInlineBounds = null;
+      _scheduleSyncOhosInlineBounds();
+    }
+  }
+
   void _handleOhosInlineClosed() {
     if (!mounted) return;
     setState(() {
       _inlinePlayerActive = false;
+      _ohosPipActive = false;
       _lastOhosInlineBounds = null;
     });
   }
@@ -1492,17 +1508,27 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage>
         key: _inlineSlotKey,
         color: colors.tonalTileBg,
         alignment: Alignment.center,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CupertinoActivityIndicator(),
-            const SizedBox(height: AelSpacing.sm),
-            Text(
-              '正在加载播放器...',
-              style: TextStyle(fontSize: 12, color: colors.textSecondary),
-            ),
-          ],
-        ),
+        child: _ohosPipActive
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(AelIcons.video, size: 22, color: colors.textSecondary),
+                  const SizedBox(height: AelSpacing.sm),
+                  Text(
+                    '视频正在画中画窗口中播放',
+                    style: TextStyle(fontSize: 12, color: colors.textSecondary),
+                  ),
+                  const SizedBox(height: AelSpacing.sm),
+                  AelButton(
+                    variant: AelButtonVariant.tonal,
+                    icon: AelIcons.fullscreenExit,
+                    label: '回到此处',
+                    onPressed: () =>
+                        OhosNativeService.instance.restoreInAppVideoFromPip(),
+                  ),
+                ],
+              )
+            : const CupertinoActivityIndicator(),
       );
     }
 
