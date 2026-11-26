@@ -212,6 +212,7 @@ struct Index {
     const pip = this.pipController;
     if (pip === undefined || !this.isSystemPipActive) {
       this.isSystemPipActive = false;
+      this.pipRestoring = false;
       return;
     }
     this.pipRestoring = true;
@@ -220,9 +221,14 @@ struct Index {
     this.syncLandscapeMultiWindow();
     this.scheduleHideOverlay();
     try {
+      pip.setAutoStartEnabled(false);
+    } catch (_) {
+    }
+    try {
       await pip.stopPiP();
     } catch (e) {
       this.pipRestoring = false;
+      this.pipController = undefined;
       hilog.warn(DOMAIN, TAG, `restoreFromSystemPip stopPiP failed: ${JSON.stringify(e)}`);
     }
   }
@@ -798,7 +804,7 @@ struct Index {
         return;
       }
       if (this.pipController !== undefined) {
-        this.pipController.setAutoStartEnabled(this.isVideoPlaying);
+        this.pipController.setAutoStartEnabled(false);
         try {
           this.pipController.updateContentSize(this.videoContentWidth, this.videoContentHeight);
         } catch (_) {
@@ -815,7 +821,7 @@ struct Index {
       };
       const ctrl = await PiPWindow.create(config);
       this.pipController = ctrl;
-      ctrl.setAutoStartEnabled(this.isVideoPlaying);
+      ctrl.setAutoStartEnabled(false);
       ctrl.on('stateChange', (state: PiPWindow.PiPState, reason: string) => {
         hilog.info(DOMAIN, TAG, `PiP stateChange: ${state}, reason=${reason}`);
         if (state === PiPWindow.PiPState.ABOUT_TO_START) {
@@ -840,19 +846,27 @@ struct Index {
           this.pipRestoring = true;
           this.isSystemPipActive = false;
           this.controlsVisible = true;
+          try {
+            ctrl.setAutoStartEnabled(false);
+          } catch (_) {
+          }
           if (this.sensorRotation && !this.isSystemMultiWindow()) {
             this.startGravitySensor();
           }
           this.syncLandscapeMultiWindow();
           this.scheduleHideOverlay();
-          // 保险：若系统未在恢复后及时关闭画中画窗口，主动停止，避免回到原位后仍停留在画中画
+          // 保险：若系统未在恢复后及时关闭画中画窗口，主动停止并释放控制器，避免回到原位后仍停留在画中画
           setTimeout(() => {
             const stale = this.pipController;
             if (this.pipRestoring && stale !== undefined && !this.isSystemPipActive) {
+              try {
+                stale.setAutoStartEnabled(false);
+              } catch (_) {
+              }
               stale.stopPiP().catch((_: Object) => {
               });
             }
-          }, 1500);
+          }, 1200);
         } else if (state === PiPWindow.PiPState.ABOUT_TO_STOP) {
           if (!this.pipRestoring) {
             this.isSystemPipActive = false;
@@ -865,20 +879,17 @@ struct Index {
           this.pipController = undefined;
           if (finishedCtrl !== undefined) {
             try {
+              finishedCtrl.setAutoStartEnabled(false);
               finishedCtrl.off('stateChange');
               finishedCtrl.off('controlPanelActionEvent');
             } catch (_) {
             }
           }
           if (wasRestoring) {
+            // 回到原位后保持为普通播放器状态，不再自动重建或强制拉起画中画
             this.controlsVisible = true;
             this.syncLandscapeMultiWindow();
             this.scheduleHideOverlay();
-            setTimeout(() => {
-              if (this.inAppVideoVisible && !this.useWebFallback && !this.isSystemPipActive) {
-                this.initOrUpdateSystemPip();
-              }
-            }, 200);
           } else if (this.inAppVideoVisible) {
             this.closeVideoOverlay();
           }
@@ -900,7 +911,7 @@ struct Index {
             this.togglePlayPause();
             return;
           }
-          ctrl.setAutoStartEnabled(this.isVideoPlaying);
+          ctrl.setAutoStartEnabled(false);
           this.syncPipPlaybackState();
         }
       });
@@ -1026,7 +1037,6 @@ struct Index {
           }
           try {
             await player.play();
-            await this.initOrUpdateSystemPip();
           } catch (playErr) {
             hilog.warn(DOMAIN, TAG, `AVPlayer play failed: ${JSON.stringify(playErr)}`);
           }
@@ -1038,7 +1048,6 @@ struct Index {
           }
           this.isVideoPlaying = true;
           this.manualTargetPlaying = true;
-          this.pipController?.setAutoStartEnabled(true);
           this.syncPipPlaybackState();
           this.scheduleHideOverlay();
         } else if (state === 'paused') {
@@ -1047,7 +1056,6 @@ struct Index {
           }
           this.isVideoPlaying = false;
           this.manualTargetPlaying = false;
-          this.pipController?.setAutoStartEnabled(false);
           this.syncPipPlaybackState();
           if (!this.isSystemPipActive) {
             this.controlsVisible = true;
@@ -1055,7 +1063,6 @@ struct Index {
         } else if (state === 'completed') {
           this.isVideoPlaying = false;
           this.manualTargetPlaying = false;
-          this.pipController?.setAutoStartEnabled(false);
           this.syncPipPlaybackState();
           this.controlsVisible = true;
         }
@@ -1171,7 +1178,6 @@ struct Index {
       this.hideOverlayTimer = -1;
     }
     try {
-      this.pipController?.setAutoStartEnabled(nextPlaying);
       this.syncPipPlaybackState();
       if (nextPlaying) {
         this.avPlayer.play();
