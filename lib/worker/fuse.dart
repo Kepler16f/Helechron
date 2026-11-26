@@ -17,7 +17,7 @@ class Fuse {
   final HttpClient _httpClient = HttpClient();
   final DatabaseHelper _db = Get.find<DatabaseHelper>(tag: 'db');
 
-  // 应用内展示文本（关于�?诊断日志/版权页均取此值）�?
+  // 应用内展示文本（关于页/诊断日志/版权页均取此值）。
   String get displayVersion => '0.2.0_dev10';
 
   Fuse() {
@@ -32,7 +32,7 @@ class Fuse {
         return null;
       }
 
-      // 仅检查本移植项目的发布版本，不能把上游版本当�?Helechron 更新�?
+      // 仅检查本移植项目的发布版本，不能把上游版本当作 Helechron 更新。
       const checkUpdateUrl =
           'https://api.github.com/repos/Kepler16f/Helechron/releases/latest';
 
