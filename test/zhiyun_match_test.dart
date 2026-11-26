@@ -237,14 +237,18 @@ void main() {
 
     test('sub_status=2 与 class_begin/course_begin 字段可正确识别正在直播并匹配当节', () {
       final now = DateTime.now();
+      final candidateBegin = now.subtract(const Duration(minutes: 15));
+      final classBegin =
+          candidateBegin.year == now.year &&
+              candidateBegin.month == now.month &&
+              candidateBegin.day == now.day
+          ? candidateBegin
+          : DateTime(now.year, now.month, now.day, 0, 0, 1);
       final liveItem = <String, dynamic>{
         'sub_id': '2026001',
         'title': '第9讲 实时直播',
         'sub_status': '2',
-        'class_begin':
-            (now.subtract(const Duration(minutes: 15)).millisecondsSinceEpoch ~/
-                    1000)
-                .toString(),
+        'class_begin': (classBegin.millisecondsSinceEpoch ~/ 1000).toString(),
         'class_end':
             (now.add(const Duration(minutes: 30)).millisecondsSinceEpoch ~/
                     1000)
