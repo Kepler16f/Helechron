@@ -88,13 +88,16 @@ class _ExamListPageState extends State<ExamListPage> {
               style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.bold,
-                color: colors.textPrimary,
+                color: colors.onWarningContainer,
               ),
             ),
             const SizedBox(height: 4),
             Text(
               '时间：${next.chineseTime}',
-              style: TextStyle(fontSize: 13, color: colors.textSecondary),
+              style: TextStyle(
+                fontSize: 13,
+                color: colors.onWarningContainer.withValues(alpha: 0.86),
+              ),
             ),
             const SizedBox(height: 2),
             GestureDetector(
@@ -107,16 +110,20 @@ class _ExamListPageState extends State<ExamListPage> {
                       '考场：${next.location ?? "未知"} · 座位：${next.seat ?? "未知"}',
                       style: TextStyle(
                         fontSize: 13,
-                        color: colors.primary,
-                        fontWeight: FontWeight.w500,
+                        color: colors.warning,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
-                  Icon(AelIcons.location, size: 15, color: colors.primary),
+                  Icon(AelIcons.location, size: 15, color: colors.warning),
                   const SizedBox(width: 2),
                   Text(
                     '导航',
-                    style: TextStyle(fontSize: 12, color: colors.primary),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: colors.warning,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ),
@@ -124,7 +131,10 @@ class _ExamListPageState extends State<ExamListPage> {
             const SizedBox(height: 6),
             Text(
               '本学期剩余 $remainingCount 门未考，加油冲刺！',
-              style: TextStyle(fontSize: 12, color: colors.textTertiary),
+              style: TextStyle(
+                fontSize: 12,
+                color: colors.onWarningContainer.withValues(alpha: 0.78),
+              ),
             ),
           ],
         ),

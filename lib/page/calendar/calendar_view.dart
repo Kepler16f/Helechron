@@ -36,7 +36,7 @@ class CalendarPage extends StatelessWidget {
       title: '跳转日期',
       builder: (sheetCtx) {
         final colors = AelTheme.colorsOf(sheetCtx);
-        final brightness = CupertinoTheme.brightnessOf(sheetCtx);
+        final brightness = colors.brightness;
         return Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -168,13 +168,13 @@ class CalendarPage extends StatelessWidget {
               );
             }),
             Expanded(
-              child: Obx(() {
-                if (_calendarController.viewMode.value ==
-                    CalendarViewMode.schedule) {
-                  return ScheduleView(controller: _calendarController);
-                }
-                return LayoutBuilder(
-                  builder: (context, constraints) {
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return Obx(() {
+                    if (_calendarController.viewMode.value ==
+                        CalendarViewMode.schedule) {
+                      return ScheduleView(controller: _calendarController);
+                    }
                     final selected = _calendarController.selectedDay.value
                         .copyWith(isUtc: false);
                     final events = _calendarController.getEventsForDay(
@@ -309,9 +309,9 @@ class CalendarPage extends StatelessWidget {
                         ),
                       ],
                     );
-                  },
-                );
-              }),
+                  });
+                },
+              ),
             ),
           ],
         ),
@@ -427,50 +427,52 @@ class CalendarPage extends StatelessWidget {
                 : colors.onInfoContainer;
 
             return Positioned.fill(
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  if (hasSwap)
-                    Positioned(
-                      top: 2,
-                      right: 3,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: badgeBg,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 3,
-                            vertical: 0.5,
+              child: IgnorePointer(
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    if (hasSwap)
+                      Positioned(
+                        top: 2,
+                        right: 3,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: badgeBg,
+                            borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text(
-                            isHoliday ? '休' : '班',
-                            style: TextStyle(
-                              fontSize: 8.5,
-                              fontWeight: FontWeight.bold,
-                              color: badgeFg,
-                              height: 1.1,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 3,
+                              vertical: 0.5,
+                            ),
+                            child: Text(
+                              isHoliday ? '休' : '班',
+                              style: TextStyle(
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.bold,
+                                color: badgeFg,
+                                height: 1.1,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  if (events.isNotEmpty)
-                    Positioned(
-                      bottom: 2,
-                      left: 0,
-                      right: 0,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          for (var event in events.take(4))
-                            singleMarkerBuilder(context, day, event),
-                        ],
+                    if (events.isNotEmpty)
+                      Positioned(
+                        bottom: 2,
+                        left: 0,
+                        right: 0,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            for (var event in events.take(4))
+                              singleMarkerBuilder(context, day, event),
+                          ],
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             );
           },
@@ -607,6 +609,12 @@ class CalendarPage extends StatelessWidget {
   }
 
   Future<void> showCardDialog(BuildContext context, Task deadline) async {
+    final colors = AelTheme.colorsOf(context);
+    final lineStyle = TextStyle(
+      fontSize: 14.5,
+      height: 1.5,
+      color: colors.textPrimary,
+    );
     return showAelDialog<void>(
       context: context,
       title: deadline.summary,
@@ -615,12 +623,19 @@ class CalendarPage extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (deadline.repeatType != TaskRepeatType.norepeat)
-            const Text('重复日程，接下来的时段：'),
-          Text('开始于 ${toStringHumanReadable(deadline.startTime)}'),
-          Text('结束于 ${toStringHumanReadable(deadline.endTime)}'),
-          if (deadline.location.isNotEmpty) Text('地点：${deadline.location}'),
+            Text('重复日程，接下来的时段：', style: lineStyle),
+          Text(
+            '开始于 ${toStringHumanReadable(deadline.startTime)}',
+            style: lineStyle,
+          ),
+          Text(
+            '结束于 ${toStringHumanReadable(deadline.endTime)}',
+            style: lineStyle,
+          ),
+          if (deadline.location.isNotEmpty)
+            Text('地点：${deadline.location}', style: lineStyle),
           if (deadline.description.isNotEmpty)
-            Text('说明：${deadline.description}'),
+            Text('说明：${deadline.description}', style: lineStyle),
         ],
       ),
       actions: [

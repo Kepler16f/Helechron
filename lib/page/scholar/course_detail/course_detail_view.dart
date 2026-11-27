@@ -11,13 +11,11 @@ import 'package:celechron/design/icons/ael_icons.dart';
 import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/http/zjuServices/courses.dart';
 import 'package:celechron/http/zjuServices/network_defense.dart';
-import 'package:celechron/model/option.dart';
 import 'package:celechron/services/diagnostic_log_service.dart';
 import 'package:celechron/services/ohos_native_service.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:celechron/model/course.dart';
 import 'package:celechron/model/period.dart';
 
@@ -28,9 +26,8 @@ import 'package:celechron/model/task.dart';
 import 'package:celechron/model/todo.dart';
 import 'package:celechron/page/scholar/todo/todo_card.dart';
 import 'package:celechron/page/task/homework_submission_page.dart';
-import 'package:celechron/design/app_notification.dart';
-import 'package:celechron/services/file_download_share_helper.dart';
 import 'package:celechron/services/zhiyun_service.dart';
+import 'courseware_batch_page.dart';
 import 'zhiyun_player_page.dart';
 import 'zhiyun_resource_batch_page.dart';
 
@@ -1371,7 +1368,7 @@ class _ZhiyunCardState extends State<ZhiyunCard> {
   }
 }
 
-class CoursewareDownloadCard extends StatefulWidget {
+class CoursewareDownloadCard extends StatelessWidget {
   final Course course;
   final String? semesterName;
   final String? preferredHalfTag;
@@ -1382,243 +1379,6 @@ class CoursewareDownloadCard extends StatefulWidget {
     this.semesterName,
     this.preferredHalfTag,
   });
-
-  @override
-  State<CoursewareDownloadCard> createState() => _CoursewareDownloadCardState();
-}
-
-class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
-  bool _expanded = false;
-  bool _loading = false;
-  bool _hasFetched = false;
-  String? _error;
-  final List<CoursewareItem> _items = [];
-  final Map<String, String> _downloadedPaths = {};
-  final Map<String, String> _downloadedNames = {};
-  final Set<String> _downloadingKeys = {};
-
-  Future<String> _resolveSaveDir() async {
-    if (Get.isRegistered<Option>(tag: 'option')) {
-      final custom = Get.find<Option>(tag: 'option').downloadPath.value.trim();
-      if (custom.isNotEmpty) {
-        return custom;
-      }
-    }
-    final doc = await getApplicationDocumentsDirectory();
-    return '${doc.path}/courseware';
-  }
-
-  Future<void> _fetchCourseware() async {
-    setState(() {
-      _expanded = true;
-      _loading = true;
-      _error = null;
-    });
-
-    final client = HttpClient();
-    applyZjuNetworkDefense(client);
-    try {
-      final list = <CoursewareItem>[];
-      final tronItems = await Courses.fetchCoursewareList(
-        client,
-        courseName: widget.course.name,
-        courseCode: widget.course.id,
-      );
-      list.addAll(tronItems);
-
-      final zhiyunCid = ZhiyunService.getKnownCourseId(
-        widget.course.name,
-        courseCode: widget.course.id,
-        teacher: widget.course.teacher,
-        course: widget.course,
-        semesterName: widget.semesterName,
-        preferredHalfTag: widget.preferredHalfTag,
-      );
-      if (zhiyunCid != null && zhiyunCid.isNotEmpty) {
-        final zyFiles = await ZhiyunService.fetchZhiyunCourseware(zhiyunCid);
-        for (final f in zyFiles) {
-          list.add(
-            CoursewareItem(
-              name: f['name'] ?? '智云课件',
-              sectionTitle: f['sectionTitle'] ?? '智云课堂',
-              sizeBytes: 0,
-              directUrl: f['url'],
-              source: '智云课堂',
-            ),
-          );
-        }
-      }
-
-      // 检查本地是否已下载（含持久化记录，兼容 SAF 目录）
-      final saveDir = await _resolveSaveDir();
-      final downloaded = <String, String>{};
-      for (final item in list) {
-        final key = _itemKey(item);
-        if (!saveDir.startsWith('content://') &&
-            !saveDir.startsWith('file://')) {
-          final safeName = item.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-          final file = File('$saveDir/$safeName');
-          try {
-            if (await file.exists() && await file.length() > 0) {
-              downloaded[key] = file.path;
-              continue;
-            }
-          } catch (_) {}
-        }
-        final rec = await FileDownloadShareHelper.getDownloadRecord(
-          'courseware|$key',
-        );
-        if (rec != null) {
-          downloaded[key] = rec.savedPath;
-          _downloadedNames[key] = rec.fileName;
-        }
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _items
-          ..clear()
-          ..addAll(list);
-        _downloadedPaths
-          ..clear()
-          ..addAll(downloaded);
-        _hasFetched = true;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _hasFetched = true;
-        _loading = false;
-        _error = '$e';
-      });
-    } finally {
-      client.close(force: true);
-    }
-  }
-
-  String _itemKey(CoursewareItem item) =>
-      '${item.source}_${item.uploadId}_${item.referenceId}_${item.name}';
-
-  Future<void> _downloadItem(
-    BuildContext context,
-    CoursewareItem item, {
-    bool share = false,
-  }) async {
-    final key = _itemKey(item);
-    if (_downloadingKeys.contains(key)) return;
-
-    // 分享：已下载则直接分享原文件，未下载则等同「下载并分享」
-    if (share) {
-      final saved = _downloadedPaths[key];
-      if (saved != null) {
-        await _shareCoursewareItem(item, saved);
-        return;
-      }
-    }
-
-    final currentDir = await _resolveSaveDir();
-    if (!context.mounted) return;
-    final target = await FileDownloadShareHelper.chooseSaveTarget(
-      context,
-      defaultFileName: _downloadedNames[key] ?? item.name,
-      currentDir: currentDir,
-      title: share ? '下载并分享课件' : '下载课件',
-      confirmHint: share ? null : '仅下载保存，不会触发分享：',
-    );
-    if (target == null || !mounted) return;
-    final saveDir = target.directory;
-
-    setState(() {
-      _downloadingKeys.add(key);
-    });
-
-    final client = HttpClient();
-    applyZjuNetworkDefense(client);
-    try {
-      final result =
-          await FileDownloadShareHelper.downloadCoursewareAndPrepareShare(
-            client,
-            item: item,
-            saveDir: saveDir,
-            customFileName: target.fileName,
-          );
-      if (!mounted) return;
-      setState(() {
-        _downloadingKeys.remove(key);
-        if (result.isSuccess) {
-          _downloadedPaths[key] = result.savedPath!;
-          _downloadedNames[key] = result.fileName;
-        }
-      });
-
-      if (result.isSuccess) {
-        await FileDownloadShareHelper.saveDownloadRecord(
-          'courseware|$key',
-          savedPath: result.savedPath!,
-          fileName: result.fileName,
-          mimeType: result.mimeType,
-        );
-        AppNotification.success(
-          share ? '已保存，正在分享' : '下载完成',
-          '${result.fileName}\n已保存：${FileDownloadShareHelper.formatDirShort(saveDir)}',
-        );
-        if (result.shareFile != null && share) {
-          await FileDownloadShareHelper.shareFiles(
-            [result.shareFile!],
-            mimeTypes: [result.mimeType],
-            subject: result.fileName,
-          );
-        } else if (share) {
-          AppNotification.info('分享提示', '文件已保存，暂未能生成系统分享副本');
-        }
-      } else if (context.mounted) {
-        AppNotification.error('下载失败', '未能获取该课件的下载文件流，请确认已登录学在浙大');
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _downloadingKeys.remove(key);
-      });
-      AppNotification.error('下载异常', '$e');
-    } finally {
-      client.close(force: true);
-    }
-  }
-
-  Future<void> _shareCoursewareItem(
-    CoursewareItem item,
-    String savedPath,
-  ) async {
-    final effectiveName = _downloadedNames[_itemKey(item)] ?? item.name;
-    await FileDownloadShareHelper.shareSavedOrPrepare(
-      savedPath: savedPath,
-      fileName: effectiveName,
-      mimeType: FileDownloadShareHelper.inferMimeType(effectiveName),
-      subject: effectiveName,
-      onPrepareShareFile: () async {
-        final client = HttpClient();
-        applyZjuNetworkDefense(client);
-        try {
-          final tempDir = await getTemporaryDirectory();
-          final dlDir = Directory('${tempDir.path}/celechron_share_dl');
-          if (!await dlDir.exists()) {
-            await dlDir.create(recursive: true);
-          }
-          final result =
-              await FileDownloadShareHelper.downloadCoursewareAndPrepareShare(
-                client,
-                item: item,
-                saveDir: dlDir.path,
-                customFileName: effectiveName,
-              );
-          return result.shareFile;
-        } finally {
-          client.close(force: true);
-        }
-      },
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1633,299 +1393,32 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    AelIconBadge(
-                      icon: AelIcons.folder,
-                      size: 36,
-                      iconSize: 18,
-                      style: AelIconBadgeStyle.cookie,
-                      backgroundColor: colors.primaryContainer,
-                      iconColor: colors.onPrimaryContainer,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () {
-                          if (_expanded) {
-                            setState(() {
-                              _expanded = false;
-                            });
-                          } else if (_hasFetched) {
-                            setState(() {
-                              _expanded = true;
-                            });
-                          } else if (!_loading) {
-                            _fetchCourseware();
-                          }
-                        },
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '学在浙大课件下载',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: colors.textPrimary,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _items.isNotEmpty
-                                  ? '已获取 ${_items.length} 个附件 · 点击${_expanded ? "收起" : "展开"}'
-                                  : _hasFetched
-                                  ? '暂无公开课件附件 · 点击${_expanded ? "收起" : "展开"}'
-                                  : '支持选择保存路径、下载课件并唤起原生分享',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: colors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    if (!_hasFetched && !_expanded)
-                      _loading
-                          ? const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 10),
-                              child: CupertinoActivityIndicator(radius: 8),
-                            )
-                          : AelChip(
-                              label: '展开课件',
-                              leadingIcon: AelIcons.download,
-                              tone: AelChipTone.primary,
-                              onTap: _fetchCourseware,
-                            )
-                    else
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (_loading)
-                            const SizedBox(
-                              width: 32,
-                              height: 32,
-                              child: Center(
-                                child: CupertinoActivityIndicator(radius: 7),
-                              ),
-                            )
-                          else
-                            AelCircleIconButton(
-                              icon: AelIcons.refresh,
-                              size: 32,
-                              iconSize: 14,
-                              backgroundColor: colors.tonalTileBg,
-                              iconColor: colors.textPrimary,
-                              elevated: false,
-                              tooltip: '刷新课件列表',
-                              onPressed: _fetchCourseware,
-                            ),
-                          const SizedBox(width: 6),
-                          AelChip(
-                            label: _expanded ? '收起' : '展开',
-                            leadingIcon: _expanded
-                                ? AelIcons.chevronUp
-                                : AelIcons.chevronDown,
-                            tone: _expanded
-                                ? AelChipTone.neutral
-                                : AelChipTone.primary,
-                            onTap: () {
-                              setState(() {
-                                _expanded = !_expanded;
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                  ],
+                // 学在浙大 / 智云课程课件批量管理与下载
+                _buildBatchResourceRow(
+                  context,
+                  colors: colors,
+                  icon: AelIcons.folder,
+                  iconBg: colors.primaryContainer,
+                  iconFg: colors.onPrimaryContainer,
+                  title: '学在浙大课件下载',
+                  subtitle: '多选批量下载与分享课程课件附件（学在浙大 / 智云）',
+                  onTap: () => _openCoursewareBatchPage(context),
                 ),
-                if (_expanded) ...[
-                  const SizedBox(height: 12),
-                  if (_loading)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      child: Center(
-                        child: Column(
-                          children: [
-                            const CupertinoActivityIndicator(),
-                            const SizedBox(height: 6),
-                            Text(
-                              '正在同步学在浙大与智云课堂课件...',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: colors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  else if (_error != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                        '获取课件失败：$_error',
-                        style: TextStyle(fontSize: 12, color: colors.error),
-                      ),
-                    )
-                  else if (_items.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                        '暂未在学在浙大或智云课堂检索到该课程的公开课件附件。',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: colors.textSecondary,
-                        ),
-                      ),
-                    )
-                  else
-                    ..._items.map((item) {
-                      final key = _itemKey(item);
-                      final downloading = _downloadingKeys.contains(key);
-                      final savedPath = _downloadedPaths[key];
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Row(
-                          children: [
-                            Icon(
-                              AelIcons.file,
-                              size: 18,
-                              color: colors.primary,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    item.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 13.5,
-                                      fontWeight: FontWeight.w500,
-                                      color: colors.textPrimary,
-                                    ),
-                                  ),
-                                  Text(
-                                    '${item.sectionTitle} · ${item.formattedSize}',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: colors.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            if (downloading)
-                              const CupertinoActivityIndicator(radius: 8)
-                            else ...[
-                              CupertinoButton(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 9,
-                                  vertical: 5,
-                                ),
-                                minimumSize: const Size(28, 28),
-                                color: savedPath != null
-                                    ? colors.successContainer
-                                    : colors.primaryContainer,
-                                borderRadius: BorderRadius.circular(999),
-                                onPressed: () => _downloadItem(context, item),
-                                child: Text(
-                                  savedPath != null ? '已下载' : '下载',
-                                  style: TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: savedPath != null
-                                        ? colors.onSuccessContainer
-                                        : colors.onPrimaryContainer,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              CupertinoButton(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 9,
-                                  vertical: 5,
-                                ),
-                                minimumSize: const Size(28, 28),
-                                color: colors.tonalTileBg,
-                                borderRadius: BorderRadius.circular(999),
-                                onPressed: () =>
-                                    _downloadItem(context, item, share: true),
-                                child: Text(
-                                  '分享',
-                                  style: TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: colors.textPrimary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      );
-                    }),
-                ],
 
                 const SizedBox(height: 12),
                 Container(height: 0.5, color: colors.divider),
                 const SizedBox(height: 12),
 
                 // 智云课堂语音字幕下载
-                Row(
-                  children: [
-                    AelIconBadge(
-                      icon: AelIcons.audio,
-                      size: 36,
-                      iconSize: 18,
-                      style: AelIconBadgeStyle.circle,
-                      backgroundColor: colors.infoContainer,
-                      iconColor: colors.onInfoContainer,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => _showZhiyunSubtitleBatchDialog(context),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '智云课堂语音字幕下载',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: colors.textPrimary,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '多选批量导出已生成的课节语音转写字幕（txt 格式）',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: colors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    AelChip(
-                      label: '批量管理',
-                      tone: AelChipTone.primary,
-                      onTap: () => _showZhiyunSubtitleBatchDialog(context),
-                    ),
-                  ],
+                _buildBatchResourceRow(
+                  context,
+                  colors: colors,
+                  icon: AelIcons.audio,
+                  iconBg: colors.infoContainer,
+                  iconFg: colors.onInfoContainer,
+                  title: '智云课堂语音字幕下载',
+                  subtitle: '多选批量导出已生成的课节语音转写字幕（txt 格式）',
+                  onTap: () => _showZhiyunSubtitleBatchDialog(context),
                 ),
 
                 const SizedBox(height: 12),
@@ -1933,51 +1426,15 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
                 const SizedBox(height: 12),
 
                 // 智云课堂切片课件下载
-                Row(
-                  children: [
-                    AelIconBadge(
-                      icon: AelIcons.image,
-                      size: 36,
-                      iconSize: 18,
-                      style: AelIconBadgeStyle.circle,
-                      backgroundColor: colors.primaryContainer,
-                      iconColor: colors.onPrimaryContainer,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => _showZhiyunPptBatchDialog(context),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '智云课堂切片课件下载',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: colors.textPrimary,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '多选批量打包下载已生成的课堂 PPT 切片（ZIP 压缩包）',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: colors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    AelChip(
-                      label: '批量管理',
-                      tone: AelChipTone.primary,
-                      onTap: () => _showZhiyunPptBatchDialog(context),
-                    ),
-                  ],
+                _buildBatchResourceRow(
+                  context,
+                  colors: colors,
+                  icon: AelIcons.image,
+                  iconBg: colors.primaryContainer,
+                  iconFg: colors.onPrimaryContainer,
+                  title: '智云课堂切片课件下载',
+                  subtitle: '多选批量打包下载已生成的课堂 PPT 切片（ZIP 压缩包）',
+                  onTap: () => _showZhiyunPptBatchDialog(context),
                 ),
               ],
             ),
@@ -1987,22 +1444,85 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
     );
   }
 
+  Widget _buildBatchResourceRow(
+    BuildContext context, {
+    required AelColorTokens colors,
+    required IconData icon,
+    required Color iconBg,
+    required Color iconFg,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Row(
+      children: [
+        AelIconBadge(
+          icon: icon,
+          size: 36,
+          iconSize: 18,
+          style: AelIconBadgeStyle.circle,
+          backgroundColor: iconBg,
+          iconColor: iconFg,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onTap,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: colors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 12, color: colors.textSecondary),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        AelChip(label: '批量管理', tone: AelChipTone.primary, onTap: onTap),
+      ],
+    );
+  }
+
+  Future<void> _openCoursewareBatchPage(BuildContext context) async {
+    await Navigator.of(context, rootNavigator: true).push(
+      CupertinoPageRoute<void>(
+        builder: (_) => CoursewareBatchPage(
+          course: course,
+          semesterName: semesterName,
+          preferredHalfTag: preferredHalfTag,
+        ),
+      ),
+    );
+  }
+
   Future<void> _showZhiyunSubtitleBatchDialog(BuildContext context) async {
     final cid = ZhiyunService.getKnownCourseId(
-      widget.course.name,
-      courseCode: widget.course.id,
-      teacher: widget.course.teacher,
-      course: widget.course,
-      semesterName: widget.semesterName,
-      preferredHalfTag: widget.preferredHalfTag,
+      course.name,
+      courseCode: course.id,
+      teacher: course.teacher,
+      course: course,
+      semesterName: semesterName,
+      preferredHalfTag: preferredHalfTag,
     );
     await Navigator.of(context, rootNavigator: true).push(
       CupertinoPageRoute<void>(
         builder: (_) => ZhiyunResourceBatchPage(
-          course: widget.course,
+          course: course,
           initialCourseId: cid,
-          semesterName: widget.semesterName,
-          preferredHalfTag: widget.preferredHalfTag,
+          semesterName: semesterName,
+          preferredHalfTag: preferredHalfTag,
           mode: ZhiyunResourceBatchMode.subtitles,
         ),
       ),
@@ -2011,20 +1531,20 @@ class _CoursewareDownloadCardState extends State<CoursewareDownloadCard> {
 
   Future<void> _showZhiyunPptBatchDialog(BuildContext context) async {
     final cid = ZhiyunService.getKnownCourseId(
-      widget.course.name,
-      courseCode: widget.course.id,
-      teacher: widget.course.teacher,
-      course: widget.course,
-      semesterName: widget.semesterName,
-      preferredHalfTag: widget.preferredHalfTag,
+      course.name,
+      courseCode: course.id,
+      teacher: course.teacher,
+      course: course,
+      semesterName: semesterName,
+      preferredHalfTag: preferredHalfTag,
     );
     await Navigator.of(context, rootNavigator: true).push(
       CupertinoPageRoute<void>(
         builder: (_) => ZhiyunResourceBatchPage(
-          course: widget.course,
+          course: course,
           initialCourseId: cid,
-          semesterName: widget.semesterName,
-          preferredHalfTag: widget.preferredHalfTag,
+          semesterName: semesterName,
+          preferredHalfTag: preferredHalfTag,
           mode: ZhiyunResourceBatchMode.pptSlides,
         ),
       ),

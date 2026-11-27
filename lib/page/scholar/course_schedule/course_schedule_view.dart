@@ -130,6 +130,7 @@ class CourseSchedulePage extends StatelessWidget {
   }
 
   Widget _courseSchedule(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     const List<String> courseStartTime = [
       "08:00",
       "08:50",
@@ -145,6 +146,7 @@ class CourseSchedulePage extends StatelessWidget {
       "19:40",
       "20:30",
     ];
+    const List<String> weekDays = ['一', '二', '三', '四', '五', '六', '日'];
     return AelSectionCard(
       padding: const EdgeInsets.all(AelSpacing.md),
       child: Column(
@@ -152,83 +154,20 @@ class CourseSchedulePage extends StatelessWidget {
           Row(
             children: [
               const Spacer(flex: 1),
-              Expanded(
-                flex: 2,
-                child: Center(
-                  child: Text(
-                    '一',
-                    style: CupertinoTheme.of(
-                      context,
-                    ).textTheme.textStyle.copyWith(fontSize: 14),
+              for (final dayLabel in weekDays)
+                Expanded(
+                  flex: 2,
+                  child: Center(
+                    child: Text(
+                      dayLabel,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: colors.textPrimary,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Center(
-                  child: Text(
-                    '二',
-                    style: CupertinoTheme.of(
-                      context,
-                    ).textTheme.textStyle.copyWith(fontSize: 14),
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Center(
-                  child: Text(
-                    '三',
-                    style: CupertinoTheme.of(
-                      context,
-                    ).textTheme.textStyle.copyWith(fontSize: 14),
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Center(
-                  child: Text(
-                    '四',
-                    style: CupertinoTheme.of(
-                      context,
-                    ).textTheme.textStyle.copyWith(fontSize: 14),
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Center(
-                  child: Text(
-                    '五',
-                    style: CupertinoTheme.of(
-                      context,
-                    ).textTheme.textStyle.copyWith(fontSize: 14),
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Center(
-                  child: Text(
-                    '六',
-                    style: CupertinoTheme.of(
-                      context,
-                    ).textTheme.textStyle.copyWith(fontSize: 14),
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Center(
-                  child: Text(
-                    '日',
-                    style: CupertinoTheme.of(
-                      context,
-                    ).textTheme.textStyle.copyWith(fontSize: 14),
-                  ),
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 4),
@@ -263,22 +202,20 @@ class CourseSchedulePage extends StatelessWidget {
                                     fit: BoxFit.fitWidth,
                                     child: Text(
                                       courseStartTime[i - 1],
-                                      style: CupertinoTheme.of(context)
-                                          .textTheme
-                                          .textStyle
-                                          .copyWith(fontSize: 10),
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: colors.textSecondary,
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
                                     i.toString(),
-                                    style: CupertinoTheme.of(context)
-                                        .textTheme
-                                        .textStyle
-                                        .copyWith(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14,
-                                        ),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: colors.textPrimary,
+                                    ),
                                   ),
                                 ],
                               ),

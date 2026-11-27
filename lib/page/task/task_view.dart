@@ -129,6 +129,12 @@ class _TaskPageState extends State<TaskPage> {
       titleType = '';
     }
 
+    final colors = AelTheme.colorsOf(context);
+    final lineStyle = TextStyle(
+      fontSize: 14.5,
+      height: 1.5,
+      color: colors.textPrimary,
+    );
     return showAelDialog<void>(
       context: context,
       title: '${deadline.summary}：$titleType',
@@ -137,19 +143,27 @@ class _TaskPageState extends State<TaskPage> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (deadline.type == TaskType.fixed) ...[
-            Text('开始于 ${toStringHumanReadable(deadline.startTime)}'),
-            Text('结束于 ${toStringHumanReadable(deadline.endTime)}'),
+            Text(
+              '开始于 ${toStringHumanReadable(deadline.startTime)}',
+              style: lineStyle,
+            ),
+            Text(
+              '结束于 ${toStringHumanReadable(deadline.endTime)}',
+              style: lineStyle,
+            ),
           ],
           if (deadline.type == TaskType.deadline ||
               deadline.type == TaskType.homework)
             Text(
               '截止于 ${toStringHumanReadable(deadline.endTime)}${deadline.endTime.isBefore(DateTime.now()) ? ' - 已过期' : ''}',
+              style: lineStyle,
             ),
           if (deadline.type == TaskType.deadline)
-            Text(deadlineProgress(deadline)),
-          if (deadline.location.isNotEmpty) Text('地点：${deadline.location}'),
+            Text(deadlineProgress(deadline), style: lineStyle),
+          if (deadline.location.isNotEmpty)
+            Text('地点：${deadline.location}', style: lineStyle),
           if (deadline.description.isNotEmpty)
-            Text('说明：${deadline.description}'),
+            Text('说明：${deadline.description}', style: lineStyle),
         ],
       ),
       actions: [

@@ -1,5 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
+import 'package:celechron/design/theme/ael_theme.dart';
+
 class SubtitleRow extends StatelessWidget {
   final String subtitle;
   final Widget? right;
@@ -18,6 +20,7 @@ class SubtitleRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: padHorizontal),
       child: Row(
@@ -27,9 +30,12 @@ class SubtitleRow extends StatelessWidget {
             padding: EdgeInsets.symmetric(vertical: padVertical),
             child: Text(
               subtitle,
-              style: CupertinoTheme.of(
-                context,
-              ).textTheme.navLargeTitleTextStyle.copyWith(fontSize: fontSize),
+              style: TextStyle(
+                color: colors.textPrimary,
+                fontSize: fontSize,
+                fontWeight: FontWeight.bold,
+                letterSpacing: -0.2,
+              ),
             ),
           ),
           const Spacer(),
@@ -54,6 +60,7 @@ class SubSubtitleRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: padHorizontal),
       child: Row(
@@ -63,9 +70,12 @@ class SubSubtitleRow extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: Text(
               subtitle,
-              style: CupertinoTheme.of(
-                context,
-              ).textTheme.navLargeTitleTextStyle.copyWith(fontSize: 18),
+              style: TextStyle(
+                color: colors.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                letterSpacing: -0.2,
+              ),
             ),
           ),
           const Spacer(),

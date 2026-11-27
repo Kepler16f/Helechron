@@ -1,12 +1,37 @@
+import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/design/components/ael_components.dart';
 import 'package:celechron/design/icons/ael_icons.dart';
 import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/design/persistent_headers.dart';
+import 'package:celechron/http/zjuServices/courses.dart';
+import 'package:celechron/model/course.dart';
+import 'package:celechron/model/option.dart';
+import 'package:celechron/model/period.dart';
 import 'package:celechron/model/practice_score_item.dart';
 import 'package:celechron/model/scholar.dart';
+import 'package:celechron/model/task.dart';
+import 'package:celechron/page/calendar/calendar_controller.dart';
+import 'package:celechron/page/calendar/calendar_view.dart';
+import 'package:celechron/page/flow/flow_controller.dart';
+import 'package:celechron/page/scholar/course_detail/courseware_batch_page.dart';
 import 'package:celechron/page/scholar/practice_score/practice_score_page.dart';
+import 'package:celechron/page/task/task_controller.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart';
+import 'package:intl/date_symbol_data_local.dart';
+
+class _NoopTaskController extends TaskController {
+  @override
+  // ignore: must_call_super
+  void onInit() {}
+}
+
+class _NoopFlowController extends FlowController {
+  @override
+  // ignore: must_call_super
+  void onInit() {}
+}
 
 void main() {
   test('AelResponsive classifies compact/medium/expanded/large widths', () {
@@ -292,4 +317,189 @@ void main() {
     expect((rPrac.top - (rGrade.bottom + 14)).abs(), lessThan(1.0));
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'NativeBottomBarSpacer renders exact height without GetX Obx errors in landscape and portrait',
+    (tester) async {
+      addTearDown(Get.reset);
+      final opt = Option(
+        workTime: const Duration(minutes: 45).obs,
+        restTime: const Duration(minutes: 15).obs,
+        allowTime: <DateTime, DateTime>{}.obs,
+        gpaStrategy: GpaStrategy.best.obs,
+        pushOnGradeChange: false.obs,
+        pushOnDdlReminder: false.obs,
+        brightnessMode: BrightnessMode.system.obs,
+        courseIdMappingList: <CourseIdMap>[].obs,
+        hideHomeGpa: false.obs,
+        asyncRefresh: false.obs,
+        calendarReminderMode: CalendarReminderMode.notification.obs,
+        bottomBarFloating: true.obs,
+        bottomBarImmersiveLight: false.obs,
+        bottomBarMaterialLevel: 10.obs,
+      );
+      Get.put(opt, tag: 'option');
+
+      // 横屏宽屏（useSideRail == true）：不应抛出 Obx 异常产生灰色 ErrorBox，且高度仅为 extra (16)
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      await tester.pumpWidget(
+        const CupertinoApp(
+          home: CupertinoPageScaffold(
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(child: SizedBox(height: 120)),
+                SliverToBoxAdapter(
+                  child: NativeBottomBarSpacer(
+                    key: ValueKey('spacer'),
+                    extra: 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.getSize(find.byKey(const ValueKey('spacer'))).height,
+        closeTo(16.0, 0.5),
+      );
+
+      // 手机竖屏（floating == true）：高度 = 64 + 16 = 80
+      tester.view.physicalSize = const Size(412, 915);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.getSize(find.byKey(const ValueKey('spacer'))).height,
+        closeTo(80.0, 0.5),
+      );
+    },
+  );
+
+  testWidgets(
+    'CalendarPage landscape allows tapping another day to switch selectedDate and events',
+    (tester) async {
+      await initializeDateFormatting('zh_CN');
+      addTearDown(() {
+        Get.deleteAll(force: true);
+        Get.reset();
+      });
+
+      final targetDay = DateTime(2026, 11, 18);
+      final initialDay = DateTime(2026, 11, 10);
+      final fixedTask = Task(
+        uid: 'fixed-18',
+        summary: '横屏测试日程',
+        type: TaskType.fixed,
+        status: TaskStatus.running,
+        startTime: DateTime(2026, 11, 18, 10, 0),
+        endTime: DateTime(2026, 11, 18, 11, 30),
+        repeatEndsTime: DateTime(2026, 11, 18, 11, 30),
+      );
+
+      Get.put(DatabaseHelper(), tag: 'db');
+      Get.put(Scholar().obs, tag: 'scholar');
+      Get.put(<Task>[fixedTask].obs, tag: 'taskList');
+      Get.put(DateTime.now().obs, tag: 'taskListLastUpdate');
+      Get.put(<Period>[].obs, tag: 'flowList');
+      Get.put(DateTime.now().obs, tag: 'flowListLastUpdate');
+      Get.put<TaskController>(_NoopTaskController());
+      Get.put<FlowController>(_NoopFlowController());
+
+      final calCtrl = Get.put(CalendarController());
+      calCtrl.focusedDay.value = initialDay;
+      calCtrl.selectedDay.value = initialDay;
+
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        CupertinoApp(home: CupertinoPageScaffold(child: CalendarPage())),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('横屏测试日程'), findsNothing);
+      await tester.tap(find.text('18').first);
+      await tester.pumpAndSettle();
+
+      expect(calCtrl.selectedDay.value.year, targetDay.year);
+      expect(calCtrl.selectedDay.value.month, targetDay.month);
+      expect(calCtrl.selectedDay.value.day, targetDay.day);
+      expect(find.text('横屏测试日程'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'CoursewareBatchPage supports multi-select, select-all, and sort order toggle',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final course = Course.fromJson({'name': '数据结构基础', 'id': 'CS201'});
+      final items = [
+        CoursewareItem(
+          name: '第01讲_绪论.pdf',
+          sectionTitle: '第一章',
+          sizeBytes: 1024 * 512,
+          uploadId: 101,
+          source: '学在浙大',
+        ),
+        CoursewareItem(
+          name: '第02讲_线性表.pptx',
+          sectionTitle: '第二章',
+          sizeBytes: 1024 * 1024 * 2,
+          uploadId: 102,
+          source: '学在浙大',
+        ),
+      ];
+
+      await tester.pumpWidget(
+        CupertinoApp(
+          home: CoursewareBatchPage(
+            course: course,
+            itemsLoader: () async => items,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('学在浙大课件下载'), findsOneWidget);
+      expect(find.text('第01讲_绪论.pdf'), findsOneWidget);
+      expect(find.text('第02讲_线性表.pptx'), findsOneWidget);
+      expect(find.text('已选 0/2'), findsOneWidget);
+
+      await tester.tap(find.text('全选'));
+      await tester.pumpAndSettle();
+      expect(find.text('已选 2/2'), findsOneWidget);
+      expect(find.text('仅下载 (2)'), findsOneWidget);
+      expect(find.text('分享 (2)'), findsOneWidget);
+
+      final y1Before = tester.getTopLeft(find.text('第01讲_绪论.pdf')).dy;
+      final y2Before = tester.getTopLeft(find.text('第02讲_线性表.pptx')).dy;
+      expect(y1Before, lessThan(y2Before));
+
+      await tester.tap(find.text('正序'));
+      await tester.pumpAndSettle();
+      expect(find.text('倒序'), findsOneWidget);
+      final y1After = tester.getTopLeft(find.text('第01讲_绪论.pdf')).dy;
+      final y2After = tester.getTopLeft(find.text('第02讲_线性表.pptx')).dy;
+      expect(y2After, lessThan(y1After));
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

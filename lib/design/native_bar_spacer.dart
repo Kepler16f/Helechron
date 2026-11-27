@@ -37,13 +37,15 @@ class NativeBottomBarSpacer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(
-      () => SizedBox(
-        height:
-            MediaQuery.paddingOf(context).bottom +
-            nativeBottomBarInsetForContext(context) +
-            extra,
-      ),
-    );
+    final baseHeight = MediaQuery.paddingOf(context).bottom + extra;
+    if (AelResponsive.useSideRail(context) ||
+        !Get.isRegistered<Option>(tag: 'option')) {
+      return SizedBox(height: baseHeight);
+    }
+    final option = Get.find<Option>(tag: 'option');
+    return Obx(() {
+      final inset = option.bottomBarFloating.value ? 64.0 : 56.0;
+      return SizedBox(height: baseHeight + inset);
+    });
   }
 }

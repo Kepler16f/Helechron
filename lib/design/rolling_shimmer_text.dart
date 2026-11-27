@@ -1,5 +1,8 @@
 import 'package:flutter/cupertino.dart';
 
+import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
+
 /// 刷新状态文案：浅灰小字，换字时新字自下而上顶掉旧字，
 /// 字面周期性扫过一道白色流光（颜色作用于文字本身，而非背景）
 class RollingShimmerText extends StatefulWidget {
@@ -37,12 +40,12 @@ class _RollingShimmerTextState extends State<RollingShimmerText>
 
   @override
   Widget build(BuildContext context) {
-    // 底色取与转圈同族的浅灰；流光为白色，深浅色模式下都比底色亮
-    final base = CupertinoDynamicColor.resolve(
-      CupertinoColors.secondaryLabel,
-      context,
-    );
-    const highlight = Color(0xFFFFFFFF);
+    final colors = AelTheme.colorsOf(context);
+    // 底色取次级文字色，流光在深色模式下偏亮白、浅色模式下高对比亮灰白，确保双态可读
+    final base = colors.textSecondary;
+    final highlight = colors.isDark
+        ? AelSemanticPalette.pureWhite
+        : colors.textPrimary;
     return RepaintBoundary(
       child: AnimatedBuilder(
         animation: _shimmer,
@@ -99,7 +102,7 @@ class _RollingShimmerTextState extends State<RollingShimmerText>
               // srcIn 会用渐变整体替换字色，这里只需保证不透明
               style: TextStyle(
                 fontSize: widget.fontSize,
-                color: const Color(0xFFFFFFFF),
+                color: AelSemanticPalette.pureWhite,
               ),
             ),
           ),

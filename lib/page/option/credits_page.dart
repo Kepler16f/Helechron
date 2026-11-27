@@ -52,7 +52,7 @@ class _CreditsPageState extends State<CreditsPage> {
     super.dispose();
   }
 
-  Widget _buildContributorsList() {
+  Widget _buildContributorsList(AelColorTokens colors) {
     final list = _contributors.isNotEmpty
         ? _contributors
         : GitHubService.defaultContributors;
@@ -60,12 +60,15 @@ class _CreditsPageState extends State<CreditsPage> {
       padding: const EdgeInsets.symmetric(horizontal: 32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        children: _buildContributorRows(list),
+        children: _buildContributorRows(list, colors),
       ),
     );
   }
 
-  List<Widget> _buildContributorRows(List<String> contributors) {
+  List<Widget> _buildContributorRows(
+    List<String> contributors,
+    AelColorTokens colors,
+  ) {
     List<Widget> rows = [];
     for (int i = 0; i < contributors.length; i += 2) {
       final String left = contributors[i];
@@ -87,7 +90,11 @@ class _CreditsPageState extends State<CreditsPage> {
                   child: Text(
                     left,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 14, height: 1.35),
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.35,
+                      color: colors.textPrimary,
+                    ),
                   ),
                 ),
               ),
@@ -98,7 +105,11 @@ class _CreditsPageState extends State<CreditsPage> {
                     child: Text(
                       right,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 14, height: 1.35),
+                      style: TextStyle(
+                        fontSize: 14,
+                        height: 1.35,
+                        color: colors.textPrimary,
+                      ),
                     ),
                   ),
                 )
@@ -137,15 +148,21 @@ class _CreditsPageState extends State<CreditsPage> {
                         const SizedBox(width: 8),
                         Column(
                           children: [
-                            const Text(
+                            Text(
                               'Helechron',
                               textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 32),
+                              style: TextStyle(
+                                fontSize: 32,
+                                color: colors.textPrimary,
+                              ),
                             ),
                             Text(
                               '${widget.version} 版本',
                               textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 12),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colors.textSecondary,
+                              ),
                             ),
                           ],
                         ),
@@ -168,17 +185,18 @@ class _CreditsPageState extends State<CreditsPage> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    const Text(
+                    Text(
                       'Helechron 移植、开发与维护',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 20,
+                        color: colors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 16),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 32),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         mainAxisSize: MainAxisSize.max,
@@ -189,33 +207,38 @@ class _CreditsPageState extends State<CreditsPage> {
                             child: Text(
                               developerName,
                               textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 14),
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: colors.textPrimary,
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 24),
-                    const Text(
+                    Text(
                       '开源来源致谢：Celechron',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 20,
+                        color: colors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       '🎨设计',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
+                        color: colors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 32),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         mainAxisSize: MainAxisSize.max,
@@ -226,37 +249,45 @@ class _CreditsPageState extends State<CreditsPage> {
                             child: Text(
                               'nosig',
                               textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 14),
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: colors.textPrimary,
+                              ),
                             ),
                           ),
                           Expanded(
                             child: Text(
                               '空之探险队的 Kate',
                               textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 14),
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: colors.textPrimary,
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 24),
-                    const Text(
+                    Text(
                       '🧑‍💻开发',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
+                        color: colors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 8),
-                    _buildContributorsList(),
+                    _buildContributorsList(colors),
                     const SizedBox(height: 24),
-                    const Text(
+                    Text(
                       '参考与致谢开源项目',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
+                        color: colors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 16),

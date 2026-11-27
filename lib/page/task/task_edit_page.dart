@@ -368,63 +368,84 @@ class _TaskEditPageState extends State<TaskEditPage> {
                                 onTap: () async {
                                   int hours = now.timeNeeded.inHours;
                                   int mins = now.timeNeeded.inMinutes % 60;
-                                  final picked =
-                                      await showAelPickerSheet<Duration>(
-                                        context: context,
-                                        title: '设置预期用时',
-                                        pickerBuilder: (_) => Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            SizedBox(
-                                              width: 110,
-                                              child: CupertinoPicker(
-                                                itemExtent: 34,
-                                                scrollController:
-                                                    FixedExtentScrollController(
-                                                      initialItem: hours,
-                                                    ),
-                                                onSelectedItemChanged: (v) =>
-                                                    hours = v,
-                                                children: List.generate(
-                                                  1000,
-                                                  (i) =>
-                                                      Center(child: Text('$i')),
-                                                ),
-                                              ),
-                                            ),
-                                            const Text('小时'),
-                                            SizedBox(
-                                              width: 110,
-                                              child: CupertinoPicker(
-                                                itemExtent: 34,
-                                                looping: true,
-                                                scrollController:
-                                                    FixedExtentScrollController(
-                                                      initialItem: mins,
-                                                    ),
-                                                onSelectedItemChanged: (v) =>
-                                                    mins = v,
-                                                children: List.generate(
-                                                  60,
-                                                  (i) =>
-                                                      Center(child: Text('$i')),
-                                                ),
-                                              ),
-                                            ),
-                                            const Text('分钟'),
-                                          ],
-                                        ),
-                                        onConfirm: () {
-                                          final d = Duration(
-                                            hours: hours,
-                                            minutes: mins,
-                                          );
-                                          return d <= Duration.zero
-                                              ? const Duration(minutes: 1)
-                                              : d;
-                                        },
+                                  final picked = await showAelPickerSheet<Duration>(
+                                    context: context,
+                                    title: '设置预期用时',
+                                    pickerBuilder: (pickerCtx) {
+                                      final pickerColors = AelTheme.colorsOf(
+                                        pickerCtx,
                                       );
+                                      final itemStyle = TextStyle(
+                                        fontSize: 19,
+                                        color: pickerColors.textPrimary,
+                                      );
+                                      final unitStyle = TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w500,
+                                        color: pickerColors.textSecondary,
+                                      );
+                                      return Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          SizedBox(
+                                            width: 110,
+                                            child: CupertinoPicker(
+                                              itemExtent: 34,
+                                              scrollController:
+                                                  FixedExtentScrollController(
+                                                    initialItem: hours,
+                                                  ),
+                                              onSelectedItemChanged: (v) =>
+                                                  hours = v,
+                                              children: List.generate(
+                                                1000,
+                                                (i) => Center(
+                                                  child: Text(
+                                                    '$i',
+                                                    style: itemStyle,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          Text('小时', style: unitStyle),
+                                          SizedBox(
+                                            width: 110,
+                                            child: CupertinoPicker(
+                                              itemExtent: 34,
+                                              looping: true,
+                                              scrollController:
+                                                  FixedExtentScrollController(
+                                                    initialItem: mins,
+                                                  ),
+                                              onSelectedItemChanged: (v) =>
+                                                  mins = v,
+                                              children: List.generate(
+                                                60,
+                                                (i) => Center(
+                                                  child: Text(
+                                                    '$i',
+                                                    style: itemStyle,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          Text('分钟', style: unitStyle),
+                                        ],
+                                      );
+                                    },
+                                    onConfirm: () {
+                                      final d = Duration(
+                                        hours: hours,
+                                        minutes: mins,
+                                      );
+                                      return d <= Duration.zero
+                                          ? const Duration(minutes: 1)
+                                          : d;
+                                    },
+                                  );
                                   if (picked != null && mounted) {
                                     setState(() => now.timeNeeded = picked);
                                   }
@@ -443,58 +464,77 @@ class _TaskEditPageState extends State<TaskEditPage> {
                                 onTap: () async {
                                   int hours = now.timeSpent.inHours;
                                   int mins = now.timeSpent.inMinutes % 60;
-                                  final picked =
-                                      await showAelPickerSheet<Duration>(
-                                        context: context,
-                                        title: '设置已经用时',
-                                        pickerBuilder: (_) => Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            SizedBox(
-                                              width: 110,
-                                              child: CupertinoPicker(
-                                                itemExtent: 34,
-                                                scrollController:
-                                                    FixedExtentScrollController(
-                                                      initialItem: hours,
-                                                    ),
-                                                onSelectedItemChanged: (v) =>
-                                                    hours = v,
-                                                children: List.generate(
-                                                  1000,
-                                                  (i) =>
-                                                      Center(child: Text('$i')),
-                                                ),
-                                              ),
-                                            ),
-                                            const Text('小时'),
-                                            SizedBox(
-                                              width: 110,
-                                              child: CupertinoPicker(
-                                                itemExtent: 34,
-                                                looping: true,
-                                                scrollController:
-                                                    FixedExtentScrollController(
-                                                      initialItem: mins,
-                                                    ),
-                                                onSelectedItemChanged: (v) =>
-                                                    mins = v,
-                                                children: List.generate(
-                                                  60,
-                                                  (i) =>
-                                                      Center(child: Text('$i')),
-                                                ),
-                                              ),
-                                            ),
-                                            const Text('分钟'),
-                                          ],
-                                        ),
-                                        onConfirm: () => Duration(
-                                          hours: hours,
-                                          minutes: mins,
-                                        ),
+                                  final picked = await showAelPickerSheet<Duration>(
+                                    context: context,
+                                    title: '设置已经用时',
+                                    pickerBuilder: (pickerCtx) {
+                                      final pickerColors = AelTheme.colorsOf(
+                                        pickerCtx,
                                       );
+                                      final itemStyle = TextStyle(
+                                        fontSize: 19,
+                                        color: pickerColors.textPrimary,
+                                      );
+                                      final unitStyle = TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w500,
+                                        color: pickerColors.textSecondary,
+                                      );
+                                      return Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          SizedBox(
+                                            width: 110,
+                                            child: CupertinoPicker(
+                                              itemExtent: 34,
+                                              scrollController:
+                                                  FixedExtentScrollController(
+                                                    initialItem: hours,
+                                                  ),
+                                              onSelectedItemChanged: (v) =>
+                                                  hours = v,
+                                              children: List.generate(
+                                                1000,
+                                                (i) => Center(
+                                                  child: Text(
+                                                    '$i',
+                                                    style: itemStyle,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          Text('小时', style: unitStyle),
+                                          SizedBox(
+                                            width: 110,
+                                            child: CupertinoPicker(
+                                              itemExtent: 34,
+                                              looping: true,
+                                              scrollController:
+                                                  FixedExtentScrollController(
+                                                    initialItem: mins,
+                                                  ),
+                                              onSelectedItemChanged: (v) =>
+                                                  mins = v,
+                                              children: List.generate(
+                                                60,
+                                                (i) => Center(
+                                                  child: Text(
+                                                    '$i',
+                                                    style: itemStyle,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          Text('分钟', style: unitStyle),
+                                        ],
+                                      );
+                                    },
+                                    onConfirm: () =>
+                                        Duration(hours: hours, minutes: mins),
+                                  );
                                   if (picked != null && mounted) {
                                     setState(() => now.timeSpent = picked);
                                   }
@@ -582,22 +622,33 @@ class _TaskEditPageState extends State<TaskEditPage> {
                                   final picked = await showAelPickerSheet<int>(
                                     context: context,
                                     title: '设置重复周期（天）',
-                                    pickerBuilder: (_) => CupertinoPicker(
-                                      itemExtent: 34,
-                                      scrollController:
-                                          FixedExtentScrollController(
-                                            initialItem: tempPeriod - 1,
+                                    pickerBuilder: (pickerCtx) {
+                                      final pickerColors = AelTheme.colorsOf(
+                                        pickerCtx,
+                                      );
+                                      return CupertinoPicker(
+                                        itemExtent: 34,
+                                        scrollController:
+                                            FixedExtentScrollController(
+                                              initialItem: tempPeriod - 1,
+                                            ),
+                                        onSelectedItemChanged: (int value) {
+                                          tempPeriod = value + 1;
+                                        },
+                                        children: List<Widget>.generate(
+                                          999,
+                                          (int index) => Center(
+                                            child: Text(
+                                              '${index + 1} 天',
+                                              style: TextStyle(
+                                                fontSize: 19,
+                                                color: pickerColors.textPrimary,
+                                              ),
+                                            ),
                                           ),
-                                      onSelectedItemChanged: (int value) {
-                                        tempPeriod = value + 1;
-                                      },
-                                      children: List<Widget>.generate(
-                                        999,
-                                        (int index) => Center(
-                                          child: Text('${index + 1} 天'),
                                         ),
-                                      ),
-                                    ),
+                                      );
+                                    },
                                     onConfirm: () => tempPeriod,
                                   );
                                   if (picked != null && mounted) {

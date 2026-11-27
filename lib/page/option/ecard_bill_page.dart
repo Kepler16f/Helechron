@@ -987,9 +987,12 @@ class _ECardBillPageState extends State<ECardBillPage> {
                             ),
                             minSize: 32,
                             onPressed: () => _loadMonthData(reset: true),
-                            child: const Text(
+                            child: Text(
                               '刷新重试',
-                              style: TextStyle(fontSize: 13),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: AelTheme.colorsOf(context).primary,
+                              ),
                             ),
                           ),
                         ],

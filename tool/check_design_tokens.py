@@ -60,6 +60,7 @@ ENFORCED_FILES = [
     "lib/page/task/task_edit_page.dart",
     "lib/page/task/homework_submission_page.dart",
     "lib/page/scholar/course_detail/course_detail_view.dart",
+    "lib/page/scholar/course_detail/courseware_batch_page.dart",
     "lib/page/scholar/course_detail/zhiyun_player_page.dart",
     "lib/page/scholar/course_detail/zhiyun_resource_batch_page.dart",
     "lib/page/scholar/course_schedule/course_card.dart",

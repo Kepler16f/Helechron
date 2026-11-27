@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/theme/ael_theme.dart';
 import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/http/zjuServices/courses.dart';
 import 'package:celechron/http/zjuServices/network_defense.dart';
@@ -329,17 +330,21 @@ class TodoTaskSync {
     String? title,
   }) async {
     // 显示加载弹窗
+    final colors = AelTheme.colorsOf(context);
     showAelDialog<void>(
       context: context,
       barrierDismissible: false,
-      content: const Padding(
-        padding: EdgeInsets.symmetric(vertical: AelSpacing.md),
+      content: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AelSpacing.md),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CupertinoActivityIndicator(radius: 14),
-            SizedBox(height: AelSpacing.md),
-            Text('正在向学在浙大探测作业状态...'),
+            const CupertinoActivityIndicator(radius: 14),
+            const SizedBox(height: AelSpacing.md),
+            Text(
+              '正在向学在浙大探测作业状态...',
+              style: TextStyle(color: colors.textPrimary),
+            ),
           ],
         ),
       ),

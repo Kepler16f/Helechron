@@ -343,6 +343,13 @@ class _CelechronAppState extends State<CelechronApp>
   }
 
   @override
+  void didChangePlatformBrightness() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _startForegroundLease();
@@ -417,15 +424,33 @@ class _CelechronAppState extends State<CelechronApp>
           if (PlatformFeatures.isOhos) {
             themeController.syncNativeAccent(option, effectiveBundle);
           }
-          return MiuixTheme(
-            data: effectiveBundle.miuixTheme,
-            child: Theme(
-              data: effectiveBundle.materialTheme,
-              child: MediaQuery(
-                data: MediaQuery.of(
-                  context,
-                ).copyWith(alwaysUse24HourFormat: true),
-                child: child!,
+          final resolvedBrightness = effectiveBundle.aelTheme.colors.brightness;
+          final isDark = resolvedBrightness == Brightness.dark;
+          final overlayStyle =
+              (isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
+                  .copyWith(
+                    statusBarColor: const Color(0x00000000),
+                    systemNavigationBarColor: const Color(0x00000000),
+                    systemNavigationBarIconBrightness: isDark
+                        ? Brightness.light
+                        : Brightness.dark,
+                  );
+          return AnnotatedRegion<SystemUiOverlayStyle>(
+            value: overlayStyle,
+            child: CupertinoTheme(
+              data: effectiveBundle.cupertinoTheme,
+              child: MiuixTheme(
+                data: effectiveBundle.miuixTheme,
+                child: Theme(
+                  data: effectiveBundle.materialTheme,
+                  child: MediaQuery(
+                    data: MediaQuery.of(context).copyWith(
+                      alwaysUse24HourFormat: true,
+                      platformBrightness: resolvedBrightness,
+                    ),
+                    child: child!,
+                  ),
+                ),
               ),
             ),
           );

@@ -357,7 +357,9 @@ class _ECardPayPageState extends State<ECardPayPage>
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
-                  color: colors.textPrimary.withValues(alpha: 0.08),
+                  color: AelSemanticPalette.pureBlack.withValues(
+                    alpha: colors.isDark ? 0.32 : 0.08,
+                  ),
                   blurRadius: 12,
                   offset: const Offset(0, 4),
                 ),

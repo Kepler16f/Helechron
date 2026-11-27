@@ -42,15 +42,36 @@ class AelStatTile extends StatelessWidget {
   final EdgeInsetsGeometry padding;
   final VoidCallback? onTap;
 
+  Color? _resolveContainerForeground(AelColorTokens colors) {
+    final bg = backgroundColor;
+    if (bg == null) return null;
+    if (bg == colors.primaryContainer) return colors.onPrimaryContainer;
+    if (bg == colors.infoContainer) return colors.onInfoContainer;
+    if (bg == colors.successContainer) return colors.onSuccessContainer;
+    if (bg == colors.warningContainer) return colors.onWarningContainer;
+    if (bg == colors.errorContainer) return colors.onErrorContainer;
+    if (bg == colors.primary) return colors.onPrimary;
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = AelTheme.colorsOf(context);
+    final containerFg = _resolveContainerForeground(colors);
+    final resolvedLabelColor = containerFg != null
+        ? containerFg.withValues(alpha: 0.82)
+        : colors.textSecondary;
+    final resolvedValueColor = valueColor ?? containerFg ?? colors.textPrimary;
+    final resolvedSubtitleColor = containerFg != null
+        ? containerFg.withValues(alpha: 0.72)
+        : colors.textTertiary;
+
     return MiuixCard(
       cornerRadius: AelRadius.tile,
       insideMargin: padding,
       colors: MiuixCardColors(
         color: backgroundColor ?? colors.tonalTileBg,
-        contentColor: colors.textPrimary,
+        contentColor: containerFg ?? colors.textPrimary,
       ),
       onPressed: onTap,
       feedbackType: onTap != null
@@ -63,7 +84,11 @@ class AelStatTile extends StatelessWidget {
           Row(
             children: [
               if (icon != null) ...[
-                Icon(icon, size: 15, color: iconColor ?? colors.primary),
+                Icon(
+                  icon,
+                  size: 15,
+                  color: iconColor ?? containerFg ?? colors.primary,
+                ),
                 const SizedBox(width: 6),
               ],
               Expanded(
@@ -72,7 +97,7 @@ class AelStatTile extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: colors.textSecondary,
+                    color: resolvedLabelColor,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
@@ -91,7 +116,7 @@ class AelStatTile extends StatelessWidget {
                   maxLines: valueMaxLines,
                   overflow: valueOverflow,
                   style: TextStyle(
-                    color: valueColor ?? colors.textPrimary,
+                    color: resolvedValueColor,
                     fontSize: valueFontSize ?? 24,
                     fontWeight: FontWeight.w700,
                     letterSpacing:
@@ -108,7 +133,7 @@ class AelStatTile extends StatelessWidget {
                 Text(
                   unit!,
                   style: TextStyle(
-                    color: colors.textSecondary,
+                    color: resolvedLabelColor,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -122,7 +147,7 @@ class AelStatTile extends StatelessWidget {
               subtitle!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: colors.textTertiary, fontSize: 12),
+              style: TextStyle(color: resolvedSubtitleColor, fontSize: 12),
             ),
           ],
         ],

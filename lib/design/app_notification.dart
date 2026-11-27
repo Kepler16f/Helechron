@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 
 import 'package:celechron/design/icons/ael_icons.dart';
 import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/model/option.dart';
 
 /// 统一的应用内悬浮弹出通知组件。
@@ -19,8 +20,12 @@ class AppNotification {
     final ctx = Get.context;
     if (ctx != null) {
       try {
-        return CupertinoTheme.brightnessOf(ctx) == Brightness.dark;
-      } catch (_) {}
+        return AelTheme.colorsOf(ctx).isDark;
+      } catch (_) {
+        try {
+          return CupertinoTheme.brightnessOf(ctx) == Brightness.dark;
+        } catch (_) {}
+      }
     }
     if (Get.isRegistered<Option>(tag: 'option')) {
       final mode = Get.find<Option>(tag: 'option').brightnessMode.value;
@@ -94,7 +99,9 @@ class AppNotification {
         borderWidth: 0.8,
         boxShadows: [
           BoxShadow(
-            color: tokens.textPrimary.withValues(alpha: isDark ? 0.35 : 0.1),
+            color: AelSemanticPalette.pureBlack.withValues(
+              alpha: isDark ? 0.42 : 0.1,
+            ),
             blurRadius: 18,
             offset: const Offset(0, 5),
           ),

@@ -114,8 +114,8 @@ class AelCircleIconButton extends StatelessWidget {
             shadows: elevated
                 ? [
                     BoxShadow(
-                      color: colors.textPrimary.withValues(
-                        alpha: colors.isDark ? 0.18 : 0.05,
+                      color: AelSemanticPalette.pureBlack.withValues(
+                        alpha: colors.isDark ? 0.36 : 0.06,
                       ),
                       blurRadius: 10,
                       offset: const Offset(0, 2),

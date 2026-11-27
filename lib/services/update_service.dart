@@ -254,18 +254,22 @@ class UpdateService {
     bool silentIfNoUpdate = false,
   }) async {
     if (showLoading) {
+      final colors = AelTheme.colorsOf(context);
       showAelDialog<void>(
         context: context,
         barrierDismissible: false,
         title: '检查更新',
-        content: const Padding(
-          padding: EdgeInsets.only(top: AelSpacing.sm),
+        content: Padding(
+          padding: const EdgeInsets.only(top: AelSpacing.sm),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CupertinoActivityIndicator(),
-              SizedBox(width: AelSpacing.md),
-              Text('正在获取最新版本信息...'),
+              const CupertinoActivityIndicator(),
+              const SizedBox(width: AelSpacing.md),
+              Text(
+                '正在获取最新版本信息...',
+                style: TextStyle(color: colors.textPrimary),
+              ),
             ],
           ),
         ),

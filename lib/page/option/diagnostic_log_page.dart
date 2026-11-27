@@ -305,10 +305,7 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
                         '${diagnosticOriginLabel(report.origin)} · '
                         '${formatLocalDiagnosticTime(report.startedAtUtc)}',
                         style: TextStyle(
-                          color: CupertinoDynamicColor.resolve(
-                            AelTheme.colorsOf(context).textSecondary,
-                            context,
-                          ),
+                          color: AelTheme.colorsOf(context).textSecondary,
                         ),
                       ),
                     ],
@@ -318,7 +315,10 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
             ),
             if (description != null) ...[
               const SizedBox(height: 12),
-              Text(description),
+              Text(
+                description,
+                style: TextStyle(color: AelTheme.colorsOf(context).textPrimary),
+              ),
             ],
             const SizedBox(height: 14),
             Wrap(
@@ -339,9 +339,9 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
                 spacing: 12,
                 runSpacing: 6,
                 children: [
-                  _flag('重新登录', report.relogged),
-                  _flag('重试', report.retried),
-                  _flag('缓存回退', report.cacheUsed),
+                  _flag(context, '重新登录', report.relogged),
+                  _flag(context, '重试', report.retried),
+                  _flag(context, '缓存回退', report.cacheUsed),
                 ],
               ),
             ],
@@ -357,27 +357,40 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
                     _expandedReports.add(report.refreshId);
                   }
                 }),
-                child: Text(expanded ? '收起详情' : '查看详情'),
+                child: Text(
+                  expanded ? '收起详情' : '查看详情',
+                  style: TextStyle(color: AelTheme.colorsOf(context).primary),
+                ),
               ),
             ),
             if (expanded) ...[
               _divider(context),
               if (report.modules.isNotEmpty) ...[
-                _sectionTitle('模块状态'),
+                _sectionTitle(context, '模块状态'),
                 for (final module in report.modules)
                   _moduleCard(context, module),
                 const SizedBox(height: 10),
               ],
-              _sectionTitle('关键时间线'),
+              _sectionTitle(context, '关键时间线'),
               if (report.timeline.isEmpty)
-                const Text('没有可展示的关键事件。')
+                Text(
+                  '没有可展示的关键事件。',
+                  style: TextStyle(
+                    color: AelTheme.colorsOf(context).textSecondary,
+                  ),
+                )
               else
                 for (final event in report.timeline)
                   _timelineRow(context, event),
               const SizedBox(height: 10),
-              _sectionTitle('发现的问题'),
+              _sectionTitle(context, '发现的问题'),
               if (report.issues.isEmpty)
-                const Text('未发现需要说明的问题。')
+                Text(
+                  '未发现需要说明的问题。',
+                  style: TextStyle(
+                    color: AelTheme.colorsOf(context).textSecondary,
+                  ),
+                )
               else
                 for (final issue in report.issues) _issueCard(context, issue),
             ],
@@ -388,19 +401,18 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
   }
 
   Widget _moduleCard(BuildContext context, DiagnosticModuleReport module) {
+    final colors = AelTheme.colorsOf(context);
     final color = _moduleColor(context, module.state);
     final cacheTime = module.cacheUpdatedAtUtc == null
         ? module.cacheUpdatedText
         : formatLocalDiagnosticTime(module.cacheUpdatedAtUtc!);
+    final metaStyle = TextStyle(fontSize: 13, color: colors.textSecondary);
     return Container(
       key: ValueKey('module-${module.name}'),
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: CupertinoDynamicColor.resolve(
-          AelTheme.colorsOf(context).tonalTileBg,
-          context,
-        ),
+        color: colors.tonalTileBg,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -411,7 +423,10 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
               Expanded(
                 child: Text(
                   module.name,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: colors.textPrimary,
+                  ),
                 ),
               ),
               Text(
@@ -421,16 +436,16 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
             ],
           ),
           const SizedBox(height: 5),
-          Text(module.reason),
+          Text(module.reason, style: TextStyle(color: colors.textPrimary)),
           const SizedBox(height: 6),
           Wrap(
             spacing: 10,
             runSpacing: 4,
             children: [
-              Text(formatModuleDuration(module)),
-              if (module.relogged) const Text('已重新登录'),
-              if (module.retried) const Text('已重试'),
-              if (cacheTime != null) Text('缓存更新于 $cacheTime'),
+              Text(formatModuleDuration(module), style: metaStyle),
+              if (module.relogged) Text('已重新登录', style: metaStyle),
+              if (module.retried) Text('已重试', style: metaStyle),
+              if (cacheTime != null) Text('缓存更新于 $cacheTime', style: metaStyle),
             ],
           ),
         ],
@@ -439,31 +454,30 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
   }
 
   Widget _timelineRow(BuildContext context, DiagnosticTimelineEvent event) {
+    final colors = AelTheme.colorsOf(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.only(top: 4),
-            child: Icon(LucideIcons.circle, size: 8),
+          Padding(
+            padding: const EdgeInsets.only(top: 5),
+            child: Icon(
+              LucideIcons.circle,
+              size: 8,
+              color: colors.textTertiary,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(event.title),
+                Text(event.title, style: TextStyle(color: colors.textPrimary)),
                 Text(
                   '${formatLocalDiagnosticTime(event.timestampUtc)}'
                   '${event.description == null ? '' : ' · ${event.description}'}',
-                  style: TextStyle(
-                    color: CupertinoDynamicColor.resolve(
-                      AelTheme.colorsOf(context).textSecondary,
-                      context,
-                    ),
-                    fontSize: 13,
-                  ),
+                  style: TextStyle(color: colors.textSecondary, fontSize: 13),
                 ),
               ],
             ),
@@ -474,6 +488,7 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
   }
 
   Widget _issueCard(BuildContext context, DiagnosticIssue issue) {
+    final colors = AelTheme.colorsOf(context);
     final expanded = _expandedIssues.contains(issue.id);
     final stackExpanded = _expandedStacks.contains(issue.id);
     final details = issue.details;
@@ -482,12 +497,9 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: CupertinoDynamicColor.resolve(
-          issue.severity == DiagnosticIssueSeverity.error
-              ? AelTheme.colorsOf(context).error.withValues(alpha: 0.08)
-              : AelTheme.colorsOf(context).tonalTileBg,
-          context,
-        ),
+        color: issue.severity == DiagnosticIssueSeverity.error
+            ? colors.error.withValues(alpha: 0.08)
+            : colors.tonalTileBg,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -495,21 +507,18 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
         children: [
           Text(
             diagnosticIssueCategoryLabel(issue.category),
-            style: TextStyle(
-              color: CupertinoDynamicColor.resolve(
-                AelTheme.colorsOf(context).textSecondary,
-                context,
-              ),
-              fontSize: 13,
-            ),
+            style: TextStyle(color: colors.textSecondary, fontSize: 13),
           ),
           const SizedBox(height: 3),
           Text(
             issue.title,
-            style: const TextStyle(fontWeight: FontWeight.w600),
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: colors.textPrimary,
+            ),
           ),
           const SizedBox(height: 4),
-          Text(issue.explanation),
+          Text(issue.explanation, style: TextStyle(color: colors.textPrimary)),
           CupertinoButton(
             key: ValueKey('toggle-issue-${issue.id}'),
             padding: const EdgeInsets.only(top: 7),
@@ -520,19 +529,23 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
                 _expandedIssues.add(issue.id);
               }
             }),
-            child: Text(expanded ? '收起技术详情' : '查看技术详情'),
+            child: Text(
+              expanded ? '收起技术详情' : '查看技术详情',
+              style: TextStyle(color: colors.primary),
+            ),
           ),
           if (expanded) ...[
-            _technicalRow('refreshId', details.refreshId),
+            _technicalRow(context, 'refreshId', details.refreshId),
             _technicalRow(
+              context,
               'UTC 时间',
               formatUtcDiagnosticTime(details.timestampUtc),
             ),
-            _technicalRow('HTTP 状态码', '${details.statusCode ?? '-'}'),
-            _technicalRow('请求接口', details.interfaceName),
-            _technicalRow('已脱敏 URL', details.url ?? '-'),
-            _technicalRow('异常类型', details.exceptionType ?? '-'),
-            _technicalRow('异常摘要', details.exceptionSummary ?? '-'),
+            _technicalRow(context, 'HTTP 状态码', '${details.statusCode ?? '-'}'),
+            _technicalRow(context, '请求接口', details.interfaceName),
+            _technicalRow(context, '已脱敏 URL', details.url ?? '-'),
+            _technicalRow(context, '异常类型', details.exceptionType ?? '-'),
+            _technicalRow(context, '异常摘要', details.exceptionSummary ?? '-'),
             if (details.stack != null) ...[
               CupertinoButton(
                 key: ValueKey('toggle-stack-${issue.id}'),
@@ -544,12 +557,19 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
                     _expandedStacks.add(issue.id);
                   }
                 }),
-                child: Text(stackExpanded ? '隐藏堆栈' : '显示堆栈'),
+                child: Text(
+                  stackExpanded ? '隐藏堆栈' : '显示堆栈',
+                  style: TextStyle(color: colors.primary),
+                ),
               ),
               if (stackExpanded)
                 Text(
                   details.stack!,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                  style: TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 11,
+                    color: colors.textSecondary,
+                  ),
                 ),
             ],
           ],
@@ -569,7 +589,7 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _sectionTitle('App 与后台协调'),
+            _sectionTitle(context, 'App 与后台协调'),
             for (final event in events) _timelineRow(context, event),
           ],
         ),
@@ -663,15 +683,18 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
   }
 
   Widget _noticeCard(BuildContext context, String text) {
+    final colors = AelTheme.colorsOf(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: _card(
         context,
         child: Row(
           children: [
-            const Icon(AelIcons.info),
+            Icon(AelIcons.info, color: colors.primary),
             const SizedBox(width: 10),
-            Expanded(child: Text(text)),
+            Expanded(
+              child: Text(text, style: TextStyle(color: colors.textPrimary)),
+            ),
           ],
         ),
       ),
@@ -679,43 +702,64 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
   }
 
   Widget _metric(BuildContext context, String label, String value) {
+    final colors = AelTheme.colorsOf(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: CupertinoDynamicColor.resolve(
-          AelTheme.colorsOf(context).tonalTileBg,
-          context,
-        ),
+        color: colors.tonalTileBg,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text('$label $value'),
+      child: Text(
+        '$label $value',
+        style: TextStyle(color: colors.textPrimary, fontSize: 13.5),
+      ),
     );
   }
 
-  Widget _flag(String label, bool enabled) {
+  Widget _flag(BuildContext context, String label, bool enabled) {
+    final colors = AelTheme.colorsOf(context);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(enabled ? AelIcons.success : LucideIcons.circleMinus, size: 15),
+        Icon(
+          enabled ? AelIcons.success : LucideIcons.circleMinus,
+          size: 15,
+          color: enabled ? colors.success : colors.textTertiary,
+        ),
         const SizedBox(width: 4),
-        Text('$label ${enabled ? '是' : '否'}'),
+        Text(
+          '$label ${enabled ? '是' : '否'}',
+          style: TextStyle(
+            color: enabled ? colors.textPrimary : colors.textSecondary,
+            fontSize: 13.5,
+          ),
+        ),
       ],
     );
   }
 
-  Widget _technicalRow(String label, String value) {
+  Widget _technicalRow(BuildContext context, String label, String value) {
+    final colors = AelTheme.colorsOf(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 5),
-      child: Text('$label：$value'),
+      child: Text(
+        '$label：$value',
+        style: TextStyle(color: colors.textSecondary, fontSize: 13),
+      ),
     );
   }
 
-  Widget _sectionTitle(String text) {
+  Widget _sectionTitle(BuildContext context, String text) {
+    final colors = AelTheme.colorsOf(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 9),
       child: Text(
         text,
-        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          fontSize: 17,
+          fontWeight: FontWeight.w600,
+          color: colors.textPrimary,
+        ),
       ),
     );
   }
@@ -732,16 +776,14 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
     BuildContext context,
     DiagnosticReportSeverity severity,
   ) {
-    final color = switch (severity) {
-      DiagnosticReportSeverity.success => AelTheme.colorsOf(context).success,
-      DiagnosticReportSeverity.degraded => AelTheme.colorsOf(context).warning,
-      DiagnosticReportSeverity.failed => AelTheme.colorsOf(context).error,
-      DiagnosticReportSeverity.incomplete => AelTheme.colorsOf(context).warning,
-      DiagnosticReportSeverity.coordinated => AelTheme.colorsOf(
-        context,
-      ).primary,
+    final colors = AelTheme.colorsOf(context);
+    return switch (severity) {
+      DiagnosticReportSeverity.success => colors.success,
+      DiagnosticReportSeverity.degraded => colors.warning,
+      DiagnosticReportSeverity.failed => colors.error,
+      DiagnosticReportSeverity.incomplete => colors.warning,
+      DiagnosticReportSeverity.coordinated => colors.primary,
     };
-    return CupertinoDynamicColor.resolve(color, context);
   }
 
   IconData _severityIcon(DiagnosticReportSeverity severity) {
@@ -755,14 +797,12 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
   }
 
   Color _moduleColor(BuildContext context, DiagnosticModuleState state) {
-    final color = switch (state) {
-      DiagnosticModuleState.liveSuccess => AelTheme.colorsOf(context).success,
-      DiagnosticModuleState.cache => AelTheme.colorsOf(context).warning,
-      DiagnosticModuleState.failed => AelTheme.colorsOf(context).error,
-      DiagnosticModuleState.notExecuted => AelTheme.colorsOf(
-        context,
-      ).textSecondary,
+    final colors = AelTheme.colorsOf(context);
+    return switch (state) {
+      DiagnosticModuleState.liveSuccess => colors.success,
+      DiagnosticModuleState.cache => colors.warning,
+      DiagnosticModuleState.failed => colors.error,
+      DiagnosticModuleState.notExecuted => colors.textSecondary,
     };
-    return CupertinoDynamicColor.resolve(color, context);
   }
 }

@@ -27,24 +27,45 @@ class ConsentApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bundle = AelThemeEngine.resolve(
-      brightness: Brightness.light,
+    final initialBrightness =
+        WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    final initialBundle = AelThemeEngine.resolve(
+      brightness: initialBrightness,
       source: ThemeColorSource.defaultBlue,
       customSeed: AelPalettePresets.defaultBlue,
       paletteStyle: ThemePaletteStyle.tonalSpot,
       contrastLevel: ThemeContrastLevel.standard,
     );
-    return Theme(
-      data: bundle.materialTheme,
-      child: MiuixTheme(
-        data: bundle.miuixTheme,
-        child: CupertinoApp(
-          title: 'Helechron',
-          debugShowCheckedModeBanner: false,
-          theme: bundle.cupertinoTheme,
-          home: ConsentPage(onAgreed: onAgreed),
-        ),
-      ),
+    return CupertinoApp(
+      title: 'Helechron',
+      debugShowCheckedModeBanner: false,
+      theme: initialBundle.cupertinoTheme,
+      builder: (context, child) {
+        final brightness = MediaQuery.platformBrightnessOf(context);
+        final bundle = brightness == initialBrightness
+            ? initialBundle
+            : AelThemeEngine.resolve(
+                brightness: brightness,
+                source: ThemeColorSource.defaultBlue,
+                customSeed: AelPalettePresets.defaultBlue,
+                paletteStyle: ThemePaletteStyle.tonalSpot,
+                contrastLevel: ThemeContrastLevel.standard,
+              );
+        final isDark = brightness == Brightness.dark;
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: isDark
+              ? SystemUiOverlayStyle.light
+              : SystemUiOverlayStyle.dark,
+          child: CupertinoTheme(
+            data: bundle.cupertinoTheme,
+            child: MiuixTheme(
+              data: bundle.miuixTheme,
+              child: Theme(data: bundle.materialTheme, child: child!),
+            ),
+          ),
+        );
+      },
+      home: ConsentPage(onAgreed: onAgreed),
     );
   }
 }
@@ -174,7 +195,7 @@ class _ConsentPageState extends State<ConsentPage> {
                             style: TextStyle(
                               fontSize: 14,
                               height: 1.65,
-                              color: colors.textPrimary,
+                              color: colors.onPrimaryContainer,
                             ),
                           ),
                         ),

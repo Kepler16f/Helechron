@@ -105,21 +105,72 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Obx(() => _buildSyncNoticeBanner(context)),
-                    AelAdaptiveGrid(
-                      maxColumns: 2,
-                      minItemWidth: 380,
-                      horizontalGap: 14,
-                      verticalGap: 14,
-                      children: [
-                        Obx(() => _buildIdentityPlanCard(context)),
-                        Obx(() => _buildGraduationProgressCard(context)),
-                        Obx(() => _buildAuditModulesCard(context)),
-                        Obx(() => _buildForeignLanguageCard(context)),
-                        Obx(() => _buildPdfTreeCard(context)),
-                        Obx(() => _buildCoreCoursesCard(context)),
-                        Obx(() => _buildObjectivesCard(context)),
-                      ],
-                    ),
+                    Obx(() {
+                      final overviewCards = <Widget>[
+                        _buildIdentityPlanCard(context),
+                        _buildGraduationProgressCard(context),
+                      ];
+                      final overviewWeights = <double>[1.6, 1.8];
+
+                      final report = _c.auditReport.value;
+                      final hasAudit =
+                          report != null &&
+                          (report['summary'] as List? ?? const [])
+                              .whereType<Map>()
+                              .any((m) {
+                                final text =
+                                    '${m['module_path'] ?? ''} ${m['title'] ?? ''}';
+                                return !text.contains('微辅修');
+                              });
+                      if (hasAudit) {
+                        overviewCards.add(_buildAuditModulesCard(context));
+                        overviewWeights.add(_showAuditDetails ? 2.8 : 0.7);
+                      }
+
+                      overviewCards.add(_buildForeignLanguageCard(context));
+                      overviewWeights.add(1.5);
+
+                      overviewCards.add(_buildCoreCoursesCard(context));
+                      overviewWeights.add(1.4);
+
+                      final plan = _c.selectedPlan.value;
+                      final ps = _c.pdfSections.value;
+                      final hasObjectives =
+                          (plan != null &&
+                              (plan.pymb.isNotEmpty ||
+                                  plan.pyyq.isNotEmpty ||
+                                  plan.bz.isNotEmpty)) ||
+                          (ps != null && _mergedIntroSections(ps).isNotEmpty);
+                      if (hasObjectives) {
+                        overviewCards.add(_buildObjectivesCard(context));
+                        overviewWeights.add(
+                          _showObjectivesAndNotes ? 2.2 : 0.7,
+                        );
+                      }
+
+                      final hasPdfTree =
+                          ps != null &&
+                          !ps.isEmpty &&
+                          _filteredCourseSections(ps).isNotEmpty;
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          AelMasonryGrid(
+                            maxColumns: 2,
+                            minItemWidth: 380,
+                            horizontalGap: 14,
+                            verticalGap: 14,
+                            itemWeights: overviewWeights,
+                            children: overviewCards,
+                          ),
+                          if (hasPdfTree) ...[
+                            const SizedBox(height: 14),
+                            _buildPdfTreeCard(context),
+                          ],
+                        ],
+                      );
+                    }),
                     const SizedBox(height: 24),
                     const NativeBottomBarSpacer(),
                   ],
@@ -1272,6 +1323,37 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
     return out;
   }
 
+  List<List<({int index, PdfModuleSection sec})>> _groupCourseSections(
+    List<PdfModuleSection> visibleSections,
+  ) {
+    if (visibleSections.isEmpty) return const [];
+    final indexed = [
+      for (var i = 0; i < visibleSections.length; i++)
+        (index: i, sec: visibleSections[i]),
+    ];
+
+    List<List<({int index, PdfModuleSection sec})>> splitAtLevel(int level) {
+      final groups = <List<({int index, PdfModuleSection sec})>>[];
+      for (final item in indexed) {
+        if (item.sec.level <= level || groups.isEmpty) {
+          groups.add([item]);
+        } else {
+          groups.last.add(item);
+        }
+      }
+      return groups;
+    }
+
+    final byL1 = splitAtLevel(1);
+    if (byL1.length > 1) return byL1;
+    // 若仅含单个大类且子模块较多，则按二级模块拆分到双列瀑布流
+    if (visibleSections.length > 3) {
+      final byL2 = splitAtLevel(2);
+      if (byL2.length > 1) return byL2;
+    }
+    return byL1;
+  }
+
   Widget _buildPdfTreeCard(BuildContext context) {
     final ps = _c.pdfSections.value;
     if (ps == null || ps.isEmpty) return const SizedBox.shrink();
@@ -1288,7 +1370,298 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
     if (sections.isEmpty) return const SizedBox.shrink();
     final visibleSections = _showPdfModuleList
         ? sections
-        : sections.take(0).toList();
+        : const <PdfModuleSection>[];
+    final groups = _groupCourseSections(visibleSections);
+
+    Widget buildSectionItem(
+      BuildContext ctx,
+      int i,
+      PdfModuleSection sec,
+      int baseLevel,
+    ) {
+      final secKey = '${i}_${sec.label}';
+      final indent = ((sec.level - baseLevel) * 10.0).clamp(0.0, 24.0);
+      final isForeign = PlanAuditHelper.isForeignSection(sec);
+      final practiceIdx = PlanAuditHelper.practiceClassroomIndex(
+        '${sec.title} ${sec.parentPath}',
+      );
+      // 第二/三/四课堂的详细要求默认收起，点击再展开
+      final defaultExpanded = practiceIdx == null;
+      final isExpanded = defaultExpanded
+          ? !_toggledSections.contains(secKey)
+          : _toggledSections.contains(secKey);
+
+      final mergedForeignExtras = <ForeignCourseEntry>[];
+      if (isForeign) {
+        final existingNames = sec.courses.map((c) => c.name.trim()).toSet();
+        for (final fc in _c.foreignCourses) {
+          if (!existingNames.contains(fc.name)) {
+            mergedForeignExtras.add(fc);
+          }
+        }
+      }
+
+      final hasBody =
+          sec.notes.isNotEmpty ||
+          sec.courses.isNotEmpty ||
+          mergedForeignExtras.isNotEmpty ||
+          practiceIdx != null;
+
+      String badgeText = '';
+      Color badgeColor = accent;
+      if (isForeign) {
+        badgeText = '要求 ${_c.effectiveForeignCredits.toStringAsFixed(1)}学分';
+      } else if (practiceIdx != null &&
+          (practiceIdx == 2 || practiceIdx == 3 || practiceIdx == 4)) {
+        final reqP = practiceIdx == 2
+            ? _c.pt2Required
+            : practiceIdx == 3
+            ? _c.pt3Required
+            : _c.pt4Required;
+        final gotP = practiceIdx == 2
+            ? _c.pt2Earned
+            : practiceIdx == 3
+            ? _c.pt3Earned
+            : _c.pt4Earned;
+        final displayReq = reqP > 0
+            ? reqP
+            : (double.tryParse(sec.creditsRaw) ?? 0.0);
+        badgeText = displayReq > 0
+            ? '已获 ${gotP.toStringAsFixed(2)}/${displayReq.toStringAsFixed(2)}分'
+            : '已获 ${gotP.toStringAsFixed(2)}分';
+        badgeColor = displayReq > 0 && gotP >= displayReq ? green : yellow;
+      } else if (practiceIdx == 0) {
+        badgeText =
+            '已获 ${_c.practiceEffectiveEarned.toStringAsFixed(2)}/${_c.practiceRequiredTotal.toStringAsFixed(2)}分';
+        badgeColor =
+            _c.practiceRequiredTotal > 0 &&
+                _c.practiceEffectiveEarned >= _c.practiceRequiredTotal
+            ? green
+            : yellow;
+      } else if (sec.creditsRaw.isNotEmpty) {
+        badgeText = sec.isCountRule
+            ? '规则:${sec.creditsRaw}门'
+            : '${sec.creditsRaw}${sec.creditsUnit}';
+        badgeColor = sec.isCountRule ? cyan : accent;
+      }
+
+      return Padding(
+        padding: EdgeInsets.only(left: indent, bottom: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: hasBody
+                  ? () {
+                      setState(() {
+                        if (_toggledSections.contains(secKey)) {
+                          _toggledSections.remove(secKey);
+                        } else {
+                          _toggledSections.add(secKey);
+                        }
+                      });
+                    }
+                  : null,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: sec.level == 1
+                      ? accent.withValues(alpha: 0.12)
+                      : colors.cardBg,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        sec.title,
+                        style: TextStyle(
+                          fontSize: sec.level <= 2 ? 13.5 : 12.5,
+                          fontWeight: sec.level <= 2
+                              ? FontWeight.w700
+                              : FontWeight.w600,
+                          color: sec.level == 1 ? accent : label,
+                        ),
+                      ),
+                    ),
+                    if (badgeText.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: badgeColor.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(AelRadius.pill),
+                        ),
+                        child: Text(
+                          badgeText,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: badgeColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (sec.courses.isNotEmpty ||
+                        mergedForeignExtras.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        '${sec.courses.length + mergedForeignExtras.length}门',
+                        style: TextStyle(fontSize: 11, color: secondary),
+                      ),
+                    ],
+                    if (hasBody) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        isExpanded ? AelIcons.chevronUp : AelIcons.chevronDown,
+                        size: 15,
+                        color: secondary,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            if (isExpanded) ...[
+              if (practiceIdx != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6, left: 6, right: 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          practiceIdx == 0
+                              ? '二课 ${_c.pt2Earned.toStringAsFixed(2)} · 三课 ${_c.pt3Earned.toStringAsFixed(2)} · 四课 ${_c.pt4Earned.toStringAsFixed(2)}（已与素拓看板实时同步）'
+                              : '第${practiceIdx == 2
+                                    ? '二'
+                                    : practiceIdx == 3
+                                    ? '三'
+                                    : '四'}课堂实获 ${practiceIdx == 2
+                                    ? _c.pt2Earned.toStringAsFixed(2)
+                                    : practiceIdx == 3
+                                    ? _c.pt3Earned.toStringAsFixed(2)
+                                    : _c.pt4Earned.toStringAsFixed(2)} 分（已同步素拓看板）',
+                          style: TextStyle(fontSize: 11.5, color: secondary),
+                        ),
+                      ),
+                      CupertinoButton(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        minSize: 24,
+                        onPressed: () =>
+                            Navigator.of(context, rootNavigator: true).push(
+                              CupertinoPageRoute(
+                                builder: (_) => PracticeScorePage(
+                                  scholar: _c.scholar.value,
+                                ),
+                                title: '素拓记点明细',
+                              ),
+                            ),
+                        child: Text(
+                          '查看明细',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: AelTheme.colorsOf(context).primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (sec.notes.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6, left: 6, right: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: sec.notes
+                        .map(
+                          (n) => Text(
+                            n,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              height: 1.4,
+                              color: secondary,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+              if (sec.courses.isNotEmpty || mergedForeignExtras.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6, left: 4),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      ...sec.courses.map((course) {
+                        final state =
+                            _c.courseStates[course.name] ??
+                            CompassCourseState.unknown;
+                        final semLabel = PlanAuditHelper.prettySemester(
+                          course.semester,
+                        );
+                        return _buildCourseChip(
+                          context,
+                          name: course.name,
+                          credits: course.credits,
+                          extra: semLabel,
+                          state: state,
+                        );
+                      }),
+                      ...mergedForeignExtras.map(
+                        (fc) => _buildCourseChip(
+                          context,
+                          name: fc.name,
+                          credits: fc.credits,
+                          extra: fc.passed
+                              ? '已通过'
+                              : (fc.active ? '在修' : '未获学分'),
+                          state: fc.state,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    double estimateGroupWeight(
+      List<({int index, PdfModuleSection sec})> group,
+    ) {
+      var weight = 0.6;
+      for (final item in group) {
+        final sec = item.sec;
+        final secKey = '${item.index}_${sec.label}';
+        final practiceIdx = PlanAuditHelper.practiceClassroomIndex(
+          '${sec.title} ${sec.parentPath}',
+        );
+        final defaultExpanded = practiceIdx == null;
+        final isExpanded = defaultExpanded
+            ? !_toggledSections.contains(secKey)
+            : _toggledSections.contains(secKey);
+        weight += 1.0;
+        if (isExpanded) {
+          weight += sec.courses.length * 0.28 + sec.notes.length * 0.35;
+        }
+      }
+      return weight;
+    }
+
+    final groupWeights = [for (final g in groups) estimateGroupWeight(g)];
 
     return AelSectionCard(
       cornerRadius: AelRadius.tile,
@@ -1305,326 +1678,86 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
                   color: label,
                 ),
               ),
-              const Spacer(),
-              Text(
-                '${sections.where((s) => s.level == 1).length}大类 · ${ps.courseCount}门课',
-                style: TextStyle(fontSize: 12, color: secondary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${sections.where((s) => s.level == 1).length}大类 · ${ps.courseCount}门课',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: secondary),
+                ),
+              ),
+              AelChip(
+                label: _showPdfModuleList ? '收起' : '展开',
+                leadingIcon: _showPdfModuleList
+                    ? AelIcons.chevronUp
+                    : AelIcons.chevronDown,
+                tone: AelChipTone.neutral,
+                onTap: () => setState(() {
+                  _showPdfModuleList = !_showPdfModuleList;
+                  if (_showPdfModuleList) {
+                    _toggledSections.clear();
+                  }
+                }),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          for (int i = 0; i < visibleSections.length; i++) ...[
-            Builder(
-              builder: (ctx) {
-                final sec = visibleSections[i];
-                final secKey = '${i}_${sec.label}';
-                final indent = ((sec.level - 1) * 12.0).clamp(0.0, 36.0);
-                final isForeign = PlanAuditHelper.isForeignSection(sec);
-                final practiceIdx = PlanAuditHelper.practiceClassroomIndex(
-                  '${sec.title} ${sec.parentPath}',
-                );
-                // 第二/三/四课堂的详细要求默认收起，点击再展开
-                final defaultExpanded = practiceIdx == null;
-                final isExpanded = defaultExpanded
-                    ? !_toggledSections.contains(secKey)
-                    : _toggledSections.contains(secKey);
-
-                final mergedForeignExtras = <ForeignCourseEntry>[];
-                if (isForeign) {
-                  final existingNames = sec.courses
-                      .map((c) => c.name.trim())
-                      .toSet();
-                  for (final fc in _c.foreignCourses) {
-                    if (!existingNames.contains(fc.name)) {
-                      mergedForeignExtras.add(fc);
-                    }
-                  }
-                }
-
-                final hasBody =
-                    sec.notes.isNotEmpty ||
-                    sec.courses.isNotEmpty ||
-                    mergedForeignExtras.isNotEmpty ||
-                    practiceIdx != null;
-
-                String badgeText = '';
-                Color badgeColor = accent;
-                if (isForeign) {
-                  badgeText =
-                      '要求 ${_c.effectiveForeignCredits.toStringAsFixed(1)}学分';
-                } else if (practiceIdx != null &&
-                    (practiceIdx == 2 ||
-                        practiceIdx == 3 ||
-                        practiceIdx == 4)) {
-                  final reqP = practiceIdx == 2
-                      ? _c.pt2Required
-                      : practiceIdx == 3
-                      ? _c.pt3Required
-                      : _c.pt4Required;
-                  final gotP = practiceIdx == 2
-                      ? _c.pt2Earned
-                      : practiceIdx == 3
-                      ? _c.pt3Earned
-                      : _c.pt4Earned;
-                  final displayReq = reqP > 0
-                      ? reqP
-                      : (double.tryParse(sec.creditsRaw) ?? 0.0);
-                  badgeText = displayReq > 0
-                      ? '已获 ${gotP.toStringAsFixed(2)}/${displayReq.toStringAsFixed(2)}分'
-                      : '已获 ${gotP.toStringAsFixed(2)}分';
-                  badgeColor = displayReq > 0 && gotP >= displayReq
-                      ? green
-                      : yellow;
-                } else if (practiceIdx == 0) {
-                  badgeText =
-                      '已获 ${_c.practiceEffectiveEarned.toStringAsFixed(2)}/${_c.practiceRequiredTotal.toStringAsFixed(2)}分';
-                  badgeColor =
-                      _c.practiceRequiredTotal > 0 &&
-                          _c.practiceEffectiveEarned >= _c.practiceRequiredTotal
-                      ? green
-                      : yellow;
-                } else if (sec.creditsRaw.isNotEmpty) {
-                  badgeText = sec.isCountRule
-                      ? '规则:${sec.creditsRaw}门'
-                      : '${sec.creditsRaw}${sec.creditsUnit}';
-                  badgeColor = sec.isCountRule ? cyan : accent;
-                }
-
-                return Padding(
-                  padding: EdgeInsets.only(left: indent, bottom: 6),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: hasBody
-                            ? () {
-                                setState(() {
-                                  if (_toggledSections.contains(secKey)) {
-                                    _toggledSections.remove(secKey);
-                                  } else {
-                                    _toggledSections.add(secKey);
-                                  }
-                                });
-                              }
-                            : null,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 7,
-                          ),
-                          decoration: BoxDecoration(
-                            color: sec.level == 1
-                                ? accent.withValues(alpha: 0.1)
-                                : colors.tonalTileBg,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
+          if (_showPdfModuleList) ...[
+            const SizedBox(height: 12),
+            AelMasonryGrid(
+              maxColumns: 2,
+              minItemWidth: 380,
+              horizontalGap: 12,
+              verticalGap: 12,
+              itemWeights: groupWeights,
+              children: [
+                for (final group in groups)
+                  Builder(
+                    builder: (ctx) {
+                      final baseLevel = group.first.sec.level;
+                      return DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: colors.tonalTileBg,
+                          borderRadius: BorderRadius.circular(AelRadius.sm),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(10, 10, 10, 4),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Expanded(
-                                child: Text(
-                                  sec.title,
-                                  style: TextStyle(
-                                    fontSize: sec.level <= 2 ? 13.5 : 12.5,
-                                    fontWeight: sec.level <= 2
-                                        ? FontWeight.w700
-                                        : FontWeight.w600,
-                                    color: sec.level == 1 ? accent : label,
-                                  ),
+                              for (final item in group)
+                                buildSectionItem(
+                                  ctx,
+                                  item.index,
+                                  item.sec,
+                                  baseLevel,
                                 ),
-                              ),
-                              if (badgeText.isNotEmpty) ...[
-                                const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 7,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: badgeColor.withValues(alpha: 0.14),
-                                    borderRadius: BorderRadius.circular(
-                                      AelRadius.pill,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    badgeText,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: badgeColor,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                              if (sec.courses.isNotEmpty ||
-                                  mergedForeignExtras.isNotEmpty) ...[
-                                const SizedBox(width: 6),
-                                Text(
-                                  '${sec.courses.length + mergedForeignExtras.length}门',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: secondary,
-                                  ),
-                                ),
-                              ],
-                              if (hasBody) ...[
-                                const SizedBox(width: 4),
-                                Icon(
-                                  isExpanded
-                                      ? AelIcons.chevronUp
-                                      : AelIcons.chevronDown,
-                                  size: 15,
-                                  color: secondary,
-                                ),
-                              ],
                             ],
                           ),
                         ),
-                      ),
-                      if (isExpanded) ...[
-                        if (practiceIdx != null)
-                          Padding(
-                            padding: const EdgeInsets.only(
-                              top: 6,
-                              left: 6,
-                              right: 6,
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    practiceIdx == 0
-                                        ? '二课 ${_c.pt2Earned.toStringAsFixed(2)} · 三课 ${_c.pt3Earned.toStringAsFixed(2)} · 四课 ${_c.pt4Earned.toStringAsFixed(2)}（已与素拓看板实时同步）'
-                                        : '第${practiceIdx == 2
-                                              ? '二'
-                                              : practiceIdx == 3
-                                              ? '三'
-                                              : '四'}课堂实获 ${practiceIdx == 2
-                                              ? _c.pt2Earned.toStringAsFixed(2)
-                                              : practiceIdx == 3
-                                              ? _c.pt3Earned.toStringAsFixed(2)
-                                              : _c.pt4Earned.toStringAsFixed(2)} 分（已同步素拓看板）',
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      color: secondary,
-                                    ),
-                                  ),
-                                ),
-                                CupertinoButton(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 3,
-                                  ),
-                                  minSize: 24,
-                                  onPressed: () =>
-                                      Navigator.of(
-                                        context,
-                                        rootNavigator: true,
-                                      ).push(
-                                        CupertinoPageRoute(
-                                          builder: (_) => PracticeScorePage(
-                                            scholar: _c.scholar.value,
-                                          ),
-                                          title: '素拓记点明细',
-                                        ),
-                                      ),
-                                  child: Text(
-                                    '查看明细',
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w600,
-                                      color: AelTheme.colorsOf(context).primary,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        if (sec.notes.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(
-                              top: 6,
-                              left: 6,
-                              right: 6,
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: sec.notes
-                                  .map(
-                                    (n) => Text(
-                                      n,
-                                      style: TextStyle(
-                                        fontSize: 11.5,
-                                        height: 1.4,
-                                        color: secondary,
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                            ),
-                          ),
-                        if (sec.courses.isNotEmpty ||
-                            mergedForeignExtras.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 6, left: 4),
-                            child: Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: [
-                                ...sec.courses.map((course) {
-                                  final state =
-                                      _c.courseStates[course.name] ??
-                                      CompassCourseState.unknown;
-                                  final semLabel =
-                                      PlanAuditHelper.prettySemester(
-                                        course.semester,
-                                      );
-                                  return _buildCourseChip(
-                                    context,
-                                    name: course.name,
-                                    credits: course.credits,
-                                    extra: semLabel,
-                                    state: state,
-                                  );
-                                }),
-                                ...mergedForeignExtras.map(
-                                  (fc) => _buildCourseChip(
-                                    context,
-                                    name: fc.name,
-                                    credits: fc.credits,
-                                    extra: fc.passed
-                                        ? '已通过'
-                                        : (fc.active ? '在修' : '未获学分'),
-                                    state: fc.state,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ],
+                      );
+                    },
                   ),
-                );
-              },
+              ],
             ),
-          ],
-          CupertinoButton(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            onPressed: () => setState(() {
-              _showPdfModuleList = !_showPdfModuleList;
-              if (_showPdfModuleList) {
+          ] else ...[
+            const SizedBox(height: 6),
+            CupertinoButton(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              onPressed: () => setState(() {
+                _showPdfModuleList = true;
                 _toggledSections.clear();
-              }
-            }),
-            child: Text(
-              _showPdfModuleList ? '收起模块列表' : '展开全部 ${sections.length} 个子模块',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: accent,
+              }),
+              child: Text(
+                '展开全部 ${sections.length} 个子模块',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: accent,
+                ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );

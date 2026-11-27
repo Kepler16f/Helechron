@@ -85,7 +85,7 @@ Future<T?> _showAelGeneralPopup<T>({
   )
   transitionBuilder,
 }) {
-  final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+  final isDark = AelTheme.colorsOf(context).isDark;
   return showGeneralDialog<T>(
     context: context,
     useRootNavigator: true,
@@ -307,7 +307,7 @@ Future<T?> showAelBottomSheet<T>({
     pageBuilder: (sheetCtx, animation, secondaryAnimation) {
       final mq = MediaQuery.of(sheetCtx);
       final colors = AelTheme.colorsOf(sheetCtx);
-      final isDark = CupertinoTheme.brightnessOf(sheetCtx) == Brightness.dark;
+      final isDark = colors.isDark;
       final bottomSafe = math.max(mq.padding.bottom, AelSpacing.lg);
       final hasHeader =
           (title != null && title.isNotEmpty) ||
@@ -539,7 +539,7 @@ Future<T?> showAelDialog<T>({
     pageBuilder: (dialogCtx, animation, secondaryAnimation) {
       final mq = MediaQuery.of(dialogCtx);
       final colors = AelTheme.colorsOf(dialogCtx);
-      final isDark = CupertinoTheme.brightnessOf(dialogCtx) == Brightness.dark;
+      final isDark = colors.isDark;
 
       return LayoutBuilder(
         builder: (layoutCtx, constraints) {
@@ -655,7 +655,19 @@ Future<T?> showAelDialog<T>({
                                     if (content != null) ...[
                                       if (message != null && message.isNotEmpty)
                                         const SizedBox(height: AelSpacing.md),
-                                      content,
+                                      DefaultTextStyle.merge(
+                                        style: TextStyle(
+                                          fontSize: 14.5,
+                                          height: 1.5,
+                                          color: colors.textPrimary,
+                                        ),
+                                        child: IconTheme.merge(
+                                          data: IconThemeData(
+                                            color: colors.textPrimary,
+                                          ),
+                                          child: content,
+                                        ),
+                                      ),
                                     ],
                                   ],
                                 ),
@@ -971,7 +983,7 @@ Future<T?> showAelPickerSheet<T>({
     subtitle: subtitle,
     builder: (sheetCtx) {
       final colors = AelTheme.colorsOf(sheetCtx);
-      final brightness = CupertinoTheme.brightnessOf(sheetCtx);
+      final brightness = colors.brightness;
       return Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,

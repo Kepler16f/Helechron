@@ -30,7 +30,6 @@ class AppearanceSection extends StatelessWidget {
       final contrast = _controller.themeContrastLevel;
       final seedValue = _controller.themeSeedColorValue;
       final monetSupported = _themeController.supportsPlatformMonet;
-      final activeSeed = AelTheme.of(context).seedColor;
       final colors = AelTheme.colorsOf(context);
 
       final footerText = switch (source) {
@@ -59,8 +58,8 @@ class AppearanceSection extends StatelessWidget {
               title: '主题色',
               subtitle: source.subtitle,
               icon: AelIcons.palette,
-              iconBgColor: activeSeed.withValues(alpha: 0.14),
-              iconColor: activeSeed,
+              iconBgColor: colors.primaryContainer,
+              iconColor: colors.onPrimaryContainer,
               trailing: Text(source.label, style: trailingStyle),
               onTap: () => _showSourcePicker(context, monetSupported),
             ),
@@ -90,8 +89,8 @@ class AppearanceSection extends StatelessWidget {
               title: '配色风格',
               subtitle: '决定莫奈/主题色生成整套配色的方式',
               icon: AelIcons.sparkles,
-              iconBgColor: activeSeed.withValues(alpha: 0.14),
-              iconColor: activeSeed,
+              iconBgColor: colors.primaryContainer,
+              iconColor: colors.onPrimaryContainer,
               trailing: Text(style.label, style: trailingStyle),
               onTap: () => _showStylePicker(context),
             ),
@@ -100,8 +99,8 @@ class AppearanceSection extends StatelessWidget {
               title: '对比度',
               subtitle: '提高文字与背景对比，便于阅读',
               icon: AelIcons.contrast,
-              iconBgColor: activeSeed.withValues(alpha: 0.14),
-              iconColor: activeSeed,
+              iconBgColor: colors.primaryContainer,
+              iconColor: colors.onPrimaryContainer,
               trailing: Text(contrast.label, style: trailingStyle),
               onTap: () => _showContrastPicker(context),
             ),

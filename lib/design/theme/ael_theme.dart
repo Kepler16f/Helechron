@@ -187,7 +187,9 @@ final class AelTheme {
   static AelThemeData of(BuildContext context) {
     final ext = Theme.of(context).extension<AelThemeData>();
     if (ext != null) return ext;
-    final brightness = MediaQuery.platformBrightnessOf(context);
+    final brightness =
+        CupertinoTheme.of(context).brightness ??
+        MediaQuery.platformBrightnessOf(context);
     return AelThemeEngine.resolve(
       brightness: brightness,
       source: ThemeColorSource.defaultBlue,
@@ -418,6 +420,16 @@ final class AelThemeEngine {
           fontSize: 34.0,
           fontWeight: FontWeight.bold,
           letterSpacing: 0.41,
+        ),
+        pickerTextStyle: TextStyle(
+          color: tokens.textPrimary,
+          fontSize: 19.0,
+          fontWeight: FontWeight.w500,
+        ),
+        dateTimePickerTextStyle: TextStyle(
+          color: tokens.textPrimary,
+          fontSize: 19.0,
+          fontWeight: FontWeight.w500,
         ),
       ),
     );
