@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:celechron/model/period.dart';
 import 'package:celechron/model/scholar.dart';
 import 'package:celechron/services/ohos_native_service.dart';
+import 'package:celechron/utils/platform_features.dart';
 
 /// 课程小组件数据同步。
 ///
@@ -28,16 +29,18 @@ class ScholarWidgetSync {
 
   /// 防止重入
   static bool _running = false;
+  static String? _lastNonOhosPayload;
+  static int? _lastNonOhosMinute;
 
   /// 计算最近的未结束课程并推送到原生小组件。
-  static void sync() {
+  static void sync({bool force = false}) {
     if (_running) {
       return;
     }
     _running = true;
     try {
       final scholarRx = Get.find<Rx<Scholar>>(tag: 'scholar');
-      _syncScholar(scholarRx.value);
+      _syncScholar(scholarRx.value, force: force);
     } catch (_) {
       // 数据尚未就绪时静默忽略
     } finally {
@@ -45,17 +48,29 @@ class ScholarWidgetSync {
     }
   }
 
-  static void _syncScholar(Scholar scholar) {
+  static void _syncScholar(Scholar scholar, {bool force = false}) {
     final now = DateTime.now();
-    final upcoming = scholar.periods
-        .where((p) => p.endTime.isAfter(now))
-        .toList()
-      ..sort((a, b) => a.startTime.compareTo(b.startTime));
+    final upcoming =
+        scholar.periods.where((p) => p.endTime.isAfter(now)).toList()
+          ..sort((a, b) => a.startTime.compareTo(b.startTime));
+
+    final encoded = jsonEncode(
+      upcoming.take(_maxCourses).map(_encodeCourse).toList(),
+    );
+
+    if (!PlatformFeatures.isOhos) {
+      final minuteBucket = now.millisecondsSinceEpoch ~/ 60000;
+      if (!force &&
+          encoded == _lastNonOhosPayload &&
+          minuteBucket == _lastNonOhosMinute) {
+        return;
+      }
+      _lastNonOhosPayload = encoded;
+      _lastNonOhosMinute = minuteBucket;
+    }
 
     OhosNativeService.instance.updateCourseWidget(
-      coursesJson: jsonEncode(
-        upcoming.take(_maxCourses).map(_encodeCourse).toList(),
-      ),
+      coursesJson: encoded,
       leadWindowMinutes: leadWindowMinutes,
     );
   }

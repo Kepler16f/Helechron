@@ -1,7 +1,5 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
-import 'package:flutter_miuix/miuix.dart'
-    show MiuixLayerBackdrop, MiuixLayerBackdropCapture;
 import 'package:get/get.dart';
 
 import 'package:celechron/design/components/ael_responsive.dart';
@@ -37,32 +35,50 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  int _indexNum = 0;
+  final ValueNotifier<int> _activeIndex = ValueNotifier<int>(0);
   final PageController _pageController = PageController();
-  MiuixLayerBackdrop? _glassBackdrop;
 
   late final List<Widget> _pages = [
-    _KeepAlivePage(child: FlowPage()),
-    _KeepAlivePage(child: CalendarPage()),
-    _KeepAlivePage(child: TaskPage()),
-    _KeepAlivePage(child: ScholarPage()),
-    _KeepAlivePage(child: OptionPage()),
+    _KeepAlivePage(
+      tabIndex: 0,
+      activeIndexListenable: _activeIndex,
+      child: FlowPage(),
+    ),
+    _KeepAlivePage(
+      tabIndex: 1,
+      activeIndexListenable: _activeIndex,
+      child: CalendarPage(),
+    ),
+    _KeepAlivePage(
+      tabIndex: 2,
+      activeIndexListenable: _activeIndex,
+      child: TaskPage(),
+    ),
+    _KeepAlivePage(
+      tabIndex: 3,
+      activeIndexListenable: _activeIndex,
+      child: ScholarPage(),
+    ),
+    _KeepAlivePage(
+      tabIndex: 4,
+      activeIndexListenable: _activeIndex,
+      child: OptionPage(),
+    ),
   ];
+
+  int get _indexNum => _activeIndex.value;
 
   @override
   void initState() {
     super.initState();
-    if (!PlatformFeatures.isOhos) {
-      _glassBackdrop = MiuixLayerBackdrop();
-    }
     OhosNativeService.instance.installNativeTabHandler(_onNativeTabChanged);
     initFuse();
   }
 
   @override
   void dispose() {
+    _activeIndex.dispose();
     _pageController.dispose();
-    _glassBackdrop?.dispose();
     super.dispose();
   }
 
@@ -74,16 +90,19 @@ class _HomePageState extends State<HomePage> {
     if (rootNav.canPop()) {
       rootNav.popUntil((route) => route.isFirst);
     }
+    _activeIndex.value = index;
     _pageController.jumpToPage(index);
   }
 
   void _selectTab(int index) {
     if (_indexNum == index) return;
     setState(() {
-      _indexNum = index;
+      _activeIndex.value = index;
     });
     _pageController.jumpToPage(index);
-    OhosNativeService.instance.setCurrentTab(index);
+    if (PlatformFeatures.isOhos) {
+      OhosNativeService.instance.setCurrentTab(index);
+    }
   }
 
   @override
@@ -91,13 +110,15 @@ class _HomePageState extends State<HomePage> {
     final option = Get.find<Option>(tag: 'option');
     final colors = AelTheme.colorsOf(context);
     final bool useSideRail = AelResponsive.useSideRail(context);
+    final bool isRouteCurrent = ModalRoute.of(context)?.isCurrent ?? true;
     return Obx(() {
       final bool useNativeBar = PlatformFeatures.isOhos;
       final bool floating = option.bottomBarFloating.value;
       final bool immersiveLight = option.bottomBarImmersiveLight.value;
+      final int materialLevel = option.bottomBarMaterialLevel.value;
 
       final ScrollBehavior scrollBehavior = ScrollConfiguration.of(context);
-      Widget content = HeroMode(
+      final Widget content = HeroMode(
         enabled: false,
         child: PageView(
           controller: _pageController,
@@ -105,9 +126,11 @@ class _HomePageState extends State<HomePage> {
           onPageChanged: (index) {
             if (index != _indexNum) {
               setState(() {
-                _indexNum = index;
+                _activeIndex.value = index;
               });
-              OhosNativeService.instance.setCurrentTab(index);
+              if (PlatformFeatures.isOhos) {
+                OhosNativeService.instance.setCurrentTab(index);
+              }
             }
           },
           scrollBehavior: scrollBehavior.copyWith(
@@ -138,35 +161,29 @@ class _HomePageState extends State<HomePage> {
           ),
         );
       } else if (floating) {
-        const double floatingBarInset =
-            AelTabBarSpec.height + AelTabBarSpec.bottomMargin;
+        final double floatingBarInset = useNativeBar
+            ? AelTabBarSpec.height + AelTabBarSpec.bottomMargin
+            : AelTabBarSpec.dockHeight + AelTabBarSpec.dockBottomMargin;
         newMediaQuery = newMediaQuery.copyWith(
           padding: newMediaQuery.padding.copyWith(
             bottom: existingMediaQuery.padding.bottom + floatingBarInset,
           ),
         );
       } else {
+        final double dockedBarInset = useNativeBar
+            ? AelTabBarSpec.height
+            : AelTabBarSpec.dockedBarHeight;
         newMediaQuery = newMediaQuery.copyWith(
           padding: newMediaQuery.padding.copyWith(
-            bottom: AelTabBarSpec.height + existingMediaQuery.padding.bottom,
+            bottom: dockedBarInset + existingMediaQuery.padding.bottom,
           ),
         );
       }
 
-      Widget pageBody = MediaQuery(
+      final Widget pageBody = MediaQuery(
         data: newMediaQuery,
         child: Padding(padding: contentPadding, child: content),
       );
-
-      // Android / iOS 悬浮沉浸光感开启时捕获背景图层，供 MiuixGlassNavigationBar 实时折射采样；
-      // 鸿蒙端由 ArkTS HdsTabs 原生托管，不在 Flutter 侧做多余的离屏截图。
-      final backdrop = _glassBackdrop;
-      if (!useNativeBar && floating && immersiveLight && backdrop != null) {
-        pageBody = MiuixLayerBackdropCapture(
-          backdrop: backdrop,
-          child: pageBody,
-        );
-      }
 
       if (useSideRail) {
         final double nativeRailSpacerWidth =
@@ -184,7 +201,8 @@ class _HomePageState extends State<HomePage> {
                     onSelect: _selectTab,
                     floating: floating,
                     immersiveLight: immersiveLight,
-                    backdrop: backdrop,
+                    materialLevel: materialLevel,
+                    captureActive: isRouteCurrent,
                   ),
                 )
               else
@@ -202,29 +220,38 @@ class _HomePageState extends State<HomePage> {
             pageBody,
             if (!useNativeBar)
               MediaQuery.withNoTextScaling(
-                child: ValueListenableBuilder<bool>(
-                  valueListenable:
-                      OhosNativeService.instance.bottomBarVisibleNotifier,
-                  builder: (context, visible, child) {
-                    return AnimatedSlide(
-                      duration: AelDurations.normal,
-                      curve: Curves.easeInOutCubic,
-                      offset: visible ? Offset.zero : const Offset(0, 1.4),
-                      child: AnimatedOpacity(
-                        duration: AelDurations.fast,
-                        curve: Curves.easeInOut,
-                        opacity: visible ? 1.0 : 0.0,
-                        child: IgnorePointer(ignoring: !visible, child: child),
-                      ),
-                    );
-                  },
-                  child: AelTabBar(
-                    items: _kBarItems,
-                    currentIndex: _indexNum,
-                    onSelect: _selectTab,
-                    floating: floating,
-                    immersiveLight: immersiveLight,
-                    backdrop: backdrop,
+                child: Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: ValueListenableBuilder<bool>(
+                    valueListenable:
+                        OhosNativeService.instance.bottomBarVisibleNotifier,
+                    builder: (context, visible, child) {
+                      return AnimatedSlide(
+                        duration: AelDurations.normal,
+                        curve: Curves.easeInOutCubic,
+                        offset: visible ? Offset.zero : const Offset(0, 1.4),
+                        child: AnimatedOpacity(
+                          duration: AelDurations.fast,
+                          curve: Curves.easeInOut,
+                          opacity: visible ? 1.0 : 0.0,
+                          child: IgnorePointer(
+                            ignoring: !visible,
+                            child: child,
+                          ),
+                        ),
+                      );
+                    },
+                    child: AelTabBar(
+                      items: _kBarItems,
+                      currentIndex: _indexNum,
+                      onSelect: _selectTab,
+                      floating: floating,
+                      immersiveLight: immersiveLight,
+                      materialLevel: materialLevel,
+                      captureActive: isRouteCurrent,
+                    ),
                   ),
                 ),
               ),
@@ -248,8 +275,14 @@ class _HomePageState extends State<HomePage> {
 }
 
 class _KeepAlivePage extends StatefulWidget {
-  const _KeepAlivePage({required this.child});
+  const _KeepAlivePage({
+    required this.tabIndex,
+    required this.activeIndexListenable,
+    required this.child,
+  });
 
+  final int tabIndex;
+  final ValueNotifier<int> activeIndexListenable;
   final Widget child;
 
   @override
@@ -264,6 +297,15 @@ class _KeepAlivePageState extends State<_KeepAlivePage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return widget.child;
+    return ValueListenableBuilder<int>(
+      valueListenable: widget.activeIndexListenable,
+      builder: (context, activeIndex, child) {
+        return TickerMode(
+          enabled: activeIndex == widget.tabIndex,
+          child: child!,
+        );
+      },
+      child: widget.child,
+    );
   }
 }

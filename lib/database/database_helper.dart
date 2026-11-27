@@ -60,6 +60,7 @@ class DatabaseHelper {
   final String kHideHomeGpa = 'hideHomeGpa';
   final String kAsyncRefresh = 'asyncRefresh';
   final String kCalendarReminderMode = 'calendarReminderMode';
+  final String kCalendarSyncEnabled = 'calendarSyncEnabled';
   final String kBottomBarFloating = 'bottomBarFloating';
   final String kBottomBarImmersiveLight = 'bottomBarImmersiveLight';
   final String kBottomBarMaterialLevel = 'bottomBarMaterialLevel';
@@ -84,6 +85,7 @@ class DatabaseHelper {
       hideHomeGpa: getHideHomeGpa().obs,
       asyncRefresh: getAsyncRefresh().obs,
       calendarReminderMode: getCalendarReminderMode().obs,
+      calendarSyncEnabled: getCalendarSyncEnabled().obs,
       bottomBarFloating: getBottomBarFloating().obs,
       bottomBarImmersiveLight: getBottomBarImmersiveLight().obs,
       bottomBarMaterialLevel: getBottomBarMaterialLevel().obs,
@@ -203,13 +205,28 @@ class DatabaseHelper {
   CalendarReminderMode getCalendarReminderMode() {
     if (optionsBox.get(kCalendarReminderMode) == null) {
       optionsBox.put(
-          kCalendarReminderMode, CalendarReminderMode.notification.index);
+        kCalendarReminderMode,
+        CalendarReminderMode.notification.index,
+      );
     }
     return CalendarReminderMode.values[optionsBox.get(kCalendarReminderMode)];
   }
 
   Future<void> setCalendarReminderMode(CalendarReminderMode mode) async {
     await optionsBox.put(kCalendarReminderMode, mode.index);
+  }
+
+  bool? getStoredCalendarSyncEnabled() {
+    final raw = optionsBox.get(kCalendarSyncEnabled);
+    return raw is bool ? raw : null;
+  }
+
+  bool getCalendarSyncEnabled() {
+    return optionsBox.get(kCalendarSyncEnabled) == true;
+  }
+
+  Future<void> setCalendarSyncEnabled(bool enabled) async {
+    await optionsBox.put(kCalendarSyncEnabled, enabled);
   }
 
   bool getBottomBarFloating() {
@@ -336,7 +353,8 @@ class DatabaseHelper {
   }
 
   Future<void> setCourseIdMappingList(
-      List<CourseIdMap> courseIdMappingList) async {
+    List<CourseIdMap> courseIdMappingList,
+  ) async {
     await optionsBox.put(kCourseIdMappingList, courseIdMappingList);
   }
 
@@ -397,7 +415,7 @@ class DatabaseHelper {
       }),
       secureStorage.read(key: kPassword).then((value) {
         if (value != null) scholar.password = value;
-      })
+      }),
     ]);
     scholar.db = this;
     return scholar;
@@ -407,7 +425,7 @@ class DatabaseHelper {
     await Future.wait([
       scholarBox.put('user', scholar),
       secureStorage.write(key: kUsername, value: scholar.username),
-      secureStorage.write(key: kPassword, value: scholar.password)
+      secureStorage.write(key: kPassword, value: scholar.password),
     ]);
   }
 
@@ -415,7 +433,7 @@ class DatabaseHelper {
     await Future.wait([
       scholarBox.delete('user'),
       secureStorage.delete(key: kUsername),
-      secureStorage.delete(key: kPassword)
+      secureStorage.delete(key: kPassword),
     ]);
   }
 
@@ -469,8 +487,11 @@ class DatabaseHelper {
     if (data == null) {
       return {};
     }
-    return Map<String, double>.from(data.map(
-        (key, value) => MapEntry(key.toString(), (value as num).toDouble())));
+    return Map<String, double>.from(
+      data.map(
+        (key, value) => MapEntry(key.toString(), (value as num).toDouble()),
+      ),
+    );
   }
 
   /// 保存加权绩点的加权比例数据

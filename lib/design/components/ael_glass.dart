@@ -1,110 +1,368 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
-import 'package:flutter_miuix/miuix.dart'
-    show MiuixGlass, MiuixGlassRendering, MiuixGlassShape, MiuixLayerBackdrop;
 
 import 'package:celechron/design/components/ael_shapes.dart';
 import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/utils/platform_features.dart';
 
-/// 玻璃渲染后端分级：
-/// - [ohosNative]：鸿蒙端由 ArkTS 原生承载系统沉浸材质（不在 Flutter 重复叠折射 shader）
-/// - [miuixShader]：Android / iOS 使用 HyperOS 4 液态玻璃折射（需预先加载 shader）
-/// - [flutterBlur]：高斯模糊半透明回退（通用降级路径）
-/// - [solid]：纯色半透明（低端机 / 降低透明度）
-enum AelGlassTier { ohosNative, miuixShader, flutterBlur, solid }
+/// 玻璃渲染分级：
+/// - [ohosNative]：鸿蒙端由 ArkTS 原生托管底栏/侧栏；Flutter 浮层使用轻量高斯模糊
+/// - [liquidGlass]：Android / iOS 参考 FlClash 液态玻璃风格，使用 GPU BackdropFilter + 光学镜面高光描边
+/// - [flutterBlur]：标准高斯模糊半透明层
+/// - [solid]：纯色半透明卡片（关闭沉浸光感或覆盖避让期间使用）
+enum AelGlassTier { ohosNative, liquidGlass, flutterBlur, solid }
 
-/// 统一玻璃表面抽象。
-///
-/// 严格遵循「鸿蒙原生优先，Flutter 玻璃分级降级」原则：
-/// - 当 [reduceTransparency] 为 true 或 [tier] 为 [AelGlassTier.solid] 时使用高不透明度卡片底；
-/// - 鸿蒙端默认不启用 `liquid_glass_renderer` / OS4 shader，走干净的 [flutterBlur] 或由 ArkTS 托管。
+/// 液态玻璃精细度档位，兼容既有 `bottomBarMaterialLevel` 持久化整数（10=自适应, 0=极致, 1=标准, 2=轻量）。
+enum AelGlassQuality {
+  ultra,
+  standard;
+
+  static AelGlassQuality fromMaterialLevel(int level) {
+    return switch (level) {
+      1 || 2 => AelGlassQuality.standard,
+      _ => AelGlassQuality.ultra,
+    };
+  }
+}
+
+/// 统一液态玻璃与半透明表面组件（零 `toImageSync` UI 线程阻塞，安全适配 Android Impeller / Skia / iOS）。
 class AelGlassSurface extends StatelessWidget {
   const AelGlassSurface({
     super.key,
     required this.child,
     required this.borderRadius,
-    this.backdrop,
+    this.isCapsule = false,
     this.reduceTransparency = false,
-    this.blurSigma = 20.0,
+    this.blurSigma = 18.0,
     this.tintAlpha,
     this.padding = EdgeInsets.zero,
-    this.preferShader = true,
+    this.quality = AelGlassQuality.ultra,
+    this.enableBackdrop = true,
+    this.glowCenter,
+    this.glowStrength = 0.0,
+    this.shadows,
   });
 
   final Widget child;
   final double borderRadius;
-  final MiuixLayerBackdrop? backdrop;
+  final bool isCapsule;
   final bool reduceTransparency;
   final double blurSigma;
   final double? tintAlpha;
   final EdgeInsetsGeometry padding;
-  final bool preferShader;
+  final AelGlassQuality quality;
+  final bool enableBackdrop;
+  final Offset? glowCenter;
+  final double glowStrength;
+  final List<BoxShadow>? shadows;
 
   static AelGlassTier resolveTier({
     required bool reduceTransparency,
-    required bool hasBackdrop,
-    required bool preferShader,
+    required bool enableBackdrop,
   }) {
-    if (reduceTransparency) return AelGlassTier.solid;
+    if (reduceTransparency || !enableBackdrop) return AelGlassTier.solid;
     if (PlatformFeatures.isOhos) {
-      // 鸿蒙端底栏/弹层由 ArkTS 原生负责；Flutter 悬浮层保持轻量高斯模糊以对齐系统质感。
       return AelGlassTier.flutterBlur;
     }
-    if (preferShader && hasBackdrop && MiuixGlassRendering.isLoaded) {
-      return AelGlassTier.miuixShader;
-    }
-    return AelGlassTier.flutterBlur;
+    return AelGlassTier.liquidGlass;
+  }
+
+  /// 生成适度增强色彩饱和度的 ColorFilter 矩阵，避免毛玻璃压灰背景色彩。
+  static ui.ColorFilter _saturationFilter(double saturation) {
+    final s = saturation;
+    const lr = 0.2126;
+    const lg = 0.7152;
+    const lb = 0.0722;
+    final invS = 1.0 - s;
+    final r = lr * invS;
+    final g = lg * invS;
+    final b = lb * invS;
+    return ui.ColorFilter.matrix(<double>[
+      r + s,
+      g,
+      b,
+      0,
+      0,
+      r,
+      g + s,
+      b,
+      0,
+      0,
+      r,
+      g,
+      b + s,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+    ]);
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = AelTheme.colorsOf(context);
+    final isDark = colors.isDark;
     final tier = resolveTier(
       reduceTransparency: reduceTransparency,
-      hasBackdrop: backdrop != null,
-      preferShader: preferShader,
+      enableBackdrop: enableBackdrop,
     );
-    final shape = AelShapes.squircle(
-      borderRadius,
-      side: BorderSide(
-        color: colors.outline.withValues(alpha: colors.isDark ? 0.16 : 0.08),
-        width: 0.75,
-      ),
-    );
+    final ShapeBorder shape = isCapsule
+        ? const StadiumBorder()
+        : AelShapes.squircle(borderRadius);
 
-    switch (tier) {
-      case AelGlassTier.miuixShader:
-        return MiuixGlass(
-          backdrop: backdrop,
-          shape: MiuixGlassShape(cornerRadius: borderRadius),
-          tint: colors.cardBg.withValues(
-            alpha: tintAlpha ?? (colors.isDark ? 0.48 : 0.62),
-          ),
-          child: Padding(padding: padding, child: child),
-        );
-      case AelGlassTier.flutterBlur:
-        final fill = colors.cardBg.withValues(
-          alpha: tintAlpha ?? (colors.isDark ? 0.72 : 0.78),
-        );
-        return ClipPath(
-          clipper: ShapeBorderClipper(shape: shape),
-          child: BackdropFilter(
-            filter: ui.ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+    if (tier == AelGlassTier.solid) {
+      final solidColor = colors.cardBg.withValues(
+        alpha: tintAlpha ?? (reduceTransparency ? 0.96 : 0.94),
+      );
+      return DecoratedBox(
+        decoration: ShapeDecoration(
+          color: solidColor,
+          shape: isCapsule
+              ? StadiumBorder(
+                  side: BorderSide(
+                    color: colors.outline.withValues(
+                      alpha: isDark ? 0.22 : 0.12,
+                    ),
+                    width: 0.75,
+                  ),
+                )
+              : AelShapes.squircle(
+                  borderRadius,
+                  side: BorderSide(
+                    color: colors.outline.withValues(
+                      alpha: isDark ? 0.20 : 0.10,
+                    ),
+                    width: 0.75,
+                  ),
+                ),
+          shadows:
+              shadows ??
+              [
+                BoxShadow(
+                  color: isDark
+                      ? AelGlassTokens.darkDropShadow
+                      : AelGlassTokens.lightDropShadow,
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+        ),
+        child: Padding(padding: padding, child: child),
+      );
+    }
+
+    final isUltra =
+        tier == AelGlassTier.liquidGlass && quality == AelGlassQuality.ultra;
+    final effectiveSigma = tier == AelGlassTier.flutterBlur
+        ? math.min(blurSigma, 14.0)
+        : (isUltra ? blurSigma : math.min(blurSigma, 13.0));
+    final Color tintColor;
+    if (tintAlpha != null) {
+      tintColor = (isDark ? AelGlassTokens.darkTint : AelGlassTokens.lightTint)
+          .withValues(alpha: tintAlpha!);
+    } else if (tier == AelGlassTier.liquidGlass) {
+      tintColor = isDark
+          ? (isUltra
+                ? AelGlassTokens.darkTint
+                : AelGlassTokens.darkStandardTint)
+          : (isUltra
+                ? AelGlassTokens.lightTint
+                : AelGlassTokens.lightStandardTint);
+    } else {
+      tintColor = colors.cardBg.withValues(alpha: isDark ? 0.74 : 0.80);
+    }
+
+    final ui.ImageFilter backdropFilter = tier == AelGlassTier.liquidGlass
+        ? ui.ImageFilter.compose(
+            outer: _saturationFilter(isUltra ? 1.28 : 1.12),
+            inner: ui.ImageFilter.blur(
+              sigmaX: effectiveSigma,
+              sigmaY: effectiveSigma,
+              tileMode: ui.TileMode.clamp,
+            ),
+          )
+        : ui.ImageFilter.blur(
+            sigmaX: effectiveSigma,
+            sigmaY: effectiveSigma,
+            tileMode: ui.TileMode.clamp,
+          );
+
+    return DecoratedBox(
+      decoration: ShapeDecoration(
+        shape: shape,
+        shadows:
+            shadows ??
+            [
+              BoxShadow(
+                color: isDark
+                    ? AelGlassTokens.darkDropShadow
+                    : AelGlassTokens.lightDropShadow,
+                blurRadius: isUltra ? 24 : 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+      ),
+      child: ClipPath(
+        clipper: ShapeBorderClipper(shape: shape),
+        child: BackdropFilter(
+          filter: backdropFilter,
+          child: CustomPaint(
+            foregroundPainter: _AelLiquidGlassRimPainter(
+              borderRadius: borderRadius,
+              isCapsule: isCapsule,
+              isDark: isDark,
+              isUltra: isUltra,
+              accentColor: colors.primary,
+              glowCenter: glowCenter,
+              glowStrength: glowStrength,
+            ),
             child: DecoratedBox(
-              decoration: ShapeDecoration(color: fill, shape: shape),
+              decoration: BoxDecoration(
+                color: tintColor,
+                gradient: tier == AelGlassTier.liquidGlass
+                    ? LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          (isDark
+                                  ? AelGlassTokens.darkRimHighlight
+                                  : AelGlassTokens.lightRimHighlight)
+                              .withValues(alpha: isDark ? 0.08 : 0.24),
+                          tintColor,
+                          tintColor,
+                        ],
+                        stops: const [0.0, 0.35, 1.0],
+                      )
+                    : null,
+              ),
               child: Padding(padding: padding, child: child),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// FlClash 风格的液态玻璃倒角高光、底部反弹微光与触摸光晕绘制器。
+class _AelLiquidGlassRimPainter extends CustomPainter {
+  const _AelLiquidGlassRimPainter({
+    required this.borderRadius,
+    required this.isCapsule,
+    required this.isDark,
+    required this.isUltra,
+    required this.accentColor,
+    this.glowCenter,
+    this.glowStrength = 0.0,
+  });
+
+  final double borderRadius;
+  final bool isCapsule;
+  final bool isDark;
+  final bool isUltra;
+  final Color accentColor;
+  final Offset? glowCenter;
+  final double glowStrength;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    final rect = Offset.zero & size;
+    final effectiveRadius = isCapsule
+        ? size.shortestSide / 2
+        : math.min(borderRadius, size.shortestSide / 2);
+    final rrect = RRect.fromRectAndRadius(
+      rect.deflate(0.5),
+      Radius.circular(effectiveRadius),
+    );
+
+    if (glowCenter != null && glowStrength > 0.005) {
+      final glowRect = Rect.fromCircle(
+        center: glowCenter!,
+        radius: math.max(size.shortestSide * 0.85, 42),
+      );
+      final glowPaint = Paint()
+        ..shader = ui.Gradient.radial(
+          glowCenter!,
+          glowRect.width / 2,
+          [
+            AelSemanticPalette.pureWhite.withValues(
+              alpha: (isDark ? 0.16 : 0.28) * glowStrength.clamp(0.0, 1.0),
+            ),
+            accentColor.withValues(alpha: 0.08 * glowStrength.clamp(0.0, 1.0)),
+            AelSemanticPalette.transparent,
+          ],
+          const [0.0, 0.45, 1.0],
         );
-      case AelGlassTier.ohosNative:
-      case AelGlassTier.solid:
-        final fill = colors.cardBg.withValues(alpha: 0.96);
-        return DecoratedBox(
-          decoration: ShapeDecoration(color: fill, shape: shape),
-          child: Padding(padding: padding, child: child),
-        );
+      canvas.drawRRect(rrect, glowPaint);
     }
+
+    final topHighlight = isDark
+        ? AelGlassTokens.darkRimHighlight
+        : AelGlassTokens.lightRimHighlight;
+    final bottomHighlight = isDark
+        ? AelGlassTokens.darkSecondaryRim
+        : AelGlassTokens.lightSecondaryRim;
+    final sideHairline = isDark
+        ? AelGlassTokens.darkSecondaryRim
+        : AelGlassTokens.lightHairlineDark;
+
+    final rimPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = isUltra ? 1.15 : 0.85
+      ..shader = ui.Gradient.linear(
+        rect.topCenter,
+        rect.bottomCenter,
+        [
+          topHighlight.withValues(
+            alpha: isUltra ? (isDark ? 0.36 : 0.78) : (isDark ? 0.24 : 0.56),
+          ),
+          sideHairline.withValues(alpha: isDark ? 0.14 : 0.10),
+          bottomHighlight.withValues(
+            alpha: isUltra ? (isDark ? 0.22 : 0.44) : (isDark ? 0.12 : 0.24),
+          ),
+        ],
+        const [0.0, 0.48, 1.0],
+      );
+    canvas.drawRRect(rrect, rimPaint);
+
+    if (isUltra) {
+      // 内侧顶部极细折射反光条，呈现立体透镜厚度感
+      final innerRRect = RRect.fromRectAndRadius(
+        rect.deflate(1.5),
+        Radius.circular(math.max(0, effectiveRadius - 1.0)),
+      );
+      final innerPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.7
+        ..shader = ui.Gradient.linear(
+          rect.topLeft,
+          rect.bottomRight,
+          [
+            topHighlight.withValues(alpha: isDark ? 0.16 : 0.34),
+            AelSemanticPalette.transparent,
+            accentColor.withValues(alpha: isDark ? 0.14 : 0.08),
+          ],
+          const [0.0, 0.55, 1.0],
+        );
+      canvas.drawRRect(innerRRect, innerPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_AelLiquidGlassRimPainter oldDelegate) {
+    return borderRadius != oldDelegate.borderRadius ||
+        isCapsule != oldDelegate.isCapsule ||
+        isDark != oldDelegate.isDark ||
+        isUltra != oldDelegate.isUltra ||
+        accentColor != oldDelegate.accentColor ||
+        glowCenter != oldDelegate.glowCenter ||
+        glowStrength != oldDelegate.glowStrength;
   }
 }

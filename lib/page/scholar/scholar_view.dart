@@ -79,61 +79,8 @@ Future<void> showRefreshResultDialog(
   );
 }
 
-class ScholarErrorHandler extends StatelessWidget {
-  final FlutterErrorDetails errorDetails;
-  final _scholarController = Get.put(ScholarController());
-
-  ScholarErrorHandler({super.key, required this.errorDetails});
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AelTheme.colorsOf(context);
-    return SliverList(
-      delegate: SliverChildListDelegate([
-        Padding(
-          padding: const EdgeInsets.all(AelSpacing.pageHorizontal),
-          child: AelSectionCard(
-            title: '数据加载异常',
-            icon: AelIcons.warning,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  '获取数据时遇到问题。请检查网络连接情况，并尝试重新获取数据。\n注意：你需要完成所有的教学评价才能获取成绩信息。',
-                  style: TextStyle(
-                    color: colors.textSecondary,
-                    fontSize: 13.5,
-                    height: 1.45,
-                  ),
-                ),
-                const SizedBox(height: AelSpacing.lg),
-                AelButton(
-                  label: '重新获取数据',
-                  icon: AelIcons.refresh,
-                  expanded: true,
-                  onPressed: () async {
-                    final results = await _scholarController.fetchData();
-                    if (context.mounted &&
-                        results.any((result) => result != null)) {
-                      await showRefreshResultDialog(context, results);
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-      ]),
-    );
-  }
-}
-
 class ScholarPage extends StatelessWidget {
-  ScholarPage({super.key}) {
-    ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
-      return ScholarErrorHandler(errorDetails: errorDetails);
-    };
-  }
+  ScholarPage({super.key});
 
   final _scholarController = Get.put(ScholarController());
   final ValueNotifier<bool> _isRefreshing = ValueNotifier(false);
@@ -182,98 +129,95 @@ class ScholarPage extends StatelessWidget {
       return s.replaceAll('.', '').replaceAll(RegExp(r'[\d.]'), '*');
     }
 
-    return Hero(
-      tag: 'gradeBrief',
-      child: AelSectionCard(
-        title: '成绩',
-        icon: AelIcons.award,
-        trailing: Obx(
-          () => _buildSyncChip(_scholarController.durationToLastUpdateGrade),
+    return AelSectionCard(
+      title: '成绩',
+      icon: AelIcons.award,
+      trailing: Obx(
+        () => _buildSyncChip(_scholarController.durationToLastUpdateGrade),
+      ),
+      onTap: () async => Navigator.of(context, rootNavigator: true).push(
+        CupertinoPageRoute(
+          builder: (context) => GradeDetailPage(),
+          fullscreenDialog: true,
         ),
-        onTap: () async => Navigator.of(context, rootNavigator: true).push(
-          CupertinoPageRoute(
-            builder: (context) => GradeDetailPage(),
-            fullscreenDialog: true,
-          ),
-        ),
-        child: Obx(
-          () => Column(
-            children: [
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: AelStatTile(
-                        label: '五分制',
-                        value: maskGPA(
-                          _scholarController.gpa[0].toStringAsFixed(2),
-                        ),
-                        backgroundColor: colors.primaryContainer,
-                        valueColor: colors.onPrimaryContainer,
+      ),
+      child: Obx(
+        () => Column(
+          children: [
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: AelStatTile(
+                      label: '五分制',
+                      value: maskGPA(
+                        _scholarController.gpa[0].toStringAsFixed(2),
+                      ),
+                      backgroundColor: colors.primaryContainer,
+                      valueColor: colors.onPrimaryContainer,
+                    ),
+                  ),
+                  const SizedBox(width: AelSpacing.sm),
+                  Expanded(
+                    child: AelStatTile(
+                      label: '获得学分',
+                      value: maskGPA(
+                        _scholarController.scholar.credit.toStringAsFixed(1),
                       ),
                     ),
-                    const SizedBox(width: AelSpacing.sm),
-                    Expanded(
-                      child: AelStatTile(
-                        label: '获得学分',
-                        value: maskGPA(
-                          _scholarController.scholar.credit.toStringAsFixed(1),
-                        ),
+                  ),
+                  const SizedBox(width: AelSpacing.sm),
+                  Expanded(
+                    child: AelStatTile(
+                      label: '四分制',
+                      value: maskGPA(
+                        _scholarController.gpa[1].toStringAsFixed(2),
                       ),
+                      subtitle:
+                          '均绩 ${maskGPA(_scholarController.gpa[2].toStringAsFixed(2))}',
                     ),
-                    const SizedBox(width: AelSpacing.sm),
-                    Expanded(
-                      child: AelStatTile(
-                        label: '四分制',
-                        value: maskGPA(
-                          _scholarController.gpa[1].toStringAsFixed(2),
-                        ),
-                        subtitle:
-                            '均绩 ${maskGPA(_scholarController.gpa[2].toStringAsFixed(2))}',
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              const SizedBox(height: AelSpacing.sm),
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: AelStatTile(
-                        label: '主修均绩',
-                        value: maskGPA(
-                          _scholarController.scholar.majorGpaAndCredit[0]
-                              .toStringAsFixed(2),
-                        ),
+            ),
+            const SizedBox(height: AelSpacing.sm),
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: AelStatTile(
+                      label: '主修均绩',
+                      value: maskGPA(
+                        _scholarController.scholar.majorGpaAndCredit[0]
+                            .toStringAsFixed(2),
                       ),
                     ),
-                    const SizedBox(width: AelSpacing.sm),
-                    Expanded(
-                      child: AelStatTile(
-                        label: '主修学分',
-                        value: maskGPA(
-                          _scholarController.scholar.majorGpaAndCredit[1]
-                              .toStringAsFixed(1),
-                        ),
+                  ),
+                  const SizedBox(width: AelSpacing.sm),
+                  Expanded(
+                    child: AelStatTile(
+                      label: '主修学分',
+                      value: maskGPA(
+                        _scholarController.scholar.majorGpaAndCredit[1]
+                            .toStringAsFixed(1),
                       ),
                     ),
-                    const SizedBox(width: AelSpacing.sm),
-                    Expanded(
-                      child: AelStatTile(
-                        label: '百分制',
-                        value: maskGPA(
-                          _scholarController.gpa[3].toStringAsFixed(2),
-                        ),
+                  ),
+                  const SizedBox(width: AelSpacing.sm),
+                  Expanded(
+                    child: AelStatTile(
+                      label: '百分制',
+                      value: maskGPA(
+                        _scholarController.gpa[3].toStringAsFixed(2),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -749,7 +693,8 @@ class ScholarPage extends StatelessWidget {
           SliverToBoxAdapter(
             child: Obx(() {
               if (_scholarController.scholar.semesters.isNotEmpty) {
-                final cards = _scholarController.scholar.isGrs
+                final isGrs = _scholarController.scholar.isGrs;
+                final cards = isGrs
                     ? [_buildSemester(context), _buildTodos(context)]
                     : [
                         _buildGradeBrief(context),
@@ -757,6 +702,9 @@ class ScholarPage extends StatelessWidget {
                         _buildTodos(context),
                         _buildPractice(context),
                       ];
+                final weights = isGrs
+                    ? const [1.1, 1.5]
+                    : const [2.2, 1.1, 1.5, 1.0];
                 return Padding(
                   padding: EdgeInsets.fromLTRB(
                     AelSpacing.pageHorizontal,
@@ -766,9 +714,10 @@ class ScholarPage extends StatelessWidget {
                   ),
                   child: AelConstrainedWidth(
                     maxWidth: AelBreakpointSpec.maxWideContentWidth,
-                    child: AelAdaptiveGrid(
+                    child: AelMasonryGrid(
                       maxColumns: 2,
                       minItemWidth: 360,
+                      itemWeights: weights,
                       children: cards,
                     ),
                   ),

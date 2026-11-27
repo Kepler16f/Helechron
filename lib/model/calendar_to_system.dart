@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:get/get.dart';
+import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/design/app_notification.dart';
 import 'package:celechron/design/components/ael_components.dart';
 import 'package:celechron/model/location_mapper.dart';
@@ -13,10 +14,11 @@ import 'package:celechron/services/ohos_native_service.dart';
 
 class CalendarToSystemManager {
   final Rx<Scholar> _scholarRx;
+  final DatabaseHelper? _db;
 
   Scholar get scholar => _scholarRx.value;
 
-  final RxBool calendarSyncEnabled = false.obs;
+  final RxBool calendarSyncEnabled;
   final RxBool hasCalendarPermission = false.obs;
 
   /// 提醒方式（通知提醒 / 闹钟提醒），默认通知提醒
@@ -25,7 +27,25 @@ class CalendarToSystemManager {
   /// 提前提醒分钟数
   int reminderMinutes = 15;
 
-  CalendarToSystemManager(this._scholarRx);
+  CalendarToSystemManager(
+    this._scholarRx, {
+    DatabaseHelper? db,
+    RxBool? persistedEnabled,
+  }) : _db =
+           db ??
+           (Get.isRegistered<DatabaseHelper>(tag: 'db')
+               ? Get.find<DatabaseHelper>(tag: 'db')
+               : null),
+       calendarSyncEnabled =
+           persistedEnabled ??
+           (Get.isRegistered<Option>(tag: 'option')
+               ? Get.find<Option>(tag: 'option').calendarSyncEnabled
+               : false.obs);
+
+  Future<void> _setSyncEnabled(bool enabled) async {
+    calendarSyncEnabled.value = enabled;
+    await _db?.setCalendarSyncEnabled(enabled);
+  }
 
   /// 深色模式自适应的顶部提示（使用统一的 AppNotification 自动适配深浅色模式）。
   void _showSyncSnackbar(
@@ -165,7 +185,10 @@ class CalendarToSystemManager {
     );
   }
 
-  Future<bool> syncScholarToSystemCalendar({String? semesterName}) async {
+  Future<bool> syncScholarToSystemCalendar({
+    String? semesterName,
+    bool silent = false,
+  }) async {
     if (!scholar.isLogan) {
       _log('sync', level: CelechronLogLevel.warning, message: '未登录，跳过');
       return false;
@@ -317,13 +340,15 @@ class CalendarToSystemManager {
     _log('diagnostics', message: diagnostics);
 
     if (count > 0) {
-      calendarSyncEnabled.value = true;
+      await _setSyncEnabled(true);
       _log('sync', message: '同步成功，写入 $count 个日程');
-      _showSyncSnackbar(
-        '日历同步成功',
-        '已同步 $totalCourseCount 门课程，共 $totalClassSessionCount 节课到系统日历\n$diagnostics',
-        duration: const Duration(seconds: 8),
-      );
+      if (!silent) {
+        _showSyncSnackbar(
+          '日历同步成功',
+          '已同步 $totalCourseCount 门课程，共 $totalClassSessionCount 节课到系统日历\n$diagnostics',
+          duration: const Duration(seconds: 8),
+        );
+      }
     } else {
       _log(
         'sync',
@@ -333,18 +358,20 @@ class CalendarToSystemManager {
       );
       final selfTest = await OhosNativeService.instance.calendarSelfTest();
       _log('selfTest', message: selfTest);
-      _showSyncSnackbar(
-        '日历同步失败',
-        '${OhosNativeService.instance.lastCalendarError ?? "未知错误"}\n$selfTest',
-        duration: const Duration(seconds: 15),
-      );
+      if (!silent) {
+        _showSyncSnackbar(
+          '日历同步失败',
+          '${OhosNativeService.instance.lastCalendarError ?? "未知错误"}\n$selfTest',
+          duration: const Duration(seconds: 15),
+        );
+      }
     }
     return count > 0;
   }
 
   Future<bool> clearSyncedEvents() async {
     final count = await OhosNativeService.instance.clearCalendarEvents();
-    calendarSyncEnabled.value = false;
+    await _setSyncEnabled(false);
     _log('clear', message: '已清除 $count 个日历');
     return true;
   }
@@ -404,14 +431,26 @@ class CalendarToSystemManager {
   }
 
   Future<void> checkInitialCalendarSyncStatus() async {
+    final stored = _db?.getStoredCalendarSyncEnabled();
     final hasPermission = await checkPermissions();
     hasCalendarPermission.value = hasPermission;
-    // 检测系统中是否存在已同步的 Helechron 日历
     final exists = await OhosNativeService.instance.hasSyncedCalendar();
-    calendarSyncEnabled.value = exists;
+
+    if (stored != null) {
+      // 以用户明确开关偏好为准，不因厂商系统日历检测差异或重开应用而重置开关状态
+      calendarSyncEnabled.value = stored;
+      if (stored && !exists && hasPermission && scholar.isLogan) {
+        await syncScholarToSystemCalendar(silent: true);
+      }
+    } else {
+      // 首次从旧版本迁移：以系统日历实况初始化并持久化开关
+      await _setSyncEnabled(exists);
+    }
+
     _log(
       'initialStatus',
-      message: 'permission=$hasPermission, calendarExists=$exists',
+      message:
+          'stored=$stored, permission=$hasPermission, calendarExists=$exists, enabled=${calendarSyncEnabled.value}',
     );
   }
 

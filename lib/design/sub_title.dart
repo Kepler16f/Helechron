@@ -5,10 +5,9 @@ class SubtitleRow extends StatelessWidget {
   final Widget? right;
   final double padHorizontal;
   final double padVertical;
-  late final String heroTag = subtitle;
   final double fontSize;
 
-  SubtitleRow({
+  const SubtitleRow({
     super.key,
     required this.subtitle,
     this.right,
@@ -26,18 +25,15 @@ class SubtitleRow extends StatelessWidget {
           Container(
             alignment: Alignment.centerLeft,
             padding: EdgeInsets.symmetric(vertical: padVertical),
-            child: Hero(
-              tag: heroTag,
-              child: Text(
-                subtitle,
-                style: CupertinoTheme.of(
-                  context,
-                ).textTheme.navLargeTitleTextStyle.copyWith(fontSize: fontSize),
-              ),
+            child: Text(
+              subtitle,
+              style: CupertinoTheme.of(
+                context,
+              ).textTheme.navLargeTitleTextStyle.copyWith(fontSize: fontSize),
             ),
           ),
           const Spacer(),
-          right == null ? const SizedBox(height: 0) : right!,
+          right ?? const SizedBox(height: 0),
         ],
       ),
     );
@@ -48,9 +44,8 @@ class SubSubtitleRow extends StatelessWidget {
   final String subtitle;
   final Widget? right;
   final double padHorizontal;
-  late final String heroTag = subtitle;
 
-  SubSubtitleRow({
+  const SubSubtitleRow({
     super.key,
     required this.subtitle,
     this.right,
@@ -66,18 +61,15 @@ class SubSubtitleRow extends StatelessWidget {
           Container(
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Hero(
-              tag: heroTag,
-              child: Text(
-                subtitle,
-                style: CupertinoTheme.of(
-                  context,
-                ).textTheme.navLargeTitleTextStyle.copyWith(fontSize: 18),
-              ),
+            child: Text(
+              subtitle,
+              style: CupertinoTheme.of(
+                context,
+              ).textTheme.navLargeTitleTextStyle.copyWith(fontSize: 18),
             ),
           ),
           const Spacer(),
-          right == null ? const SizedBox(height: 0) : right!,
+          right ?? const SizedBox(height: 0),
         ],
       ),
     );

@@ -4,7 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Theme;
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_miuix/miuix.dart' show MiuixGlassRendering, MiuixTheme;
+import 'package:flutter_miuix/miuix.dart' show MiuixTheme;
 import 'package:get/get.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:app_links/app_links.dart';
@@ -74,19 +74,15 @@ Future<void> _bootstrap() async {
   Get.put(db.getOption(), tag: 'option');
   Get.put(AelThemeController(), tag: 'themeController');
 
-  // Android / iOS：预加载 HyperOS 4 液态玻璃 shader（失败时自动降级为高斯模糊）；
-  // 鸿蒙端保留 ArkTS 原生沉浸底栏，不加载此 shader。
-  if (!PlatformFeatures.isOhos) {
-    unawaited(MiuixGlassRendering.load());
-  }
-
-  // 将底栏样式同步到原生
   final option = Get.find<Option>(tag: 'option');
-  OhosNativeService.instance.setBottomBarStyle(
-    floating: option.bottomBarFloating.value,
-    immersiveLight: option.bottomBarImmersiveLight.value,
-    materialLevel: option.bottomBarMaterialLevel.value,
-  );
+  if (PlatformFeatures.isOhos) {
+    // 鸿蒙端保留 ArkTS 原生沉浸底栏，同步样式配置到 ArkTS
+    OhosNativeService.instance.setBottomBarStyle(
+      floating: option.bottomBarFloating.value,
+      immersiveLight: option.bottomBarImmersiveLight.value,
+      materialLevel: option.bottomBarMaterialLevel.value,
+    );
+  }
 
   Get.put(db.getFuse().obs, tag: 'fuse');
 
@@ -95,12 +91,14 @@ Future<void> _bootstrap() async {
   // Android / iOS：注册后台定时刷新（成绩变动 / DDL 提醒）
   unawaited(registerMobileBackgroundRefresh());
 
-  // 应用级课程小组件同步：独立于页面生命周期，进程存活期间持续刷新，
-  // 保证下课能及时切换到下一节课。主动刷新走 updateForm，不计入系统
-  // 50 次/天配额，因此用 5 秒高频推送让倒计时尽量平滑；应用不在时由
-  // 原生侧 updateDuration(30min) + 边界预调度兜底。
+  // 应用级课程小组件同步：鸿蒙端 5 秒推送支撑实时倒计时，Android/iOS 30 秒且已做按分钟与数据去重
   ScholarWidgetSync.sync();
-  Timer.periodic(const Duration(seconds: 5), (_) => ScholarWidgetSync.sync());
+  Timer.periodic(
+    PlatformFeatures.isOhos
+        ? const Duration(seconds: 5)
+        : const Duration(seconds: 30),
+    (_) => ScholarWidgetSync.sync(),
+  );
 
   // 启动时立即将校园卡凭据（含学号密码）同步至原生 Preferences 并刷新一次付款码，
   // 不必等待教务/学在浙大爬虫完成，保证随时切后台或被杀后小组件放大页均可独立刷码。
@@ -232,6 +230,9 @@ class _NativeBarVisibilityObserver extends NavigatorObserver {
   }
 
   void _sync() {
+    if (!PlatformFeatures.isOhos) {
+      return;
+    }
     // 只有在根页面（只有1个页面路由且无非首屏路由）且没有任何PopupRoute（弹窗/选择器/对话框）且无底层通知时，才显示原生底栏
     final bool hasSubRoute = _pageRoutes.any((r) => !r.isFirst);
     final bool shouldShow =
@@ -389,7 +390,9 @@ class _CelechronAppState extends State<CelechronApp>
         option,
         platformBrightness: platformBrightness,
       );
-      themeController.syncNativeAccent(option, bundle);
+      if (PlatformFeatures.isOhos) {
+        themeController.syncNativeAccent(option, bundle);
+      }
 
       return GetCupertinoApp(
         theme: bundle.cupertinoTheme,
@@ -411,7 +414,9 @@ class _CelechronAppState extends State<CelechronApp>
                   option,
                   platformBrightness: resolvedPlatformBrightness,
                 );
-          themeController.syncNativeAccent(option, effectiveBundle);
+          if (PlatformFeatures.isOhos) {
+            themeController.syncNativeAccent(option, effectiveBundle);
+          }
           return MiuixTheme(
             data: effectiveBundle.miuixTheme,
             child: Theme(

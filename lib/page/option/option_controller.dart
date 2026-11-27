@@ -33,7 +33,11 @@ class OptionController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    _calendarManager = CalendarToSystemManager(scholar);
+    _calendarManager = CalendarToSystemManager(
+      scholar,
+      db: _db,
+      persistedEnabled: _option.calendarSyncEnabled,
+    );
     _calendarManager.reminderMode = _option.calendarReminderMode.value;
 
     ever(courseIdMappingList, (value) {
@@ -210,11 +214,13 @@ class OptionController extends GetxController {
     if (!value) {
       bottomBarImmersiveLight = false;
     }
-    OhosNativeService.instance.setBottomBarStyle(
-      floating: bottomBarFloating,
-      immersiveLight: bottomBarImmersiveLight,
-      materialLevel: bottomBarMaterialLevel,
-    );
+    if (PlatformFeatures.isOhos) {
+      OhosNativeService.instance.setBottomBarStyle(
+        floating: bottomBarFloating,
+        immersiveLight: bottomBarImmersiveLight,
+        materialLevel: bottomBarMaterialLevel,
+      );
+    }
   }
 
   bool get bottomBarImmersiveLight => _option.bottomBarImmersiveLight.value;
@@ -222,11 +228,13 @@ class OptionController extends GetxController {
   set bottomBarImmersiveLight(bool value) {
     _option.bottomBarImmersiveLight.value = value;
     _db.setBottomBarImmersiveLight(value);
-    OhosNativeService.instance.setBottomBarStyle(
-      floating: bottomBarFloating,
-      immersiveLight: bottomBarImmersiveLight,
-      materialLevel: bottomBarMaterialLevel,
-    );
+    if (PlatformFeatures.isOhos) {
+      OhosNativeService.instance.setBottomBarStyle(
+        floating: bottomBarFloating,
+        immersiveLight: bottomBarImmersiveLight,
+        materialLevel: bottomBarMaterialLevel,
+      );
+    }
   }
 
   int get bottomBarMaterialLevel => _option.bottomBarMaterialLevel.value;
@@ -234,11 +242,13 @@ class OptionController extends GetxController {
   set bottomBarMaterialLevel(int value) {
     _option.bottomBarMaterialLevel.value = value;
     _db.setBottomBarMaterialLevel(value);
-    OhosNativeService.instance.setBottomBarStyle(
-      floating: bottomBarFloating,
-      immersiveLight: bottomBarImmersiveLight,
-      materialLevel: bottomBarMaterialLevel,
-    );
+    if (PlatformFeatures.isOhos) {
+      OhosNativeService.instance.setBottomBarStyle(
+        floating: bottomBarFloating,
+        immersiveLight: bottomBarImmersiveLight,
+        materialLevel: bottomBarMaterialLevel,
+      );
+    }
   }
 
   RxList<CourseIdMap> get courseIdMappingList => _option.courseIdMappingList;
@@ -267,7 +277,10 @@ class OptionController extends GetxController {
   }
 
   Future<void> manualCheckUpdate(BuildContext context) async {
-    await UpdateService.instance.performCheckUpdateFlow(context, showLoading: true);
+    await UpdateService.instance.performCheckUpdateFlow(
+      context,
+      showLoading: true,
+    );
   }
 
   bool get hasNewVersion => _fuse.value.hasNewVersion;

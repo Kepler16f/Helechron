@@ -1,17 +1,11 @@
 import 'dart:math' as math;
-import 'dart:ui' as ui;
+import 'dart:ui' show lerpDouble;
 
+import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter/widgets.dart';
-import 'package:flutter_miuix/miuix.dart'
-    show
-        MiuixGlassNavigationBar,
-        MiuixGlassNavigationItem,
-        MiuixGlassRendering,
-        MiuixLayerBackdrop;
 
 import 'package:celechron/design/components/ael_glass.dart';
-import 'package:celechron/design/components/ael_shapes.dart';
 import 'package:celechron/design/theme/ael_theme.dart';
 import 'package:celechron/design/tokens/ael_tokens.dart';
 
@@ -22,11 +16,10 @@ class AelTabItem {
   final String label;
 }
 
-/// Android / iOS 端使用的自适应玻璃底栏（对齐鸿蒙 ArkTS HdsTabs 几何规格）：
-/// - 悬浮模式下：若 [backdrop] 可用且 OS4 玻璃 shader 已加载，使用 HyperOS 4 真液态玻璃拖拽导航条
-///   [MiuixGlassNavigationBar]；否则平滑降级到 [AelGlassSurface]（高斯模糊 / 纯色）
-/// - 停靠模式下：全宽底栏，读 [AelTheme.colorsOf] 与 [AelTabBarSpec]
-/// - 鸿蒙端不渲染此控件，继续由 ArkTS 原生 `HdsTabs` 承载
+/// Android / iOS 端使用的 FlClash 风格导航底栏（鸿蒙端由 ArkTS 原生 `HdsTabs` 托管，不渲染此组件）：
+/// - 悬浮模式下：居中胶囊 Dock + 物理弹簧驱动的可拖拽透镜滑块 + 双层裁切动态着色
+/// - 沉浸光感开启时：在胶囊与透镜上启用液态玻璃折射模糊与镜面边缘高光（页面被二级路由覆盖时自动暂停模糊捕获）
+/// - 停靠模式下：FlClash NavigationBar 风格全宽底栏，带水平展开高亮胶囊指示器
 class AelTabBar extends StatelessWidget {
   const AelTabBar({
     super.key,
@@ -35,7 +28,8 @@ class AelTabBar extends StatelessWidget {
     required this.onSelect,
     required this.floating,
     required this.immersiveLight,
-    this.backdrop,
+    this.materialLevel = 10,
+    this.captureActive = true,
   });
 
   final List<AelTabItem> items;
@@ -43,7 +37,8 @@ class AelTabBar extends StatelessWidget {
   final ValueChanged<int> onSelect;
   final bool floating;
   final bool immersiveLight;
-  final MiuixLayerBackdrop? backdrop;
+  final int materialLevel;
+  final bool captureActive;
 
   void _handleSelect(int index) {
     HapticFeedback.selectionClick();
@@ -54,83 +49,33 @@ class AelTabBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
     final colors = AelTheme.colorsOf(context);
+    final bottomInset = media.padding.bottom;
 
     if (!floating) {
-      return _buildDockedBar(context, media, colors);
+      return _buildDockedBar(context, colors, bottomInset);
     }
 
-    final screenWidth = media.size.width;
-    final capsuleWidth = math.min(screenWidth * 0.92, 500.0);
-    final bottomPadding = media.padding.bottom + AelTabBarSpec.bottomMargin;
-
-    final bool useMiuixGlass =
-        immersiveLight && backdrop != null && MiuixGlassRendering.isLoaded;
-
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: AelTabBarSpec.horizontalInset,
-          right: AelTabBarSpec.horizontalInset,
-          bottom: bottomPadding,
-        ),
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        AelTabBarSpec.dockHorizontalMargin,
+        0,
+        AelTabBarSpec.dockHorizontalMargin,
+        bottomInset + AelTabBarSpec.dockBottomMargin,
+      ),
+      child: Center(
+        heightFactor: 1.0,
         child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: capsuleWidth, minWidth: 260),
-          child: useMiuixGlass
-              ? MiuixGlassNavigationBar(
-                  backdrop: backdrop,
-                  selectedIndex: currentIndex,
-                  onSelect: _handleSelect,
-                  height: AelTabBarSpec.height,
-                  selectedColor: colors.primary,
-                  unselectedColor: colors.textSecondary,
-                  indicatorColor: colors.primary.withValues(
-                    alpha: colors.isDark ? 0.22 : 0.14,
-                  ),
-                  indicatorPressedColor: colors.primary.withValues(
-                    alpha: colors.isDark ? 0.30 : 0.20,
-                  ),
-                  items: items
-                      .map(
-                        (item) => MiuixGlassNavigationItem(
-                          icon: Icon(
-                            item.icon,
-                            size: AelTabBarSpec.floatingIconSize,
-                          ),
-                          label: item.label,
-                        ),
-                      )
-                      .toList(),
-                )
-              : DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(
-                      AelTabBarSpec.borderRadius,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: colors.textPrimary.withValues(
-                          alpha: colors.isDark ? 0.24 : 0.08,
-                        ),
-                        blurRadius: 18,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: SizedBox(
-                    height: AelTabBarSpec.height,
-                    child: AelGlassSurface(
-                      borderRadius: AelTabBarSpec.borderRadius,
-                      backdrop: backdrop,
-                      preferShader: false,
-                      blurSigma: immersiveLight ? 28.0 : 20.0,
-                      tintAlpha: colors.isDark
-                          ? (immersiveLight ? 0.62 : 0.86)
-                          : (immersiveLight ? 0.56 : 0.86),
-                      child: _buildItemsRow(colors, floating: true),
-                    ),
-                  ),
-                ),
+          constraints: const BoxConstraints(
+            maxWidth: AelTabBarSpec.dockMaxWidth,
+          ),
+          child: _FlClashFloatingDock(
+            items: items,
+            currentIndex: currentIndex,
+            onSelect: _handleSelect,
+            immersiveLight: immersiveLight,
+            quality: AelGlassQuality.fromMaterialLevel(materialLevel),
+            captureActive: captureActive,
+          ),
         ),
       ),
     );
@@ -138,79 +83,523 @@ class AelTabBar extends StatelessWidget {
 
   Widget _buildDockedBar(
     BuildContext context,
-    MediaQueryData media,
     AelColorTokens colors,
+    double bottomInset,
   ) {
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border(
-            top: BorderSide(
-              color: colors.divider.withValues(alpha: 0.5),
-              width: 0.5,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.cardBg,
+        border: Border(
+          top: BorderSide(
+            color: colors.divider.withValues(
+              alpha: colors.isDark ? 0.35 : 0.45,
             ),
+            width: 0.5,
           ),
         ),
-        child: ClipRect(
-          child: BackdropFilter(
-            filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-            child: Container(
-              width: double.infinity,
-              height: AelTabBarSpec.height + media.padding.bottom,
-              padding: EdgeInsets.only(bottom: media.padding.bottom),
-              color: colors.cardBg.withValues(alpha: 0.88),
-              child: _buildItemsRow(colors, floating: false),
-            ),
+      ),
+      child: Padding(
+        padding: EdgeInsets.only(bottom: bottomInset),
+        child: SizedBox(
+          height: AelTabBarSpec.dockedBarHeight,
+          child: Row(
+            children: [
+              for (var i = 0; i < items.length; i++)
+                Expanded(
+                  child: _DockedTabDestination(
+                    item: items[i],
+                    selected: i == currentIndex,
+                    onTap: () => _handleSelect(i),
+                  ),
+                ),
+            ],
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _buildItemsRow(AelColorTokens colors, {required bool floating}) {
-    return Row(
-      children: List.generate(items.length, (index) {
-        final selected = index == currentIndex;
-        final item = items[index];
-        final fg = selected ? colors.primary : colors.textSecondary;
+class _DockedTabDestination extends StatelessWidget {
+  const _DockedTabDestination({
+    required this.item,
+    required this.selected,
+    required this.onTap,
+  });
 
-        return Expanded(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _handleSelect(index),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  item.icon,
-                  size: floating
-                      ? AelTabBarSpec.floatingIconSize
-                      : AelTabBarSpec.iconSize,
-                  color: fg,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  item.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: floating ? 10.0 : AelTabBarSpec.labelFontSize,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                    color: fg,
-                    height: 1.1,
+  final AelTabItem item;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
+    final fg = selected ? colors.primary : colors.textSecondary;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: item.label,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 58,
+              height: 30,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  TweenAnimationBuilder<double>(
+                    tween: Tween(end: selected ? 1.0 : 0.0),
+                    duration: AelDurations.normal,
+                    curve: Curves.easeInOutCubic,
+                    builder: (context, t, _) {
+                      return Opacity(
+                        opacity: t.clamp(0.0, 1.0),
+                        child: Transform.scale(
+                          scaleX: 0.35 + 0.65 * t,
+                          child: DecoratedBox(
+                            decoration: ShapeDecoration(
+                              color: colors.primaryContainer,
+                              shape: const StadiumBorder(),
+                            ),
+                            child: const SizedBox.expand(),
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                ),
-              ],
+                  Icon(item.icon, size: 22, color: fg),
+                ],
+              ),
             ),
-          ),
-        );
-      }),
+            const SizedBox(height: 3),
+            Text(
+              item.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: AelTabBarSpec.dockLabelSize,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                color: selected ? colors.textPrimary : colors.textSecondary,
+                height: 1.1,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
 
-/// Android / iOS 平板与宽屏使用的左侧自适应玻璃导航栏（与鸿蒙 ArkTS 竖排 HdsTabs 对齐）。
+/// FlClash NavigationDock 风格的弹簧透镜悬浮胶囊底栏。
+class _FlClashFloatingDock extends StatefulWidget {
+  const _FlClashFloatingDock({
+    required this.items,
+    required this.currentIndex,
+    required this.onSelect,
+    required this.immersiveLight,
+    required this.quality,
+    required this.captureActive,
+  });
+
+  final List<AelTabItem> items;
+  final int currentIndex;
+  final ValueChanged<int> onSelect;
+  final bool immersiveLight;
+  final AelGlassQuality quality;
+  final bool captureActive;
+
+  @override
+  State<_FlClashFloatingDock> createState() => _FlClashFloatingDockState();
+}
+
+class _FlClashFloatingDockState extends State<_FlClashFloatingDock>
+    with TickerProviderStateMixin {
+  static final _travelSpring = SpringDescription.withDurationAndBounce(
+    duration: const Duration(milliseconds: 380),
+    bounce: 0.14,
+  );
+  static final _followSpring = SpringDescription.withDampingRatio(
+    mass: 1,
+    stiffness: 920,
+    ratio: 0.88,
+  );
+  static final _liftSpring = SpringDescription.withDurationAndBounce(
+    duration: const Duration(milliseconds: 220),
+  );
+  static final _glowOutSpring = SpringDescription.withDurationAndBounce(
+    duration: const Duration(milliseconds: 420),
+  );
+
+  late final AnimationController _lensController;
+  late final AnimationController _liftController;
+  late final AnimationController _glowController;
+
+  int? _activePointer;
+  int? _pressedIndex;
+  double _pressX = 0;
+  bool _dragging = false;
+  Offset? _glowPosition;
+  double _pillWidth = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _lensController = AnimationController.unbounded(
+      vsync: this,
+      value: widget.currentIndex.toDouble(),
+    );
+    _liftController = AnimationController.unbounded(vsync: this, value: 0.0);
+    _glowController = AnimationController.unbounded(vsync: this, value: 0.0);
+  }
+
+  @override
+  void didUpdateWidget(covariant _FlClashFloatingDock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.currentIndex != oldWidget.currentIndex && !_dragging) {
+      _springTo(_lensController, widget.currentIndex.toDouble(), _travelSpring);
+    }
+  }
+
+  @override
+  void dispose() {
+    _lensController.dispose();
+    _liftController.dispose();
+    _glowController.dispose();
+    super.dispose();
+  }
+
+  void _springTo(
+    AnimationController controller,
+    double target,
+    SpringDescription spring,
+  ) {
+    final simulation = SpringSimulation(
+      spring,
+      controller.value,
+      target,
+      controller.velocity,
+    );
+    controller.animateWith(simulation);
+  }
+
+  int get _count => widget.items.length;
+
+  double _positionFromLocalX(double dx, double innerWidth) {
+    if (_count <= 1 || innerWidth <= 0) return 0;
+    final cellWidth = innerWidth / _count;
+    final raw = (dx - AelTabBarSpec.dockPadding) / cellWidth - 0.5;
+    return raw.clamp(-0.22, _count - 1 + 0.22);
+  }
+
+  int _nearestIndex(double position) {
+    if (_count <= 1) return 0;
+    return position.round().clamp(0, _count - 1);
+  }
+
+  void _onPointerDown(PointerDownEvent event) {
+    if (_activePointer != null || _count == 0) return;
+    _activePointer = event.pointer;
+    final innerWidth = math.max(
+      1.0,
+      _pillWidth - AelTabBarSpec.dockPadding * 2,
+    );
+    final pos = _positionFromLocalX(event.localPosition.dx, innerWidth);
+    final index = _nearestIndex(pos);
+    _pressedIndex = index;
+    _pressX = event.localPosition.dx;
+    _dragging = false;
+    setState(() {
+      _glowPosition = event.localPosition;
+    });
+    _springTo(_liftController, 1.0, _liftSpring);
+    _springTo(_glowController, 1.0, _liftSpring);
+    if (index != widget.currentIndex) {
+      _springTo(_lensController, index.toDouble(), _travelSpring);
+    }
+  }
+
+  void _onPointerMove(PointerMoveEvent event) {
+    if (event.pointer != _activePointer || _count == 0) return;
+    final innerWidth = math.max(
+      1.0,
+      _pillWidth - AelTabBarSpec.dockPadding * 2,
+    );
+    if (!_dragging && (event.localPosition.dx - _pressX).abs() > 6.0) {
+      _dragging = true;
+    }
+    setState(() {
+      _glowPosition = event.localPosition;
+    });
+    if (!_dragging) return;
+    final pos = _positionFromLocalX(event.localPosition.dx, innerWidth);
+    _springTo(_lensController, pos, _followSpring);
+    final nearest = _nearestIndex(pos);
+    if (nearest != _pressedIndex) {
+      HapticFeedback.selectionClick();
+      _pressedIndex = nearest;
+    }
+  }
+
+  void _onPointerEnd(PointerEvent event) {
+    if (event.pointer != _activePointer) return;
+    _activePointer = null;
+    final commit = event is PointerUpEvent;
+    final target = commit
+        ? (_pressedIndex ?? widget.currentIndex).clamp(0, _count - 1)
+        : widget.currentIndex;
+    _pressedIndex = null;
+    _dragging = false;
+    _springTo(_lensController, target.toDouble(), _travelSpring);
+    _springTo(_liftController, 0.0, _liftSpring);
+    _springTo(_glowController, 0.0, _glowOutSpring);
+    if (commit && target != widget.currentIndex) {
+      widget.onSelect(target);
+    }
+  }
+
+  Rect _lensRectFor(
+    double innerWidth,
+    double height,
+    double lensPos,
+    double lift,
+  ) {
+    if (_count <= 0) return Rect.zero;
+    final cellWidth = innerWidth / _count;
+    final spread = lerpDouble(0, 5.5, lift)!;
+    final verticalInset = lerpDouble(
+      AelTabBarSpec.dockPadding,
+      AelTabBarSpec.dockPadding - 1.5,
+      lift,
+    )!;
+    final left = AelTabBarSpec.dockPadding + lensPos * cellWidth - spread * 0.5;
+    final width = cellWidth + spread;
+    return Rect.fromLTWH(
+      left.clamp(2.0, math.max(2.0, _pillWidth - width - 2.0)),
+      verticalInset,
+      width,
+      math.max(0.0, height - verticalInset * 2),
+    );
+  }
+
+  Widget _buildItemsRow({
+    required BuildContext context,
+    required AelColorTokens colors,
+    required bool highlighted,
+    required double lift,
+  }) {
+    final color = highlighted ? colors.primary : colors.textSecondary;
+    final scale = highlighted ? (1.0 + 0.05 * lift) : 1.0;
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AelTabBarSpec.dockPadding,
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < _count; i++)
+            Expanded(
+              child: highlighted
+                  ? ExcludeSemantics(
+                      child: Transform.scale(
+                        scale: scale,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              widget.items[i].icon,
+                              size: AelTabBarSpec.dockIconSize,
+                              color: color,
+                            ),
+                            const SizedBox(height: 1.5),
+                            Text(
+                              widget.items[i].label,
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: AelTabBarSpec.dockLabelSize,
+                                fontWeight: FontWeight.w600,
+                                color: color,
+                                height: 1.15,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : Semantics(
+                      button: true,
+                      selected: i == widget.currentIndex,
+                      label: widget.items[i].label,
+                      child: Transform.scale(
+                        scale: scale,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              widget.items[i].icon,
+                              size: AelTabBarSpec.dockIconSize,
+                              color: color,
+                            ),
+                            const SizedBox(height: 1.5),
+                            Text(
+                              widget.items[i].label,
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: AelTabBarSpec.dockLabelSize,
+                                fontWeight: FontWeight.w500,
+                                color: color,
+                                height: 1.15,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AelTheme.colorsOf(context);
+    final isDark = colors.isDark;
+    final glassEnabled = widget.immersiveLight && widget.captureActive;
+
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: _onPointerDown,
+      onPointerMove: _onPointerMove,
+      onPointerUp: _onPointerEnd,
+      onPointerCancel: _onPointerEnd,
+      child: SizedBox(
+        height: AelTabBarSpec.dockHeight,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            _pillWidth = constraints.maxWidth;
+            final innerWidth = math.max(
+              0.0,
+              _pillWidth - AelTabBarSpec.dockPadding * 2,
+            );
+            return AnimatedBuilder(
+              animation: Listenable.merge([
+                _lensController,
+                _liftController,
+                _glowController,
+              ]),
+              builder: (context, _) {
+                final lensRect = _lensRectFor(
+                  innerWidth,
+                  AelTabBarSpec.dockHeight,
+                  _lensController.value,
+                  _liftController.value,
+                );
+                final lift = _liftController.value.clamp(0.0, 1.0);
+                final outerContent = Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // 外部未选中图层
+                    _buildItemsRow(
+                      context: context,
+                      colors: colors,
+                      highlighted: false,
+                      lift: 0,
+                    ),
+                    // 弹簧悬浮透镜指示器
+                    Positioned.fromRect(
+                      rect: lensRect,
+                      child: DecoratedBox(
+                        decoration: ShapeDecoration(
+                          color: widget.immersiveLight
+                              ? (isDark
+                                    ? AelGlassTokens.darkLensTint
+                                    : AelGlassTokens.lightLensTint)
+                              : colors.primaryContainer.withValues(
+                                  alpha: 0.72 + 0.14 * lift,
+                                ),
+                          shape: StadiumBorder(
+                            side: BorderSide(
+                              color: widget.immersiveLight
+                                  ? (isDark
+                                        ? AelGlassTokens.darkRimHighlight
+                                              .withValues(
+                                                alpha: 0.34 + 0.24 * lift,
+                                              )
+                                        : AelGlassTokens.lightRimHighlight
+                                              .withValues(alpha: 0.85))
+                                  : colors.primary.withValues(alpha: 0.16),
+                              width: widget.immersiveLight ? 0.9 : 0.6,
+                            ),
+                          ),
+                          shadows: [
+                            BoxShadow(
+                              color: isDark
+                                  ? AelGlassTokens.darkLensShadow
+                                  : AelGlassTokens.lightLensShadow,
+                              blurRadius: lerpDouble(8, 16, lift)!,
+                              offset: Offset(0, lerpDouble(2, 5, lift)!),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    // 透镜内部裁切高亮图层
+                    ClipPath(
+                      clipper: _CapsuleRectClipper(lensRect),
+                      child: _buildItemsRow(
+                        context: context,
+                        colors: colors,
+                        highlighted: true,
+                        lift: lift,
+                      ),
+                    ),
+                  ],
+                );
+
+                return AelGlassSurface(
+                  borderRadius: AelTabBarSpec.dockHeight / 2,
+                  isCapsule: true,
+                  reduceTransparency: !widget.immersiveLight,
+                  enableBackdrop: glassEnabled,
+                  quality: widget.quality,
+                  blurSigma: 18.0,
+                  glowCenter: widget.immersiveLight ? _glowPosition : null,
+                  glowStrength: _glowController.value,
+                  child: outerContent,
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _CapsuleRectClipper extends CustomClipper<Path> {
+  const _CapsuleRectClipper(this.rect);
+
+  final Rect rect;
+
+  @override
+  Path getClip(Size size) {
+    final radius = rect.shortestSide / 2;
+    return Path()
+      ..addRRect(RRect.fromRectAndRadius(rect, Radius.circular(radius)));
+  }
+
+  @override
+  bool shouldReclip(_CapsuleRectClipper oldClipper) => rect != oldClipper.rect;
+}
+
+/// Android / iOS 平板与横屏宽屏使用的左侧导航栏（>= 600dp 时替代底部栏）。
 class AelSideRail extends StatelessWidget {
   const AelSideRail({
     super.key,
@@ -219,7 +608,8 @@ class AelSideRail extends StatelessWidget {
     required this.onSelect,
     required this.floating,
     required this.immersiveLight,
-    this.backdrop,
+    this.materialLevel = 10,
+    this.captureActive = true,
   });
 
   final List<AelTabItem> items;
@@ -227,7 +617,8 @@ class AelSideRail extends StatelessWidget {
   final ValueChanged<int> onSelect;
   final bool floating;
   final bool immersiveLight;
-  final MiuixLayerBackdrop? backdrop;
+  final int materialLevel;
+  final bool captureActive;
 
   void _handleSelect(int index) {
     HapticFeedback.selectionClick();
@@ -239,80 +630,59 @@ class AelSideRail extends StatelessWidget {
     final media = MediaQuery.of(context);
     final colors = AelTheme.colorsOf(context);
     final leftSafe = media.padding.left;
-    final outerWidth = AelTabBarSpec.sideRailWidth + leftSafe;
+    final topSafe = media.padding.top;
+    final bottomSafe = media.padding.bottom;
 
-    if (floating) {
-      final capsuleHeight = math.min(
-        math.max(media.size.height * 0.62, 320.0),
-        440.0,
-      );
-      return SizedBox(
-        width: outerWidth,
-        height: double.infinity,
-        child: Padding(
-          padding: EdgeInsets.only(
-            left: leftSafe + 7,
-            right: 7,
-            top: math.max(media.padding.top, AelSpacing.md),
-            bottom: math.max(media.padding.bottom, AelSpacing.md),
+    if (!floating) {
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.cardBg,
+          border: Border(
+            right: BorderSide(
+              color: colors.divider.withValues(alpha: 0.45),
+              width: 0.5,
+            ),
           ),
-          child: Center(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(AelTabBarSpec.borderRadius),
-                boxShadow: [
-                  BoxShadow(
-                    color: colors.textPrimary.withValues(
-                      alpha: colors.isDark ? 0.24 : 0.08,
-                    ),
-                    blurRadius: 18,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: SizedBox(
-                width: AelTabBarSpec.sideRailFloatingWidth,
-                height: capsuleHeight,
-                child: AelGlassSurface(
-                  borderRadius: AelTabBarSpec.borderRadius,
-                  backdrop: backdrop,
-                  preferShader: false,
-                  blurSigma: immersiveLight ? 28.0 : 20.0,
-                  tintAlpha: colors.isDark
-                      ? (immersiveLight ? 0.62 : 0.86)
-                      : (immersiveLight ? 0.56 : 0.88),
-                  child: _buildDestinations(colors),
-                ),
-              ),
+        ),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            leftSafe,
+            topSafe + 12,
+            0,
+            bottomSafe + 12,
+          ),
+          child: SizedBox(
+            width: AelTabBarSpec.sideRailWidth,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: _buildRailButtons(context, colors, compact: false),
             ),
           ),
         ),
       );
     }
 
-    return SizedBox(
-      width: outerWidth,
-      height: double.infinity,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border(
-            right: BorderSide(
-              color: colors.divider.withValues(alpha: 0.5),
-              width: 0.5,
-            ),
-          ),
-        ),
-        child: ClipRect(
-          child: BackdropFilter(
-            filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-            child: Container(
-              color: colors.cardBg.withValues(alpha: 0.88),
-              padding: EdgeInsets.only(
-                left: leftSafe,
-                top: math.max(media.padding.top, AelSpacing.md),
-                bottom: math.max(media.padding.bottom, AelSpacing.md),
-              ),
-              child: _buildDestinations(colors),
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        leftSafe + 10,
+        topSafe + 14,
+        6,
+        bottomSafe + 14,
+      ),
+      child: Center(
+        widthFactor: 1.0,
+        child: SizedBox(
+          width: AelTabBarSpec.sideRailFloatingWidth,
+          child: AelGlassSurface(
+            borderRadius: AelTabBarSpec.borderRadius,
+            reduceTransparency: !immersiveLight,
+            enableBackdrop: immersiveLight && captureActive,
+            quality: AelGlassQuality.fromMaterialLevel(materialLevel),
+            blurSigma: 18,
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: _buildRailButtons(context, colors, compact: true),
             ),
           ),
         ),
@@ -320,56 +690,68 @@ class AelSideRail extends StatelessWidget {
     );
   }
 
-  Widget _buildDestinations(AelColorTokens colors) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(items.length, (index) {
-        final selected = index == currentIndex;
-        final item = items[index];
-        final fg = selected ? colors.primary : colors.textSecondary;
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _handleSelect(index),
-            child: SizedBox(
-              width: 56,
-              height: 54,
-              child: DecoratedBox(
-                decoration: ShapeDecoration(
-                  color: selected
-                      ? colors.primary.withValues(
-                          alpha: colors.isDark ? 0.22 : 0.12,
-                        )
-                      : AelSemanticPalette.transparent,
-                  shape: AelShapes.squircle(16),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(item.icon, size: AelTabBarSpec.iconSize, color: fg),
-                    const SizedBox(height: 3),
-                    Text(
-                      item.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: selected
-                            ? FontWeight.w600
-                            : FontWeight.w400,
-                        color: fg,
-                        height: 1.1,
-                      ),
+  List<Widget> _buildRailButtons(
+    BuildContext context,
+    AelColorTokens colors, {
+    required bool compact,
+  }) {
+    final list = <Widget>[];
+    for (var i = 0; i < items.length; i++) {
+      if (i > 0) list.add(SizedBox(height: compact ? 6 : 8));
+      final item = items[i];
+      final active = i == currentIndex;
+      list.add(
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _handleSelect(i),
+          child: Semantics(
+            button: true,
+            selected: active,
+            label: item.label,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AnimatedContainer(
+                    duration: AelDurations.normal,
+                    curve: Curves.easeInOutCubic,
+                    width: compact ? 48 : 56,
+                    height: 32,
+                    decoration: ShapeDecoration(
+                      color: active
+                          ? colors.primaryContainer
+                          : AelSemanticPalette.transparent,
+                      shape: const StadiumBorder(),
                     ),
-                  ],
-                ),
+                    alignment: Alignment.center,
+                    child: Icon(
+                      item.icon,
+                      size: 21,
+                      color: active
+                          ? colors.onPrimaryContainer
+                          : colors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    item.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: AelTabBarSpec.labelFontSize,
+                      fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                      color: active ? colors.primary : colors.textSecondary,
+                      height: 1.1,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-        );
-      }),
-    );
+        ),
+      );
+    }
+    return list;
   }
 }

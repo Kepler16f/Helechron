@@ -147,6 +147,93 @@ class AelAdaptiveGrid extends StatelessWidget {
   }
 }
 
+/// 瀑布流多列布局：在宽屏 / 平板横屏下按列累加堆叠子项，消除不等高卡片造成的行对齐留白；
+/// 窄屏自动退化为单列 [Column]。
+class AelMasonryGrid extends StatelessWidget {
+  const AelMasonryGrid({
+    super.key,
+    required this.children,
+    this.maxColumns = 2,
+    this.minItemWidth = 360,
+    this.horizontalGap = AelSpacing.md,
+    this.verticalGap = AelSpacing.sectionGap,
+    this.itemWeights,
+  });
+
+  final List<Widget> children;
+  final int maxColumns;
+  final double minItemWidth;
+  final double horizontalGap;
+  final double verticalGap;
+
+  /// 可选预估高度权重（与 [children] 一一对应），用于贪心分配到当前最短列以保持左右平衡。
+  final List<double>? itemWeights;
+
+  @override
+  Widget build(BuildContext context) {
+    if (children.isEmpty) return const SizedBox.shrink();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cols = AelResponsive.gridColumnsForWidth(
+          constraints.maxWidth,
+          maxColumns: maxColumns,
+          minItemWidth: minItemWidth,
+        );
+        if (cols <= 1 || children.length <= 1) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < children.length; i++) ...[
+                if (i > 0) SizedBox(height: verticalGap),
+                children[i],
+              ],
+            ],
+          );
+        }
+
+        final colItems = List.generate(cols, (_) => <Widget>[]);
+        final colHeights = List<double>.filled(cols, 0);
+        for (var i = 0; i < children.length; i++) {
+          var targetCol = 0;
+          for (var c = 1; c < cols; c++) {
+            if (colHeights[c] < colHeights[targetCol]) {
+              targetCol = c;
+            }
+          }
+          if (colItems[targetCol].isNotEmpty) {
+            colItems[targetCol].add(SizedBox(height: verticalGap));
+          }
+          colItems[targetCol].add(children[i]);
+          final weight =
+              (itemWeights != null &&
+                  i < itemWeights!.length &&
+                  itemWeights![i] > 0)
+              ? itemWeights![i]
+              : 1.0;
+          colHeights[targetCol] += weight;
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var c = 0; c < cols; c++) ...[
+              if (c > 0) SizedBox(width: horizontalGap),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: colItems[c],
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
 /// 通用列表-详情双栏容器：宽屏左/右并排，窄屏仅渲染主内容（或调用 fallback）。
 class AelTwoPane extends StatelessWidget {
   const AelTwoPane({

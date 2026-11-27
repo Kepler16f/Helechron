@@ -56,6 +56,16 @@ final class AelTabBarSpec {
   static const double sideRailWidth = 80;
   static const double sideRailFloatingWidth = 66;
   static const double sideRailBreakpoint = 600;
+
+  /// Android / iOS FlClash 风格悬浮胶囊底栏与停靠底栏几何规格。
+  static const double dockHeight = 62;
+  static const double dockPadding = 4;
+  static const double dockBottomMargin = 10;
+  static const double dockHorizontalMargin = 20;
+  static const double dockMaxWidth = 440;
+  static const double dockedBarHeight = 64;
+  static const double dockIconSize = 24;
+  static const double dockLabelSize = 10.5;
 }
 
 /// 响应式窗口断点与多栏限宽规格。
@@ -160,4 +170,27 @@ final class AelSemanticPalette {
   static const Color transparent = Color(0x00000000);
   static const Color pureWhite = Color(0xFFFFFFFF);
   static const Color pureBlack = Color(0xFF000000);
+}
+
+/// 液态玻璃材质与胶囊高光/阴影光学色值（集中于 tokens，供 ael_glass 与 ael_tab_bar 读取）。
+final class AelGlassTokens {
+  const AelGlassTokens._();
+
+  static const Color lightTint = Color(0x96F7F8FC);
+  static const Color lightStandardTint = Color(0xB8F5F7FA);
+  static const Color lightLensTint = Color(0xD8FFFFFF);
+  static const Color lightRimHighlight = Color(0xE6FFFFFF);
+  static const Color lightSecondaryRim = Color(0x73FFFFFF);
+  static const Color lightDropShadow = Color(0x22000000);
+  static const Color lightLensShadow = Color(0x1C000000);
+  static const Color lightHairlineDark = Color(0x16000000);
+
+  static const Color darkTint = Color(0x7A242832);
+  static const Color darkStandardTint = Color(0xA61E222B);
+  static const Color darkLensTint = Color(0x42FFFFFF);
+  static const Color darkRimHighlight = Color(0x70FFFFFF);
+  static const Color darkSecondaryRim = Color(0x2BFFFFFF);
+  static const Color darkDropShadow = Color(0x52000000);
+  static const Color darkLensShadow = Color(0x36000000);
+  static const Color darkHairlineDark = Color(0x22000000);
 }

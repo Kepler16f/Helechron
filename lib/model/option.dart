@@ -16,16 +16,12 @@ class CourseIdMap {
 
   CourseIdMap({required this.id1, required this.id2, required this.comment});
 
-  Map<String, dynamic> toJson() => {
-        'id1': id1,
-        'id2': id2,
-        'comment': comment,
-      };
+  Map<String, dynamic> toJson() => {'id1': id1, 'id2': id2, 'comment': comment};
 
   CourseIdMap.fromJson(Map<String, dynamic> json)
-      : id1 = json['id1'],
-        id2 = json['id2'],
-        comment = json['comment'];
+    : id1 = json['id1'],
+      id2 = json['id2'],
+      comment = json['comment'];
 }
 
 class Option {
@@ -40,6 +36,7 @@ class Option {
   RxBool hideHomeGpa;
   RxBool asyncRefresh;
   Rx<CalendarReminderMode> calendarReminderMode;
+  RxBool calendarSyncEnabled;
   RxBool bottomBarFloating;
   RxBool bottomBarImmersiveLight;
 
@@ -65,6 +62,7 @@ class Option {
     required this.hideHomeGpa,
     required this.asyncRefresh,
     required this.calendarReminderMode,
+    RxBool? calendarSyncEnabled,
     required this.bottomBarFloating,
     required this.bottomBarImmersiveLight,
     required this.bottomBarMaterialLevel,
@@ -75,15 +73,14 @@ class Option {
     RxInt? themeSeedColorValue,
     Rx<ThemePaletteStyle>? themePaletteStyle,
     Rx<ThemeContrastLevel>? themeContrastLevel,
-  })  : pushOnExamReminder = pushOnExamReminder ?? true.obs,
-        ecardLowBalanceThreshold = ecardLowBalanceThreshold ?? 15.0.obs,
-        downloadPath = downloadPath ?? ''.obs,
-        themeColorSource =
-            themeColorSource ?? ThemeColorSource.defaultBlue.obs,
-        themeSeedColorValue =
-            themeSeedColorValue ?? AelPalettePresets.defaultBlueValue.obs,
-        themePaletteStyle =
-            themePaletteStyle ?? ThemePaletteStyle.tonalSpot.obs,
-        themeContrastLevel =
-            themeContrastLevel ?? ThemeContrastLevel.standard.obs;
+  }) : calendarSyncEnabled = calendarSyncEnabled ?? false.obs,
+       pushOnExamReminder = pushOnExamReminder ?? true.obs,
+       ecardLowBalanceThreshold = ecardLowBalanceThreshold ?? 15.0.obs,
+       downloadPath = downloadPath ?? ''.obs,
+       themeColorSource = themeColorSource ?? ThemeColorSource.defaultBlue.obs,
+       themeSeedColorValue =
+           themeSeedColorValue ?? AelPalettePresets.defaultBlueValue.obs,
+       themePaletteStyle = themePaletteStyle ?? ThemePaletteStyle.tonalSpot.obs,
+       themeContrastLevel =
+           themeContrastLevel ?? ThemeContrastLevel.standard.obs;
 }

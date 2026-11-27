@@ -245,4 +245,51 @@ void main() {
       }
     },
   );
+
+  testWidgets('AelMasonryGrid packs uneven cards into waterfall columns', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(960, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      const CupertinoApp(
+        home: CupertinoPageScaffold(
+          child: SingleChildScrollView(
+            child: AelMasonryGrid(
+              maxColumns: 2,
+              minItemWidth: 360,
+              verticalGap: 14,
+              itemWeights: [2.2, 1.1, 1.5, 1.0],
+              children: [
+                SizedBox(height: 220, child: Text('CardGrade')),
+                SizedBox(height: 110, child: Text('CardSem')),
+                SizedBox(height: 150, child: Text('CardTodo')),
+                SizedBox(height: 100, child: Text('CardPrac')),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final rGrade = tester.getRect(find.text('CardGrade'));
+    final rSem = tester.getRect(find.text('CardSem'));
+    final rTodo = tester.getRect(find.text('CardTodo'));
+    final rPrac = tester.getRect(find.text('CardPrac'));
+
+    // CardGrade (左列顶部), CardSem (右列顶部)
+    expect((rGrade.top - rSem.top).abs(), lessThan(1.0));
+    expect(rSem.left, greaterThan(rGrade.right));
+
+    // 瀑布流紧贴：CardTodo 在右列紧跟 CardSem 下方（gap = 14），不必向下对齐 CardGrade 底边
+    expect((rTodo.left - rSem.left).abs(), lessThan(1.0));
+    expect((rTodo.top - (rSem.bottom + 14)).abs(), lessThan(1.0));
+    expect(rTodo.top, lessThan(rGrade.bottom));
+
+    // CardPrac 落在左列紧跟 CardGrade 下方（gap = 14）
+    expect((rPrac.left - rGrade.left).abs(), lessThan(1.0));
+    expect((rPrac.top - (rGrade.bottom + 14)).abs(), lessThan(1.0));
+    expect(tester.takeException(), isNull);
+  });
 }

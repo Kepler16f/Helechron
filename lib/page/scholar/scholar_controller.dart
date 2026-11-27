@@ -91,7 +91,7 @@ class ScholarController extends GetxController {
       ? _scholar.value.gpa
       : _scholar.value.aboardGpa;
 
-  List<Todo> get todos => _scholar.value.todos
+  List<Todo> get todos => List.of(_scholar.value.todos)
     ..sort((a, b) {
       if (a.endTime == null) return 1;
       if (b.endTime == null) return -1;
@@ -101,13 +101,15 @@ class ScholarController extends GetxController {
   // 获取当前学期的未完成作业
   List<Todo> get currentSemesterPendingTodos {
     final thisSemester = _scholar.value.thisSemester;
-    final currentSemesterCourseNames =
-        thisSemester.courses.values.map((course) => course.name).toSet();
+    final currentSemesterCourseNames = thisSemester.courses.values
+        .map((course) => course.name)
+        .toSet();
 
     return todos.where((todo) {
       // 检查作业是否属于当前学期的课程
-      final isCurrentSemester =
-          currentSemesterCourseNames.contains(todo.course);
+      final isCurrentSemester = currentSemesterCourseNames.contains(
+        todo.course,
+      );
       // 检查作业是否未完成（截止时间未过或没有截止时间）
       final isPending =
           todo.endTime == null || !todo.endTime!.isBefore(DateTime.now());
@@ -122,12 +124,22 @@ class ScholarController extends GetxController {
       currentSemesterPendingTodos.where((e) => e.isInOneWeek()).toList();
 
   void _updateDurations() {
-    _durationToLastUpdateGrade.value =
-        DateTime.now().difference(_scholar.value.lastUpdateTimeGrade);
-    _durationToLastUpdateCourse.value =
-        DateTime.now().difference(_scholar.value.lastUpdateTimeCourse);
-    _durationToLastUpdateHomework.value =
-        DateTime.now().difference(_scholar.value.lastUpdateTimeHomework);
+    final now = DateTime.now();
+    final gradeDiff = now.difference(_scholar.value.lastUpdateTimeGrade);
+    if (gradeDiff.inMinutes != _durationToLastUpdateGrade.value.inMinutes ||
+        _durationToLastUpdateGrade.value == Duration.zero) {
+      _durationToLastUpdateGrade.value = gradeDiff;
+    }
+    final courseDiff = now.difference(_scholar.value.lastUpdateTimeCourse);
+    if (courseDiff.inMinutes != _durationToLastUpdateCourse.value.inMinutes ||
+        _durationToLastUpdateCourse.value == Duration.zero) {
+      _durationToLastUpdateCourse.value = courseDiff;
+    }
+    final hwDiff = now.difference(_scholar.value.lastUpdateTimeHomework);
+    if (hwDiff.inMinutes != _durationToLastUpdateHomework.value.inMinutes ||
+        _durationToLastUpdateHomework.value == Duration.zero) {
+      _durationToLastUpdateHomework.value = hwDiff;
+    }
   }
 
   void _syncWidgetData() {
@@ -143,19 +155,20 @@ class ScholarController extends GetxController {
       // 异步刷新开启时，每合并一部分数据就刷新界面和“更新于”时长
       return await _scholar.value
           .refresh(
-              onPartialUpdate: () {
-                _scholar.refresh();
-                _updateDurations();
-                TodoTaskSync.syncFromScholar();
-              },
-              onFetchStatus: _onFetchStatus)
+            onPartialUpdate: () {
+              _scholar.refresh();
+              _updateDurations();
+              TodoTaskSync.syncFromScholar();
+            },
+            onFetchStatus: _onFetchStatus,
+          )
           .then((value) {
-        _scholar.refresh();
-        _updateDurations();
-        _syncWidgetData();
-        TodoTaskSync.syncFromScholar();
-        return value;
-      });
+            _scholar.refresh();
+            _updateDurations();
+            _syncWidgetData();
+            TodoTaskSync.syncFromScholar();
+            return value;
+          });
     } finally {
       _activeFetchCount--;
       if (_activeFetchCount == 0) _stopStatusFeed();
@@ -204,13 +217,14 @@ class ScholarController extends GetxController {
   void onReady() {
     super.onReady();
     // 在生命周期方法中正确初始化 semesterIndex
-    final thisSemesterIndex =
-        semesters.indexWhere((e) => e.name == _scholar.value.thisSemester.name);
+    final thisSemesterIndex = semesters.indexWhere(
+      (e) => e.name == _scholar.value.thisSemester.name,
+    );
     semesterIndex.value = thisSemesterIndex >= 0 ? thisSemesterIndex : 0;
 
     _syncWidgetData();
     TodoTaskSync.syncFromScholar();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _timer = Timer.periodic(const Duration(seconds: 15), (timer) {
       _updateDurations();
     });
   }

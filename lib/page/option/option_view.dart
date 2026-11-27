@@ -541,6 +541,7 @@ class _OptionPageState extends State<OptionPage> {
     return Obx(() {
       final colors = AelTheme.colorsOf(context);
       final syncEnabled = _optionController.calendarSyncEnabled.value;
+      final hasPermission = _optionController.hasCalendarPermission.value;
 
       return AelSectionCard(
         title: '日程',
@@ -550,12 +551,13 @@ class _OptionPageState extends State<OptionPage> {
           children: [
             AelListRow(
               title: '同步到系统日历',
+              subtitle: (syncEnabled && !hasPermission)
+                  ? '缺少系统日历权限，关闭后重新打开可重新授权'
+                  : null,
               icon: AelIcons.tabCalendar,
               showChevron: false,
               trailing: CupertinoAsyncSwitch(
-                value:
-                    syncEnabled &&
-                    _optionController.hasCalendarPermission.value,
+                value: syncEnabled,
                 onChanged: (value) async {
                   await _optionController.toggleCalendarSync(context, value);
                 },
@@ -774,7 +776,9 @@ class _OptionPageState extends State<OptionPage> {
           Obx(
             () => AelSwitchTile(
               title: '悬浮底栏',
-              subtitle: '底部 Tab 栏悬停显示，胶囊形悬浮',
+              subtitle: PlatformFeatures.isOhos
+                  ? '底部 Tab 栏悬停显示，胶囊形悬浮'
+                  : '底部导航栏胶囊悬浮显示，支持横向滑动切换',
               icon: AelIcons.layers,
               useTonalContainer: true,
               value: _optionController.bottomBarFloating,
@@ -787,7 +791,9 @@ class _OptionPageState extends State<OptionPage> {
           Obx(
             () => AelSwitchTile(
               title: '沉浸光感',
-              subtitle: '悬浮底栏背景液态玻璃光感效果',
+              subtitle: PlatformFeatures.isOhos
+                  ? '悬浮底栏背景液态玻璃光感效果'
+                  : '悬浮胶囊与透镜滑块启用液态玻璃光感材质',
               icon: AelIcons.sparkles,
               useTonalContainer: true,
               value: _optionController.bottomBarImmersiveLight,
@@ -804,7 +810,9 @@ class _OptionPageState extends State<OptionPage> {
               opacity: _optionController.bottomBarImmersiveLight ? 1 : 0.5,
               child: AelListRow(
                 title: '光感强度',
-                subtitle: '跟随系统策略，或手动指定材质精细度',
+                subtitle: PlatformFeatures.isOhos
+                    ? '跟随系统策略，或手动指定材质精细度'
+                    : '自适应或手动选择液态玻璃模糊与高光细腻度',
                 icon: AelIcons.contrast,
                 trailing: _trailingText(
                   context,
@@ -816,7 +824,12 @@ class _OptionPageState extends State<OptionPage> {
               ),
             ),
           ),
-          _footerNote(context, '悬浮底栏遵循鸿蒙原生设计规范，液态玻璃沉浸光感需要 HarmonyOS 6 及以上版本。'),
+          _footerNote(
+            context,
+            PlatformFeatures.isOhos
+                ? '悬浮底栏遵循鸿蒙原生设计规范，液态玻璃沉浸光感需要 HarmonyOS 6 及以上版本。'
+                : '悬浮底栏支持在底栏上左右滑动切换标签；沉浸光感采用高斯模糊与光学镜面高光材质，可根据设备性能调节强度。',
+          ),
         ],
       ),
     );
@@ -995,21 +1008,37 @@ class _OptionPageState extends State<OptionPage> {
   }
 
   String _materialLevelName(int level) {
+    if (PlatformFeatures.isOhos) {
+      switch (level) {
+        case 0:
+          return '精致';
+        case 1:
+          return '柔和';
+        case 2:
+          return '流畅';
+        default:
+          return '跟随系统';
+      }
+    }
     switch (level) {
       case 0:
-        return '精致';
+        return '极致';
       case 1:
-        return '柔和';
       case 2:
-        return '流畅';
+        return '标准';
       default:
-        return '跟随系统';
+        return '自适应';
     }
   }
 
   void _showMaterialLevelPicker(BuildContext context) {
-    const levels = <int, String>{10: '跟随系统', 0: '精致', 1: '柔和', 2: '流畅'};
+    final levels = PlatformFeatures.isOhos
+        ? const <int, String>{10: '跟随系统', 0: '精致', 1: '柔和', 2: '流畅'}
+        : const <int, String>{10: '自适应', 0: '极致', 1: '标准'};
     final current = _optionController.bottomBarMaterialLevel;
+    final normalizedCurrent = (!PlatformFeatures.isOhos && current == 2)
+        ? 1
+        : current;
     showAelActionSheet<int>(
       context: context,
       title: '选择底栏光感强度',
@@ -1018,7 +1047,7 @@ class _OptionPageState extends State<OptionPage> {
             (entry) => AelActionOption<int>(
               value: entry.key,
               label: entry.value,
-              isSelected: current == entry.key,
+              isSelected: normalizedCurrent == entry.key,
               onTap: () => _optionController.bottomBarMaterialLevel = entry.key,
             ),
           )

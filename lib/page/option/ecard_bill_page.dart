@@ -59,7 +59,7 @@ class _ECardBillPageState extends State<ECardBillPage> {
     final now = DateTime.now();
     _selectedMonth = DateTime(now.year, now.month, 1);
     applyZjuNetworkDefense(_httpClient);
-    _loadMonthData(reset: true);
+    _loadMonthData(reset: true, skipInitialSetState: true);
   }
 
   @override
@@ -162,14 +162,17 @@ class _ECardBillPageState extends State<ECardBillPage> {
     return auth;
   }
 
-  Future<void> _loadMonthData({bool reset = true}) async {
+  Future<void> _loadMonthData({
+    bool reset = true,
+    bool skipInitialSetState = false,
+  }) async {
     final targetMonth = _selectedMonth;
     final cachedSnapshot = _readMonthCache(targetMonth);
     final cachedBalance = _readBalanceCache();
     final hasCachedRecords =
         cachedSnapshot != null && cachedSnapshot.records.isNotEmpty;
 
-    setState(() {
+    void applyInitialState() {
       _error = null;
       _syncWarning = null;
       if (cachedBalance != null && _balance == null) {
@@ -193,7 +196,13 @@ class _ECardBillPageState extends State<ECardBillPage> {
         _loading = true;
         _syncing = false;
       }
-    });
+    }
+
+    if (skipInitialSetState) {
+      applyInitialState();
+    } else {
+      setState(applyInitialState);
+    }
 
     try {
       var auth = await _ensureAuth();

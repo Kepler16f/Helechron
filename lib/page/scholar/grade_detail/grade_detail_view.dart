@@ -20,11 +20,36 @@ import 'grade_detail_controller.dart';
 import 'semester_gpa_trend_card.dart';
 import 'weighted_gpa_view.dart';
 
-class GradeDetailPage extends StatelessWidget {
-  final _gradeDetailController = Get.put(GradeDetailController());
+class GradeDetailPage extends StatefulWidget {
+  const GradeDetailPage({super.key});
 
-  GradeDetailPage({super.key}) {
-    _gradeDetailController.init();
+  @override
+  State<GradeDetailPage> createState() => _GradeDetailPageState();
+}
+
+class _GradeDetailPageState extends State<GradeDetailPage> {
+  late final GradeDetailController _gradeDetailController;
+  late final bool _ownsController;
+
+  @override
+  void initState() {
+    super.initState();
+    if (Get.isRegistered<GradeDetailController>()) {
+      _gradeDetailController = Get.find<GradeDetailController>();
+      _gradeDetailController.resetState();
+      _ownsController = false;
+    } else {
+      _gradeDetailController = Get.put(GradeDetailController());
+      _ownsController = true;
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_ownsController && Get.isRegistered<GradeDetailController>()) {
+      Get.delete<GradeDetailController>();
+    }
+    super.dispose();
   }
 
   int getPairedSemesterIndex(int idx) {
@@ -67,157 +92,158 @@ class GradeDetailPage extends StatelessWidget {
 
   Widget _buildGradeBrief(BuildContext context) {
     final colors = AelTheme.colorsOf(context);
-    return Hero(
-      tag: 'gradeBrief',
-      child: AelSectionCard(
-        title: '学年成绩概览',
-        icon: AelIcons.award,
-        child: Obx(() {
-          final idx = _gradeDetailController.semesterIndex.value;
-          final yearStats = getYearStats(idx);
-          final majorStats = _gradeDetailController.getYearMajorGpa(idx);
-          return Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: AelStatTile(
-                      label: '学年学分',
-                      value: yearStats.item2.toStringAsFixed(1),
-                    ),
+    return AelSectionCard(
+      title: '学年成绩概览',
+      icon: AelIcons.award,
+      child: Obx(() {
+        final semesters = _gradeDetailController.semestersWithGrades;
+        if (semesters.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        final idx = _gradeDetailController.semesterIndex.value.clamp(
+          0,
+          semesters.length - 1,
+        );
+        final yearStats = getYearStats(idx);
+        final majorStats = _gradeDetailController.getYearMajorGpa(idx);
+        return Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: AelStatTile(
+                    label: '学年学分',
+                    value: yearStats.item2.toStringAsFixed(1),
                   ),
-                  const SizedBox(width: AelSpacing.sm),
-                  Expanded(
-                    child: AelStatTile(
-                      label: '学年均绩',
-                      value: yearStats.item1[0].toStringAsFixed(2),
-                      backgroundColor: colors.primaryContainer,
-                      valueColor: colors.onPrimaryContainer,
-                    ),
+                ),
+                const SizedBox(width: AelSpacing.sm),
+                Expanded(
+                  child: AelStatTile(
+                    label: '学年均绩',
+                    value: yearStats.item1[0].toStringAsFixed(2),
+                    backgroundColor: colors.primaryContainer,
+                    valueColor: colors.onPrimaryContainer,
                   ),
-                  const SizedBox(width: AelSpacing.sm),
-                  Expanded(
-                    child: AelStatTile(
-                      label: '学年四分制',
-                      value: yearStats.item1[1].toStringAsFixed(2),
-                      subtitle: '均绩 ${yearStats.item1[2].toStringAsFixed(2)}',
-                    ),
+                ),
+                const SizedBox(width: AelSpacing.sm),
+                Expanded(
+                  child: AelStatTile(
+                    label: '学年四分制',
+                    value: yearStats.item1[1].toStringAsFixed(2),
+                    subtitle: '均绩 ${yearStats.item1[2].toStringAsFixed(2)}',
                   ),
-                ],
-              ),
-              const SizedBox(height: AelSpacing.sm),
-              Row(
-                children: [
-                  Expanded(
-                    child: AelStatTile(
-                      label: '学年主修学分',
-                      value: majorStats.item2.toStringAsFixed(1),
-                    ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AelSpacing.sm),
+            Row(
+              children: [
+                Expanded(
+                  child: AelStatTile(
+                    label: '学年主修学分',
+                    value: majorStats.item2.toStringAsFixed(1),
                   ),
-                  const SizedBox(width: AelSpacing.sm),
-                  Expanded(
-                    child: AelStatTile(
-                      label: '学年主修均绩',
-                      value: majorStats.item1[0].toStringAsFixed(2),
-                    ),
+                ),
+                const SizedBox(width: AelSpacing.sm),
+                Expanded(
+                  child: AelStatTile(
+                    label: '学年主修均绩',
+                    value: majorStats.item1[0].toStringAsFixed(2),
                   ),
-                  const SizedBox(width: AelSpacing.sm),
-                  Expanded(
-                    child: AelStatTile(
-                      label: '学年主修四分制',
-                      value: majorStats.item1[1].toStringAsFixed(2),
-                      subtitle: '均绩 ${majorStats.item1[2].toStringAsFixed(2)}',
-                    ),
+                ),
+                const SizedBox(width: AelSpacing.sm),
+                Expanded(
+                  child: AelStatTile(
+                    label: '学年主修四分制',
+                    value: majorStats.item1[1].toStringAsFixed(2),
+                    subtitle: '均绩 ${majorStats.item1[2].toStringAsFixed(2)}',
                   ),
-                ],
-              ),
-            ],
-          );
-        }),
-      ),
+                ),
+              ],
+            ),
+          ],
+        );
+      }),
     );
   }
 
   Widget _buildCustomGpaBrief(BuildContext context) {
     final colors = AelTheme.colorsOf(context);
-    return Hero(
-      tag: 'gradeBrief',
-      child: AelSectionCard(
-        title: '自选 GPA 计算',
-        icon: AelIcons.filter,
-        child: Obx(() {
-          List<Grade> inSelected = [], notSelected = [];
-          for (var semester in _gradeDetailController.semestersWithGrades) {
-            for (var grade in semester.grades) {
-              if (_gradeDetailController.customGpaSelected[grade.id] ?? false) {
-                inSelected.add(grade);
-              } else {
-                notSelected.add(grade);
-              }
+    return AelSectionCard(
+      title: '自选 GPA 计算',
+      icon: AelIcons.filter,
+      child: Obx(() {
+        List<Grade> inSelected = [], notSelected = [];
+        for (var semester in _gradeDetailController.semestersWithGrades) {
+          for (var grade in semester.grades) {
+            if (_gradeDetailController.customGpaSelected[grade.id] ?? false) {
+              inSelected.add(grade);
+            } else {
+              notSelected.add(grade);
             }
           }
-          var inGpa = GpaHelper.calculateGpa(inSelected);
-          var notGpa = GpaHelper.calculateGpa(notSelected);
+        }
+        var inGpa = GpaHelper.calculateGpa(inSelected);
+        var notGpa = GpaHelper.calculateGpa(notSelected);
 
-          return Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: AelStatTile(
-                      label: '已选学分',
-                      value: inGpa.item2.toStringAsFixed(1),
-                    ),
+        return Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: AelStatTile(
+                    label: '已选学分',
+                    value: inGpa.item2.toStringAsFixed(1),
                   ),
-                  const SizedBox(width: AelSpacing.sm),
-                  Expanded(
-                    child: AelStatTile(
-                      label: '已选五分制',
-                      value: inGpa.item1[0].toStringAsFixed(2),
-                      backgroundColor: colors.primaryContainer,
-                      valueColor: colors.onPrimaryContainer,
-                    ),
+                ),
+                const SizedBox(width: AelSpacing.sm),
+                Expanded(
+                  child: AelStatTile(
+                    label: '已选五分制',
+                    value: inGpa.item1[0].toStringAsFixed(2),
+                    backgroundColor: colors.primaryContainer,
+                    valueColor: colors.onPrimaryContainer,
                   ),
-                  const SizedBox(width: AelSpacing.sm),
-                  Expanded(
-                    child: AelStatTile(
-                      label: '已选四分制',
-                      value: inGpa.item1[1].toStringAsFixed(2),
-                      subtitle: '均绩 ${inGpa.item1[2].toStringAsFixed(2)}',
-                    ),
+                ),
+                const SizedBox(width: AelSpacing.sm),
+                Expanded(
+                  child: AelStatTile(
+                    label: '已选四分制',
+                    value: inGpa.item1[1].toStringAsFixed(2),
+                    subtitle: '均绩 ${inGpa.item1[2].toStringAsFixed(2)}',
                   ),
-                ],
-              ),
-              const SizedBox(height: AelSpacing.sm),
-              Row(
-                children: [
-                  Expanded(
-                    child: AelStatTile(
-                      label: '已选百分制',
-                      value: inGpa.item1[3].toStringAsFixed(2),
-                    ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AelSpacing.sm),
+            Row(
+              children: [
+                Expanded(
+                  child: AelStatTile(
+                    label: '已选百分制',
+                    value: inGpa.item1[3].toStringAsFixed(2),
                   ),
-                  const SizedBox(width: AelSpacing.sm),
-                  Expanded(
-                    child: AelStatTile(
-                      label: '未选五分制',
-                      value: notGpa.item1[0].toStringAsFixed(2),
-                    ),
+                ),
+                const SizedBox(width: AelSpacing.sm),
+                Expanded(
+                  child: AelStatTile(
+                    label: '未选五分制',
+                    value: notGpa.item1[0].toStringAsFixed(2),
                   ),
-                  const SizedBox(width: AelSpacing.sm),
-                  Expanded(
-                    child: AelStatTile(
-                      label: '未选四分制',
-                      value: notGpa.item1[1].toStringAsFixed(2),
-                      subtitle: '均绩 ${notGpa.item1[2].toStringAsFixed(2)}',
-                    ),
+                ),
+                const SizedBox(width: AelSpacing.sm),
+                Expanded(
+                  child: AelStatTile(
+                    label: '未选四分制',
+                    value: notGpa.item1[1].toStringAsFixed(2),
+                    subtitle: '均绩 ${notGpa.item1[2].toStringAsFixed(2)}',
                   ),
-                ],
-              ),
-            ],
-          );
-        }),
-      ),
+                ),
+              ],
+            ),
+          ],
+        );
+      }),
     );
   }
 
@@ -594,11 +620,16 @@ class GradeDetailPage extends StatelessWidget {
                           Expanded(
                             flex: 6,
                             child: Obx(() {
-                              final grades = _gradeDetailController
-                                  .semestersWithGrades[_gradeDetailController
-                                      .semesterIndex
-                                      .value]
-                                  .grades;
+                              final semesters =
+                                  _gradeDetailController.semestersWithGrades;
+                              if (semesters.isEmpty) {
+                                return const SizedBox.shrink();
+                              }
+                              final safeIdx = _gradeDetailController
+                                  .semesterIndex
+                                  .value
+                                  .clamp(0, semesters.length - 1);
+                              final grades = semesters[safeIdx].grades;
                               return Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
@@ -626,32 +657,28 @@ class GradeDetailPage extends StatelessWidget {
                   ),
                   sliver: SliverToBoxAdapter(child: summaryColumn),
                 ),
-                Obx(
-                  () => SliverPadding(
+                Obx(() {
+                  final semesters = _gradeDetailController.semestersWithGrades;
+                  if (semesters.isEmpty) {
+                    return const SliverToBoxAdapter(child: SizedBox.shrink());
+                  }
+                  final safeIdx = _gradeDetailController.semesterIndex.value
+                      .clamp(0, semesters.length - 1);
+                  final grades = semesters[safeIdx].grades;
+                  return SliverPadding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: AelSpacing.pageHorizontal,
                     ),
                     sliver: SliverList.separated(
-                      itemCount: _gradeDetailController
-                          .semestersWithGrades[_gradeDetailController
-                              .semesterIndex
-                              .value]
-                          .grades
-                          .length,
+                      itemCount: grades.length,
                       separatorBuilder: (context, index) =>
                           const SizedBox(height: AelSpacing.sm),
                       itemBuilder: (context, index) {
-                        return GradeCard(
-                          grade: _gradeDetailController
-                              .semestersWithGrades[_gradeDetailController
-                                  .semesterIndex
-                                  .value]
-                              .grades[index],
-                        );
+                        return GradeCard(grade: grades[index]);
                       },
                     ),
-                  ),
-                ),
+                  );
+                }),
               ],
               const SliverToBoxAdapter(child: NativeBottomBarSpacer()),
             ],

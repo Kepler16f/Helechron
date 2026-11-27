@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/cupertino.dart';
 
 import 'package:celechron/design/components/ael_large_title_bar.dart';
@@ -63,86 +61,82 @@ class CelechronHeader extends SliverPersistentHeaderDelegate {
     bool overlapsContent,
   ) {
     final colors = AelTheme.colorsOf(context);
-    final bgAlpha = shrinkOffset > 12
-        ? 0.78
-        : (shrinkOffset / 16).clamp(0.0, 0.78);
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(
-          sigmaX: shrinkOffset > 12 ? 12 : shrinkOffset,
-          sigmaY: shrinkOffset > 12 ? 12 : shrinkOffset,
-        ),
-        child: Container(
-          padding: EdgeInsets.only(top: padding),
-          color: colors.pageBg.withValues(alpha: bgAlpha),
-          child: Column(
-            children: [
-              SizedBox(
-                height: 52,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    if (!firstPage)
-                      Positioned(
-                        left: 12,
-                        child: AelCircleIconButton(
-                          icon: AelIcons.back,
-                          size: 36,
-                          iconSize: 18,
-                          tooltip: '返回',
-                          onPressed: () {
-                            final onBack = AelEmbeddedBackScope.maybeOf(
-                              context,
-                            );
-                            if (onBack != null) {
-                              onBack();
-                            } else {
-                              Navigator.of(context).pop();
-                            }
-                          },
-                        ),
+    final scrolled = shrinkOffset > 4 || overlapsContent;
+    final bgAlpha = scrolled ? 0.96 : 0.0;
+    final dividerAlpha = scrolled ? (colors.isDark ? 0.28 : 0.35) : 0.0;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.pageBg.withValues(alpha: bgAlpha),
+        border: dividerAlpha > 0
+            ? Border(
+                bottom: BorderSide(
+                  color: colors.divider.withValues(alpha: dividerAlpha),
+                  width: 0.5,
+                ),
+              )
+            : null,
+      ),
+      child: Padding(
+        padding: EdgeInsets.only(top: padding),
+        child: Column(
+          children: [
+            SizedBox(
+              height: 52,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  if (!firstPage)
+                    Positioned(
+                      left: 12,
+                      child: AelCircleIconButton(
+                        icon: AelIcons.back,
+                        size: 36,
+                        iconSize: 18,
+                        tooltip: '返回',
+                        onPressed: () {
+                          final onBack = AelEmbeddedBackScope.maybeOf(context);
+                          if (onBack != null) {
+                            onBack();
+                          } else {
+                            Navigator.of(context).pop();
+                          }
+                        },
                       ),
-                    Positioned.fill(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: right != null
-                              ? 104
-                              : (firstPage ? 16 : 56),
-                        ),
-                        child: Center(
-                          child: Hero(
-                            tag: subtitle,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    subtitle,
-                                    maxLines: 1,
-                                    softWrap: false,
-                                    style: TextStyle(
-                                      color: colors.textPrimary,
-                                      fontSize:
-                                          fontSize - (bottom == null ? 0 : 2),
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: -0.3,
-                                    ),
-                                  ),
+                    ),
+                  Positioned.fill(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: right != null ? 104 : (firstPage ? 16 : 56),
+                      ),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                subtitle,
+                                maxLines: 1,
+                                softWrap: false,
+                                style: TextStyle(
+                                  color: colors.textPrimary,
+                                  fontSize: fontSize - (bottom == null ? 0 : 2),
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.3,
                                 ),
-                                if (bottom != null) bottom!,
-                              ],
+                              ),
                             ),
-                          ),
+                            if (bottom != null) bottom!,
+                          ],
                         ),
                       ),
                     ),
-                    if (right != null) Positioned(right: 0, child: right!),
-                  ],
-                ),
+                  ),
+                  if (right != null) Positioned(right: 0, child: right!),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -155,7 +149,12 @@ class CelechronHeader extends SliverPersistentHeaderDelegate {
   double get maxExtent => 52 + padding + (bottom == null ? 0 : 48);
 
   @override
-  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) {
-    return true;
+  bool shouldRebuild(covariant CelechronHeader oldDelegate) {
+    return subtitle != oldDelegate.subtitle ||
+        fontSize != oldDelegate.fontSize ||
+        firstPage != oldDelegate.firstPage ||
+        padding != oldDelegate.padding ||
+        right != oldDelegate.right ||
+        bottom != oldDelegate.bottom;
   }
 }

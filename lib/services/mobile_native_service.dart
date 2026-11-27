@@ -126,6 +126,15 @@ class MobileNativeService {
     }
   }
 
+  static final RegExp _helechronEventPrefix = RegExp(
+    r'^\[(20\d{2}-20\d{2}[^\]]*|任务|作业|DDL|日程|课程|考试)\]',
+  );
+
+  bool _isHelechronEvent(Event e) {
+    final title = e.title ?? '';
+    return _helechronEventPrefix.hasMatch(title);
+  }
+
   Future<int> clearCalendarEvents() async {
     try {
       var count = 0;
@@ -136,6 +145,25 @@ class MobileNativeService {
         if (!(r.isSuccess && (r.data ?? false))) break;
         count++;
       }
+      // 部分 Android 机型禁止创建独立日历而回退写入默认可写日历，需按前缀清理残留日程
+      final all = await _calendar.retrieveCalendars();
+      final start = DateTime.now().subtract(const Duration(days: 60));
+      final end = DateTime.now().add(const Duration(days: 240));
+      for (final c in all.data ?? const <Calendar>[]) {
+        if (c.isReadOnly != false || c.id == null) continue;
+        final eventsRes = await _calendar.retrieveEvents(
+          c.id,
+          RetrieveEventsParams(startDate: start, endDate: end),
+        );
+        for (final e in eventsRes.data ?? const <Event>[]) {
+          if (_isHelechronEvent(e) && e.eventId != null) {
+            final del = await _calendar.deleteEvent(c.id, e.eventId);
+            if (del.isSuccess && (del.data ?? false)) {
+              count++;
+            }
+          }
+        }
+      }
       return count;
     } catch (e) {
       debugPrint('clearCalendarEvents failed: $e');
@@ -145,7 +173,22 @@ class MobileNativeService {
 
   Future<bool> hasSyncedCalendar() async {
     try {
-      return (await _findCalendar()) != null;
+      if ((await _findCalendar()) != null) return true;
+      if (!await checkCalendarPermission()) return false;
+      final all = await _calendar.retrieveCalendars();
+      final start = DateTime.now().subtract(const Duration(days: 30));
+      final end = DateTime.now().add(const Duration(days: 180));
+      for (final c in all.data ?? const <Calendar>[]) {
+        if (c.isReadOnly != false || c.id == null) continue;
+        final eventsRes = await _calendar.retrieveEvents(
+          c.id,
+          RetrieveEventsParams(startDate: start, endDate: end),
+        );
+        if ((eventsRes.data ?? const <Event>[]).any(_isHelechronEvent)) {
+          return true;
+        }
+      }
+      return false;
     } catch (_) {
       return false;
     }
