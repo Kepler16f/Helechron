@@ -80,7 +80,14 @@ class AppNotification {
             : null,
         snackPosition: snackPosition,
         duration: duration,
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        margin: EdgeInsets.symmetric(
+          horizontal:
+              (Get.context != null &&
+                  MediaQuery.sizeOf(Get.context!).width > 560)
+              ? (MediaQuery.sizeOf(Get.context!).width - 480) / 2
+              : 16,
+          vertical: 12,
+        ),
         borderRadius: 16,
         backgroundColor: bgColor,
         borderColor: borderColor,

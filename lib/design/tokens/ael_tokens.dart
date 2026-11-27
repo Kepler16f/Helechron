@@ -40,7 +40,7 @@ final class AelDurations {
   static const Duration slow = Duration(milliseconds: 380);
 }
 
-/// 三端共享的底栏几何规格（Flutter 玻璃底栏与鸿蒙 ArkTS HdsTabs 对齐同一规格）。
+/// 三端共享的底栏与平板侧栏几何规格（Flutter 玻璃导航与鸿蒙 ArkTS HdsTabs 对齐同一规格）。
 final class AelTabBarSpec {
   const AelTabBarSpec._();
 
@@ -51,6 +51,29 @@ final class AelTabBarSpec {
   static const double iconSize = 22;
   static const double floatingIconSize = 20;
   static const double labelFontSize = 10.5;
+
+  /// 平板 / 宽屏左侧导航栏宽度与触发断点（三端一致）。
+  static const double sideRailWidth = 80;
+  static const double sideRailFloatingWidth = 66;
+  static const double sideRailBreakpoint = 600;
+}
+
+/// 响应式窗口断点与多栏限宽规格。
+final class AelBreakpointSpec {
+  const AelBreakpointSpec._();
+
+  static const double mediumMinWidth = 600;
+  static const double expandedMinWidth = 840;
+  static const double largeMinWidth = 1200;
+
+  /// 扣减左侧栏后的正文双栏最小触发宽度（约对应窗口总宽 >= 800）。
+  static const double bodyTwoPaneMinWidth = 720;
+
+  /// 二级阅读/详情页最大内容宽度（防止超宽行距难以阅读）。
+  static const double maxDetailWidth = 880;
+
+  /// 宽屏首页/多列网格最大内容宽度。
+  static const double maxWideContentWidth = 1240;
 }
 
 @immutable

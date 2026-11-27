@@ -362,19 +362,27 @@ class _ExamListPageState extends State<ExamListPage> {
         slivers: [
           const CelechronSliverTextHeader(subtitle: '考试'),
           SliverPinnedToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.only(
-                left: 16,
-                right: 16,
-                bottom: 10,
-                top: 10,
+            child: AelConstrainedWidth(
+              maxWidth: AelBreakpointSpec.maxDetailWidth,
+              child: Padding(
+                padding: const EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  bottom: 10,
+                  top: 10,
+                ),
+                child: _semesterPicker(context),
               ),
-              child: _semesterPicker(context),
             ),
           ),
           Obx(() {
             if (_examListController.isSprintMode) {
-              return SliverToBoxAdapter(child: _buildSprintHeader(context));
+              return SliverToBoxAdapter(
+                child: AelConstrainedWidth(
+                  maxWidth: AelBreakpointSpec.maxDetailWidth,
+                  child: _buildSprintHeader(context),
+                ),
+              );
             }
             return const SliverToBoxAdapter(child: SizedBox.shrink());
           }),
@@ -384,12 +392,15 @@ class _ExamListPageState extends State<ExamListPage> {
 
             if (upcoming.isEmpty && past.isEmpty) {
               return SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Center(
-                    child: AelEmptyState(
-                      icon: AelIcons.check,
-                      title: '本学期暂无考试安排',
+                child: AelConstrainedWidth(
+                  maxWidth: AelBreakpointSpec.maxDetailWidth,
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Center(
+                      child: AelEmptyState(
+                        icon: AelIcons.check,
+                        title: '本学期暂无考试安排',
+                      ),
                     ),
                   ),
                 ),
@@ -399,56 +410,65 @@ class _ExamListPageState extends State<ExamListPage> {
             return SliverList(
               delegate: SliverChildListDelegate([
                 for (final dayExams in upcoming)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 5,
+                  AelConstrainedWidth(
+                    maxWidth: AelBreakpointSpec.maxDetailWidth,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 5,
+                      ),
+                      child: _examCard(context, dayExams),
                     ),
-                    child: _examCard(context, dayExams),
                   ),
                 if (past.isNotEmpty) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                    child: CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      onPressed: () {
-                        _examListController.showPastExams.toggle();
-                      },
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            _examListController.showPastExams.value
-                                ? '收起已结束的考试'
-                                : '展开已结束的考试 (${_examListController.pastExams.length} 门)',
-                            style: TextStyle(
-                              fontSize: 14,
+                  AelConstrainedWidth(
+                    maxWidth: AelBreakpointSpec.maxDetailWidth,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      child: CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        onPressed: () {
+                          _examListController.showPastExams.toggle();
+                        },
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              _examListController.showPastExams.value
+                                  ? '收起已结束的考试'
+                                  : '展开已结束的考试 (${_examListController.pastExams.length} 门)',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              _examListController.showPastExams.value
+                                  ? AelIcons.chevronUp
+                                  : AelIcons.chevronDown,
+                              size: 16,
                               color: colors.textSecondary,
                             ),
-                          ),
-                          const SizedBox(width: 4),
-                          Icon(
-                            _examListController.showPastExams.value
-                                ? AelIcons.chevronUp
-                                : AelIcons.chevronDown,
-                            size: 16,
-                            color: colors.textSecondary,
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
                   if (_examListController.showPastExams.value)
                     for (final dayExams in past)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 5,
+                      AelConstrainedWidth(
+                        maxWidth: AelBreakpointSpec.maxDetailWidth,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 5,
+                          ),
+                          child: _examCard(context, dayExams, isPast: true),
                         ),
-                        child: _examCard(context, dayExams, isPast: true),
                       ),
                 ],
               ]),

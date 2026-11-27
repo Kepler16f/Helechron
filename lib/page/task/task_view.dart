@@ -5,6 +5,7 @@ import 'package:flutter/material.dart'
     show AlwaysStoppedAnimation, LinearProgressIndicator;
 import 'package:get/get.dart';
 
+import 'package:celechron/design/app_notification.dart';
 import 'package:celechron/design/components/ael_components.dart';
 import 'package:celechron/design/custom_colors.dart';
 import 'package:celechron/design/icons/ael_icons.dart';
@@ -22,11 +23,17 @@ import 'package:celechron/utils/utils.dart';
 import 'homework_submission_page.dart';
 import 'task_edit_page.dart';
 
-class TaskPage extends StatelessWidget {
-  TaskPage({super.key});
+class TaskPage extends StatefulWidget {
+  const TaskPage({super.key});
 
+  @override
+  State<TaskPage> createState() => _TaskPageState();
+}
+
+class _TaskPageState extends State<TaskPage> {
   final _taskController = Get.put(TaskController());
   final _flowController = Get.put(FlowController());
+  String? _selectedUid;
 
   String deadlineProgress(Task deadline) {
     return '${(deadline.getProgress() * 100).toInt()}% 已完成：预期 ${durationToString(deadline.timeNeeded)}，还要 ${durationToString(deadline.timeNeeded <= deadline.timeSpent ? Duration.zero : (deadline.timeNeeded - deadline.timeSpent))}';
@@ -286,8 +293,10 @@ class TaskPage extends StatelessWidget {
     BuildContext context,
     Task deadline,
     Color color,
-    AelColorTokens colors,
-  ) {
+    AelColorTokens colors, {
+    bool isWide = false,
+    bool isSelected = false,
+  }) {
     final bool canSwipeComplete =
         deadline.type == TaskType.deadline ||
         deadline.type == TaskType.homework;
@@ -431,73 +440,93 @@ class TaskPage extends StatelessWidget {
           _taskController.taskList.refresh();
         }
       },
-      child: AelSectionCard(
-        cornerRadius: AelRadius.tile,
-        backgroundColor: colors.tonalTileBg,
-        padding: const EdgeInsets.all(14),
-        onTap: () async {
-          if (deadline.type == TaskType.homework) {
-            await Navigator.of(context, rootNavigator: true).push(
-              CupertinoPageRoute(
-                builder: (context) => HomeworkSubmissionPage(task: deadline),
-              ),
+      child: DecoratedBox(
+        decoration: ShapeDecoration(
+          shape: AelShapes.squircle(
+            AelRadius.tile,
+            side: isWide && isSelected
+                ? BorderSide(color: colors.primary, width: 1.5)
+                : BorderSide.none,
+          ),
+        ),
+        child: AelSectionCard(
+          cornerRadius: AelRadius.tile,
+          backgroundColor: isWide && isSelected
+              ? colors.primaryContainer.withValues(alpha: 0.45)
+              : colors.tonalTileBg,
+          padding: const EdgeInsets.all(14),
+          onTap: () async {
+            if (isWide) {
+              setState(() => _selectedUid = deadline.uid);
+              return;
+            }
+            if (deadline.type == TaskType.homework) {
+              await Navigator.of(context, rootNavigator: true).push(
+                CupertinoPageRoute(
+                  builder: (context) => HomeworkSubmissionPage(task: deadline),
+                ),
+              );
+              return;
+            }
+            Task? res = await Navigator.of(context, rootNavigator: true).push(
+              CupertinoPageRoute(builder: (context) => TaskEditPage(deadline)),
             );
-            return;
-          }
-          Task? res = await Navigator.of(context, rootNavigator: true).push(
-            CupertinoPageRoute(builder: (context) => TaskEditPage(deadline)),
-          );
-          if (res != null && res.status != TaskStatus.deleted) {
-            deadline.copy(res);
-            _taskController.updateDeadlineList();
-            _taskController.updateDeadlineListTime();
-            _flowController.removeFlowInFlowList();
-            DateTime now = DateTime.now();
-            DateTime startsAt = DateTime(
-              now.year,
-              now.month,
-              now.day,
-              now.hour,
-              now.minute,
-            );
-            _flowController.generateNewFlowList(startsAt);
-            _taskController.taskList.refresh();
-          }
-        },
-        onLongPress: () async {
-          if (deadline.type == TaskType.homework) {
-            await showCardDialog(context, deadline);
-          }
-        },
-        child: deadline.type == TaskType.homework
-            ? Builder(
-                builder: (context) {
-                  final state = _resolveTaskHomeworkState(deadline);
-                  final hasUrl =
-                      extractCoursesUrl(deadline.description) != null;
-                  return HomeworkTaskItemContent(
-                    indicatorColor: color,
-                    title: deadline.summary,
-                    courseName: _getHomeworkCourseName(deadline),
-                    endTime: deadline.endTime,
-                    isQuiz: state.isQuiz,
-                    isSubmitted: state.isSubmitted,
-                    isGraded: state.isGraded,
-                    score: state.score,
-                    onOpenSubmission: hasUrl
-                        ? () {
-                            Navigator.of(context, rootNavigator: true).push(
-                              CupertinoPageRoute(
-                                builder: (context) =>
-                                    HomeworkSubmissionPage(task: deadline),
-                              ),
-                            );
-                          }
-                        : null,
-                  );
-                },
-              )
-            : _buildRegularTaskBody(context, deadline, color, colors),
+            if (res != null && res.status != TaskStatus.deleted) {
+              deadline.copy(res);
+              _taskController.updateDeadlineList();
+              _taskController.updateDeadlineListTime();
+              _flowController.removeFlowInFlowList();
+              DateTime now = DateTime.now();
+              DateTime startsAt = DateTime(
+                now.year,
+                now.month,
+                now.day,
+                now.hour,
+                now.minute,
+              );
+              _flowController.generateNewFlowList(startsAt);
+              _taskController.taskList.refresh();
+            }
+          },
+          onLongPress: () async {
+            if (deadline.type == TaskType.homework) {
+              await showCardDialog(context, deadline);
+            }
+          },
+          child: deadline.type == TaskType.homework
+              ? Builder(
+                  builder: (context) {
+                    final state = _resolveTaskHomeworkState(deadline);
+                    final hasUrl =
+                        extractCoursesUrl(deadline.description) != null;
+                    return HomeworkTaskItemContent(
+                      indicatorColor: color,
+                      title: deadline.summary,
+                      courseName: _getHomeworkCourseName(deadline),
+                      endTime: deadline.endTime,
+                      isQuiz: state.isQuiz,
+                      isSubmitted: state.isSubmitted,
+                      isGraded: state.isGraded,
+                      score: state.score,
+                      onOpenSubmission: hasUrl
+                          ? () {
+                              if (isWide) {
+                                setState(() => _selectedUid = deadline.uid);
+                                return;
+                              }
+                              Navigator.of(context, rootNavigator: true).push(
+                                CupertinoPageRoute(
+                                  builder: (context) =>
+                                      HomeworkSubmissionPage(task: deadline),
+                                ),
+                              );
+                            }
+                          : null,
+                    );
+                  },
+                )
+              : _buildRegularTaskBody(context, deadline, color, colors),
+        ),
       ),
     );
   }
@@ -656,6 +685,8 @@ class TaskPage extends StatelessWidget {
     required List<Task> items,
     required AelColorTokens colors,
     Widget? trailing,
+    bool isWide = false,
+    String? selectedUid,
   }) {
     if (items.isEmpty) return const SizedBox.shrink();
     return Padding(
@@ -675,6 +706,8 @@ class TaskPage extends StatelessWidget {
                 items[i],
                 UidColors.colorFromUid(items[i].uid),
                 colors,
+                isWide: isWide,
+                isSelected: isWide && items[i].uid == selectedUid,
               ),
             ],
           ],
@@ -740,6 +773,76 @@ class TaskPage extends StatelessWidget {
     );
   }
 
+  Widget _buildDetailPane(BuildContext context, Task? selectedTask) {
+    if (selectedTask == null) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(AelSpacing.xl),
+          child: AelConstrainedWidth(
+            maxWidth: 420,
+            child: AelEmptyState(
+              icon: AelIcons.tabTask,
+              title: '选择左侧事项查看详情',
+              subtitle: '点击任意课程作业、待办或日程即可在此处查看详情与编辑',
+            ),
+          ),
+        ),
+      );
+    }
+    if (selectedTask.type == TaskType.homework) {
+      return HomeworkSubmissionPage(
+        key: ValueKey('task-hw-${selectedTask.uid}'),
+        task: selectedTask,
+        embedded: true,
+      );
+    }
+    return TaskEditPage(
+      selectedTask,
+      key: ValueKey('task-edit-${selectedTask.uid}'),
+      embedded: true,
+      onSaved: (res) {
+        selectedTask.copy(res);
+        _taskController.updateDeadlineList();
+        _taskController.updateDeadlineListTime();
+        _flowController.removeFlowInFlowList();
+        final now = DateTime.now();
+        final startsAt = DateTime(
+          now.year,
+          now.month,
+          now.day,
+          now.hour,
+          now.minute,
+        );
+        _flowController.generateNewFlowList(startsAt);
+        _taskController.taskList.refresh();
+        _taskController.saveDeadlineListToDb();
+        AppNotification.success('已保存', '${res.summary} 已更新');
+      },
+      onDeleted: () {
+        selectedTask.status = TaskStatus.deleted;
+        _taskController.lastChangeIsHomeworkOnly.value = false;
+        _taskController.updateDeadlineList();
+        _taskController.updateDeadlineListTime();
+        _flowController.removeFlowInFlowList();
+        final now = DateTime.now();
+        final startsAt = DateTime(
+          now.year,
+          now.month,
+          now.day,
+          now.hour,
+          now.minute,
+        );
+        _flowController.generateNewFlowList(startsAt);
+        _taskController.taskList.refresh();
+        _taskController.saveDeadlineListToDb();
+        if (mounted) {
+          setState(() => _selectedUid = null);
+        }
+        AppNotification.info('已删除', '${selectedTask.summary} 已移除');
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = AelTheme.colorsOf(context);
@@ -747,102 +850,156 @@ class TaskPage extends StatelessWidget {
       decoration: BoxDecoration(color: colors.pageBg),
       child: SafeArea(
         bottom: false,
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: AelLargeTitleBar(
-                title: '任务',
-                actions: [
-                  AelCircleIconButton(
-                    icon: AelIcons.add,
-                    tooltip: '新建任务',
-                    onPressed: () async {
-                      await newDeadline(context);
-                      _taskController.updateDeadlineList();
-                      _taskController.taskList.refresh();
-                    },
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = AelResponsive.isWideBody(constraints.maxWidth);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AelConstrainedWidth(
+                  maxWidth: AelBreakpointSpec.maxWideContentWidth,
+                  child: AelLargeTitleBar(
+                    title: '任务',
+                    actions: [
+                      AelCircleIconButton(
+                        icon: AelIcons.add,
+                        tooltip: '新建任务',
+                        onPressed: () async {
+                          await newDeadline(context);
+                          _taskController.updateDeadlineList();
+                          _taskController.taskList.refresh();
+                        },
+                      ),
+                      AelCircleIconButton(
+                        icon: AelIcons.more,
+                        tooltip: '更多操作',
+                        onPressed: () => _showMoreActions(context),
+                      ),
+                    ],
                   ),
-                  AelCircleIconButton(
-                    icon: AelIcons.more,
-                    tooltip: '更多操作',
-                    onPressed: () => _showMoreActions(context),
-                  ),
-                ],
-              ),
-            ),
-            Obx(() {
-              final hw = _taskController.todoHomeworkList;
-              final todo = _taskController.todoDeadlineList;
-              final done = _taskController.doneDeadlineList;
-              final fixed = _taskController.fixedDeadlineList;
-
-              if (hw.isEmpty && todo.isEmpty && done.isEmpty && fixed.isEmpty) {
-                return SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AelSpacing.pageHorizontal,
-                      vertical: AelSpacing.xl,
-                    ),
-                    child: AelEmptyState(
-                      icon: AelIcons.tabTask,
-                      title: '没有任务',
-                      subtitle: '当前没有待办作业或任务安排',
-                      actionLabel: '新建任务',
-                      onAction: () async {
-                        await newDeadline(context);
-                        _taskController.updateDeadlineList();
-                        _taskController.taskList.refresh();
-                      },
-                    ),
-                  ),
-                );
-              }
-
-              return SliverPadding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AelSpacing.pageHorizontal,
                 ),
-                sliver: SliverList(
-                  delegate: SliverChildListDelegate([
-                    _buildSection(
-                      context,
-                      icon: AelIcons.homework,
-                      title: '课程作业',
-                      items: hw,
-                      colors: colors,
-                      trailing: _buildHomeworkRefreshButton(context),
-                    ),
-                    _buildSection(
-                      context,
-                      icon: AelIcons.tabTask,
-                      title: '待办',
-                      items: todo,
-                      colors: colors,
-                    ),
-                    _buildSection(
-                      context,
-                      icon: AelIcons.success,
-                      title: '已完成',
-                      items: done,
-                      colors: colors,
-                    ),
-                    _buildSection(
-                      context,
-                      icon: AelIcons.tabCalendar,
-                      title: '日程列表',
-                      items: fixed,
-                      colors: colors,
-                    ),
-                  ]),
+                Expanded(
+                  child: Obx(() {
+                    final hw = _taskController.todoHomeworkList;
+                    final todo = _taskController.todoDeadlineList;
+                    final done = _taskController.doneDeadlineList;
+                    final fixed = _taskController.fixedDeadlineList;
+                    final allItems = <Task>[...hw, ...todo, ...done, ...fixed];
+
+                    if (allItems.isEmpty) {
+                      return SingleChildScrollView(
+                        padding: EdgeInsets.fromLTRB(
+                          AelSpacing.pageHorizontal,
+                          AelSpacing.xl,
+                          AelSpacing.pageHorizontal,
+                          MediaQuery.paddingOf(context).bottom + 24,
+                        ),
+                        child: AelConstrainedWidth(
+                          maxWidth: 520,
+                          child: AelEmptyState(
+                            icon: AelIcons.tabTask,
+                            title: '没有任务',
+                            subtitle: '当前没有待办作业或任务安排',
+                            actionLabel: '新建任务',
+                            onAction: () async {
+                              await newDeadline(context);
+                              _taskController.updateDeadlineList();
+                              _taskController.taskList.refresh();
+                            },
+                          ),
+                        ),
+                      );
+                    }
+
+                    Task? selectedTask;
+                    if (_selectedUid != null) {
+                      for (final t in allItems) {
+                        if (t.uid == _selectedUid) {
+                          selectedTask = t;
+                          break;
+                        }
+                      }
+                    }
+                    selectedTask ??= allItems.first;
+
+                    final Widget listContent = CustomScrollView(
+                      slivers: [
+                        SliverPadding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AelSpacing.pageHorizontal,
+                          ),
+                          sliver: SliverList(
+                            delegate: SliverChildListDelegate([
+                              _buildSection(
+                                context,
+                                icon: AelIcons.homework,
+                                title: '课程作业',
+                                items: hw,
+                                colors: colors,
+                                trailing: _buildHomeworkRefreshButton(context),
+                                isWide: isWide,
+                                selectedUid: selectedTask.uid,
+                              ),
+                              _buildSection(
+                                context,
+                                icon: AelIcons.tabTask,
+                                title: '待办',
+                                items: todo,
+                                colors: colors,
+                                isWide: isWide,
+                                selectedUid: selectedTask.uid,
+                              ),
+                              _buildSection(
+                                context,
+                                icon: AelIcons.success,
+                                title: '已完成',
+                                items: done,
+                                colors: colors,
+                                isWide: isWide,
+                                selectedUid: selectedTask.uid,
+                              ),
+                              _buildSection(
+                                context,
+                                icon: AelIcons.tabCalendar,
+                                title: '日程列表',
+                                items: fixed,
+                                colors: colors,
+                                isWide: isWide,
+                                selectedUid: selectedTask.uid,
+                              ),
+                            ]),
+                          ),
+                        ),
+                        SliverToBoxAdapter(
+                          child: SizedBox(
+                            height: MediaQuery.paddingOf(context).bottom + 24,
+                          ),
+                        ),
+                      ],
+                    );
+
+                    if (isWide) {
+                      return AelConstrainedWidth(
+                        maxWidth: AelBreakpointSpec.maxWideContentWidth,
+                        child: AelTwoPane(
+                          masterFraction: 0.43,
+                          minMasterWidth: 320,
+                          maxMasterWidth: 460,
+                          master: listContent,
+                          detail: _buildDetailPane(context, selectedTask),
+                        ),
+                      );
+                    }
+
+                    return AelConstrainedWidth(
+                      maxWidth: AelBreakpointSpec.maxDetailWidth,
+                      child: listContent,
+                    );
+                  }),
                 ),
-              );
-            }),
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: MediaQuery.paddingOf(context).bottom + 24,
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         ),
       ),
     );

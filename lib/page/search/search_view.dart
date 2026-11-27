@@ -27,56 +27,59 @@ class SearchPage extends StatelessWidget {
               child: Container(
                 color: colors.pageBg,
                 padding: const EdgeInsets.fromLTRB(12, 8, 16, 8),
-                child: Row(
-                  children: [
-                    AelCircleIconButton(
-                      icon: AelIcons.back,
-                      size: 36,
-                      iconSize: 18,
-                      tooltip: '返回',
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: CupertinoSearchTextField(
-                        placeholder: '搜索课程、事项...',
-                        backgroundColor: colors.cardBg,
-                        placeholderStyle: TextStyle(
-                          color: colors.textTertiary,
-                          height: 1.25,
-                          fontSize: 16,
-                        ),
-                        style: TextStyle(
-                          color: colors.textPrimary,
-                          height: 1.25,
-                          fontSize: 16,
-                        ),
-                        borderRadius: BorderRadius.circular(14),
-                        itemColor: colors.textSecondary,
-                        itemSize: 18,
-                        suffixInsets: const EdgeInsetsDirectional.fromSTEB(
-                          0,
-                          0,
-                          6,
-                          0,
-                        ),
-                        prefixInsets: const EdgeInsetsDirectional.fromSTEB(
-                          10,
-                          0,
-                          0,
-                          0,
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 9,
-                        ),
-                        onChanged: (String value) {
-                          _searchController.searchWord.value = value;
-                        },
-                        autofocus: true,
+                child: AelConstrainedWidth(
+                  maxWidth: AelBreakpointSpec.maxDetailWidth,
+                  child: Row(
+                    children: [
+                      AelCircleIconButton(
+                        icon: AelIcons.back,
+                        size: 36,
+                        iconSize: 18,
+                        tooltip: '返回',
+                        onPressed: () => Navigator.of(context).pop(),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: CupertinoSearchTextField(
+                          placeholder: '搜索课程、事项...',
+                          backgroundColor: colors.cardBg,
+                          placeholderStyle: TextStyle(
+                            color: colors.textTertiary,
+                            height: 1.25,
+                            fontSize: 16,
+                          ),
+                          style: TextStyle(
+                            color: colors.textPrimary,
+                            height: 1.25,
+                            fontSize: 16,
+                          ),
+                          borderRadius: BorderRadius.circular(14),
+                          itemColor: colors.textSecondary,
+                          itemSize: 18,
+                          suffixInsets: const EdgeInsetsDirectional.fromSTEB(
+                            0,
+                            0,
+                            6,
+                            0,
+                          ),
+                          prefixInsets: const EdgeInsetsDirectional.fromSTEB(
+                            10,
+                            0,
+                            0,
+                            0,
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 9,
+                          ),
+                          onChanged: (String value) {
+                            _searchController.searchWord.value = value;
+                          },
+                          autofocus: true,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -87,30 +90,36 @@ class SearchPage extends StatelessWidget {
                 return const SliverPadding(
                   padding: EdgeInsets.all(AelSpacing.lg),
                   sliver: SliverToBoxAdapter(
-                    child: AelEmptyState(
-                      icon: AelIcons.search,
-                      title: '未找到相关课程或事项',
+                    child: AelConstrainedWidth(
+                      maxWidth: AelBreakpointSpec.maxDetailWidth,
+                      child: AelEmptyState(
+                        icon: AelIcons.search,
+                        title: '未找到相关课程或事项',
+                      ),
                     ),
                   ),
                 );
               }
               return SliverList(
                 delegate: SliverChildBuilderDelegate(
-                  (context, index) => Padding(
-                    padding: index == 0
-                        ? const EdgeInsets.only(
-                            top: 4,
-                            bottom: 5,
-                            left: 16,
-                            right: 16,
-                          )
-                        : const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 5,
-                          ),
-                    child: CourseBriefCard(
-                      course: results[index],
-                      allowDirect: true,
+                  (context, index) => AelConstrainedWidth(
+                    maxWidth: AelBreakpointSpec.maxDetailWidth,
+                    child: Padding(
+                      padding: index == 0
+                          ? const EdgeInsets.only(
+                              top: 4,
+                              bottom: 5,
+                              left: 16,
+                              right: 16,
+                            )
+                          : const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 5,
+                            ),
+                      child: CourseBriefCard(
+                        course: results[index],
+                        allowDirect: true,
+                      ),
                     ),
                   ),
                   childCount: results.length,

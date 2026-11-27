@@ -15,7 +15,7 @@ class ScheduleView extends StatelessWidget {
 
   const ScheduleView({super.key, required this.controller});
 
-  Widget _courseSchedule(BuildContext context) {
+  Widget _courseSchedule(BuildContext context, double gridHeight) {
     final colors = AelTheme.colorsOf(context);
     const List<String> courseStartTime = [
       "08:00",
@@ -53,7 +53,7 @@ class ScheduleView extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           SizedBox(
-            height: 560,
+            height: gridHeight,
             child: Obx(() {
               final semester = controller.getCurrentSemester();
               if (semester == null) {
@@ -247,16 +247,27 @@ class ScheduleView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          AelSpacing.pageHorizontal,
-          AelSpacing.xs,
-          AelSpacing.pageHorizontal,
-          MediaQuery.paddingOf(context).bottom + 20,
-        ),
-        child: _courseSchedule(context),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availH = constraints.maxHeight.isFinite
+            ? constraints.maxHeight - 88
+            : 560.0;
+        final gridHeight = max(560.0, min(availH, 860.0));
+        return SingleChildScrollView(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              AelSpacing.pageHorizontal,
+              AelSpacing.xs,
+              AelSpacing.pageHorizontal,
+              MediaQuery.paddingOf(context).bottom + 20,
+            ),
+            child: AelConstrainedWidth(
+              maxWidth: AelBreakpointSpec.maxWideContentWidth,
+              child: _courseSchedule(context, gridHeight),
+            ),
+          ),
+        );
+      },
     );
   }
 }

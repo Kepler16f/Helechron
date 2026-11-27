@@ -255,103 +255,112 @@ class _AllowTimeEditPageState extends State<AllowTimeEditPage> {
                 vertical: AelSpacing.sm,
               ),
               sliver: SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    AelSectionCard(
-                      title: '可用工作时段列表',
-                      icon: AelIcons.tabFlow,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AelSpacing.lg,
-                        vertical: AelSpacing.md,
-                      ),
-                      child: Column(
-                        children: [
-                          for (var index = 0; index < now.length; index++) ...[
-                            if (index > 0)
-                              Container(height: 0.5, color: colors.divider),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      '${timeToString(now[index].first)} - ${timeToString(now[index].second)}',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w500,
-                                        color: colors.textPrimary,
+                child: AelConstrainedWidth(
+                  maxWidth: AelBreakpointSpec.maxDetailWidth,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      AelSectionCard(
+                        title: '可用工作时段列表',
+                        icon: AelIcons.tabFlow,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AelSpacing.lg,
+                          vertical: AelSpacing.md,
+                        ),
+                        child: Column(
+                          children: [
+                            for (
+                              var index = 0;
+                              index < now.length;
+                              index++
+                            ) ...[
+                              if (index > 0)
+                                Container(height: 0.5, color: colors.divider),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '${timeToString(now[index].first)} - ${timeToString(now[index].second)}',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w500,
+                                          color: colors.textPrimary,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  AelCircleIconButton(
-                                    icon: AelIcons.edit,
-                                    size: 32,
-                                    iconSize: 15,
-                                    backgroundColor: colors.primaryContainer,
-                                    iconColor: colors.onPrimaryContainer,
-                                    elevated: false,
-                                    tooltip: '编辑时段',
-                                    onPressed: () {
-                                      showDateTimePairEditSheet(
-                                        context,
-                                        val: now[index],
-                                        onChanged: (DateTimePair updated) {
+                                    AelCircleIconButton(
+                                      icon: AelIcons.edit,
+                                      size: 32,
+                                      iconSize: 15,
+                                      backgroundColor: colors.primaryContainer,
+                                      iconColor: colors.onPrimaryContainer,
+                                      elevated: false,
+                                      tooltip: '编辑时段',
+                                      onPressed: () {
+                                        showDateTimePairEditSheet(
+                                          context,
+                                          val: now[index],
+                                          onChanged: (DateTimePair updated) {
+                                            setState(() {
+                                              now[index] = DateTimePair(
+                                                first: updated.first,
+                                                second: updated.second,
+                                                isDeleted: updated.isDeleted,
+                                              );
+                                              saveAllowTime();
+                                            });
+                                          },
+                                        );
+                                      },
+                                    ),
+                                    const SizedBox(width: 8),
+                                    AelCircleIconButton(
+                                      icon: AelIcons.delete,
+                                      size: 32,
+                                      iconSize: 15,
+                                      backgroundColor: colors.errorContainer,
+                                      iconColor: colors.onErrorContainer,
+                                      elevated: false,
+                                      tooltip: '删除时段',
+                                      onPressed: () {
+                                        if (now.length > 1) {
                                           setState(() {
-                                            now[index] = DateTimePair(
-                                              first: updated.first,
-                                              second: updated.second,
-                                              isDeleted: updated.isDeleted,
-                                            );
+                                            now.removeAt(index);
                                             saveAllowTime();
                                           });
-                                        },
-                                      );
-                                    },
-                                  ),
-                                  const SizedBox(width: 8),
-                                  AelCircleIconButton(
-                                    icon: AelIcons.delete,
-                                    size: 32,
-                                    iconSize: 15,
-                                    backgroundColor: colors.errorContainer,
-                                    iconColor: colors.onErrorContainer,
-                                    elevated: false,
-                                    tooltip: '删除时段',
-                                    onPressed: () {
-                                      if (now.length > 1) {
-                                        setState(() {
-                                          now.removeAt(index);
-                                          saveAllowTime();
-                                        });
-                                      }
-                                    },
-                                  ),
-                                ],
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: AelSpacing.md),
-                    AelButton(
-                      expanded: true,
-                      variant: AelButtonVariant.tonal,
-                      icon: AelIcons.add,
-                      label: '添加一个时段',
-                      onPressed: () {
-                        now.add(
-                          DateTimePair(
-                            first: DateTime(0, 0, 0, 8, 0),
-                            second: DateTime(0, 0, 0, 12, 0),
-                            isDeleted: false,
-                          ),
-                        );
-                        setState(() {});
-                      },
-                    ),
-                  ],
+                      const SizedBox(height: AelSpacing.md),
+                      AelButton(
+                        expanded: true,
+                        variant: AelButtonVariant.tonal,
+                        icon: AelIcons.add,
+                        label: '添加一个时段',
+                        onPressed: () {
+                          now.add(
+                            DateTimePair(
+                              first: DateTime(0, 0, 0, 8, 0),
+                              second: DateTime(0, 0, 0, 12, 0),
+                              isDeleted: false,
+                            ),
+                          );
+                          setState(() {});
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

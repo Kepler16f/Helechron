@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 
 import 'package:celechron/design/components/ael_components.dart';
 import 'package:celechron/design/icons/ael_icons.dart';
+import 'package:celechron/design/native_bar_spacer.dart';
 import 'package:celechron/design/persistent_headers.dart';
 import 'package:celechron/design/theme/ael_theme.dart';
 import 'package:celechron/design/tokens/ael_tokens.dart';
@@ -61,54 +62,113 @@ class CourseListPage extends StatelessWidget {
 
     return CupertinoPageScaffold(
       backgroundColor: colors.pageBg,
-      child: CustomScrollView(
-        slivers: [
-          CelechronSliverTextHeader(
-            subtitle: '课程',
-            right: Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: AelChip(
-                label: '培养方案',
-                leadingIcon: AelIcons.book,
-                tone: AelChipTone.primary,
-                onTap: () => Navigator.of(context, rootNavigator: true).push(
-                  CupertinoPageRoute(
-                    builder: (context) => const CurriculumPlanPage(),
-                    title: '培养方案查看',
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = AelResponsive.isWideBody(constraints.maxWidth);
+          return CustomScrollView(
+            slivers: [
+              CelechronSliverTextHeader(
+                subtitle: '课程',
+                right: Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: AelChip(
+                    label: '培养方案',
+                    leadingIcon: AelIcons.book,
+                    tone: AelChipTone.primary,
+                    onTap: () =>
+                        Navigator.of(context, rootNavigator: true).push(
+                          CupertinoPageRoute(
+                            builder: (context) => const CurriculumPlanPage(),
+                            title: '培养方案查看',
+                          ),
+                        ),
                   ),
                 ),
               ),
-            ),
-          ),
-          SliverPinnedToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 10),
-              child: Obx(() => _semesterPicker(context)),
-            ),
-          ),
-          Obx(
-            () => SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) => Container(
-                  padding: index == 0
-                      ? const EdgeInsets.only(
-                          top: 0,
-                          bottom: 5,
-                          left: 16,
-                          right: 16,
-                        )
-                      : const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-                  child: CourseBriefCard(
-                    course: _courseListController.courses[index],
-                    allowDirect: true,
-                    showZhiyunInDetail: false,
+              SliverPinnedToBoxAdapter(
+                child: AelConstrainedWidth(
+                  maxWidth: AelBreakpointSpec.maxWideContentWidth,
+                  child: Padding(
+                    padding: const EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      bottom: 10,
+                    ),
+                    child: Obx(() => _semesterPicker(context)),
                   ),
                 ),
-                childCount: _courseListController.courses.length,
               ),
-            ),
-          ),
-        ],
+              Obx(() {
+                final courses = _courseListController.courses;
+                if (!isWide) {
+                  return SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) => Container(
+                        padding: index == 0
+                            ? const EdgeInsets.only(
+                                top: 0,
+                                bottom: 5,
+                                left: 16,
+                                right: 16,
+                              )
+                            : const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 5,
+                              ),
+                        child: CourseBriefCard(
+                          course: courses[index],
+                          allowDirect: true,
+                          showZhiyunInDetail: false,
+                        ),
+                      ),
+                      childCount: courses.length,
+                    ),
+                  );
+                }
+
+                final rowCount = (courses.length + 1) ~/ 2;
+                return SliverList(
+                  delegate: SliverChildBuilderDelegate((context, rowIndex) {
+                    final leftIdx = rowIndex * 2;
+                    final rightIdx = leftIdx + 1;
+                    return AelConstrainedWidth(
+                      maxWidth: AelBreakpointSpec.maxWideContentWidth,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 5,
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: CourseBriefCard(
+                                course: courses[leftIdx],
+                                allowDirect: true,
+                                showZhiyunInDetail: false,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: rightIdx < courses.length
+                                  ? CourseBriefCard(
+                                      course: courses[rightIdx],
+                                      allowDirect: true,
+                                      showZhiyunInDetail: false,
+                                    )
+                                  : const SizedBox.shrink(),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }, childCount: rowCount),
+                );
+              }),
+              const SliverToBoxAdapter(child: NativeBottomBarSpacer()),
+            ],
+          );
+        },
       ),
     );
   }

@@ -28,6 +28,7 @@
         "startWindowIcon": "$media:startIcon",
         "startWindowBackground": "$color:start_window_background",
         "supportWindowMode": ["fullscreen", "split", "floating"],
+        "orientation": "auto_rotation_unspecified",
         "exported": true,
         "skills": [
           {

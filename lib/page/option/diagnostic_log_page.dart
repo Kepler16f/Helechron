@@ -142,59 +142,72 @@ class _DiagnosticLogPageState extends State<DiagnosticLogPage> {
       backgroundColor: colors.pageBg,
       child: SafeArea(
         bottom: false,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 16, 4),
-              child: Row(
-                children: [
-                  AelCircleIconButton(
-                    icon: AelIcons.back,
-                    size: 36,
-                    iconSize: 18,
-                    tooltip: '返回',
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      '诊断与测试',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.3,
-                        color: colors.textPrimary,
+        child: AelConstrainedWidth(
+          maxWidth: AelBreakpointSpec.maxDetailWidth,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 16, 4),
+                child: Row(
+                  children: [
+                    AelCircleIconButton(
+                      icon: AelIcons.back,
+                      size: 36,
+                      iconSize: 18,
+                      tooltip: '返回',
+                      onPressed: () {
+                        final onBack = AelEmbeddedBackScope.maybeOf(context);
+                        if (onBack != null) {
+                          onBack();
+                        } else {
+                          Navigator.of(context).pop();
+                        }
+                      },
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '诊断与测试',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.3,
+                          color: colors.textPrimary,
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: Semantics(
-                label: '诊断日志显示模式',
-                child: AelSegmented<int>(
-                  key: const ValueKey('diagnostic-mode-switch'),
-                  stackedIcon: false,
-                  value: _mode,
-                  items: const [
-                    AelSegmentItem(value: 0, label: '易读报告'),
-                    AelSegmentItem(value: 1, label: '原始日志'),
                   ],
-                  onChanged: _setMode,
                 ),
               ),
-            ),
-            Expanded(
-              child: PageView(
-                key: const ValueKey('diagnostic-mode-pages'),
-                controller: _pageController,
-                onPageChanged: (value) => setState(() => _mode = value),
-                children: [_buildReadablePage(context), _buildRawPage(context)],
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: Semantics(
+                  label: '诊断日志显示模式',
+                  child: AelSegmented<int>(
+                    key: const ValueKey('diagnostic-mode-switch'),
+                    stackedIcon: false,
+                    value: _mode,
+                    items: const [
+                      AelSegmentItem(value: 0, label: '易读报告'),
+                      AelSegmentItem(value: 1, label: '原始日志'),
+                    ],
+                    onChanged: _setMode,
+                  ),
+                ),
               ),
-            ),
-          ],
+              Expanded(
+                child: PageView(
+                  key: const ValueKey('diagnostic-mode-pages'),
+                  controller: _pageController,
+                  onPageChanged: (value) => setState(() => _mode = value),
+                  children: [
+                    _buildReadablePage(context),
+                    _buildRawPage(context),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

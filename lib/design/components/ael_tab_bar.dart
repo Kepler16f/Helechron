@@ -11,6 +11,7 @@ import 'package:flutter_miuix/miuix.dart'
         MiuixLayerBackdrop;
 
 import 'package:celechron/design/components/ael_glass.dart';
+import 'package:celechron/design/components/ael_shapes.dart';
 import 'package:celechron/design/theme/ael_theme.dart';
 import 'package:celechron/design/tokens/ael_tokens.dart';
 
@@ -201,6 +202,170 @@ class AelTabBar extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+/// Android / iOS 平板与宽屏使用的左侧自适应玻璃导航栏（与鸿蒙 ArkTS 竖排 HdsTabs 对齐）。
+class AelSideRail extends StatelessWidget {
+  const AelSideRail({
+    super.key,
+    required this.items,
+    required this.currentIndex,
+    required this.onSelect,
+    required this.floating,
+    required this.immersiveLight,
+    this.backdrop,
+  });
+
+  final List<AelTabItem> items;
+  final int currentIndex;
+  final ValueChanged<int> onSelect;
+  final bool floating;
+  final bool immersiveLight;
+  final MiuixLayerBackdrop? backdrop;
+
+  void _handleSelect(int index) {
+    HapticFeedback.selectionClick();
+    onSelect(index);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final colors = AelTheme.colorsOf(context);
+    final leftSafe = media.padding.left;
+    final outerWidth = AelTabBarSpec.sideRailWidth + leftSafe;
+
+    if (floating) {
+      final capsuleHeight = math.min(
+        math.max(media.size.height * 0.62, 320.0),
+        440.0,
+      );
+      return SizedBox(
+        width: outerWidth,
+        height: double.infinity,
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: leftSafe + 7,
+            right: 7,
+            top: math.max(media.padding.top, AelSpacing.md),
+            bottom: math.max(media.padding.bottom, AelSpacing.md),
+          ),
+          child: Center(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(AelTabBarSpec.borderRadius),
+                boxShadow: [
+                  BoxShadow(
+                    color: colors.textPrimary.withValues(
+                      alpha: colors.isDark ? 0.24 : 0.08,
+                    ),
+                    blurRadius: 18,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: SizedBox(
+                width: AelTabBarSpec.sideRailFloatingWidth,
+                height: capsuleHeight,
+                child: AelGlassSurface(
+                  borderRadius: AelTabBarSpec.borderRadius,
+                  backdrop: backdrop,
+                  preferShader: false,
+                  blurSigma: immersiveLight ? 28.0 : 20.0,
+                  tintAlpha: colors.isDark
+                      ? (immersiveLight ? 0.62 : 0.86)
+                      : (immersiveLight ? 0.56 : 0.88),
+                  child: _buildDestinations(colors),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      width: outerWidth,
+      height: double.infinity,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            right: BorderSide(
+              color: colors.divider.withValues(alpha: 0.5),
+              width: 0.5,
+            ),
+          ),
+        ),
+        child: ClipRect(
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(
+              color: colors.cardBg.withValues(alpha: 0.88),
+              padding: EdgeInsets.only(
+                left: leftSafe,
+                top: math.max(media.padding.top, AelSpacing.md),
+                bottom: math.max(media.padding.bottom, AelSpacing.md),
+              ),
+              child: _buildDestinations(colors),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDestinations(AelColorTokens colors) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(items.length, (index) {
+        final selected = index == currentIndex;
+        final item = items[index];
+        final fg = selected ? colors.primary : colors.textSecondary;
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _handleSelect(index),
+            child: SizedBox(
+              width: 56,
+              height: 54,
+              child: DecoratedBox(
+                decoration: ShapeDecoration(
+                  color: selected
+                      ? colors.primary.withValues(
+                          alpha: colors.isDark ? 0.22 : 0.12,
+                        )
+                      : AelSemanticPalette.transparent,
+                  shape: AelShapes.squircle(16),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(item.icon, size: AelTabBarSpec.iconSize, color: fg),
+                    const SizedBox(height: 3),
+                    Text(
+                      item.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                        color: fg,
+                        height: 1.1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         );

@@ -4,6 +4,7 @@ import 'package:flutter_miuix/miuix.dart'
     show MiuixLayerBackdrop, MiuixLayerBackdropCapture;
 import 'package:get/get.dart';
 
+import 'package:celechron/design/components/ael_responsive.dart';
 import 'package:celechron/design/components/ael_tab_bar.dart';
 import 'package:celechron/design/icons/ael_icons.dart';
 import 'package:celechron/design/theme/ael_theme.dart';
@@ -89,6 +90,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final option = Get.find<Option>(tag: 'option');
     final colors = AelTheme.colorsOf(context);
+    final bool useSideRail = AelResponsive.useSideRail(context);
     return Obx(() {
       final bool useNativeBar = PlatformFeatures.isOhos;
       final bool floating = option.bottomBarFloating.value;
@@ -99,6 +101,7 @@ class _HomePageState extends State<HomePage> {
         enabled: false,
         child: PageView(
           controller: _pageController,
+          physics: useSideRail ? const NeverScrollableScrollPhysics() : null,
           onPageChanged: (index) {
             if (index != _indexNum) {
               setState(() {
@@ -126,7 +129,15 @@ class _HomePageState extends State<HomePage> {
         bottom: existingMediaQuery.viewInsets.bottom,
       );
 
-      if (floating) {
+      if (useSideRail) {
+        // 左侧导航栏已占去左安全区，正文中移除多余 left padding 防止二次缩进，也不再叠加底栏高度。
+        newMediaQuery = newMediaQuery.copyWith(
+          padding: newMediaQuery.padding.copyWith(
+            left: 0,
+            bottom: existingMediaQuery.padding.bottom,
+          ),
+        );
+      } else if (floating) {
         const double floatingBarInset =
             AelTabBarSpec.height + AelTabBarSpec.bottomMargin;
         newMediaQuery = newMediaQuery.copyWith(
@@ -154,6 +165,33 @@ class _HomePageState extends State<HomePage> {
         pageBody = MiuixLayerBackdropCapture(
           backdrop: backdrop,
           child: pageBody,
+        );
+      }
+
+      if (useSideRail) {
+        final double nativeRailSpacerWidth =
+            AelTabBarSpec.sideRailWidth + existingMediaQuery.padding.left;
+        return DecoratedBox(
+          decoration: BoxDecoration(color: colors.pageBg),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (!useNativeBar)
+                MediaQuery.withNoTextScaling(
+                  child: AelSideRail(
+                    items: _kBarItems,
+                    currentIndex: _indexNum,
+                    onSelect: _selectTab,
+                    floating: floating,
+                    immersiveLight: immersiveLight,
+                    backdrop: backdrop,
+                  ),
+                )
+              else
+                SizedBox(width: nativeRailSpacerWidth),
+              Expanded(child: pageBody),
+            ],
+          ),
         );
       }
 

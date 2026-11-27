@@ -558,62 +558,78 @@ class GpaSimulatorPage extends StatelessWidget {
             ),
           ),
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
-              child: _buildSimulatorSummaryCard(context),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: AelConstrainedWidth(
+              maxWidth: AelBreakpointSpec.maxDetailWidth,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    '绩点计算标准:',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: colors.textPrimary,
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      bottom: 8,
+                    ),
+                    child: _buildSimulatorSummaryCard(context),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 6,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '绩点计算标准:',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: colors.textPrimary,
+                          ),
+                        ),
+                        SizedBox(
+                          width: 140,
+                          child: Obx(
+                            () => AelSegmented<GpaScaleType>(
+                              value: _controller.selectedScale.value,
+                              stackedIcon: false,
+                              gap: 4,
+                              onChanged: (val) =>
+                                  _controller.selectedScale.value = val,
+                              items: GpaScaleType.values
+                                  .map(
+                                    (s) => AelSegmentItem(
+                                      value: s,
+                                      label: s.label,
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  SizedBox(
-                    width: 140,
-                    child: Obx(
-                      () => AelSegmented<GpaScaleType>(
-                        value: _controller.selectedScale.value,
-                        stackedIcon: false,
-                        gap: 4,
-                        onChanged: (val) =>
-                            _controller.selectedScale.value = val,
-                        items: GpaScaleType.values
-                            .map(
-                              (s) => AelSegmentItem(value: s, label: s.label),
-                            )
-                            .toList(),
-                      ),
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      bottom: 8,
                     ),
+                    child: _buildTargetGpaCard(context),
+                  ),
+                  _buildPresetActions(context),
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      top: 4,
+                      bottom: 8,
+                    ),
+                    child: _buildSimulatedCourseList(context),
                   ),
                 ],
               ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
-              child: _buildTargetGpaCard(context),
-            ),
-          ),
-          SliverToBoxAdapter(child: _buildPresetActions(context)),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.only(
-                left: 16,
-                right: 16,
-                top: 4,
-                bottom: 8,
-              ),
-              child: _buildSimulatedCourseList(context),
             ),
           ),
           const SliverToBoxAdapter(child: NativeBottomBarSpacer()),

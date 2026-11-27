@@ -16,6 +16,7 @@ import 'package:celechron/services/ohos_native_service.dart';
 import 'package:celechron/services/secure_storage_service.dart';
 import 'package:celechron/worker/ecard_widget_messenger.dart';
 import 'package:celechron/design/theme/ael_theme.dart';
+import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/design/icons/ael_icons.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -864,12 +865,15 @@ class _ECardBillPageState extends State<ECardBillPage> {
               onRefresh: () => _loadMonthData(reset: true),
             ),
             SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 6,
+              child: AelConstrainedWidth(
+                maxWidth: AelBreakpointSpec.maxDetailWidth,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 6,
+                  ),
+                  child: _buildMonthSelector(context),
                 ),
-                child: _buildMonthSelector(context),
               ),
             ),
             if (_loading)
@@ -896,42 +900,59 @@ class _ECardBillPageState extends State<ECardBillPage> {
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: AelEmptyState(
-                      icon: AelIcons.error,
-                      title: '获取账单失败',
-                      subtitle: _error!,
-                      actionLabel: '重试',
-                      onAction: () => _loadMonthData(reset: true),
+                  child: AelConstrainedWidth(
+                    maxWidth: AelBreakpointSpec.maxDetailWidth,
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: AelEmptyState(
+                        icon: AelIcons.error,
+                        title: '获取账单失败',
+                        subtitle: _error!,
+                        actionLabel: '重试',
+                        onAction: () => _loadMonthData(reset: true),
+                      ),
                     ),
                   ),
                 ),
               )
             else ...[
-              SliverToBoxAdapter(child: _buildSyncBanner(context)),
               SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 6,
-                  ),
-                  child: _buildSummaryCard(context),
+                child: AelConstrainedWidth(
+                  maxWidth: AelBreakpointSpec.maxDetailWidth,
+                  child: _buildSyncBanner(context),
                 ),
               ),
               SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 6,
+                child: AelConstrainedWidth(
+                  maxWidth: AelBreakpointSpec.maxDetailWidth,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 6,
+                    ),
+                    child: _buildSummaryCard(context),
                   ),
-                  child: _buildCategoryStatsCard(context),
                 ),
               ),
               SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 6, bottom: 6),
-                  child: _buildFilterChips(context),
+                child: AelConstrainedWidth(
+                  maxWidth: AelBreakpointSpec.maxDetailWidth,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 6,
+                    ),
+                    child: _buildCategoryStatsCard(context),
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: AelConstrainedWidth(
+                  maxWidth: AelBreakpointSpec.maxDetailWidth,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 6, bottom: 6),
+                    child: _buildFilterChips(context),
+                  ),
                 ),
               ),
               if (filtered.isEmpty)
@@ -970,8 +991,10 @@ class _ECardBillPageState extends State<ECardBillPage> {
               else
                 SliverList(
                   delegate: SliverChildBuilderDelegate(
-                    (context, index) =>
-                        _buildTransactionTile(context, filtered[index]),
+                    (context, index) => AelConstrainedWidth(
+                      maxWidth: AelBreakpointSpec.maxDetailWidth,
+                      child: _buildTransactionTile(context, filtered[index]),
+                    ),
                     childCount: filtered.length,
                   ),
                 ),

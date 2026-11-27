@@ -60,60 +60,67 @@ class LegalDocumentPage extends StatelessWidget {
                       AelSpacing.xl,
                     ),
                     sliver: SliverToBoxAdapter(
-                      child: FutureBuilder<String>(
-                        future: rootBundle.loadString(assetPath),
-                        builder: (context, snapshot) {
-                          if (snapshot.hasError) {
-                            return AelEmptyState(
-                              icon: AelIcons.error,
-                              title: '文档加载失败',
-                              subtitle: '${snapshot.error}',
-                            );
-                          }
-                          if (!snapshot.hasData) {
-                            return const Padding(
-                              padding: EdgeInsets.all(32),
-                              child: Center(
-                                child: CupertinoActivityIndicator(),
-                              ),
-                            );
-                          }
-                          return AelSectionCard(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                SelectableText(
-                                  resolvePlaceholders(snapshot.data!),
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    height: 1.65,
-                                    color: colors.textPrimary,
-                                  ),
+                      child: AelConstrainedWidth(
+                        maxWidth: AelBreakpointSpec.maxDetailWidth,
+                        child: FutureBuilder<String>(
+                          future: rootBundle.loadString(assetPath),
+                          builder: (context, snapshot) {
+                            if (snapshot.hasError) {
+                              return AelEmptyState(
+                                icon: AelIcons.error,
+                                title: '文档加载失败',
+                                subtitle: '${snapshot.error}',
+                              );
+                            }
+                            if (!snapshot.hasData) {
+                              return const Padding(
+                                padding: EdgeInsets.all(32),
+                                child: Center(
+                                  child: CupertinoActivityIndicator(),
                                 ),
-                                if (onlineUrl != null &&
-                                    onlineUrl!.isNotEmpty) ...[
-                                  const SizedBox(height: AelSpacing.lg),
-                                  AelButton(
-                                    variant: AelButtonVariant.tonal,
-                                    icon: AelIcons.externalLink,
-                                    label: '在线查看最新版本',
-                                    onPressed: () => launchUrlString(
-                                      onlineUrl!,
-                                      mode: LaunchMode.externalApplication,
+                              );
+                            }
+                            return AelSectionCard(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  SelectableText(
+                                    resolvePlaceholders(snapshot.data!),
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      height: 1.65,
+                                      color: colors.textPrimary,
                                     ),
                                   ),
+                                  if (onlineUrl != null &&
+                                      onlineUrl!.isNotEmpty) ...[
+                                    const SizedBox(height: AelSpacing.lg),
+                                    AelButton(
+                                      variant: AelButtonVariant.tonal,
+                                      icon: AelIcons.externalLink,
+                                      label: '在线查看最新版本',
+                                      onPressed: () => launchUrlString(
+                                        onlineUrl!,
+                                        mode: LaunchMode.externalApplication,
+                                      ),
+                                    ),
+                                  ],
                                 ],
-                              ],
-                            ),
-                          );
-                        },
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-            if (footer != null) footer!,
+            if (footer != null)
+              AelConstrainedWidth(
+                maxWidth: AelBreakpointSpec.maxDetailWidth,
+                child: footer!,
+              ),
           ],
         ),
       ),

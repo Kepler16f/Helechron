@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 
 import 'package:celechron/design/components/ael_large_title_bar.dart';
+import 'package:celechron/design/components/ael_responsive.dart';
 import 'package:celechron/design/icons/ael_icons.dart';
 import 'package:celechron/design/theme/ael_theme.dart';
 
@@ -89,7 +90,16 @@ class CelechronHeader extends SliverPersistentHeaderDelegate {
                           size: 36,
                           iconSize: 18,
                           tooltip: '返回',
-                          onPressed: () => Navigator.of(context).pop(),
+                          onPressed: () {
+                            final onBack = AelEmbeddedBackScope.maybeOf(
+                              context,
+                            );
+                            if (onBack != null) {
+                              onBack();
+                            } else {
+                              Navigator.of(context).pop();
+                            }
+                          },
                         ),
                       ),
                     Positioned.fill(

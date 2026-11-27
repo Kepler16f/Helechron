@@ -225,165 +225,168 @@ class _NetworkProxyPageState extends State<NetworkProxyPage> {
                 vertical: AelSpacing.sm,
               ),
               sliver: SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    AelSectionCard(
-                      title: 'App 内网络直连防御',
-                      icon: AelIcons.wifi,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          AelSwitchTile(
-                            icon: AelIcons.shield,
-                            badgeStyle: AelIconBadgeStyle.circle,
-                            title: '校内服务强制直连',
-                            subtitle: '针对 *.zju.edu.cn 等校内域名强制 DIRECT',
-                            value: _forceZjuDirect,
-                            onChanged: (val) async {
-                              await setForceZjuDirectEnabled(val);
-                              setState(() => _forceZjuDirect = val);
-                            },
-                          ),
-                          const SizedBox(height: AelSpacing.xs),
-                          Container(height: 0.5, color: colors.divider),
-                          const SizedBox(height: AelSpacing.xs),
-                          AelSwitchTile(
-                            icon: AelIcons.globe,
-                            badgeStyle: AelIconBadgeStyle.circle,
-                            title: '全局直连模式',
-                            subtitle: 'App 内所有网络请求均不走系统 HTTP 代理',
-                            value: _globalDirect,
-                            onChanged: (val) async {
-                              await setGlobalDirectEnabled(val);
-                              setState(() => _globalDirect = val);
-                            },
-                          ),
-                          const SizedBox(height: AelSpacing.sm),
-                          Text(
-                            '开启后，App 内发起的所有针对校内域名的 HTTP 请求均会强制通过 DIRECT 直连发出，忽略系统配置的常规 HTTP 代理。',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              height: 1.4,
-                              color: colors.textSecondary,
+                child: AelConstrainedWidth(
+                  maxWidth: AelBreakpointSpec.maxDetailWidth,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      AelSectionCard(
+                        title: 'App 内网络直连防御',
+                        icon: AelIcons.wifi,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            AelSwitchTile(
+                              icon: AelIcons.shield,
+                              badgeStyle: AelIconBadgeStyle.circle,
+                              title: '校内服务强制直连',
+                              subtitle: '针对 *.zju.edu.cn 等校内域名强制 DIRECT',
+                              value: _forceZjuDirect,
+                              onChanged: (val) async {
+                                await setForceZjuDirectEnabled(val);
+                                setState(() => _forceZjuDirect = val);
+                              },
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: AelSpacing.md),
-                    AelSectionCard(
-                      title: '为什么开“规则模式”依然打不开？',
-                      icon: LucideIcons.circleQuestionMark,
-                      child: Text(
-                        '1. TUN 虚拟网卡与 Fake-IP 劫持：\n'
-                        '手机代理客户端（Clash / Sing-box / NekoBox 等）在开启 VPN 模式时，会通过虚拟网卡拦截所有 IP 数据包。大部分第三方订阅的分流规则未包含浙大校内域名，未匹配的请求会被默认兜底规则（MATCH / FINAL）全量转发至海外节点。\n\n'
-                        '2. 浙大防火墙与 WAF 拦截海外机房 IP：\n'
-                        '浙大核心系统（统一身份认证、学在浙大、教务系统等）对境外节点实行严格的 WAF 拦截策略。一旦请求经由海外节点发出，将被直接阻断，表现为 403 Forbidden、连接超时或验证码加载失败。',
-                        style: TextStyle(
-                          fontSize: 13,
-                          height: 1.5,
-                          color: colors.textSecondary,
+                            const SizedBox(height: AelSpacing.xs),
+                            Container(height: 0.5, color: colors.divider),
+                            const SizedBox(height: AelSpacing.xs),
+                            AelSwitchTile(
+                              icon: AelIcons.globe,
+                              badgeStyle: AelIconBadgeStyle.circle,
+                              title: '全局直连模式',
+                              subtitle: 'App 内所有网络请求均不走系统 HTTP 代理',
+                              value: _globalDirect,
+                              onChanged: (val) async {
+                                await setGlobalDirectEnabled(val);
+                                setState(() => _globalDirect = val);
+                              },
+                            ),
+                            const SizedBox(height: AelSpacing.sm),
+                            Text(
+                              '开启后，App 内发起的所有针对校内域名的 HTTP 请求均会强制通过 DIRECT 直连发出，忽略系统配置的常规 HTTP 代理。',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                height: 1.4,
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                    const SizedBox(height: AelSpacing.md),
-                    AelSectionCard(
-                      title: '彻底解决：开启“分应用代理”',
-                      icon: AelIcons.shield,
-                      child: Text(
-                        '最有效、最彻底的做法是让代理客户端完全不接管本 App 的流量：\n\n'
-                        '• 打开您的代理客户端（如 Clash、Sing-box、NekoBox 或 v2ray）\n'
-                        '• 进入【设置】或【路由设置】-> 找到【分应用代理 / 绕过模式】\n'
-                        '• 将模式设为【绕过模式】（黑名单模式），勾选【合乐日程 (Helechron)】；或在白名单模式中不要勾选本应用。\n\n'
-                        '设置完成后，本 App 的所有数据包将 100% 绕过 VPN 虚拟网卡，直接走本地真实 Wi-Fi / 蜂窝网络，彻底根除所有代理冲突！',
-                        style: TextStyle(
-                          fontSize: 13,
-                          height: 1.45,
-                          color: colors.textPrimary,
+                      const SizedBox(height: AelSpacing.md),
+                      AelSectionCard(
+                        title: '为什么开“规则模式”依然打不开？',
+                        icon: LucideIcons.circleQuestionMark,
+                        child: Text(
+                          '1. TUN 虚拟网卡与 Fake-IP 劫持：\n'
+                          '手机代理客户端（Clash / Sing-box / NekoBox 等）在开启 VPN 模式时，会通过虚拟网卡拦截所有 IP 数据包。大部分第三方订阅的分流规则未包含浙大校内域名，未匹配的请求会被默认兜底规则（MATCH / FINAL）全量转发至海外节点。\n\n'
+                          '2. 浙大防火墙与 WAF 拦截海外机房 IP：\n'
+                          '浙大核心系统（统一身份认证、学在浙大、教务系统等）对境外节点实行严格的 WAF 拦截策略。一旦请求经由海外节点发出，将被直接阻断，表现为 403 Forbidden、连接超时或验证码加载失败。',
+                          style: TextStyle(
+                            fontSize: 13,
+                            height: 1.5,
+                            color: colors.textSecondary,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: AelSpacing.md),
-                    AelSectionCard(
-                      title: '规则模式修复：一键复制直连规则',
-                      icon: AelIcons.copy,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '如果您不想开启分应用代理，也可以在代理软件中手动添加浙大校内直连分流规则：',
-                            style: TextStyle(
-                              fontSize: 13,
-                              height: 1.4,
-                              color: colors.textSecondary,
-                            ),
+                      const SizedBox(height: AelSpacing.md),
+                      AelSectionCard(
+                        title: '彻底解决：开启“分应用代理”',
+                        icon: AelIcons.shield,
+                        child: Text(
+                          '最有效、最彻底的做法是让代理客户端完全不接管本 App 的流量：\n\n'
+                          '• 打开您的代理客户端（如 Clash、Sing-box、NekoBox 或 v2ray）\n'
+                          '• 进入【设置】或【路由设置】-> 找到【分应用代理 / 绕过模式】\n'
+                          '• 将模式设为【绕过模式】（黑名单模式），勾选【合乐日程 (Helechron)】；或在白名单模式中不要勾选本应用。\n\n'
+                          '设置完成后，本 App 的所有数据包将 100% 绕过 VPN 虚拟网卡，直接走本地真实 Wi-Fi / 蜂窝网络，彻底根除所有代理冲突！',
+                          style: TextStyle(
+                            fontSize: 13,
+                            height: 1.45,
+                            color: colors.textPrimary,
                           ),
-                          const SizedBox(height: AelSpacing.md),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: AelButton(
-                                  variant: AelButtonVariant.tonal,
-                                  icon: AelIcons.copy,
-                                  label: 'Clash 规则',
-                                  onPressed: () => _copyToClipboard(
-                                    _clashRules,
-                                    '已复制 Clash / Mihomo 规则',
+                        ),
+                      ),
+                      const SizedBox(height: AelSpacing.md),
+                      AelSectionCard(
+                        title: '规则模式修复：一键复制直连规则',
+                        icon: AelIcons.copy,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '如果您不想开启分应用代理，也可以在代理软件中手动添加浙大校内直连分流规则：',
+                              style: TextStyle(
+                                fontSize: 13,
+                                height: 1.4,
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: AelSpacing.md),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: AelButton(
+                                    variant: AelButtonVariant.tonal,
+                                    icon: AelIcons.copy,
+                                    label: 'Clash 规则',
+                                    onPressed: () => _copyToClipboard(
+                                      _clashRules,
+                                      '已复制 Clash / Mihomo 规则',
+                                    ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: AelSpacing.sm),
-                              Expanded(
-                                child: AelButton(
-                                  variant: AelButtonVariant.tonal,
-                                  icon: AelIcons.copy,
-                                  label: 'Sing-box 规则',
-                                  onPressed: () => _copyToClipboard(
-                                    _singboxRules,
-                                    '已复制 Sing-box 规则',
+                                const SizedBox(width: AelSpacing.sm),
+                                Expanded(
+                                  child: AelButton(
+                                    variant: AelButtonVariant.tonal,
+                                    icon: AelIcons.copy,
+                                    label: 'Sing-box 规则',
+                                    onPressed: () => _copyToClipboard(
+                                      _singboxRules,
+                                      '已复制 Sing-box 规则',
+                                    ),
                                   ),
                                 ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: AelSpacing.md),
+                      AelSectionCard(
+                        title: '校内服务连通性体检',
+                        icon: AelIcons.activity,
+                        trailing: _isTesting
+                            ? const CupertinoActivityIndicator(radius: 8)
+                            : AelChip(
+                                label: '开始体检',
+                                tone: AelChipTone.primary,
+                                leadingIcon: AelIcons.refresh,
+                                onTap: _runDiagnostics,
                               ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: AelSpacing.md),
-                    AelSectionCard(
-                      title: '校内服务连通性体检',
-                      icon: AelIcons.activity,
-                      trailing: _isTesting
-                          ? const CupertinoActivityIndicator(radius: 8)
-                          : AelChip(
-                              label: '开始体检',
-                              tone: AelChipTone.primary,
-                              leadingIcon: AelIcons.refresh,
-                              onTap: _runDiagnostics,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '实时探测当前网络环境下连接浙大各核心业务系统的延迟与状态码：',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colors.textSecondary,
+                              ),
                             ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '实时探测当前网络环境下连接浙大各核心业务系统的延迟与状态码：',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: colors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: AelSpacing.md),
-                          ..._targets.map((target) {
-                            final res = _diagnosticResults[target.id];
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 10.0),
-                              child: _buildDiagnosticItem(target, res),
-                            );
-                          }),
-                        ],
+                            const SizedBox(height: AelSpacing.md),
+                            ..._targets.map((target) {
+                              final res = _diagnosticResults[target.id];
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 10.0),
+                                child: _buildDiagnosticItem(target, res),
+                              );
+                            }),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

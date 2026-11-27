@@ -390,52 +390,114 @@ class CourseDetailPage extends StatelessWidget {
     }
     return CupertinoPageScaffold(
       backgroundColor: colors.pageBg,
-      child: CustomScrollView(
-        slivers: [
-          const CelechronSliverTextHeader(subtitle: '课程详情'),
-          SliverToBoxAdapter(
-            child: Container(
-              padding: const EdgeInsets.only(bottom: 5, left: 16, right: 16),
-              child: Column(
-                children: [
-                  SubSubtitleRow(subtitle: '基本信息'),
-                  CourseBriefCard(course: c),
-                ],
-              ),
-            ),
-          ),
-          if (_shouldShowZhiyun(c))
-            SliverToBoxAdapter(child: createZhiyunCard(context, c)),
-          SliverToBoxAdapter(
-            child: CoursewareDownloadCard(
-              course: c,
-              semesterName: semesterName,
-              preferredHalfTag: preferredHalfTag,
-            ),
-          ),
-          SliverToBoxAdapter(child: CourseHomeworkCard(course: c)),
-          if (c.sessions.isNotEmpty)
-            SliverToBoxAdapter(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 5,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = AelResponsive.isWideBody(constraints.maxWidth);
+          return CustomScrollView(
+            slivers: [
+              const CelechronSliverTextHeader(subtitle: '课程详情'),
+              if (isWide)
+                SliverToBoxAdapter(
+                  child: AelConstrainedWidth(
+                    maxWidth: AelBreakpointSpec.maxWideContentWidth,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 5,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                SubSubtitleRow(subtitle: '基本信息'),
+                                CourseBriefCard(course: c),
+                                if (_shouldShowZhiyun(c)) ...[
+                                  const SizedBox(height: 8),
+                                  createZhiyunCard(context, c),
+                                ],
+                                if (c.sessions.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  createSessionCard(context, c.sessions),
+                                ],
+                                if (c.exams.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  createExamCard(context, c.exams),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            flex: 6,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                CoursewareDownloadCard(
+                                  course: c,
+                                  semesterName: semesterName,
+                                  preferredHalfTag: preferredHalfTag,
+                                ),
+                                CourseHomeworkCard(course: c),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+              else ...[
+                SliverToBoxAdapter(
+                  child: Container(
+                    padding: const EdgeInsets.only(
+                      bottom: 5,
+                      left: 16,
+                      right: 16,
+                    ),
+                    child: Column(
+                      children: [
+                        SubSubtitleRow(subtitle: '基本信息'),
+                        CourseBriefCard(course: c),
+                      ],
+                    ),
+                  ),
                 ),
-                child: createSessionCard(context, c.sessions),
-              ),
-            ),
-          if (c.exams.isNotEmpty)
-            SliverToBoxAdapter(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 5,
+                if (_shouldShowZhiyun(c))
+                  SliverToBoxAdapter(child: createZhiyunCard(context, c)),
+                SliverToBoxAdapter(
+                  child: CoursewareDownloadCard(
+                    course: c,
+                    semesterName: semesterName,
+                    preferredHalfTag: preferredHalfTag,
+                  ),
                 ),
-                child: createExamCard(context, c.exams),
-              ),
-            ),
-          const SliverToBoxAdapter(child: NativeBottomBarSpacer()),
-        ],
+                SliverToBoxAdapter(child: CourseHomeworkCard(course: c)),
+                if (c.sessions.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 5,
+                      ),
+                      child: createSessionCard(context, c.sessions),
+                    ),
+                  ),
+                if (c.exams.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 5,
+                      ),
+                      child: createExamCard(context, c.exams),
+                    ),
+                  ),
+              ],
+              const SliverToBoxAdapter(child: NativeBottomBarSpacer()),
+            ],
+          );
+        },
       ),
     );
   }

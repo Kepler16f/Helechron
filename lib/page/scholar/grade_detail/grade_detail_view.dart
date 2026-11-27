@@ -472,9 +472,10 @@ class GradeDetailPage extends StatelessWidget {
     final colors = AelTheme.colorsOf(context);
     return CupertinoPageScaffold(
       backgroundColor: colors.pageBg,
-      child: CustomScrollView(
-        slivers: [
-          CelechronSliverTextHeader(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = AelResponsive.isWideBody(constraints.maxWidth);
+          final header = CelechronSliverTextHeader(
             subtitle: '成绩',
             right: Obx(
               () => Padding(
@@ -531,85 +532,131 @@ class GradeDetailPage extends StatelessWidget {
                 ),
               ),
             ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(
-              AelSpacing.pageHorizontal,
-              AelSpacing.sm,
-              AelSpacing.pageHorizontal,
-              AelSpacing.md,
-            ),
-            sliver: SliverToBoxAdapter(
-              child: Column(
-                children: [
-                  Obx(
-                    () => _gradeDetailController.customGpaMode.value
-                        ? _buildCustomGpaBrief(context)
-                        : _buildGradeBrief(context),
-                  ),
-                  Obx(() {
-                    if (_gradeDetailController.customGpaMode.value) {
-                      return const SizedBox.shrink();
-                    }
-                    return Padding(
-                      padding: const EdgeInsets.only(top: AelSpacing.md),
-                      child: _buildQuickActionRow(context),
-                    );
-                  }),
-                  Obx(() {
-                    if (!_gradeDetailController.customGpaMode.value &&
-                        _gradeDetailController.showTrendChart.value &&
-                        _gradeDetailController.semestersWithGrades.length >=
-                            2) {
-                      return Padding(
-                        padding: const EdgeInsets.only(top: AelSpacing.md),
-                        child: SemesterGpaTrendCard(
-                          semesters: _gradeDetailController.semestersWithGrades,
-                          selectedIndex:
-                              _gradeDetailController.semesterIndex.value,
-                          onSemesterSelected: (idx) {
-                            _gradeDetailController.semesterIndex.value = idx;
-                            _gradeDetailController.semesterIndex.refresh();
-                          },
-                        ),
-                      );
-                    }
-                    return const SizedBox.shrink();
-                  }),
-                  const SizedBox(height: AelSpacing.sectionGap),
-                  _buildHistory(context),
-                ],
+          );
+          final summaryColumn = Column(
+            children: [
+              Obx(
+                () => _gradeDetailController.customGpaMode.value
+                    ? _buildCustomGpaBrief(context)
+                    : _buildGradeBrief(context),
               ),
-            ),
-          ),
-          Obx(
-            () => SliverPadding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AelSpacing.pageHorizontal,
-              ),
-              sliver: SliverList.separated(
-                itemCount: _gradeDetailController
-                    .semestersWithGrades[_gradeDetailController
-                        .semesterIndex
-                        .value]
-                    .grades
-                    .length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: AelSpacing.sm),
-                itemBuilder: (context, index) {
-                  return GradeCard(
-                    grade: _gradeDetailController
-                        .semestersWithGrades[_gradeDetailController
-                            .semesterIndex
-                            .value]
-                        .grades[index],
+              Obx(() {
+                if (_gradeDetailController.customGpaMode.value) {
+                  return const SizedBox.shrink();
+                }
+                return Padding(
+                  padding: const EdgeInsets.only(top: AelSpacing.md),
+                  child: _buildQuickActionRow(context),
+                );
+              }),
+              Obx(() {
+                if (!_gradeDetailController.customGpaMode.value &&
+                    _gradeDetailController.showTrendChart.value &&
+                    _gradeDetailController.semestersWithGrades.length >= 2) {
+                  return Padding(
+                    padding: const EdgeInsets.only(top: AelSpacing.md),
+                    child: SemesterGpaTrendCard(
+                      semesters: _gradeDetailController.semestersWithGrades,
+                      selectedIndex: _gradeDetailController.semesterIndex.value,
+                      onSemesterSelected: (idx) {
+                        _gradeDetailController.semesterIndex.value = idx;
+                        _gradeDetailController.semesterIndex.refresh();
+                      },
+                    ),
                   );
-                },
-              ),
-            ),
-          ),
-          const SliverToBoxAdapter(child: NativeBottomBarSpacer()),
-        ],
+                }
+                return const SizedBox.shrink();
+              }),
+              const SizedBox(height: AelSpacing.sectionGap),
+              _buildHistory(context),
+            ],
+          );
+
+          return CustomScrollView(
+            slivers: [
+              header,
+              if (isWide)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AelSpacing.pageHorizontal,
+                    AelSpacing.sm,
+                    AelSpacing.pageHorizontal,
+                    AelSpacing.md,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: AelConstrainedWidth(
+                      maxWidth: AelBreakpointSpec.maxWideContentWidth,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(flex: 5, child: summaryColumn),
+                          const SizedBox(width: AelSpacing.lg),
+                          Expanded(
+                            flex: 6,
+                            child: Obx(() {
+                              final grades = _gradeDetailController
+                                  .semestersWithGrades[_gradeDetailController
+                                      .semesterIndex
+                                      .value]
+                                  .grades;
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  for (var i = 0; i < grades.length; i++) ...[
+                                    if (i > 0)
+                                      const SizedBox(height: AelSpacing.sm),
+                                    GradeCard(grade: grades[i]),
+                                  ],
+                                ],
+                              );
+                            }),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+              else ...[
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AelSpacing.pageHorizontal,
+                    AelSpacing.sm,
+                    AelSpacing.pageHorizontal,
+                    AelSpacing.md,
+                  ),
+                  sliver: SliverToBoxAdapter(child: summaryColumn),
+                ),
+                Obx(
+                  () => SliverPadding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AelSpacing.pageHorizontal,
+                    ),
+                    sliver: SliverList.separated(
+                      itemCount: _gradeDetailController
+                          .semestersWithGrades[_gradeDetailController
+                              .semesterIndex
+                              .value]
+                          .grades
+                          .length,
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: AelSpacing.sm),
+                      itemBuilder: (context, index) {
+                        return GradeCard(
+                          grade: _gradeDetailController
+                              .semestersWithGrades[_gradeDetailController
+                                  .semesterIndex
+                                  .value]
+                              .grades[index],
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
+              const SliverToBoxAdapter(child: NativeBottomBarSpacer()),
+            ],
+          );
+        },
       ),
     );
   }

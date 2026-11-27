@@ -1088,139 +1088,144 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
             ),
 
             // 顶部课程概览与多选操作工具栏
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
-              child: AelSectionCard(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        AelIconBadge(
-                          icon: _isSubtitleMode
-                              ? AelIcons.audio
-                              : AelIcons.image,
-                          size: 34,
-                          iconSize: 17,
-                          style: AelIconBadgeStyle.cookie,
-                          backgroundColor: accent,
-                          iconColor: colors.onPrimary,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                widget.course.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  color: colors.textPrimary,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _buildSummaryText(),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: colors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (_probing && _totalCandidates > 0) ...[
-                      const SizedBox(height: 10),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(3),
-                        child: SizedBox(
-                          height: 4,
-                          child: Stack(
-                            children: [
-                              Container(color: colors.tonalTileBg),
-                              FractionallySizedBox(
-                                widthFactor: (_probedCount / _totalCandidates)
-                                    .clamp(0, 1),
-                                child: Container(color: accent),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                    if (_lessons.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Container(height: 0.5, color: colors.divider),
-                      const SizedBox(height: 8),
+            AelConstrainedWidth(
+              maxWidth: AelBreakpointSpec.maxDetailWidth,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+                child: AelSectionCard(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Row(
                         children: [
-                          GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: _isBatchProcessing ? null : _toggleSelectAll,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
+                          AelIconBadge(
+                            icon: _isSubtitleMode
+                                ? AelIcons.audio
+                                : AelIcons.image,
+                            size: 34,
+                            iconSize: 17,
+                            style: AelIconBadgeStyle.cookie,
+                            backgroundColor: accent,
+                            iconColor: colors.onPrimary,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Icon(
-                                  allSelected
-                                      ? AelIcons.success
-                                      : partialSelected
-                                      ? LucideIcons.circleMinus
-                                      : LucideIcons.circle,
-                                  size: 18,
-                                  color: (allSelected || partialSelected)
-                                      ? colors.primary
-                                      : colors.textTertiary,
-                                ),
-                                const SizedBox(width: 5),
                                 Text(
-                                  allSelected ? '取消全选' : '全选',
+                                  widget.course.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    fontSize: 13.5,
+                                    fontSize: 15,
                                     fontWeight: FontWeight.w600,
                                     color: colors.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _buildSummaryText(),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: colors.textSecondary,
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          AelChip(
-                            label: (hasDownloaded && hasUndownloaded)
-                                ? '选未下载'
-                                : '反选',
-                            tone: AelChipTone.neutral,
-                            onTap: _isBatchProcessing
-                                ? null
-                                : _selectUndownloadedOrInvert,
-                          ),
-                          const SizedBox(width: 6),
-                          AelChip(
-                            label: _ascending ? '正序' : '倒序',
-                            leadingIcon: LucideIcons.arrowUpDown,
-                            tone: AelChipTone.neutral,
-                            onTap: _toggleSortOrder,
-                          ),
-                          const Spacer(),
-                          Text(
-                            '已选 ${_selectedSubIds.length}/${_lessons.length}',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: _selectedSubIds.isNotEmpty
-                                  ? colors.primary
-                                  : colors.textSecondary,
-                            ),
-                          ),
                         ],
                       ),
+                      if (_probing && _totalCandidates > 0) ...[
+                        const SizedBox(height: 10),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(3),
+                          child: SizedBox(
+                            height: 4,
+                            child: Stack(
+                              children: [
+                                Container(color: colors.tonalTileBg),
+                                FractionallySizedBox(
+                                  widthFactor: (_probedCount / _totalCandidates)
+                                      .clamp(0, 1),
+                                  child: Container(color: accent),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (_lessons.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Container(height: 0.5, color: colors.divider),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: _isBatchProcessing
+                                  ? null
+                                  : _toggleSelectAll,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    allSelected
+                                        ? AelIcons.success
+                                        : partialSelected
+                                        ? LucideIcons.circleMinus
+                                        : LucideIcons.circle,
+                                    size: 18,
+                                    color: (allSelected || partialSelected)
+                                        ? colors.primary
+                                        : colors.textTertiary,
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    allSelected ? '取消全选' : '全选',
+                                    style: TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: colors.textPrimary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            AelChip(
+                              label: (hasDownloaded && hasUndownloaded)
+                                  ? '选未下载'
+                                  : '反选',
+                              tone: AelChipTone.neutral,
+                              onTap: _isBatchProcessing
+                                  ? null
+                                  : _selectUndownloadedOrInvert,
+                            ),
+                            const SizedBox(width: 6),
+                            AelChip(
+                              label: _ascending ? '正序' : '倒序',
+                              leadingIcon: LucideIcons.arrowUpDown,
+                              tone: AelChipTone.neutral,
+                              onTap: _toggleSortOrder,
+                            ),
+                            const Spacer(),
+                            Text(
+                              '已选 ${_selectedSubIds.length}/${_lessons.length}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: _selectedSubIds.isNotEmpty
+                                    ? colors.primary
+                                    : colors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -1316,114 +1321,117 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
         final isBusy = lesson.status == _LessonDownloadStatus.downloading;
         final isDownloaded = lesson.localFilePath != null;
 
-        return AelSectionCard(
-          onTap: () => _toggleSelection(lesson.subId),
-          cornerRadius: AelRadius.tile,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-          backgroundColor: isSelected
-              ? colors.primaryContainer.withValues(alpha: 0.35)
-              : colors.cardBg,
-          child: Row(
-            children: [
-              // 左侧勾选框
-              Padding(
-                padding: const EdgeInsets.only(right: 10),
-                child: Icon(
-                  isSelected ? AelIcons.success : LucideIcons.circle,
-                  size: 21,
-                  color: isSelected ? colors.primary : colors.textTertiary,
+        return AelConstrainedWidth(
+          maxWidth: AelBreakpointSpec.maxDetailWidth,
+          child: AelSectionCard(
+            onTap: () => _toggleSelection(lesson.subId),
+            cornerRadius: AelRadius.tile,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            backgroundColor: isSelected
+                ? colors.primaryContainer.withValues(alpha: 0.35)
+                : colors.cardBg,
+            child: Row(
+              children: [
+                // 左侧勾选框
+                Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: Icon(
+                    isSelected ? AelIcons.success : LucideIcons.circle,
+                    size: 21,
+                    color: isSelected ? colors.primary : colors.textTertiary,
+                  ),
                 ),
-              ),
-              // 中间课节信息与已生成数量标签
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      lesson.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w600,
-                        color: colors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        if (lesson.dateLabel.isNotEmpty)
-                          Text(
-                            lesson.dateLabel,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: colors.textSecondary,
-                            ),
-                          ),
-                        _buildTag(
-                          _isSubtitleMode
-                              ? '${lesson.itemCount} 条 · ${lesson.charCountLabel}'
-                              : '${lesson.itemCount} 页 PPT',
-                          accent,
+                // 中间课节信息与已生成数量标签
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        lesson.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w600,
+                          color: colors.textPrimary,
                         ),
-                        if (isBusy && lesson.progressText != null)
-                          _buildTag(lesson.progressText!, colors.primary)
-                        else if (lesson.status == _LessonDownloadStatus.error)
-                          _buildTag('下载失败', colors.error)
-                        else if (isDownloaded)
-                          _buildTag('已下载', colors.success),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              // 右侧独立「下载 / 分享」按钮
-              if (isBusy)
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8),
-                  child: CupertinoActivityIndicator(radius: 8),
-                )
-              else
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    _actionPill(
-                      icon: isDownloaded ? AelIcons.check : AelIcons.download,
-                      label: isDownloaded ? '已下载' : '下载',
-                      bg: isDownloaded
-                          ? colors.successContainer
-                          : colors.primaryContainer,
-                      fg: isDownloaded
-                          ? colors.onSuccessContainer
-                          : colors.onPrimaryContainer,
-                      onTap: _isBatchProcessing
-                          ? null
-                          : () => _handleSingleDownloadOrShare(
-                              lesson,
-                              share: false,
+                      ),
+                      const SizedBox(height: 5),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if (lesson.dateLabel.isNotEmpty)
+                            Text(
+                              lesson.dateLabel,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colors.textSecondary,
+                              ),
                             ),
-                    ),
-                    const SizedBox(height: 5),
-                    _actionPill(
-                      icon: AelIcons.share,
-                      label: '分享',
-                      bg: colors.tonalTileBg,
-                      fg: colors.textPrimary,
-                      onTap: _isBatchProcessing
-                          ? null
-                          : () => _handleSingleDownloadOrShare(
-                              lesson,
-                              share: true,
-                            ),
-                    ),
-                  ],
+                          _buildTag(
+                            _isSubtitleMode
+                                ? '${lesson.itemCount} 条 · ${lesson.charCountLabel}'
+                                : '${lesson.itemCount} 页 PPT',
+                            accent,
+                          ),
+                          if (isBusy && lesson.progressText != null)
+                            _buildTag(lesson.progressText!, colors.primary)
+                          else if (lesson.status == _LessonDownloadStatus.error)
+                            _buildTag('下载失败', colors.error)
+                          else if (isDownloaded)
+                            _buildTag('已下载', colors.success),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-            ],
+                const SizedBox(width: 8),
+                // 右侧独立「下载 / 分享」按钮
+                if (isBusy)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8),
+                    child: CupertinoActivityIndicator(radius: 8),
+                  )
+                else
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      _actionPill(
+                        icon: isDownloaded ? AelIcons.check : AelIcons.download,
+                        label: isDownloaded ? '已下载' : '下载',
+                        bg: isDownloaded
+                            ? colors.successContainer
+                            : colors.primaryContainer,
+                        fg: isDownloaded
+                            ? colors.onSuccessContainer
+                            : colors.onPrimaryContainer,
+                        onTap: _isBatchProcessing
+                            ? null
+                            : () => _handleSingleDownloadOrShare(
+                                lesson,
+                                share: false,
+                              ),
+                      ),
+                      const SizedBox(height: 5),
+                      _actionPill(
+                        icon: AelIcons.share,
+                        label: '分享',
+                        bg: colors.tonalTileBg,
+                        fg: colors.textPrimary,
+                        onTap: _isBatchProcessing
+                            ? null
+                            : () => _handleSingleDownloadOrShare(
+                                lesson,
+                                share: true,
+                              ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
           ),
         );
       },
@@ -1498,122 +1506,128 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
       ),
       child: SafeArea(
         top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 保存目录选择行
-              Row(
-                children: [
-                  Icon(AelIcons.folder, size: 14, color: colors.textSecondary),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      '保存至：${_formatSaveDirShort()}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colors.textSecondary,
-                      ),
-                    ),
-                  ),
-                  AelChip(
-                    label: '更改目录',
-                    tone: AelChipTone.primary,
-                    onTap: _isBatchProcessing ? null : _pickSaveDirectory,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              if (_isBatchProcessing) ...[
+        child: AelConstrainedWidth(
+          maxWidth: AelBreakpointSpec.maxDetailWidth,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 保存目录选择行
                 Row(
                   children: [
-                    const CupertinoActivityIndicator(radius: 8),
-                    const SizedBox(width: 8),
+                    Icon(
+                      AelIcons.folder,
+                      size: 14,
+                      color: colors.textSecondary,
+                    ),
+                    const SizedBox(width: 6),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '正在处理 $_batchCompleted/$_batchTotal：$_batchCurrentLabel',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: colors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 5),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(3),
-                            child: SizedBox(
-                              height: 4,
-                              child: Stack(
-                                children: [
-                                  Container(color: colors.tonalTileBg),
-                                  FractionallySizedBox(
-                                    widthFactor: _batchTotal > 0
-                                        ? (_batchCompleted / _batchTotal).clamp(
-                                            0,
-                                            1,
-                                          )
-                                        : 0,
-                                    child: Container(color: colors.primary),
-                                  ),
-                                ],
+                      child: Text(
+                        '保存至：${_formatSaveDirShort()}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                    ),
+                    AelChip(
+                      label: '更改目录',
+                      tone: AelChipTone.primary,
+                      onTap: _isBatchProcessing ? null : _pickSaveDirectory,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (_isBatchProcessing) ...[
+                  Row(
+                    children: [
+                      const CupertinoActivityIndicator(radius: 8),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '正在处理 $_batchCompleted/$_batchTotal：$_batchCurrentLabel',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: colors.textPrimary,
                               ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 5),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(3),
+                              child: SizedBox(
+                                height: 4,
+                                child: Stack(
+                                  children: [
+                                    Container(color: colors.tonalTileBg),
+                                    FractionallySizedBox(
+                                      widthFactor: _batchTotal > 0
+                                          ? (_batchCompleted / _batchTotal)
+                                                .clamp(0, 1)
+                                          : 0,
+                                      child: Container(color: colors.primary),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    AelButton(
-                      variant: AelButtonVariant.destructive,
-                      label: '停止',
-                      onPressed: () {
-                        setState(() {
-                          _cancelRequested = true;
-                        });
-                      },
-                    ),
-                  ],
-                ),
-              ] else ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: AelButton(
-                        variant: AelButtonVariant.tonal,
-                        icon: AelIcons.download,
-                        label: selectedCount == 0
-                            ? '仅下载'
-                            : '仅下载 ($selectedCount)',
-                        onPressed: canDownload
-                            ? () => _downloadSelectedLessons(shareAfter: false)
-                            : null,
+                      const SizedBox(width: 10),
+                      AelButton(
+                        variant: AelButtonVariant.destructive,
+                        label: '停止',
+                        onPressed: () {
+                          setState(() {
+                            _cancelRequested = true;
+                          });
+                        },
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: AelButton(
-                        variant: AelButtonVariant.primary,
-                        icon: AelIcons.share,
-                        label: selectedCount == 0
-                            ? '分享'
-                            : '分享 ($selectedCount)',
-                        onPressed: canDownload
-                            ? () => _downloadSelectedLessons(shareAfter: true)
-                            : null,
+                    ],
+                  ),
+                ] else ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: AelButton(
+                          variant: AelButtonVariant.tonal,
+                          icon: AelIcons.download,
+                          label: selectedCount == 0
+                              ? '仅下载'
+                              : '仅下载 ($selectedCount)',
+                          onPressed: canDownload
+                              ? () =>
+                                    _downloadSelectedLessons(shareAfter: false)
+                              : null,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: AelButton(
+                          variant: AelButtonVariant.primary,
+                          icon: AelIcons.share,
+                          label: selectedCount == 0
+                              ? '分享'
+                              : '分享 ($selectedCount)',
+                          onPressed: canDownload
+                              ? () => _downloadSelectedLessons(shareAfter: true)
+                              : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

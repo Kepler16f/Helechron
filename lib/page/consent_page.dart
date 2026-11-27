@@ -105,87 +105,93 @@ class _ConsentPageState extends State<ConsentPage> {
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(24, 44, 24, 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      AelIconBadge(
-                        icon: AelIcons.tabFlow,
-                        size: 64,
-                        iconSize: 32,
-                        style: AelIconBadgeStyle.cookie,
-                        backgroundColor: colors.primary,
-                        iconColor: colors.onPrimary,
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        '欢迎使用 Helechron',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.5,
-                          color: colors.textPrimary,
+                  child: AelConstrainedWidth(
+                    maxWidth: AelBreakpointSpec.maxDetailWidth,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        AelIconBadge(
+                          icon: AelIcons.tabFlow,
+                          size: 64,
+                          iconSize: 32,
+                          style: AelIconBadgeStyle.cookie,
+                          backgroundColor: colors.primary,
+                          iconColor: colors.onPrimary,
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        '$appOriginStatement\n\n在开始使用前，请阅读并同意以下条款。我们会严格按照《隐私政策》处理你的信息。',
-                        style: TextStyle(
-                          fontSize: 16,
-                          height: 1.5,
-                          color: colors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      _LegalTile(
-                        icon: AelIcons.shield,
-                        title: '《Helechron 隐私政策》',
-                        subtitle: '了解我们处理哪些信息、如何存储和保护',
-                        onTap: () => _openLegal(
-                          '隐私政策',
-                          'assets/legal/privacy_policy.txt',
-                          privacyPolicyUrl,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _LegalTile(
-                        icon: AelIcons.file,
-                        title: '《Helechron 用户协议》',
-                        subtitle: '使用本应用的权利、义务与免责声明',
-                        onTap: () => _openLegal(
-                          '用户协议',
-                          'assets/legal/user_agreement.txt',
-                          userAgreementUrl,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      AelSectionCard(
-                        backgroundColor: colors.primaryContainer.withValues(
-                          alpha: 0.65,
-                        ),
-                        child: Text(
-                          '要点提示：\n'
-                          '· 账号密码仅保存在你的设备本地，不会上传到我们运营的服务器；\n'
-                          '· 课表、成绩、校园卡等数据来自你本人登录的学校系统；\n'
-                          '· 本应用为第三方开源工具，非浙江大学官方应用，非 Celechron 官方应用；\n'
-                          '· 开发者：$developerName（$developerSubjectType）；APP 备案号：$icpFilingNumber；\n'
-                          '· 你可以随时退出登录、清除应用数据或卸载应用来删除本地信息。',
+                        const SizedBox(height: 24),
+                        Text(
+                          '欢迎使用 Helechron',
                           style: TextStyle(
-                            fontSize: 14,
-                            height: 1.65,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.5,
                             color: colors.textPrimary,
                           ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 12),
+                        Text(
+                          '$appOriginStatement\n\n在开始使用前，请阅读并同意以下条款。我们会严格按照《隐私政策》处理你的信息。',
+                          style: TextStyle(
+                            fontSize: 16,
+                            height: 1.5,
+                            color: colors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 28),
+                        _LegalTile(
+                          icon: AelIcons.shield,
+                          title: '《Helechron 隐私政策》',
+                          subtitle: '了解我们处理哪些信息、如何存储和保护',
+                          onTap: () => _openLegal(
+                            '隐私政策',
+                            'assets/legal/privacy_policy.txt',
+                            privacyPolicyUrl,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _LegalTile(
+                          icon: AelIcons.file,
+                          title: '《Helechron 用户协议》',
+                          subtitle: '使用本应用的权利、义务与免责声明',
+                          onTap: () => _openLegal(
+                            '用户协议',
+                            'assets/legal/user_agreement.txt',
+                            userAgreementUrl,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        AelSectionCard(
+                          backgroundColor: colors.primaryContainer.withValues(
+                            alpha: 0.65,
+                          ),
+                          child: Text(
+                            '要点提示：\n'
+                            '· 账号密码仅保存在你的设备本地，不会上传到我们运营的服务器；\n'
+                            '· 课表、成绩、校园卡等数据来自你本人登录的学校系统；\n'
+                            '· 本应用为第三方开源工具，非浙江大学官方应用，非 Celechron 官方应用；\n'
+                            '· 开发者：$developerName（$developerSubjectType）；APP 备案号：$icpFilingNumber；\n'
+                            '· 你可以随时退出登录、清除应用数据或卸载应用来删除本地信息。',
+                            style: TextStyle(
+                              fontSize: 14,
+                              height: 1.65,
+                              color: colors.textPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-              _ConsentActions(
-                checked: _checked,
-                onCheckedChanged: (value) => _checked.value = value,
-                busy: _busy,
-                onAgree: _agree,
-                onDeny: _deny,
+              AelConstrainedWidth(
+                maxWidth: AelBreakpointSpec.maxDetailWidth,
+                child: _ConsentActions(
+                  checked: _checked,
+                  onCheckedChanged: (value) => _checked.value = value,
+                  busy: _busy,
+                  onAgree: _agree,
+                  onDeny: _deny,
+                ),
               ),
             ],
           ),

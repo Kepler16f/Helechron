@@ -246,45 +246,58 @@ class WeightedGpaPage extends StatelessWidget {
               ),
             ),
             SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
-                child: _buildWeightedGpaBrief(context),
-              ),
-            ),
-            if (!_controller.showAllSemesters.value &&
-                _controller.semestersWithGrades.length >= 2)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.only(
-                    left: 16,
-                    right: 16,
-                    bottom: 8,
-                  ),
-                  child: SemesterGpaTrendCard(
-                    semesters: _controller.semestersWithGrades,
-                    selectedIndex: _controller.semesterIndex.value,
-                    onSemesterSelected: (idx) {
-                      _controller.semesterIndex.value = idx;
-                      _controller.semesterIndex.refresh();
-                    },
-                  ),
+              child: AelConstrainedWidth(
+                maxWidth: AelBreakpointSpec.maxDetailWidth,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(
+                        left: 16,
+                        right: 16,
+                        bottom: 8,
+                      ),
+                      child: _buildWeightedGpaBrief(context),
+                    ),
+                    if (!_controller.showAllSemesters.value &&
+                        _controller.semestersWithGrades.length >= 2)
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          left: 16,
+                          right: 16,
+                          bottom: 8,
+                        ),
+                        child: SemesterGpaTrendCard(
+                          semesters: _controller.semestersWithGrades,
+                          selectedIndex: _controller.semesterIndex.value,
+                          onSemesterSelected: (idx) {
+                            _controller.semesterIndex.value = idx;
+                            _controller.semesterIndex.refresh();
+                          },
+                        ),
+                      ),
+                    if (!_controller.showAllSemesters.value)
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          left: 16,
+                          right: 16,
+                          bottom: 8,
+                        ),
+                        child: _buildSemesterPicker(context),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.only(
+                        left: 16,
+                        right: 16,
+                        bottom: 8,
+                      ),
+                      child: _buildCourseWeightSliders(
+                        context,
+                        affectGpaGrades,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            if (!_controller.showAllSemesters.value)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.only(
-                    left: 16,
-                    right: 16,
-                    bottom: 8,
-                  ),
-                  child: _buildSemesterPicker(context),
-                ),
-              ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
-                child: _buildCourseWeightSliders(context, affectGpaGrades),
               ),
             ),
             const SliverToBoxAdapter(child: NativeBottomBarSpacer()),

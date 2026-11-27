@@ -98,25 +98,33 @@ class _CurriculumPlanPageState extends State<CurriculumPlanPage> {
           ),
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                Obx(() => _buildSyncNoticeBanner(context)),
-                Obx(() => _buildIdentityPlanCard(context)),
-                const SizedBox(height: 14),
-                Obx(() => _buildGraduationProgressCard(context)),
-                const SizedBox(height: 14),
-                Obx(() => _buildAuditModulesCard(context)),
-                const SizedBox(height: 14),
-                Obx(() => _buildForeignLanguageCard(context)),
-                const SizedBox(height: 14),
-                Obx(() => _buildPdfTreeCard(context)),
-                const SizedBox(height: 14),
-                Obx(() => _buildCoreCoursesCard(context)),
-                const SizedBox(height: 14),
-                Obx(() => _buildObjectivesCard(context)),
-                const SizedBox(height: 24),
-                const NativeBottomBarSpacer(),
-              ]),
+            sliver: SliverToBoxAdapter(
+              child: AelConstrainedWidth(
+                maxWidth: AelBreakpointSpec.maxWideContentWidth,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Obx(() => _buildSyncNoticeBanner(context)),
+                    AelAdaptiveGrid(
+                      maxColumns: 2,
+                      minItemWidth: 380,
+                      horizontalGap: 14,
+                      verticalGap: 14,
+                      children: [
+                        Obx(() => _buildIdentityPlanCard(context)),
+                        Obx(() => _buildGraduationProgressCard(context)),
+                        Obx(() => _buildAuditModulesCard(context)),
+                        Obx(() => _buildForeignLanguageCard(context)),
+                        Obx(() => _buildPdfTreeCard(context)),
+                        Obx(() => _buildCoreCoursesCard(context)),
+                        Obx(() => _buildObjectivesCard(context)),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    const NativeBottomBarSpacer(),
+                  ],
+                ),
+              ),
             ),
           ),
         ],

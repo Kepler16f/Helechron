@@ -307,6 +307,16 @@ struct Index {
     return this.isFloatingWindow || this.isSplitWindow;
   }
 
+  /// 平板或宽屏窗口（>= 600vp）切换为左侧 HdsTabs 竖排导航栏，与 Flutter 断点对齐
+  private isSideRailMode(): boolean {
+    return this.winWidthVp >= 600;
+  }
+
+  /// 平板物理屏判断（短边 >= 600vp）
+  private isTabletViewport(): boolean {
+    return Math.min(this.winWidthVp, this.winHeightVp) >= 600;
+  }
+
   private isInlineCardActive(): boolean {
     return this.inAppVideoVisible
       && this.inAppVideoInline
@@ -698,6 +708,10 @@ struct Index {
 
   private handleAccelerometerData(x: number, y: number, z: number): void {
     if (!this.inAppVideoVisible || !this.sensorRotation || this.isPlayerMiniWindow || this.isSystemPipActive || this.isSystemMultiWindow()) {
+      return;
+    }
+    // 平板端内嵌播放保留双栏卡片布局，不因机身横向握持强行切换为全屏
+    if (this.isTabletViewport() && this.isInlineCardActive()) {
       return;
     }
     // 手机几乎平放桌面时忽略重力微扰
@@ -1151,7 +1165,7 @@ struct Index {
     this.manualFullscreenLock = false;
     this.isPlayerFullscreen = false;
     this.showMoreSheet = false;
-    this.applyPlayerWindowMode(this.isSystemMultiWindow() ? window.Orientation.UNSPECIFIED : window.Orientation.PORTRAIT, false);
+    this.applyPlayerWindowMode((this.isSystemMultiWindow() || this.isTabletViewport()) ? window.Orientation.UNSPECIFIED : window.Orientation.PORTRAIT, false);
     this.scheduleHideOverlay();
   }
 
@@ -1162,7 +1176,7 @@ struct Index {
     this.showMoreSheet = false;
     this.stopGravitySensor();
     this.clearOverlayTimers();
-    this.applyPlayerWindowMode(this.isSystemMultiWindow() ? window.Orientation.UNSPECIFIED : window.Orientation.PORTRAIT, false);
+    this.applyPlayerWindowMode((this.isSystemMultiWindow() || this.isTabletViewport()) ? window.Orientation.UNSPECIFIED : window.Orientation.PORTRAIT, false);
   }
 
   private togglePlayPause(): void {
@@ -1493,6 +1507,119 @@ struct Index {
     return this.themePrimaryHex.length > 0
       ? this.themePrimaryHex
       : $r('sys.color.ohos_id_color_emphasize');
+  }
+
+  private activeTabPillBgColor(): ResourceColor {
+    if (this.themePrimaryHex.length === 7 && this.themePrimaryHex.startsWith('#')) {
+      return `#1F${this.themePrimaryHex.substring(1)}`;
+    }
+    if (this.themePrimaryHex.length === 9 && this.themePrimaryHex.startsWith('#')) {
+      return `#1F${this.themePrimaryHex.substring(3)}`;
+    }
+    return '#1F007AFF';
+  }
+
+  @Builder
+  HdsSideBarItem(index: number) {
+    Column() {
+      Column() {
+        SymbolGlyph(barSymbol(index))
+          .fontSize(22)
+          .fontColor([this.bottomBarCurrentTab === index
+            ? this.activeTabColor()
+            : $r('sys.color.ohos_id_color_text_secondary')])
+        Text(barTitle(index))
+          .fontSize(10.5)
+          .fontWeight(this.bottomBarCurrentTab === index ? FontWeight.Bold : FontWeight.Normal)
+          .margin({ top: 3 })
+          .fontColor(this.bottomBarCurrentTab === index
+            ? this.activeTabColor()
+            : $r('sys.color.ohos_id_color_text_secondary'))
+      }
+      .width(56)
+      .height(54)
+      .borderRadius(16)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .backgroundColor(this.bottomBarCurrentTab === index ? this.activeTabPillBgColor() : Color.Transparent)
+    }
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+  }
+
+  /// 平板/宽屏左侧原生 HdsTabs 竖排导航栏（兼容悬浮磨砂胶囊与停靠侧栏两种外观）
+  @Builder
+  SideRailNavigation() {
+    HdsTabs({ controller: this.tabsController }) {
+      ForEach(BAR_INDICES, (index: number) => {
+        TabContent() {
+        }
+        .tabBar(this.HdsSideBarItem(index))
+      }, (index: number) => index.toString())
+    }
+    .onTabBarClick((index: number) => {
+      this.switchTab(index);
+    })
+    .scrollable(false)
+    .barOverlap(false)
+    .barPosition(BarPosition.Start)
+    .vertical(true)
+    .barWidth(this.bottomBarFloating ? 66 : 80)
+    .backgroundColor(Color.Transparent)
+    .width(this.bottomBarFloating ? 66 : 80)
+    .height('100%')
+  }
+
+  @Builder
+  SideRailContainer() {
+    if (this.bottomBarFloating) {
+      if (this.bottomBarImmersiveLight) {
+        Column() {
+          this.SideRailNavigation()
+        }
+        .width(66)
+        .height(Math.min(Math.max(this.winHeightVp * 0.62, 320), 440))
+        .margin({ left: this.safeLeft + 7, right: 7 })
+        .padding({ top: 8, bottom: 8 })
+        .borderRadius(28)
+        .clip(true)
+        .backgroundColor(Color.Transparent)
+        .backgroundEffect({
+          radius: this.apiLevel >= MIN_API_FOR_SYSTEM_MATERIAL ? 40 : 30,
+          saturation: 2.0,
+          brightness: 1.1
+        })
+        .border({ width: 0.5, color: '#26FFFFFF' })
+        .shadow({ radius: 18, color: '#1A000000', offsetX: 0, offsetY: 6 })
+      } else {
+        Column() {
+          this.SideRailNavigation()
+        }
+        .width(66)
+        .height(Math.min(Math.max(this.winHeightVp * 0.62, 320), 440))
+        .margin({ left: this.safeLeft + 7, right: 7 })
+        .padding({ top: 8, bottom: 8 })
+        .borderRadius(28)
+        .clip(true)
+        .backgroundColor($r('sys.color.ohos_id_color_bottom_tab_bg'))
+        .shadow({ radius: 18, color: '#1A000000', offsetX: 0, offsetY: 6 })
+      }
+    } else {
+      Column() {
+        this.SideRailNavigation()
+      }
+      .width(80 + this.safeLeft)
+      .height('100%')
+      .padding({
+        left: this.safeLeft,
+        top: Math.max(this.safeTop, 16) + 20,
+        bottom: Math.max(this.safeBottom, 16) + 20
+      })
+      .backgroundColor($r('sys.color.ohos_id_color_bottom_tab_bg'))
+      .border({ width: { right: 0.5 }, color: '#1F808080' })
+    }
   }
 
   /// 自绘底栏单元（低版本回退 / 非沉浸模式）
@@ -1827,7 +1954,16 @@ struct Index {
       .height('100%')
 
       if (!this.bottomBarHidden && (!this.inAppVideoVisible || this.isPlayerMiniWindow)) {
-        if (this.useSystemMaterial()) {
+        if (this.isSideRailMode()) {
+          Row() {
+            this.SideRailContainer()
+          }
+          .width('100%')
+          .height('100%')
+          .justifyContent(FlexAlign.Start)
+          .alignItems(VerticalAlign.Center)
+          .hitTestBehavior(HitTestMode.Transparent)
+        } else if (this.useSystemMaterial()) {
           this.SystemMaterialBar()
         } else if (this.bottomBarFloating) {
           if (this.bottomBarImmersiveLight) {
@@ -2668,6 +2804,14 @@ struct Index {
     }
     .width('100%')
     .height('100%')
+    .onAreaChange((_oldArea: Area, newArea: Area) => {
+      const w = Number(newArea.width);
+      const h = Number(newArea.height);
+      if (w > 0 && h > 0 && (Math.abs(w - this.winWidthVp) > 0.5 || Math.abs(h - this.winHeightVp) > 0.5)) {
+        this.winWidthVp = w;
+        this.winHeightVp = h;
+      }
+    })
   }
 
   onBackPress(): boolean {

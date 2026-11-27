@@ -549,162 +549,170 @@ class ScholarPage extends StatelessWidget {
                   AelSpacing.pageHorizontal,
                   AelSpacing.sm,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          '学业',
-                          style: TextStyle(
-                            color: colors.textPrimary,
-                            fontSize: 30,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.6,
-                            height: 1.15,
+                child: AelConstrainedWidth(
+                  maxWidth: AelBreakpointSpec.maxWideContentWidth,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            '学业',
+                            style: TextStyle(
+                              color: colors.textPrimary,
+                              fontSize: 30,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.6,
+                              height: 1.15,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: AelSpacing.md),
-                        Expanded(child: _buildSearchBar(context)),
-                        if (PlatformFeatures.isDesktop) ...[
-                          const SizedBox(width: AelSpacing.sm),
-                          ValueListenableBuilder<bool>(
-                            valueListenable: _isRefreshing,
-                            builder: (context, isRefreshing, _) {
-                              if (isRefreshing) {
-                                return const SizedBox(
-                                  width: 40,
-                                  height: 40,
-                                  child: Center(
-                                    child: CupertinoActivityIndicator(),
-                                  ),
-                                );
-                              }
-                              return AelCircleIconButton(
-                                icon: AelIcons.refresh,
-                                tooltip: '刷新学业数据',
-                                onPressed: () async {
-                                  _isRefreshing.value = true;
-                                  late final List<String?> results;
-                                  try {
-                                    results = await _scholarController
-                                        .fetchData();
-                                  } finally {
-                                    _isRefreshing.value = false;
-                                  }
-                                  if (context.mounted &&
-                                      results.any((result) => result != null)) {
-                                    await showRefreshResultDialog(
-                                      context,
-                                      results,
-                                    );
-                                  }
-                                },
-                              );
-                            },
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: AelSpacing.md),
-                    SizedBox(
-                      height: 34,
-                      child: _mouseDraggable(
-                        context,
-                        Obx(
-                          () => ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: _scholarController.semesters.length,
-                            separatorBuilder: (context, index) =>
-                                const SizedBox(width: AelSpacing.sm),
-                            itemBuilder: (context, index) {
-                              final semester =
-                                  _scholarController.semesters[index];
-                              return Obx(() {
-                                final selected =
-                                    _scholarController.semesterIndex.value ==
-                                    index;
-                                return MiuixPressable(
-                                  feedbackType: MiuixPressFeedbackType.sink,
-                                  onPressed: () {
-                                    _scholarController.semesterIndex.value =
-                                        index;
-                                    _scholarController.semesterIndex.refresh();
+                          const SizedBox(width: AelSpacing.md),
+                          Expanded(child: _buildSearchBar(context)),
+                          if (PlatformFeatures.isDesktop) ...[
+                            const SizedBox(width: AelSpacing.sm),
+                            ValueListenableBuilder<bool>(
+                              valueListenable: _isRefreshing,
+                              builder: (context, isRefreshing, _) {
+                                if (isRefreshing) {
+                                  return const SizedBox(
+                                    width: 40,
+                                    height: 40,
+                                    child: Center(
+                                      child: CupertinoActivityIndicator(),
+                                    ),
+                                  );
+                                }
+                                return AelCircleIconButton(
+                                  icon: AelIcons.refresh,
+                                  tooltip: '刷新学业数据',
+                                  onPressed: () async {
+                                    _isRefreshing.value = true;
+                                    late final List<String?> results;
+                                    try {
+                                      results = await _scholarController
+                                          .fetchData();
+                                    } finally {
+                                      _isRefreshing.value = false;
+                                    }
+                                    if (context.mounted &&
+                                        results.any(
+                                          (result) => result != null,
+                                        )) {
+                                      await showRefreshResultDialog(
+                                        context,
+                                        results,
+                                      );
+                                    }
                                   },
-                                  child: AnimatedContainer(
-                                    duration: AelDurations.fast,
-                                    curve: Curves.easeOutCubic,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                    ),
-                                    decoration: ShapeDecoration(
-                                      color: selected
-                                          ? colors.primary
-                                          : colors.cardBg,
-                                      shape: AelShapes.squircle(AelRadius.pill),
-                                    ),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      '${semester.name.substring(2, 5)}${semester.name.substring(7, 11)}',
-                                      style: TextStyle(
+                                );
+                              },
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: AelSpacing.md),
+                      SizedBox(
+                        height: 34,
+                        child: _mouseDraggable(
+                          context,
+                          Obx(
+                            () => ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: _scholarController.semesters.length,
+                              separatorBuilder: (context, index) =>
+                                  const SizedBox(width: AelSpacing.sm),
+                              itemBuilder: (context, index) {
+                                final semester =
+                                    _scholarController.semesters[index];
+                                return Obx(() {
+                                  final selected =
+                                      _scholarController.semesterIndex.value ==
+                                      index;
+                                  return MiuixPressable(
+                                    feedbackType: MiuixPressFeedbackType.sink,
+                                    onPressed: () {
+                                      _scholarController.semesterIndex.value =
+                                          index;
+                                      _scholarController.semesterIndex
+                                          .refresh();
+                                    },
+                                    child: AnimatedContainer(
+                                      duration: AelDurations.fast,
+                                      curve: Curves.easeOutCubic,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                      ),
+                                      decoration: ShapeDecoration(
                                         color: selected
-                                            ? colors.onPrimary
-                                            : colors.textSecondary,
-                                        fontSize: 13.5,
-                                        fontWeight: selected
-                                            ? FontWeight.w600
-                                            : FontWeight.w500,
+                                            ? colors.primary
+                                            : colors.cardBg,
+                                        shape: AelShapes.squircle(
+                                          AelRadius.pill,
+                                        ),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Text(
+                                        '${semester.name.substring(2, 5)}${semester.name.substring(7, 11)}',
+                                        style: TextStyle(
+                                          color: selected
+                                              ? colors.onPrimary
+                                              : colors.textSecondary,
+                                          fontSize: 13.5,
+                                          fontWeight: selected
+                                              ? FontWeight.w600
+                                              : FontWeight.w500,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                );
-                              });
-                            },
+                                  );
+                                });
+                              },
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    // 桌面端刷新超过 5 秒后的状态条：小转圈 + 滚动文案，随刷新结束收起。
-                    // 移动端的状态文案由下方 CupertinoSliverRefreshControl 的 builder 展示
-                    if (PlatformFeatures.isDesktop)
-                      Obx(() {
-                        final message =
-                            _scholarController.refreshStatusMessage.value;
-                        return AnimatedSize(
-                          duration: AelDurations.normal,
-                          curve: Curves.easeInOut,
-                          alignment: Alignment.topCenter,
-                          child: AnimatedSwitcher(
-                            duration: AelDurations.fast,
-                            child: message == null
-                                ? const SizedBox(
-                                    key: ValueKey('refreshStatusStripEmpty'),
-                                    width: double.infinity,
-                                  )
-                                : Padding(
-                                    key: const ValueKey('refreshStatusStrip'),
-                                    padding: const EdgeInsets.only(
-                                      top: 6,
-                                      bottom: 2,
+                      // 桌面端刷新超过 5 秒后的状态条：小转圈 + 滚动文案，随刷新结束收起。
+                      // 移动端的状态文案由下方 CupertinoSliverRefreshControl 的 builder 展示
+                      if (PlatformFeatures.isDesktop)
+                        Obx(() {
+                          final message =
+                              _scholarController.refreshStatusMessage.value;
+                          return AnimatedSize(
+                            duration: AelDurations.normal,
+                            curve: Curves.easeInOut,
+                            alignment: Alignment.topCenter,
+                            child: AnimatedSwitcher(
+                              duration: AelDurations.fast,
+                              child: message == null
+                                  ? const SizedBox(
+                                      key: ValueKey('refreshStatusStripEmpty'),
+                                      width: double.infinity,
+                                    )
+                                  : Padding(
+                                      key: const ValueKey('refreshStatusStrip'),
+                                      padding: const EdgeInsets.only(
+                                        top: 6,
+                                        bottom: 2,
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          const CupertinoActivityIndicator(
+                                            radius: 7,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Flexible(
+                                            child: RollingShimmerText(message),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        const CupertinoActivityIndicator(
-                                          radius: 7,
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Flexible(
-                                          child: RollingShimmerText(message),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                          ),
-                        );
-                      }),
-                  ],
+                            ),
+                          );
+                        }),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -741,6 +749,14 @@ class ScholarPage extends StatelessWidget {
           SliverToBoxAdapter(
             child: Obx(() {
               if (_scholarController.scholar.semesters.isNotEmpty) {
+                final cards = _scholarController.scholar.isGrs
+                    ? [_buildSemester(context), _buildTodos(context)]
+                    : [
+                        _buildGradeBrief(context),
+                        _buildSemester(context),
+                        _buildTodos(context),
+                        _buildPractice(context),
+                      ];
                 return Padding(
                   padding: EdgeInsets.fromLTRB(
                     AelSpacing.pageHorizontal,
@@ -748,22 +764,13 @@ class ScholarPage extends StatelessWidget {
                     AelSpacing.pageHorizontal,
                     MediaQuery.paddingOf(context).bottom + 24,
                   ),
-                  child: Column(
-                    children: _scholarController.scholar.isGrs
-                        ? [
-                            _buildSemester(context),
-                            const SizedBox(height: AelSpacing.sectionGap),
-                            _buildTodos(context),
-                          ]
-                        : [
-                            _buildGradeBrief(context),
-                            const SizedBox(height: AelSpacing.sectionGap),
-                            _buildSemester(context),
-                            const SizedBox(height: AelSpacing.sectionGap),
-                            _buildTodos(context),
-                            const SizedBox(height: AelSpacing.sectionGap),
-                            _buildPractice(context),
-                          ],
+                  child: AelConstrainedWidth(
+                    maxWidth: AelBreakpointSpec.maxWideContentWidth,
+                    child: AelAdaptiveGrid(
+                      maxColumns: 2,
+                      minItemWidth: 360,
+                      children: cards,
+                    ),
                   ),
                 );
               }
@@ -774,16 +781,19 @@ class ScholarPage extends StatelessWidget {
                   AelSpacing.pageHorizontal,
                   MediaQuery.paddingOf(context).bottom + 24,
                 ),
-                child: AelEmptyState(
-                  icon: _scholarController.scholar.isLogan
-                      ? AelIcons.refresh
-                      : AelIcons.tabOption,
-                  title: _scholarController.scholar.isLogan
-                      ? '下拉刷新以获取数据'
-                      : '未登录',
-                  subtitle: _scholarController.scholar.isLogan
-                      ? '离线数据将在同步失败时自动使用'
-                      : '前往设置登录浙大通行证后即可同步学业数据',
+                child: AelConstrainedWidth(
+                  maxWidth: 520,
+                  child: AelEmptyState(
+                    icon: _scholarController.scholar.isLogan
+                        ? AelIcons.refresh
+                        : AelIcons.tabOption,
+                    title: _scholarController.scholar.isLogan
+                        ? '下拉刷新以获取数据'
+                        : '未登录',
+                    subtitle: _scholarController.scholar.isLogan
+                        ? '离线数据将在同步失败时自动使用'
+                        : '前往设置登录浙大通行证后即可同步学业数据',
+                  ),
                 ),
               );
             }),

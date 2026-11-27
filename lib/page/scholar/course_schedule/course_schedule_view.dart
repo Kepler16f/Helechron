@@ -233,7 +233,11 @@ class CourseSchedulePage extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           SizedBox(
-            height: 560,
+            height:
+                MediaQuery.sizeOf(context).width >=
+                    AelTabBarSpec.sideRailBreakpoint
+                ? (MediaQuery.sizeOf(context).height * 0.68).clamp(560.0, 780.0)
+                : 560,
             child: Obx(() {
               var sessionsByDayOfWeek =
                   _courseScheduleController.sessionsByDayOfWeek;
@@ -486,43 +490,48 @@ class CourseSchedulePage extends StatelessWidget {
             ),
           ),
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: [
-                  _semesterPicker(context),
-                  const SizedBox(height: 8),
-                  // Container(
-                  //   padding: const EdgeInsets.only(left: 16, right: 16),
-                  //   child: Text(
-                  //     '请前往教务网查看冲突选课课表',
-                  //     style: TextStyle(
-                  //         fontSize: 14),
-                  //   ),
-                  // ),
-                  // const SizedBox(height: 8),
-                  _courseSchedule(context),
-                  const SizedBox(height: 20),
-                  Obx(
-                    () => AelSectionCard(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AelSpacing.lg,
-                        vertical: AelSpacing.xs,
-                      ),
-                      child: AelSwitchTile(
-                        icon: AelIcons.shield,
-                        title: '隐藏课程信息',
-                        value: _courseScheduleController
-                            .hideCourseInfomation
-                            .value,
-                        onChanged: (value) async {
-                          _courseScheduleController.hideCourseInfomation.value =
-                              value;
-                        },
+            child: AelConstrainedWidth(
+              maxWidth: AelBreakpointSpec.maxWideContentWidth,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  children: [
+                    _semesterPicker(context),
+                    const SizedBox(height: 8),
+                    // Container(
+                    //   padding: const EdgeInsets.only(left: 16, right: 16),
+                    //   child: Text(
+                    //     '请前往教务网查看冲突选课课表',
+                    //     style: TextStyle(
+                    //         fontSize: 14),
+                    //   ),
+                    // ),
+                    // const SizedBox(height: 8),
+                    _courseSchedule(context),
+                    const SizedBox(height: 20),
+                    Obx(
+                      () => AelSectionCard(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AelSpacing.lg,
+                          vertical: AelSpacing.xs,
+                        ),
+                        child: AelSwitchTile(
+                          icon: AelIcons.shield,
+                          title: '隐藏课程信息',
+                          value: _courseScheduleController
+                              .hideCourseInfomation
+                              .value,
+                          onChanged: (value) async {
+                            _courseScheduleController
+                                    .hideCourseInfomation
+                                    .value =
+                                value;
+                          },
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

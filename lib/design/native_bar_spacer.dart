@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:get/get.dart';
 
+import 'package:celechron/design/components/ael_responsive.dart';
+
 import '../model/option.dart';
 
 /// 原生底栏（悬浮或普通）在系统安全区之上额外占用的高度：
@@ -18,8 +20,16 @@ double nativeBottomBarInset() {
   }
 }
 
+/// 在侧栏布局（平板 / 宽屏）下，导航已移至左侧，不再占用底部高度。
+double nativeBottomBarInsetForContext(BuildContext context) {
+  if (AelResponsive.useSideRail(context)) {
+    return 0;
+  }
+  return nativeBottomBarInset();
+}
+
 /// 给被原生底栏遮挡的滚动页面提供底部留白，
-/// 高度 = 系统安全区 + 原生底栏占位 + [extra]。
+/// 高度 = 系统安全区 + 原生底栏占位 + [extra]；宽屏侧栏模式下自动去掉底栏占位。
 class NativeBottomBarSpacer extends StatelessWidget {
   final double extra;
 
@@ -31,7 +41,7 @@ class NativeBottomBarSpacer extends StatelessWidget {
       () => SizedBox(
         height:
             MediaQuery.paddingOf(context).bottom +
-            nativeBottomBarInset() +
+            nativeBottomBarInsetForContext(context) +
             extra,
       ),
     );

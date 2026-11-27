@@ -1558,92 +1558,28 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage>
   Widget build(BuildContext context) {
     final colors = AelTheme.colorsOf(context);
     if (_inlinePlayerActive) {
-      return CupertinoPageScaffold(
-        backgroundColor: colors.pageBg,
-        child: SafeArea(
-          bottom: false,
-          child: Column(
-            children: [
-              _buildInlineTopBar(context),
-              _buildInlinePlayerCard(context),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AelSpacing.lg,
-                  vertical: AelSpacing.sm,
-                ),
-                child: AelSegmented<int>(
-                  stackedIcon: false,
-                  value: _tabIndex,
-                  items: [
-                    AelSegmentItem(
-                      value: 0,
-                      label: '课堂 PPT (${_slides.length})',
-                    ),
-                    AelSegmentItem(
-                      value: 1,
-                      label: '语音字幕 (${_transcript.length})',
-                    ),
-                  ],
-                  onChanged: (val) => setState(() => _tabIndex = val),
-                ),
-              ),
-              Expanded(
-                child: CustomScrollView(
-                  slivers: [
-                    SliverToBoxAdapter(
-                      child: _tabIndex == 0
-                          ? _buildSlidesView(context)
-                          : _buildTranscriptView(context),
-                    ),
-                    const SliverToBoxAdapter(child: NativeBottomBarSpacer()),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
+      _scheduleSyncOhosInlineBounds();
     }
-
-    return CupertinoPageScaffold(
-      backgroundColor: colors.pageBg,
-      child: SafeArea(
-        bottom: false,
-        child: CustomScrollView(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = AelResponsive.isWideBody(constraints.maxWidth);
+        final segmentWidget = Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AelSpacing.lg,
+            vertical: AelSpacing.sm,
+          ),
+          child: AelSegmented<int>(
+            stackedIcon: false,
+            value: _tabIndex,
+            items: [
+              AelSegmentItem(value: 0, label: '课堂 PPT (${_slides.length})'),
+              AelSegmentItem(value: 1, label: '语音字幕 (${_transcript.length})'),
+            ],
+            onChanged: (val) => setState(() => _tabIndex = val),
+          ),
+        );
+        final resourceScroll = CustomScrollView(
           slivers: [
-            CelechronSliverTextHeader(subtitle: '${widget.courseName} · 智云课堂'),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AelSpacing.lg,
-                  vertical: 6,
-                ),
-                child: _buildPlayerControlCard(context),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AelSpacing.lg,
-                  vertical: AelSpacing.sm,
-                ),
-                child: AelSegmented<int>(
-                  stackedIcon: false,
-                  value: _tabIndex,
-                  items: [
-                    AelSegmentItem(
-                      value: 0,
-                      label: '课堂 PPT (${_slides.length})',
-                    ),
-                    AelSegmentItem(
-                      value: 1,
-                      label: '语音字幕 (${_transcript.length})',
-                    ),
-                  ],
-                  onChanged: (val) => setState(() => _tabIndex = val),
-                ),
-              ),
-            ),
             SliverToBoxAdapter(
               child: _tabIndex == 0
                   ? _buildSlidesView(context)
@@ -1651,8 +1587,150 @@ class _ZhiyunPlayerPageState extends State<ZhiyunPlayerPage>
             ),
             const SliverToBoxAdapter(child: NativeBottomBarSpacer()),
           ],
-        ),
-      ),
+        );
+
+        if (_inlinePlayerActive) {
+          return CupertinoPageScaffold(
+            backgroundColor: colors.pageBg,
+            child: SafeArea(
+              bottom: false,
+              child: isWide
+                  ? AelConstrainedWidth(
+                      maxWidth: AelBreakpointSpec.maxWideContentWidth,
+                      child: Column(
+                        children: [
+                          _buildInlineTopBar(context),
+                          Expanded(
+                            child: AelTwoPane(
+                              masterFraction: 0.52,
+                              minMasterWidth: 380,
+                              maxMasterWidth: 680,
+                              master: Align(
+                                alignment: Alignment.topCenter,
+                                child: SingleChildScrollView(
+                                  padding: const EdgeInsets.only(
+                                    bottom: AelSpacing.lg,
+                                  ),
+                                  child: _buildInlinePlayerCard(context),
+                                ),
+                              ),
+                              detail: Column(
+                                children: [
+                                  segmentWidget,
+                                  Expanded(child: resourceScroll),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : Column(
+                      children: [
+                        _buildInlineTopBar(context),
+                        _buildInlinePlayerCard(context),
+                        segmentWidget,
+                        Expanded(child: resourceScroll),
+                      ],
+                    ),
+            ),
+          );
+        }
+
+        if (isWide) {
+          return CupertinoPageScaffold(
+            backgroundColor: colors.pageBg,
+            child: SafeArea(
+              bottom: false,
+              child: AelConstrainedWidth(
+                maxWidth: AelBreakpointSpec.maxWideContentWidth,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 16, 6),
+                      child: Row(
+                        children: [
+                          AelCircleIconButton(
+                            icon: AelIcons.back,
+                            size: 36,
+                            iconSize: 18,
+                            tooltip: '返回',
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              '${widget.courseName} · 智云课堂',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.3,
+                                color: colors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: AelTwoPane(
+                        masterFraction: 0.44,
+                        minMasterWidth: 340,
+                        maxMasterWidth: 520,
+                        master: SingleChildScrollView(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AelSpacing.lg,
+                            vertical: 6,
+                          ),
+                          child: _buildPlayerControlCard(context),
+                        ),
+                        detail: Column(
+                          children: [
+                            segmentWidget,
+                            Expanded(child: resourceScroll),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        return CupertinoPageScaffold(
+          backgroundColor: colors.pageBg,
+          child: SafeArea(
+            bottom: false,
+            child: CustomScrollView(
+              slivers: [
+                CelechronSliverTextHeader(
+                  subtitle: '${widget.courseName} · 智云课堂',
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AelSpacing.lg,
+                      vertical: 6,
+                    ),
+                    child: _buildPlayerControlCard(context),
+                  ),
+                ),
+                SliverToBoxAdapter(child: segmentWidget),
+                SliverToBoxAdapter(
+                  child: _tabIndex == 0
+                      ? _buildSlidesView(context)
+                      : _buildTranscriptView(context),
+                ),
+                const SliverToBoxAdapter(child: NativeBottomBarSpacer()),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

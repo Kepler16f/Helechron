@@ -516,34 +516,38 @@ class _ECardPayPageState extends State<ECardPayPage>
           slivers: [
             const CelechronSliverTextHeader(subtitle: '付款码'),
             SliverFillRemaining(
-              child: Column(
-                children: [
-                  // 上6下4的比例将二维码中心下移至屏幕高度约 52% 处（与官方电子校园卡一致）
-                  const Spacer(flex: 6),
-                  Obx(() => _buildCenter(context)),
-                  const SizedBox(height: 16),
-                  Obx(() => _buildSubtitle(context)),
-                  const SizedBox(height: 12),
-                  Obx(() => _buildCodeValue()),
-                  Obx(() => _buildBalance()),
-                  const SizedBox(height: 24),
-                  Obx(() => _buildRefreshButton(context)),
-                  const SizedBox(height: 12),
-                  AelButton(
-                    variant: AelButtonVariant.tonal,
-                    icon: LucideIcons.chartColumn,
-                    label: '消费账单与统计',
-                    cornerRadius: AelRadius.pill,
-                    onPressed: () {
-                      Navigator.of(context, rootNavigator: true).push(
-                        CupertinoPageRoute(
-                          builder: (context) => const ECardBillPage(),
-                        ),
-                      );
-                    },
-                  ),
-                  const Spacer(flex: 4),
-                ],
+              hasScrollBody: false,
+              child: AelConstrainedWidth(
+                maxWidth: AelBreakpointSpec.maxDetailWidth,
+                child: Column(
+                  children: [
+                    // 上6下4的比例将二维码中心下移至屏幕高度约 52% 处（与官方电子校园卡一致）
+                    const Spacer(flex: 6),
+                    Obx(() => _buildCenter(context)),
+                    const SizedBox(height: 16),
+                    Obx(() => _buildSubtitle(context)),
+                    const SizedBox(height: 12),
+                    Obx(() => _buildCodeValue()),
+                    Obx(() => _buildBalance()),
+                    const SizedBox(height: 24),
+                    Obx(() => _buildRefreshButton(context)),
+                    const SizedBox(height: 12),
+                    AelButton(
+                      variant: AelButtonVariant.tonal,
+                      icon: LucideIcons.chartColumn,
+                      label: '消费账单与统计',
+                      cornerRadius: AelRadius.pill,
+                      onPressed: () {
+                        Navigator.of(context, rootNavigator: true).push(
+                          CupertinoPageRoute(
+                            builder: (context) => const ECardBillPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    const Spacer(flex: 4),
+                  ],
+                ),
               ),
             ),
             const SliverToBoxAdapter(child: NativeBottomBarSpacer()),

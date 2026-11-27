@@ -126,42 +126,45 @@ class CalendarPage extends StatelessWidget {
               final title = isCal
                   ? '${_calendarController.focusedDay.value.year} 年 ${_calendarController.focusedDay.value.month} 月'
                   : _calendarController.getCurrentSemesterDisplayName();
-              return AelLargeTitleBar(
-                title: title,
-                actions: [
-                  if (isCal) ...[
+              return AelConstrainedWidth(
+                maxWidth: AelBreakpointSpec.maxWideContentWidth,
+                child: AelLargeTitleBar(
+                  title: title,
+                  actions: [
+                    if (isCal) ...[
+                      AelCircleIconButton(
+                        icon: AelIcons.add,
+                        tooltip: '新建日程',
+                        onPressed: () async {
+                          await newDeadline(
+                            context,
+                            time: DateTime(
+                              _calendarController.selectedDay.value.year,
+                              _calendarController.selectedDay.value.month,
+                              _calendarController.selectedDay.value.day,
+                              DateTime.now().hour,
+                              DateTime.now().minute,
+                            ),
+                          );
+                          _taskController.updateDeadlineList();
+                          _taskController.taskList.refresh();
+                        },
+                      ),
+                      AelCircleIconButton(
+                        icon: AelIcons.tabCalendar,
+                        tooltip: '跳转日期',
+                        onPressed: () => _showJumpToDatePicker(context),
+                      ),
+                    ],
                     AelCircleIconButton(
-                      icon: AelIcons.add,
-                      tooltip: '新建日程',
-                      onPressed: () async {
-                        await newDeadline(
-                          context,
-                          time: DateTime(
-                            _calendarController.selectedDay.value.year,
-                            _calendarController.selectedDay.value.month,
-                            _calendarController.selectedDay.value.day,
-                            DateTime.now().hour,
-                            DateTime.now().minute,
-                          ),
-                        );
-                        _taskController.updateDeadlineList();
-                        _taskController.taskList.refresh();
+                      icon: isCal ? AelIcons.layers : AelIcons.tabCalendar,
+                      tooltip: isCal ? '切换课表视图' : '切换日历视图',
+                      onPressed: () {
+                        _calendarController.toggleViewMode();
                       },
                     ),
-                    AelCircleIconButton(
-                      icon: AelIcons.tabCalendar,
-                      tooltip: '跳转日期',
-                      onPressed: () => _showJumpToDatePicker(context),
-                    ),
                   ],
-                  AelCircleIconButton(
-                    icon: isCal ? AelIcons.layers : AelIcons.tabCalendar,
-                    tooltip: isCal ? '切换课表视图' : '切换日历视图',
-                    onPressed: () {
-                      _calendarController.toggleViewMode();
-                    },
-                  ),
-                ],
+                ),
               );
             }),
             Expanded(
@@ -170,62 +173,143 @@ class CalendarPage extends StatelessWidget {
                     CalendarViewMode.schedule) {
                   return ScheduleView(controller: _calendarController);
                 }
-                return CustomScrollView(
-                  slivers: [
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AelSpacing.pageHorizontal,
-                        0,
-                        AelSpacing.pageHorizontal,
-                        AelSpacing.sectionGap,
-                      ),
-                      sliver: SliverToBoxAdapter(
-                        child: _buildCalendarCard(context, colors),
-                      ),
-                    ),
-                    SliverPadding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AelSpacing.pageHorizontal,
-                      ),
-                      sliver: SliverToBoxAdapter(
-                        child: Obx(() {
-                          final selected = _calendarController.selectedDay.value
-                              .copyWith(isUtc: false);
-                          final events = _calendarController.getEventsForDay(
-                            _calendarController.selectedDay.value,
-                          );
-                          final swapInfo = swapDayInfoFor(
-                            selected,
-                            _calendarController.scholar.value.specialDates,
-                          );
-                          final specialDesc = _calendarController
-                              .scholar
-                              .value
-                              .specialDates[selected];
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              if (swapInfo != null) ...[
-                                _buildSwapDayBanner(context, swapInfo, colors),
-                                const SizedBox(height: AelSpacing.sectionGap),
-                              ],
-                              _buildDayEventsCard(
-                                context,
-                                colors,
-                                _calendarController.dayDescription(selected),
-                                specialDesc,
-                                events,
-                              ),
-                              SizedBox(
-                                height:
-                                    MediaQuery.paddingOf(context).bottom + 20,
+                return LayoutBuilder(
+                  builder: (context, constraints) {
+                    final selected = _calendarController.selectedDay.value
+                        .copyWith(isUtc: false);
+                    final events = _calendarController.getEventsForDay(
+                      _calendarController.selectedDay.value,
+                    );
+                    final swapInfo = swapDayInfoFor(
+                      selected,
+                      _calendarController.scholar.value.specialDates,
+                    );
+                    final specialDesc = _calendarController
+                        .scholar
+                        .value
+                        .specialDates[selected];
+
+                    if (AelResponsive.isWideBody(constraints.maxWidth)) {
+                      return AelConstrainedWidth(
+                        maxWidth: AelBreakpointSpec.maxWideContentWidth,
+                        child: AelTwoPane(
+                          masterFraction: 0.45,
+                          minMasterWidth: 340,
+                          maxMasterWidth: 480,
+                          master: SingleChildScrollView(
+                            padding: EdgeInsets.fromLTRB(
+                              AelSpacing.pageHorizontal,
+                              0,
+                              AelSpacing.pageHorizontal,
+                              MediaQuery.paddingOf(context).bottom + 20,
+                            ),
+                            child: _buildCalendarCard(context, colors),
+                          ),
+                          detail: CustomScrollView(
+                            slivers: [
+                              SliverPadding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AelSpacing.pageHorizontal,
+                                ),
+                                sliver: SliverToBoxAdapter(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      if (swapInfo != null) ...[
+                                        _buildSwapDayBanner(
+                                          context,
+                                          swapInfo,
+                                          colors,
+                                        ),
+                                        const SizedBox(
+                                          height: AelSpacing.sectionGap,
+                                        ),
+                                      ],
+                                      _buildDayEventsCard(
+                                        context,
+                                        colors,
+                                        _calendarController.dayDescription(
+                                          selected,
+                                        ),
+                                        specialDesc,
+                                        events,
+                                      ),
+                                      SizedBox(
+                                        height:
+                                            MediaQuery.paddingOf(
+                                              context,
+                                            ).bottom +
+                                            20,
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ],
-                          );
-                        }),
-                      ),
-                    ),
-                  ],
+                          ),
+                        ),
+                      );
+                    }
+
+                    return CustomScrollView(
+                      slivers: [
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(
+                            AelSpacing.pageHorizontal,
+                            0,
+                            AelSpacing.pageHorizontal,
+                            AelSpacing.sectionGap,
+                          ),
+                          sliver: SliverToBoxAdapter(
+                            child: AelConstrainedWidth(
+                              maxWidth: AelBreakpointSpec.maxDetailWidth,
+                              child: _buildCalendarCard(context, colors),
+                            ),
+                          ),
+                        ),
+                        SliverPadding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AelSpacing.pageHorizontal,
+                          ),
+                          sliver: SliverToBoxAdapter(
+                            child: AelConstrainedWidth(
+                              maxWidth: AelBreakpointSpec.maxDetailWidth,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if (swapInfo != null) ...[
+                                    _buildSwapDayBanner(
+                                      context,
+                                      swapInfo,
+                                      colors,
+                                    ),
+                                    const SizedBox(
+                                      height: AelSpacing.sectionGap,
+                                    ),
+                                  ],
+                                  _buildDayEventsCard(
+                                    context,
+                                    colors,
+                                    _calendarController.dayDescription(
+                                      selected,
+                                    ),
+                                    specialDesc,
+                                    events,
+                                  ),
+                                  SizedBox(
+                                    height:
+                                        MediaQuery.paddingOf(context).bottom +
+                                        20,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 );
               }),
             ),

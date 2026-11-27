@@ -25,13 +25,35 @@ import 'login_page.dart';
 import 'network_proxy_page.dart';
 import 'option_controller.dart';
 
-class OptionPage extends StatelessWidget {
+class OptionPage extends StatefulWidget {
+  const OptionPage({super.key});
+
+  @override
+  State<OptionPage> createState() => _OptionPageState();
+}
+
+class _OptionPageState extends State<OptionPage> {
   final _optionController = Get.put(
     OptionController(),
     tag: 'optionController',
   );
+  int _selectedCategory = 0;
+  WidgetBuilder? _subPageBuilder;
+  int _subPageVersion = 0;
 
-  OptionPage({super.key});
+  void _openSubPage(BuildContext context, bool isWide, WidgetBuilder builder) {
+    if (isWide) {
+      setState(() {
+        _subPageBuilder = builder;
+        _subPageVersion++;
+      });
+      return;
+    }
+    Navigator.of(
+      context,
+      rootNavigator: true,
+    ).push(CupertinoPageRoute(builder: builder));
+  }
 
   Text _trailingText(BuildContext context, String text, {Color? color}) {
     final colors = AelTheme.colorsOf(context);
@@ -62,57 +84,239 @@ class OptionPage extends StatelessWidget {
     );
   }
 
+  Widget _buildRightPane(
+    BuildContext context,
+    AelColorTokens colors,
+    List<Widget Function(BuildContext)> detailBuilders,
+  ) {
+    if (_subPageBuilder != null) {
+      return AelEmbeddedBackScope(
+        onBack: () => setState(() => _subPageBuilder = null),
+        child: MediaQuery.removePadding(
+          context: context,
+          removeTop: true,
+          child: KeyedSubtree(
+            key: ValueKey('option-subpage-$_subPageVersion'),
+            child: _subPageBuilder!(context),
+          ),
+        ),
+      );
+    }
+    final idx = _selectedCategory.clamp(0, detailBuilders.length - 1);
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(
+        AelSpacing.pageHorizontal,
+        AelSpacing.sm,
+        AelSpacing.pageHorizontal,
+        MediaQuery.paddingOf(context).bottom + 24,
+      ),
+      child: AelConstrainedWidth(
+        maxWidth: 760,
+        child: detailBuilders[idx](context),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = AelTheme.colorsOf(context);
 
-    return CupertinoPageScaffold(
-      backgroundColor: colors.pageBg,
+    return DecoratedBox(
+      decoration: BoxDecoration(color: colors.pageBg),
       child: SafeArea(
         bottom: false,
-        child: CustomScrollView(
-          slivers: [
-            const SliverToBoxAdapter(
-              child: AelLargeTitleBar(title: '设置', subtitle: '账号、外观、同步与工具配置'),
-            ),
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(
-                AelSpacing.pageHorizontal,
-                AelSpacing.sm,
-                AelSpacing.pageHorizontal,
-                MediaQuery.paddingOf(context).bottom + 24,
-              ),
-              sliver: SliverList.list(
-                children: [
-                  _buildScholarSection(context),
-                  const SizedBox(height: AelSpacing.sectionGap),
-                  _buildPlannerSection(context),
-                  const SizedBox(height: AelSpacing.sectionGap),
-                  _buildCalendarSection(context),
-                  const SizedBox(height: AelSpacing.sectionGap),
-                  _buildBackupSection(context),
-                  const SizedBox(height: AelSpacing.sectionGap),
-                  _buildToolsSection(context),
-                  const SizedBox(height: AelSpacing.sectionGap),
-                  _buildNetworkSection(context),
-                  const SizedBox(height: AelSpacing.sectionGap),
-                  const AppearanceSection(),
-                  const SizedBox(height: AelSpacing.sectionGap),
-                  _buildDisplaySection(context),
-                  const SizedBox(height: AelSpacing.sectionGap),
-                  _buildDiagnosticsSection(context),
-                  const SizedBox(height: AelSpacing.sectionGap),
-                  _buildAboutSection(context),
-                ],
-              ),
-            ),
-          ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = AelResponsive.isWideBody(constraints.maxWidth);
+            final categories =
+                <
+                  ({
+                    String title,
+                    IconData icon,
+                    Widget Function(BuildContext) builder,
+                  })
+                >[
+                  (
+                    title: '教务',
+                    icon: AelIcons.award,
+                    builder: (ctx) => _buildScholarSection(ctx, isWide: isWide),
+                  ),
+                  (
+                    title: '时间规划',
+                    icon: AelIcons.activity,
+                    builder: (ctx) => _buildPlannerSection(ctx, isWide: isWide),
+                  ),
+                  (
+                    title: '日程',
+                    icon: AelIcons.tabCalendar,
+                    builder: (ctx) => _buildCalendarSection(ctx),
+                  ),
+                  (
+                    title: '备份与恢复',
+                    icon: AelIcons.layers,
+                    builder: (ctx) => _buildBackupSection(ctx),
+                  ),
+                  (
+                    title: '工具',
+                    icon: AelIcons.qrCode,
+                    builder: (ctx) => _buildToolsSection(ctx, isWide: isWide),
+                  ),
+                  (
+                    title: '网络与环境',
+                    icon: AelIcons.wifi,
+                    builder: (ctx) => _buildNetworkSection(ctx, isWide: isWide),
+                  ),
+                  (
+                    title: '外观主题',
+                    icon: AelIcons.palette,
+                    builder: (_) => const AppearanceSection(),
+                  ),
+                  (
+                    title: '显示',
+                    icon: AelIcons.smartphone,
+                    builder: (ctx) => _buildDisplaySection(ctx),
+                  ),
+                  (
+                    title: '诊断与测试',
+                    icon: AelIcons.info,
+                    builder: (ctx) =>
+                        _buildDiagnosticsSection(ctx, isWide: isWide),
+                  ),
+                  (
+                    title: '关于',
+                    icon: AelIcons.info,
+                    builder: (ctx) => _buildAboutSection(ctx, isWide: isWide),
+                  ),
+                ];
+
+            if (isWide) {
+              return AelConstrainedWidth(
+                maxWidth: AelBreakpointSpec.maxWideContentWidth,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const AelLargeTitleBar(
+                      title: '设置',
+                      subtitle: '账号、外观、同步与工具配置',
+                    ),
+                    Expanded(
+                      child: AelTwoPane(
+                        masterFraction: 0.36,
+                        minMasterWidth: 280,
+                        maxMasterWidth: 380,
+                        master: SingleChildScrollView(
+                          padding: EdgeInsets.fromLTRB(
+                            AelSpacing.pageHorizontal,
+                            AelSpacing.sm,
+                            AelSpacing.pageHorizontal,
+                            MediaQuery.paddingOf(context).bottom + 24,
+                          ),
+                          child: AelSectionCard(
+                            padding: const EdgeInsets.all(10),
+                            child: Column(
+                              children: [
+                                for (int i = 0; i < categories.length; i++) ...[
+                                  if (i > 0) const SizedBox(height: 6),
+                                  DecoratedBox(
+                                    decoration: ShapeDecoration(
+                                      color: _selectedCategory == i
+                                          ? colors.primaryContainer.withValues(
+                                              alpha: 0.72,
+                                            )
+                                          : colors.tonalTileBg,
+                                      shape: AelShapes.squircle(
+                                        AelRadius.tile,
+                                        side: _selectedCategory == i
+                                            ? BorderSide(
+                                                color: colors.primary
+                                                    .withValues(alpha: 0.45),
+                                                width: 1,
+                                              )
+                                            : BorderSide.none,
+                                      ),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 4,
+                                      ),
+                                      child: AelListRow(
+                                        title: categories[i].title,
+                                        icon: categories[i].icon,
+                                        iconBgColor: _selectedCategory == i
+                                            ? colors.primary
+                                            : colors.cardBg,
+                                        iconColor: _selectedCategory == i
+                                            ? colors.onPrimary
+                                            : colors.textSecondary,
+                                        useTonalContainer: false,
+                                        showChevron: true,
+                                        onTap: () {
+                                          setState(() {
+                                            _selectedCategory = i;
+                                            _subPageBuilder = null;
+                                          });
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                        detail: _buildRightPane(
+                          context,
+                          colors,
+                          categories.map((c) => c.builder).toList(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return CustomScrollView(
+              slivers: [
+                const SliverToBoxAdapter(
+                  child: AelLargeTitleBar(
+                    title: '设置',
+                    subtitle: '账号、外观、同步与工具配置',
+                  ),
+                ),
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    AelSpacing.pageHorizontal,
+                    AelSpacing.sm,
+                    AelSpacing.pageHorizontal,
+                    MediaQuery.paddingOf(context).bottom + 24,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: AelConstrainedWidth(
+                      maxWidth: AelBreakpointSpec.maxDetailWidth,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (int i = 0; i < categories.length; i++) ...[
+                            if (i > 0)
+                              const SizedBox(height: AelSpacing.sectionGap),
+                            categories[i].builder(context),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildScholarSection(BuildContext context) {
+  Widget _buildScholarSection(BuildContext context, {bool isWide = false}) {
     return Obx(() {
       final colors = AelTheme.colorsOf(context);
       final isLoggedIn = _optionController.scholar.value.isLogan;
@@ -202,13 +406,11 @@ class OptionPage extends StatelessWidget {
               AelListRow(
                 title: '自定义课程代码映射',
                 icon: AelIcons.edit,
-                onTap: () async {
-                  Navigator.of(context, rootNavigator: true).push(
-                    CupertinoPageRoute(
-                      builder: (context) => CourseIdMappingEditPage(),
-                    ),
-                  );
-                },
+                onTap: () => _openSubPage(
+                  context,
+                  isWide,
+                  (_) => CourseIdMappingEditPage(),
+                ),
               ),
               const SizedBox(height: 6),
               Obx(
@@ -288,7 +490,7 @@ class OptionPage extends StatelessWidget {
     });
   }
 
-  Widget _buildPlannerSection(BuildContext context) {
+  Widget _buildPlannerSection(BuildContext context, {bool isWide = false}) {
     return AelSectionCard(
       title: '时间规划',
       icon: AelIcons.activity,
@@ -327,13 +529,8 @@ class OptionPage extends StatelessWidget {
                 '${_optionController.allowTimeLength} 个时段',
               ),
             ),
-            onTap: () async {
-              await Navigator.of(context, rootNavigator: true).push(
-                CupertinoPageRoute(
-                  builder: (context) => const AllowTimeEditPage(),
-                ),
-              );
-            },
+            onTap: () =>
+                _openSubPage(context, isWide, (_) => const AllowTimeEditPage()),
           ),
         ],
       ),
@@ -483,7 +680,7 @@ class OptionPage extends StatelessWidget {
     );
   }
 
-  Widget _buildToolsSection(BuildContext context) {
+  Widget _buildToolsSection(BuildContext context, {bool isWide = false}) {
     return AelSectionCard(
       title: '工具',
       icon: AelIcons.qrCode,
@@ -504,11 +701,8 @@ class OptionPage extends StatelessWidget {
             title: '校园卡账单与消费统计',
             subtitle: '按月查看流水、餐饮/商超/水电分类消费占比',
             icon: AelIcons.wallet,
-            onTap: () {
-              Navigator.of(context, rootNavigator: true).push(
-                CupertinoPageRoute(builder: (context) => const ECardBillPage()),
-              );
-            },
+            onTap: () =>
+                _openSubPage(context, isWide, (_) => const ECardBillPage()),
           ),
           const SizedBox(height: 6),
           Obx(() {
@@ -540,7 +734,7 @@ class OptionPage extends StatelessWidget {
     );
   }
 
-  Widget _buildNetworkSection(BuildContext context) {
+  Widget _buildNetworkSection(BuildContext context, {bool isWide = false}) {
     return AelSectionCard(
       title: '网络与环境',
       icon: AelIcons.wifi,
@@ -548,11 +742,8 @@ class OptionPage extends StatelessWidget {
         title: '网络代理与校内直连',
         subtitle: '解决挂节点无法访问浙大、分流规则与连通性体检',
         icon: AelIcons.globe,
-        onTap: () async {
-          Navigator.of(context, rootNavigator: true).push(
-            CupertinoPageRoute(builder: (context) => const NetworkProxyPage()),
-          );
-        },
+        onTap: () =>
+            _openSubPage(context, isWide, (_) => const NetworkProxyPage()),
       ),
     );
   }
@@ -631,7 +822,7 @@ class OptionPage extends StatelessWidget {
     );
   }
 
-  Widget _buildDiagnosticsSection(BuildContext context) {
+  Widget _buildDiagnosticsSection(BuildContext context, {bool isWide = false}) {
     return AelSectionCard(
       title: '诊断与测试',
       icon: AelIcons.info,
@@ -639,20 +830,16 @@ class OptionPage extends StatelessWidget {
         title: '测试日志',
         subtitle: '查看、复制或导出脱敏 TXT',
         icon: AelIcons.file,
-        onTap: () {
-          Navigator.of(context, rootNavigator: true).push(
-            CupertinoPageRoute(
-              builder: (context) => DiagnosticLogPage(
-                version: _optionController.celechronVersion,
-              ),
-            ),
-          );
-        },
+        onTap: () => _openSubPage(
+          context,
+          isWide,
+          (_) => DiagnosticLogPage(version: _optionController.celechronVersion),
+        ),
       ),
     );
   }
 
-  Widget _buildAboutSection(BuildContext context) {
+  Widget _buildAboutSection(BuildContext context, {bool isWide = false}) {
     return AelSectionCard(
       title: '关于',
       icon: AelIcons.info,
@@ -689,46 +876,39 @@ class OptionPage extends StatelessWidget {
               context,
               _optionController.celechronVersion,
             ),
-            onTap: () async {
-              Navigator.of(context, rootNavigator: true).push(
-                CupertinoPageRoute(
-                  builder: (context) =>
-                      CreditsPage(version: _optionController.celechronVersion),
-                ),
-              );
-            },
+            onTap: () => _openSubPage(
+              context,
+              isWide,
+              (_) => CreditsPage(version: _optionController.celechronVersion),
+            ),
           ),
           const SizedBox(height: 6),
           AelListRow(
             title: '隐私政策',
             icon: AelIcons.shield,
-            onTap: () async {
-              Navigator.of(context, rootNavigator: true).push(
-                CupertinoPageRoute(
-                  builder: (context) => const LegalDocumentPage(
-                    title: '隐私政策',
-                    assetPath: 'assets/legal/privacy_policy.txt',
-                    onlineUrl: privacyPolicyUrl,
-                  ),
-                ),
-              );
-            },
+            onTap: () => _openSubPage(
+              context,
+              isWide,
+              (_) => const LegalDocumentPage(
+                title: '隐私政策',
+                assetPath: 'assets/legal/privacy_policy.txt',
+                onlineUrl: privacyPolicyUrl,
+              ),
+            ),
           ),
           const SizedBox(height: 6),
           AelListRow(
             title: '用户协议',
             icon: AelIcons.file,
-            onTap: () async {
-              Navigator.of(context, rootNavigator: true).push(
-                CupertinoPageRoute(
-                  builder: (context) => const LegalDocumentPage(
-                    title: '用户协议',
-                    assetPath: 'assets/legal/user_agreement.txt',
-                    onlineUrl: userAgreementUrl,
-                  ),
-                ),
-              );
-            },
+            onTap: () => _openSubPage(
+              context,
+              isWide,
+              (_) => const LegalDocumentPage(
+                title: '用户协议',
+                assetPath: 'assets/legal/user_agreement.txt',
+                onlineUrl: userAgreementUrl,
+              ),
+            ),
           ),
           const SizedBox(height: 6),
           AelListRow(
@@ -741,13 +921,8 @@ class OptionPage extends StatelessWidget {
           AelListRow(
             title: '开源许可证',
             icon: AelIcons.book,
-            onTap: () async {
-              Navigator.of(context, rootNavigator: true).push(
-                CupertinoPageRoute(
-                  builder: (context) => const CustomLicensePage(),
-                ),
-              );
-            },
+            onTap: () =>
+                _openSubPage(context, isWide, (_) => const CustomLicensePage()),
           ),
           const SizedBox(height: 6),
           AelListRow(

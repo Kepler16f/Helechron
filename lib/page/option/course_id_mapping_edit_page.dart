@@ -138,67 +138,70 @@ class CourseIdMappingEditPage extends StatelessWidget {
                   vertical: AelSpacing.sm,
                 ),
                 sliver: SliverToBoxAdapter(
-                  child: AelSectionCard(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AelSpacing.lg,
-                      vertical: AelSpacing.xs,
-                    ),
-                    child: Column(
-                      children: [
-                        for (
-                          var index = 0;
-                          index < courseIdMappingList.length;
-                          index++
-                        ) ...[
-                          if (index > 0)
-                            Container(height: 0.5, color: colors.divider),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        courseIdMappingList[index].comment,
-                                        style: TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w600,
-                                          color: colors.textPrimary,
+                  child: AelConstrainedWidth(
+                    maxWidth: AelBreakpointSpec.maxDetailWidth,
+                    child: AelSectionCard(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AelSpacing.lg,
+                        vertical: AelSpacing.xs,
+                      ),
+                      child: Column(
+                        children: [
+                          for (
+                            var index = 0;
+                            index < courseIdMappingList.length;
+                            index++
+                          ) ...[
+                            if (index > 0)
+                              Container(height: 0.5, color: colors.divider),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          courseIdMappingList[index].comment,
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w600,
+                                            color: colors.textPrimary,
+                                          ),
                                         ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        '${courseIdMappingList[index].id1} <-> ${courseIdMappingList[index].id2}',
-                                        style: TextStyle(
-                                          fontSize: 12.5,
-                                          color: colors.textSecondary,
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          '${courseIdMappingList[index].id1} <-> ${courseIdMappingList[index].id2}',
+                                          style: TextStyle(
+                                            fontSize: 12.5,
+                                            color: colors.textSecondary,
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                AelCircleIconButton(
-                                  icon: AelIcons.delete,
-                                  size: 32,
-                                  iconSize: 15,
-                                  backgroundColor: colors.errorContainer,
-                                  iconColor: colors.onErrorContainer,
-                                  elevated: false,
-                                  tooltip: '删除映射',
-                                  onPressed: () async {
-                                    courseIdMappingList.removeAt(index);
-                                    await scholar.value.recalculateGpa();
-                                    scholar.refresh();
-                                  },
-                                ),
-                              ],
+                                  AelCircleIconButton(
+                                    icon: AelIcons.delete,
+                                    size: 32,
+                                    iconSize: 15,
+                                    backgroundColor: colors.errorContainer,
+                                    iconColor: colors.onErrorContainer,
+                                    elevated: false,
+                                    tooltip: '删除映射',
+                                    onPressed: () async {
+                                      courseIdMappingList.removeAt(index);
+                                      await scholar.value.recalculateGpa();
+                                      scholar.refresh();
+                                    },
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -210,20 +213,23 @@ class CourseIdMappingEditPage extends StatelessWidget {
                 vertical: AelSpacing.sm,
               ),
               sliver: SliverToBoxAdapter(
-                child: AelButton(
-                  expanded: true,
-                  variant: AelButtonVariant.tonal,
-                  icon: AelIcons.add,
-                  label: '添加新的映射关系',
-                  onPressed: () {
-                    showAelBottomSheet<void>(
-                      context: context,
-                      title: '添加新的映射关系',
-                      showCloseButton: true,
-                      builder: (_) =>
-                          CourseIdMappingEditForm(title: '添加新的映射关系'),
-                    );
-                  },
+                child: AelConstrainedWidth(
+                  maxWidth: AelBreakpointSpec.maxDetailWidth,
+                  child: AelButton(
+                    expanded: true,
+                    variant: AelButtonVariant.tonal,
+                    icon: AelIcons.add,
+                    label: '添加新的映射关系',
+                    onPressed: () {
+                      showAelBottomSheet<void>(
+                        context: context,
+                        title: '添加新的映射关系',
+                        showCloseButton: true,
+                        builder: (_) =>
+                            CourseIdMappingEditForm(title: '添加新的映射关系'),
+                      );
+                    },
+                  ),
                 ),
               ),
             ),

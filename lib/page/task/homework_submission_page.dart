@@ -35,6 +35,7 @@ class HomeworkSubmissionPage extends StatefulWidget {
   final String? courseId;
   final String? title;
   final String? submitUrl;
+  final bool embedded;
 
   const HomeworkSubmissionPage({
     super.key,
@@ -44,6 +45,7 @@ class HomeworkSubmissionPage extends StatefulWidget {
     this.courseId,
     this.title,
     this.submitUrl,
+    this.embedded = false,
   });
 
   /// 计算多附件上传阶段的归一化按钮进度值（0.04 ~ 0.90 留给上传，0.94+ 留给最终提交）
@@ -1121,6 +1123,7 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
     return CupertinoPageScaffold(
       backgroundColor: colors.pageBg,
       child: SafeArea(
+        top: !widget.embedded,
         bottom: false,
         child: Column(
           children: [
@@ -1128,14 +1131,17 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
               child: Row(
                 children: [
-                  AelCircleIconButton(
-                    icon: AelIcons.back,
-                    size: 36,
-                    iconSize: 18,
-                    tooltip: '返回',
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                  const SizedBox(width: 10),
+                  if (!widget.embedded) ...[
+                    AelCircleIconButton(
+                      icon: AelIcons.back,
+                      size: 36,
+                      iconSize: 18,
+                      tooltip: '返回',
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                    const SizedBox(width: 10),
+                  ] else
+                    const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       navTitle,
@@ -1194,30 +1200,33 @@ class _HomeworkSubmissionPageState extends State<HomeworkSubmissionPage> {
                         16,
                         MediaQuery.paddingOf(context).bottom + 24,
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _buildHeaderCard(colors),
-                          const SizedBox(height: 12),
-                          if (_errorMessage != null) ...[
-                            _buildErrorCard(colors),
+                      child: AelConstrainedWidth(
+                        maxWidth: AelBreakpointSpec.maxDetailWidth,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildHeaderCard(colors),
                             const SizedBox(height: 12),
-                          ],
-                          if (_isQuiz) ...[
-                            _buildQuizRuleCard(colors),
+                            if (_errorMessage != null) ...[
+                              _buildErrorCard(colors),
+                              const SizedBox(height: 12),
+                            ],
+                            if (_isQuiz) ...[
+                              _buildQuizRuleCard(colors),
+                              const SizedBox(height: 12),
+                            ],
+                            _buildRequirementsCard(colors),
                             const SizedBox(height: 12),
+                            if (_teacherUploads.isNotEmpty) ...[
+                              _buildTeacherUploadsCard(colors),
+                              const SizedBox(height: 12),
+                            ],
+                            if (_isQuiz)
+                              _buildQuizConsoleSection(colors)
+                            else
+                              _buildSubmissionCard(colors),
                           ],
-                          _buildRequirementsCard(colors),
-                          const SizedBox(height: 12),
-                          if (_teacherUploads.isNotEmpty) ...[
-                            _buildTeacherUploadsCard(colors),
-                            const SizedBox(height: 12),
-                          ],
-                          if (_isQuiz)
-                            _buildQuizConsoleSection(colors)
-                          else
-                            _buildSubmissionCard(colors),
-                        ],
+                        ),
                       ),
                     ),
             ),

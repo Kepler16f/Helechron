@@ -475,86 +475,163 @@ class _FlowPageState extends State<FlowPage> {
       decoration: BoxDecoration(color: colors.pageBg),
       child: SafeArea(
         bottom: false,
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: AelLargeTitleBar(
-                title: '接下来',
-                actions: [
-                  AelCircleIconButton(
-                    icon: AelIcons.refresh,
-                    tooltip: '开始规划',
-                    onPressed: () async {
-                      await newFlowList(context);
-                      _flowController.flowList.refresh();
-                    },
-                  ),
-                ],
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: ExamWeekBanner(now: _flowController.timeNow),
-            ),
-            Obx(() {
-              final list = _flowController.flowList;
-              if (list.isEmpty) {
-                return SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AelSpacing.pageHorizontal,
-                      vertical: AelSpacing.xl,
-                    ),
-                    child: AelEmptyState(
-                      icon: AelIcons.sparkles,
-                      title: '今日无事可做',
-                      subtitle: '当前没有即将进行的课程或待办安排',
-                      actionLabel: '开始规划',
-                      onAction: () async {
-                        await newFlowList(context);
-                        _flowController.flowList.refresh();
-                      },
-                    ),
-                  ),
-                );
-              }
-
-              final hero = list.first;
-              final heroTitle = hero.hasStarted ? '正在进行' : '即将开始';
-              final activeExtras = <Period>[];
-              final upcoming = <Period>[];
-              for (int i = 1; i < list.length; i++) {
-                if (list[i].hasStarted) {
-                  activeExtras.add(list[i]);
-                } else {
-                  upcoming.add(list[i]);
-                }
-              }
-
-              return SliverPadding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AelSpacing.pageHorizontal,
-                ),
-                sliver: SliverList(
-                  delegate: SliverChildListDelegate([
-                    _buildHeroPeriodCard(context, hero, heroTitle),
-                    for (final p in activeExtras) ...[
-                      const SizedBox(height: AelSpacing.sectionGap),
-                      _buildHeroPeriodCard(context, p, '同时进行'),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = AelResponsive.isWideBody(constraints.maxWidth);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AelConstrainedWidth(
+                  maxWidth: AelBreakpointSpec.maxWideContentWidth,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      AelLargeTitleBar(
+                        title: '接下来',
+                        actions: [
+                          AelCircleIconButton(
+                            icon: AelIcons.refresh,
+                            tooltip: '开始规划',
+                            onPressed: () async {
+                              await newFlowList(context);
+                              _flowController.flowList.refresh();
+                            },
+                          ),
+                        ],
+                      ),
+                      ExamWeekBanner(now: _flowController.timeNow),
                     ],
-                    if (upcoming.isNotEmpty) ...[
-                      const SizedBox(height: AelSpacing.sectionGap),
-                      _buildUpcomingSection(context, upcoming),
-                    ],
-                  ]),
+                  ),
                 ),
-              );
-            }),
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: MediaQuery.paddingOf(context).bottom + 20,
-              ),
-            ),
-          ],
+                Expanded(
+                  child: Obx(() {
+                    final list = _flowController.flowList;
+                    if (list.isEmpty) {
+                      return SingleChildScrollView(
+                        padding: EdgeInsets.fromLTRB(
+                          AelSpacing.pageHorizontal,
+                          AelSpacing.xl,
+                          AelSpacing.pageHorizontal,
+                          MediaQuery.paddingOf(context).bottom + 20,
+                        ),
+                        child: AelConstrainedWidth(
+                          maxWidth: 520,
+                          child: AelEmptyState(
+                            icon: AelIcons.sparkles,
+                            title: '今日无事可做',
+                            subtitle: '当前没有即将进行的课程或待办安排',
+                            actionLabel: '开始规划',
+                            onAction: () async {
+                              await newFlowList(context);
+                              _flowController.flowList.refresh();
+                            },
+                          ),
+                        ),
+                      );
+                    }
+
+                    final hero = list.first;
+                    final heroTitle = hero.hasStarted ? '正在进行' : '即将开始';
+                    final activeExtras = <Period>[];
+                    final upcoming = <Period>[];
+                    for (int i = 1; i < list.length; i++) {
+                      if (list[i].hasStarted) {
+                        activeExtras.add(list[i]);
+                      } else {
+                        upcoming.add(list[i]);
+                      }
+                    }
+
+                    if (isWide) {
+                      return AelConstrainedWidth(
+                        maxWidth: AelBreakpointSpec.maxWideContentWidth,
+                        child: AelTwoPane(
+                          masterFraction: 0.46,
+                          minMasterWidth: 340,
+                          maxMasterWidth: 520,
+                          master: SingleChildScrollView(
+                            padding: EdgeInsets.fromLTRB(
+                              AelSpacing.pageHorizontal,
+                              0,
+                              AelSpacing.pageHorizontal,
+                              MediaQuery.paddingOf(context).bottom + 20,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _buildHeroPeriodCard(context, hero, heroTitle),
+                                for (final p in activeExtras) ...[
+                                  const SizedBox(height: AelSpacing.sectionGap),
+                                  _buildHeroPeriodCard(context, p, '同时进行'),
+                                ],
+                              ],
+                            ),
+                          ),
+                          detail: SingleChildScrollView(
+                            padding: EdgeInsets.fromLTRB(
+                              AelSpacing.pageHorizontal,
+                              0,
+                              AelSpacing.pageHorizontal,
+                              MediaQuery.paddingOf(context).bottom + 20,
+                            ),
+                            child: upcoming.isNotEmpty
+                                ? _buildUpcomingSection(context, upcoming)
+                                : const AelEmptyState(
+                                    icon: AelIcons.tabCalendar,
+                                    title: '今日后续已清',
+                                    subtitle: '当前之后暂无其他日程与规划安排',
+                                  ),
+                          ),
+                        ),
+                      );
+                    }
+
+                    return CustomScrollView(
+                      slivers: [
+                        SliverPadding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AelSpacing.pageHorizontal,
+                          ),
+                          sliver: SliverToBoxAdapter(
+                            child: AelConstrainedWidth(
+                              maxWidth: AelBreakpointSpec.maxDetailWidth,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  _buildHeroPeriodCard(
+                                    context,
+                                    hero,
+                                    heroTitle,
+                                  ),
+                                  for (final p in activeExtras) ...[
+                                    const SizedBox(
+                                      height: AelSpacing.sectionGap,
+                                    ),
+                                    _buildHeroPeriodCard(context, p, '同时进行'),
+                                  ],
+                                  if (upcoming.isNotEmpty) ...[
+                                    const SizedBox(
+                                      height: AelSpacing.sectionGap,
+                                    ),
+                                    _buildUpcomingSection(context, upcoming),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        SliverToBoxAdapter(
+                          child: SizedBox(
+                            height: MediaQuery.paddingOf(context).bottom + 20,
+                          ),
+                        ),
+                      ],
+                    );
+                  }),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );

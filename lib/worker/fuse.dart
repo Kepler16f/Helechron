@@ -8,8 +8,8 @@ class Fuse {
   late DateTime lastUpdateTime;
 
   final bool isBeta = false;
-  final version = [0, 2, 0];
-  final build = 126;
+  final version = [0, 2, 1];
+  final build = 127;
   List<int>? remoteVersion;
   int? remoteBuild;
   bool hasNewVersion = false;
@@ -18,7 +18,7 @@ class Fuse {
   final DatabaseHelper _db = Get.find<DatabaseHelper>(tag: 'db');
 
   // 应用内展示文本（关于页/诊断日志/版权页均取此值）。
-  String get displayVersion => '0.2.0';
+  String get displayVersion => '0.2.1';
 
   Fuse() {
     lastUpdateTime = DateTime(2001, 1, 1);
