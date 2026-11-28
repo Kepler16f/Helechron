@@ -451,6 +451,30 @@ class MobileNativeService {
     }
   }
 
+  /// 调用 Android 原生 ACTION_SEND / ACTION_SEND_MULTIPLE 分享面板（含 ClipData 与 FileProvider 授权）
+  Future<bool> shareFiles(
+    List<String> filePaths, {
+    List<String>? mimeTypes,
+    String? subject,
+    String? text,
+  }) async {
+    if (!Platform.isAndroid || filePaths.isEmpty) return false;
+    try {
+      final result = await _widgetChannel.invokeMethod<bool>('shareFiles', {
+        'paths': filePaths,
+        'mimeTypes': mimeTypes ?? const <String>[],
+        'subject': subject ?? '',
+        'text': text ?? '',
+      });
+      return result ?? false;
+    } on MissingPluginException {
+      return false;
+    } catch (e) {
+      debugPrint('MobileNativeService shareFiles failed: $e');
+      return false;
+    }
+  }
+
   Future<bool> openInAppVideoPlayer({
     required String url,
     required String title,

@@ -607,6 +607,38 @@ class OhosNativeService {
     }
   }
 
+  /// 调用系统原生文件分享面板（Android 使用原生 FileProvider+ClipData ACTION_SEND，鸿蒙使用 @kit.ShareKit）
+  Future<bool> shareFiles(
+    List<String> filePaths, {
+    List<String>? mimeTypes,
+    String? subject,
+    String? text,
+  }) async {
+    if (filePaths.isEmpty) return false;
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.shareFiles(
+        filePaths,
+        mimeTypes: mimeTypes,
+        subject: subject,
+        text: text,
+      );
+    }
+    try {
+      final result = await _channel.invokeMethod<bool>('shareFiles', {
+        'paths': filePaths,
+        'mimeTypes': mimeTypes ?? const <String>[],
+        'subject': subject ?? '',
+        'text': text ?? '',
+      });
+      return result ?? false;
+    } on PlatformException catch (e) {
+      debugPrint('shareFiles failed: $e');
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
   /// 在应用内打开原生视频/直播播放器浮层（或鸿蒙内联上方卡片槽位）
   Future<bool> openInAppVideoPlayer({
     required String url,

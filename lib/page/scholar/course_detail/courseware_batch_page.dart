@@ -497,18 +497,22 @@ class _CoursewareBatchPageState extends State<CoursewareBatchPage> {
       entry,
       targetDir: pickedDir,
       customFileName: target.fileName,
-      showToast: true,
+      showToast: !share,
     );
     if (!mounted || result == null || !result.isSuccess) return;
 
-    if (share && result.shareFile != null) {
-      await FileDownloadShareHelper.shareFiles(
-        [result.shareFile!],
-        mimeTypes: [result.mimeType],
-        subject: result.fileName,
-      );
-    } else if (share) {
-      AppNotification.info('分享提示', '文件已保存，暂未能生成系统分享副本');
+    if (share) {
+      File? shareTarget = result.shareFile;
+      shareTarget ??= await _resolveExistingShareFile(entry);
+      if (shareTarget != null) {
+        await FileDownloadShareHelper.shareFiles(
+          [shareTarget],
+          mimeTypes: [result.mimeType],
+          subject: result.fileName,
+        );
+      } else {
+        AppNotification.info('分享提示', '文件已保存，暂未能生成系统分享副本');
+      }
     }
   }
 
@@ -578,6 +582,7 @@ class _CoursewareBatchPageState extends State<CoursewareBatchPage> {
           : '待下载 ${pendingDownload.length} 个课件附件，留空保留原文件名，或输入统一前缀',
       fileNamePlaceholder: isSingleTarget ? '请输入文件名' : '留空保留原文件名（可选前缀）',
       preserveExtension: isSingleTarget,
+      allowEmptyFileName: !isSingleTarget,
       confirmHint: shareAfter ? null : '仅下载保存，不会触发分享：',
     );
     if (saveChoice == null || !mounted) return;
@@ -619,8 +624,12 @@ class _CoursewareBatchPageState extends State<CoursewareBatchPage> {
         );
         if (result != null && result.isSuccess) {
           successCount++;
-          if (result.shareFile != null) {
-            shareFiles.add(result.shareFile!);
+          File? shareTarget = result.shareFile;
+          if (shareAfter && shareTarget == null) {
+            shareTarget = await _resolveExistingShareFile(entry);
+          }
+          if (shareTarget != null) {
+            shareFiles.add(shareTarget);
             shareMimes.add(result.mimeType);
           }
           if (mounted) {
@@ -641,18 +650,29 @@ class _CoursewareBatchPageState extends State<CoursewareBatchPage> {
       if (!mounted) return;
       if (_cancelRequested) {
         AppNotification.info('批量下载已停止', '已完成 $successCount 个，其余任务已取消');
-      } else if (failedCount == 0) {
-        AppNotification.success('批量下载完成', '成功保存 $successCount 个课件附件');
-      } else {
-        AppNotification.info('批量下载结束', '成功 $successCount 个，失败 $failedCount 个');
+      } else if (!shareAfter) {
+        if (failedCount == 0) {
+          AppNotification.success('批量下载完成', '成功保存 $successCount 个课件附件');
+        } else {
+          AppNotification.info(
+            '批量下载结束',
+            '成功 $successCount 个，失败 $failedCount 个',
+          );
+        }
+      } else if (failedCount > 0 && shareFiles.isEmpty) {
+        AppNotification.error('下载失败', '所选课件下载失败（$failedCount 个），未能发起分享');
       }
 
-      if (shareAfter && shareFiles.isNotEmpty) {
-        await FileDownloadShareHelper.shareFiles(
-          shareFiles,
-          mimeTypes: shareMimes,
-          subject: '${widget.course.name}_课程课件',
-        );
+      if (shareAfter) {
+        if (shareFiles.isNotEmpty) {
+          await FileDownloadShareHelper.shareFiles(
+            shareFiles,
+            mimeTypes: shareMimes,
+            subject: '${widget.course.name}_课程课件',
+          );
+        } else if (!_cancelRequested && failedCount == 0) {
+          AppNotification.info('分享提示', '课件已保存，但未能准备系统分享副本，请点击单条「分享」重试');
+        }
       }
     } finally {
       if (mounted) {

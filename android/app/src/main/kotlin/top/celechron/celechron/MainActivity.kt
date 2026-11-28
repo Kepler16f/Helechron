@@ -1,8 +1,10 @@
 package top.celechron.celechron
 
 import android.app.Activity
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -108,6 +110,15 @@ class MainActivity : FlutterActivity() {
                     val rawMime = call.argument<String>("mimeType") ?: ""
                     val title = call.argument<String>("title") ?: "选择打开方式"
                     result.success(openFileWithSystem(filePath, rawMime, title))
+                }
+                "shareFiles" -> {
+                    val paths = (call.argument<List<*>>("paths") ?: emptyList<Any>())
+                        .filterIsInstance<String>()
+                    val mimes = (call.argument<List<*>>("mimeTypes") ?: emptyList<Any>())
+                        .filterIsInstance<String>()
+                    val subject = call.argument<String>("subject") ?: ""
+                    val text = call.argument<String>("text") ?: ""
+                    result.success(shareFilesNative(paths, mimes, subject, text))
                 }
                 "openInAppVideoPlayer" -> {
                     val url = call.argument<String>("url") ?: ""
@@ -464,6 +475,128 @@ class MainActivity : FlutterActivity() {
             startActivity(chooser)
             true
         } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun reduceShareMimeType(mimes: List<String>): String {
+        val cleaned = mimes.map { it.trim() }.filter { it.isNotEmpty() }
+        if (cleaned.isEmpty()) return "*/*"
+        if (cleaned.size == 1) return cleaned.first()
+        var common = cleaned.first()
+        for (i in 1 until cleaned.size) {
+            if (common != cleaned[i]) {
+                val baseA = common.substringBefore('/', "")
+                val baseB = cleaned[i].substringBefore('/', "")
+                if (baseA.isNotEmpty() && baseA == baseB) {
+                    common = "$baseA/*"
+                } else {
+                    return "*/*"
+                }
+            }
+        }
+        return common
+    }
+
+    private fun resolveShareUriForFile(file: File): Uri {
+        val authority = "${context.packageName}.fileprovider"
+        return try {
+            androidx.core.content.FileProvider.getUriForFile(context, authority, file)
+        } catch (_: Exception) {
+            val cacheDir = File(context.cacheDir, "celechron_share_native")
+            if (!cacheDir.exists()) cacheDir.mkdirs()
+            val target = File(cacheDir, file.name)
+            if (file.canonicalPath != target.canonicalPath) {
+                file.copyTo(target, overwrite = true)
+            }
+            androidx.core.content.FileProvider.getUriForFile(context, authority, target)
+        }
+    }
+
+    private fun shareFilesNative(
+        paths: List<String>,
+        rawMimes: List<String>,
+        subject: String,
+        text: String
+    ): Boolean {
+        if (paths.isEmpty()) return false
+        return try {
+            val uris = ArrayList<Uri>()
+            val resolvedMimes = ArrayList<String>()
+            paths.forEachIndexed { idx, rawPath ->
+                val f = File(rawPath)
+                if (f.exists() && f.length() > 0) {
+                    uris.add(resolveShareUriForFile(f))
+                    val supplied = rawMimes.getOrNull(idx)?.trim().orEmpty()
+                    val mime = if (supplied.isNotEmpty()) {
+                        supplied
+                    } else {
+                        val ext = MimeTypeMap.getFileExtensionFromUrl(f.name)?.lowercase().orEmpty()
+                        if (ext.isNotEmpty()) {
+                            MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
+                                ?: "application/octet-stream"
+                        } else {
+                            "application/octet-stream"
+                        }
+                    }
+                    resolvedMimes.add(mime)
+                }
+            }
+            if (uris.isEmpty()) return false
+
+            val shareIntent = if (uris.size == 1) {
+                Intent(Intent.ACTION_SEND).apply {
+                    type = resolvedMimes.firstOrNull() ?: "*/*"
+                    putExtra(Intent.EXTRA_STREAM, uris.first())
+                    clipData = ClipData.newRawUri(subject.ifEmpty { "file" }, uris.first())
+                }
+            } else {
+                Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                    type = reduceShareMimeType(resolvedMimes)
+                    putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                    val clip = ClipData.newRawUri(subject.ifEmpty { "files" }, uris.first())
+                    for (i in 1 until uris.size) {
+                        clip.addItem(ClipData.Item(uris[i]))
+                    }
+                    clipData = clip
+                }
+            }
+
+            shareIntent.apply {
+                if (subject.isNotBlank()) {
+                    putExtra(Intent.EXTRA_SUBJECT, subject)
+                    putExtra(Intent.EXTRA_TITLE, subject)
+                }
+                if (text.isNotBlank()) {
+                    putExtra(Intent.EXTRA_TEXT, text)
+                }
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            val chooser = Intent.createChooser(
+                shareIntent,
+                subject.ifBlank { "分享文件" }
+            ).apply {
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            val resInfoList = packageManager.queryIntentActivities(
+                shareIntent,
+                PackageManager.MATCH_DEFAULT_ONLY
+            )
+            resInfoList.forEach { info ->
+                val pkg = info.activityInfo.packageName
+                uris.forEach { uri ->
+                    try {
+                        grantUriPermission(pkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+
+            startActivity(chooser)
+            true
+        } catch (_: Exception) {
             false
         }
     }

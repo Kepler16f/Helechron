@@ -4,6 +4,8 @@ import { Want, AbilityConstant, wantConstant } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { formBindingData, formProvider } from '@kit.FormKit';
 import { picker, fileIo, fileUri } from '@kit.CoreFileKit';
+import { systemShare } from '@kit.ShareKit';
+import { uniformTypeDescriptor as utd } from '@kit.ArkData';
 import { util } from '@kit.ArkTS';
 import notificationManager from '@ohos.notificationManager';
 import { calendarManager } from '@kit.CalendarKit';
@@ -664,6 +666,80 @@ export default class EntryAbility extends FlutterAbility {
     }
   }
 
+  /// 调用 HarmonyOS 原生 ShareKit 系统分享面板（支持单文件与多文件批量分享）
+  private async shareFiles(call: MethodCall, result: MethodResult): Promise<void> {
+    try {
+      const paths = (call.argument('paths') as Array<string>) || [];
+      const subject = ((call.argument('subject') as string) || '').trim();
+      if (!paths || paths.length === 0) {
+        result.success(false);
+        return;
+      }
+
+      let shareData: systemShare.SharedData | null = null;
+      let recordCount = 0;
+
+      for (const rawPath of paths) {
+        if (!rawPath || rawPath.length === 0) {
+          continue;
+        }
+        let uri = rawPath;
+        if (rawPath.indexOf('file://') !== 0) {
+          uri = rawPath.indexOf('/storage/Users/') === 0
+            ? `file://docs${rawPath}`
+            : fileUri.getUriFromPath(rawPath);
+        }
+        const slashIdx = rawPath.lastIndexOf('/');
+        const fileName = slashIdx >= 0 ? rawPath.substring(slashIdx + 1) : rawPath;
+        const dotIdx = fileName.lastIndexOf('.');
+        const ext = dotIdx >= 0 ? fileName.substring(dotIdx).toLowerCase() : '';
+
+        let utdTypeId: string = utd.UniformDataType.FILE;
+        if (ext.length > 1) {
+          try {
+            const detected = utd.getUniformDataTypeByFilenameExtension(ext);
+            if (detected && detected.length > 0 && detected.indexOf('flex.') !== 0) {
+              utdTypeId = detected;
+            }
+          } catch (utdErr) {
+            hilog.warn(DOMAIN, TAG, `shareFiles UTD lookup failed for ${ext}: ${JSON.stringify(utdErr)}`);
+            utdTypeId = utd.UniformDataType.FILE;
+          }
+        }
+
+        const record: systemShare.SharedRecord = {
+          utd: utdTypeId,
+          uri: uri,
+          title: fileName.length > 0 ? fileName : (subject.length > 0 ? subject : '课件文件')
+        };
+
+        if (shareData === null) {
+          shareData = new systemShare.SharedData(record);
+        } else {
+          shareData.addRecord(record);
+        }
+        recordCount++;
+      }
+
+      if (shareData === null || recordCount === 0) {
+        result.success(false);
+        return;
+      }
+
+      const controller = new systemShare.ShareController(shareData);
+      await controller.show(this.context, {
+        selectionMode: recordCount > 1
+          ? systemShare.SelectionMode.BATCH
+          : systemShare.SelectionMode.SINGLE,
+        previewMode: systemShare.SharePreviewMode.DETAIL
+      });
+      result.success(true);
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, `shareFiles failed: ${JSON.stringify(err)}`);
+      result.success(false);
+    }
+  }
+
   private inferMimeType(filePath: string): string {
     const lower = filePath.toLowerCase();
     if (lower.endsWith('.pdf')) return 'application/pdf';
@@ -845,6 +921,9 @@ export default class EntryAbility extends FlutterAbility {
         break;
       case 'openFileWithSystem':
         this.openFileWithSystem(call, result);
+        break;
+      case 'shareFiles':
+        this.shareFiles(call, result);
         break;
       case 'openInAppVideoPlayer':
         this.openInAppVideoPlayer(call, result);

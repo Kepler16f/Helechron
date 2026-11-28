@@ -12,6 +12,7 @@ import 'package:celechron/model/practice_score_item.dart';
 
 import 'period.dart';
 import 'grade.dart';
+import 'option.dart';
 import 'semester.dart';
 import 'todo.dart';
 import 'package:celechron/utils/gpa_helper.dart';
@@ -101,11 +102,9 @@ class Scholar {
 
   Semester get thisSemester {
     if (semesters.length > 1) {
-      if (semesters[1]
-          .periods
-          .last
-          .endTime
-          .isAfter(DateTime.now().subtract(const Duration(days: 14)))) {
+      if (semesters[1].periods.last.endTime.isAfter(
+        DateTime.now().subtract(const Duration(days: 14)),
+      )) {
         return semesters[1];
       } else {
         return semesters[0];
@@ -278,73 +277,78 @@ class Scholar {
       if (onFetchStatus != null && fetchLabels.isNotEmpty) {
         onFetchStatus([
           for (var label in fetchLabels)
-            ModuleFetchStatus(label, FetchModuleState.pending)
+            ModuleFetchStatus(label, FetchModuleState.pending),
         ]);
       }
       var wantProgress = useAsyncRefresh || onFetchStatus != null;
       return await _spider
               ?.getEverything(
-                  onProgress: wantProgress
-                      ? (partial) {
-                          if (useAsyncRefresh) {
-                            try {
-                              final emptyGuardMessages =
-                                  _applyFetchResult(partial, partial: true);
-                              // 空课表保护的降级提示写入「课表」槽位后，
-                              // 状态上报与“更新于”时间戳都按“课表未成功”处理
-                              _injectEmptyGuardMessages(
-                                  partial.item2, emptyGuardMessages);
-                              // 已成功板块立即打上“更新于”时间戳；
-                              // 未完成/失败的板块被 updateLastUpdateTime 的
-                              // 关键字守卫（“查询进行中”/“查询出错”）拦下
-                              if (partial.item1.every((e) => e == null)) {
-                                updateLastUpdateTime(partial.item2);
-                              }
-                              onPartialUpdate();
-                            } catch (e) {
-                              // 中间态合并失败不影响整体刷新，最终合并会兜底
-                              // ignore: avoid_print
-                              print('partial refresh error: $e');
+                onProgress: wantProgress
+                    ? (partial) {
+                        if (useAsyncRefresh) {
+                          try {
+                            final emptyGuardMessages = _applyFetchResult(
+                              partial,
+                              partial: true,
+                            );
+                            // 空课表保护的降级提示写入「课表」槽位后，
+                            // 状态上报与“更新于”时间戳都按“课表未成功”处理
+                            _injectEmptyGuardMessages(
+                              partial.item2,
+                              emptyGuardMessages,
+                            );
+                            // 已成功板块立即打上“更新于”时间戳；
+                            // 未完成/失败的板块被 updateLastUpdateTime 的
+                            // 关键字守卫（“查询进行中”/“查询出错”）拦下
+                            if (partial.item1.every((e) => e == null)) {
+                              updateLastUpdateTime(partial.item2);
                             }
+                            onPartialUpdate();
+                          } catch (e) {
+                            // 中间态合并失败不影响整体刷新，最终合并会兜底
+                            // ignore: avoid_print
+                            print('partial refresh error: $e');
                           }
-                          emitStatuses(partial.item2);
                         }
-                      : null)
+                        emitStatuses(partial.item2);
+                      }
+                    : null,
+              )
               .then((value) async {
-            final emptyGuardMessages = _applyFetchResult(value);
-            _injectEmptyGuardMessages(value.item2, emptyGuardMessages);
-            for (var e in value.item1) {
-              if (e != null) {
-                DiagnosticLogService.instance.record(
-                  level: CelechronLogLevel.warning,
-                  module: '登录',
-                  operation: 'result',
-                  message: e,
-                );
-              }
-            }
-            for (var e in value.item2) {
-              if (e != null) {
-                DiagnosticLogService.instance.record(
-                  level: isDegradedRefreshText(e)
-                      ? CelechronLogLevel.warning
-                      : CelechronLogLevel.error,
-                  module: '刷新聚合',
-                  operation: 'moduleResult',
-                  message: e,
-                );
-              }
-            }
-            if (value.item1.every((e) => e == null)) {
-              updateLastUpdateTime(value.item2);
-            }
+                final emptyGuardMessages = _applyFetchResult(value);
+                _injectEmptyGuardMessages(value.item2, emptyGuardMessages);
+                for (var e in value.item1) {
+                  if (e != null) {
+                    DiagnosticLogService.instance.record(
+                      level: CelechronLogLevel.warning,
+                      module: '登录',
+                      operation: 'result',
+                      message: e,
+                    );
+                  }
+                }
+                for (var e in value.item2) {
+                  if (e != null) {
+                    DiagnosticLogService.instance.record(
+                      level: isDegradedRefreshText(e)
+                          ? CelechronLogLevel.warning
+                          : CelechronLogLevel.error,
+                      module: '刷新聚合',
+                      operation: 'moduleResult',
+                      message: e,
+                    );
+                  }
+                }
+                if (value.item1.every((e) => e == null)) {
+                  updateLastUpdateTime(value.item2);
+                }
 
-            // 终态补发：最后完成的模块不会触发 onProgress，只能在这里定论
-            emitStatuses(value.item2);
+                // 终态补发：最后完成的模块不会触发 onProgress，只能在这里定论
+                emitStatuses(value.item2);
 
-            await _db?.setScholar(this);
-            return value.item2;
-          }) ??
+                await _db?.setScholar(this);
+                return value.item2;
+              }) ??
           ['未登录'];
     } on Object catch (error, stackTrace) {
       // 网络异常等情况下保留已有数据，不清空
@@ -361,14 +365,22 @@ class Scholar {
   // 空数据、有报错或尚未抓完的部分会被 setScholar 的守卫拦下，保留原值；
   // 实践学分成功与否要等全部抓完才能判定，中间态一律保持不变。
   // 返回空课表保护触发的降级提示（通常为空或一条），由调用方注入抓取错误列表。
-  List<String> _applyFetchResult(EverythingTuple value,
-      {bool partial = false}) {
+  List<String> _applyFetchResult(
+    EverythingTuple value, {
+    bool partial = false,
+  }) {
     final emptyGuardMessages = <String>[];
     final tempGrades = <String, List<Grade>>{};
     final courseIdMappingList =
-        Get.find<OptionController>(tag: 'optionController').courseIdMappingList;
+        Get.isRegistered<OptionController>(tag: 'optionController')
+        ? Get.find<OptionController>(
+            tag: 'optionController',
+          ).courseIdMappingList
+        : (Get.isRegistered<Option>(tag: 'option')
+              ? Get.find<Option>(tag: 'option').courseIdMappingList
+              : const <CourseIdMap>[]);
     final courseIdMappingMap = {
-      for (final mapping in courseIdMappingList) mapping.id1: mapping.id2
+      for (final mapping in courseIdMappingList) mapping.id1: mapping.id2,
     };
     for (final grade in value.item4) {
       try {
@@ -385,7 +397,8 @@ class Scholar {
       } on Object catch (error, stackTrace) {
         if (kDebugMode) {
           debugPrint(
-              '跳过无法归类的成绩 ${grade.id}：${error.runtimeType}: $error\n$stackTrace');
+            '跳过无法归类的成绩 ${grade.id}：${error.runtimeType}: $error\n$stackTrace',
+          );
         }
       }
     }
@@ -395,9 +408,16 @@ class Scholar {
       tempPracticeSnapshot = (_spider as UgrsSpider).practiceSnapshot;
     }
 
-    setScholar(value.item2, value.item3, tempGrades, value.item5, value.item6,
-        value.item7, tempPracticeSnapshot,
-        emptyGuardMessages: emptyGuardMessages);
+    setScholar(
+      value.item2,
+      value.item3,
+      tempGrades,
+      value.item5,
+      value.item6,
+      value.item7,
+      tempPracticeSnapshot,
+      emptyGuardMessages: emptyGuardMessages,
+    );
 
     // 保研成绩，只取第一次
     var netGrades = grades.values.map((e) => e.first);
@@ -444,14 +464,15 @@ class Scholar {
   }
 
   void setScholar(
-      List<String?> errorMessage,
-      List<Semester> tempSemesters,
-      Map<String, List<Grade>> tempGrades,
-      List<double> tempMajorGpaAndCredit,
-      Map<DateTime, String> tempSpecialDates,
-      List<Todo> tempTodos,
-      PracticeScoreSnapshot? tempPracticeSnapshot,
-      {List<String>? emptyGuardMessages}) {
+    List<String?> errorMessage,
+    List<Semester> tempSemesters,
+    Map<String, List<Grade>> tempGrades,
+    List<double> tempMajorGpaAndCredit,
+    Map<DateTime, String> tempSpecialDates,
+    List<Todo> tempTodos,
+    PracticeScoreSnapshot? tempPracticeSnapshot, {
+    List<String>? emptyGuardMessages,
+  }) {
     // 各模块独立降级：某一来源失败时保留该模块旧数据，不阻断其它成功结果。
     var errorItems = ["成绩", "主修", "课表", "作业", "实践"];
     var errorResult = [false, false, false, false, false];
@@ -477,12 +498,16 @@ class Scholar {
       majorGpaAndCredit = tempMajorGpaAndCredit;
     }
     if (errorResult[2] == false && tempSemesters.isNotEmpty) {
-      semesters = _guardSemestersAgainstEmpty(tempSemesters, emptyGuardMessages);
+      semesters = _guardSemestersAgainstEmpty(
+        tempSemesters,
+        emptyGuardMessages,
+      );
     } else if (tempSemesters.isNotEmpty) {
       // 降级刷新只合并可用片段，避免不完整新对象覆盖已有课表明细。
       for (final incoming in tempSemesters) {
-        final existingIndex =
-            semesters.indexWhere((semester) => semester.name == incoming.name);
+        final existingIndex = semesters.indexWhere(
+          (semester) => semester.name == incoming.name,
+        );
         if (existingIndex < 0) {
           semesters.add(incoming);
         } else {
@@ -535,7 +560,9 @@ class Scholar {
   /// 全部退课导致的合法清空极为罕见，宁可短暂显示旧课表也不能清空用户课表。
   /// 触发时向 [emptyGuardMessages] 写入降级文案，由刷新链路注入「课表」槽位。
   List<Semester> _guardSemestersAgainstEmpty(
-      List<Semester> incoming, List<String>? emptyGuardMessages) {
+    List<Semester> incoming,
+    List<String>? emptyGuardMessages,
+  ) {
     if (semesters.isEmpty) return incoming;
     var kept = 0;
     var restored = 0;
@@ -572,8 +599,9 @@ class Scholar {
       if (kept > 0) '$kept 个学期沿用本地课表',
       if (restored > 0) '$restored 个学期已从本地缓存补回',
     ];
-    emptyGuardMessages?.add(degradedRefreshText(
-        '课表：教务网未返回课程数据，为防清空已保留缓存（${parts.join('，')}）'));
+    emptyGuardMessages?.add(
+      degradedRefreshText('课表：教务网未返回课程数据，为防清空已保留缓存（${parts.join('，')}）'),
+    );
     guarded.sort((a, b) => b.name.compareTo(a.name));
     return guarded;
   }
@@ -599,8 +627,9 @@ class Scholar {
       'aboardGpa': aboardGpa,
       'credit': credit,
       'majorGpaAndCredit': majorGpaAndCredit,
-      'specialDates':
-          specialDates.map((k, v) => MapEntry(k.toIso8601String(), v)),
+      'specialDates': specialDates.map(
+        (k, v) => MapEntry(k.toIso8601String(), v),
+      ),
       'lastUpdateTimeGrade': lastUpdateTimeGrade.toIso8601String(),
       'lastUpdateTimeCourse': lastUpdateTimeCourse.toIso8601String(),
       'lastUpdateTimeHomework': lastUpdateTimeHomework.toIso8601String(),
@@ -609,8 +638,9 @@ class Scholar {
       'pt3': pt3,
       'pt4': pt4,
       'isPracticeScoresGet': isPracticeScoresGet,
-      'practiceScoreItems':
-          practiceScoreItems.map((item) => item.toJson()).toList(),
+      'practiceScoreItems': practiceScoreItems
+          .map((item) => item.toJson())
+          .toList(),
       'practiceDataSource': practiceDataSource.name,
       'practiceSummarySource': practiceSummarySource.name,
       'practiceUpdatedAt': practiceUpdatedAt?.toIso8601String(),
@@ -624,8 +654,10 @@ class Scholar {
   }
 
   Future<void> recalculateGpa() async {
-    grades =
-        grades.values.expand((e) => e).fold(<String, List<Grade>>{}, (p, e) {
+    grades = grades.values.expand((e) => e).fold(<String, List<Grade>>{}, (
+      p,
+      e,
+    ) {
       // 体育课
       var matchClass = RegExp(r'(\(.*\)-(.*?))-.*').firstMatch(e.id);
       var key = matchClass?.group(2) ?? e.id.substring(14, 22);
@@ -633,10 +665,15 @@ class Scholar {
         key = matchClass?.group(1) ?? e.id.substring(0, 22);
       }
       var courseIdMappingList =
-          Get.find<OptionController>(tag: 'optionController')
-              .courseIdMappingList;
+          Get.isRegistered<OptionController>(tag: 'optionController')
+          ? Get.find<OptionController>(
+              tag: 'optionController',
+            ).courseIdMappingList
+          : (Get.isRegistered<Option>(tag: 'option')
+                ? Get.find<Option>(tag: 'option').courseIdMappingList
+                : const <CourseIdMap>[]);
       var courseIdMappingMap = {
-        for (var e in courseIdMappingList) e.id1: e.id2
+        for (var e in courseIdMappingList) e.id1: e.id2,
       };
       if (courseIdMappingMap.containsKey(key)) {
         key = courseIdMappingMap[key]!;
@@ -780,8 +817,9 @@ class Scholar {
     practiceUpdatedAt = asDateTime(json['practiceUpdatedAt'])?.toLocal();
     practiceDetailsUpdatedAt =
         asDateTime(json['practiceDetailsUpdatedAt'])?.toLocal() ??
-            practiceUpdatedAt;
-    practiceDetailsAvailable = asBool(json['practiceDetailsAvailable']) ??
+        practiceUpdatedAt;
+    practiceDetailsAvailable =
+        asBool(json['practiceDetailsAvailable']) ??
         (hasPracticeItemsField && practiceScoreItems.isNotEmpty);
     practiceDetailsStale = asBool(json['practiceDetailsStale']) ?? false;
     practiceSummaryStale =
@@ -835,8 +873,10 @@ class Scholar {
     if (_spider is UgrsSpider) {
       final spider = _spider as UgrsSpider;
       try {
-        final res = await spider.zdbk
-            .getStudentMajor(spider.httpClient, studentId: username);
+        final res = await spider.zdbk.getStudentMajor(
+          spider.httpClient,
+          studentId: username,
+        );
         if (res.item2 != null && res.item2!.trim().isNotEmpty) {
           return res.item2!.trim();
         }
@@ -849,8 +889,10 @@ class Scholar {
       // 若初次未能获得专业，尝试全量重登一次教务网再试
       try {
         await _loginInternal();
-        final retryRes = await spider.zdbk
-            .getStudentMajor(spider.httpClient, studentId: username);
+        final retryRes = await spider.zdbk.getStudentMajor(
+          spider.httpClient,
+          studentId: username,
+        );
         if (retryRes.item2 != null && retryRes.item2!.trim().isNotEmpty) {
           return retryRes.item2!.trim();
         }
@@ -864,8 +906,10 @@ class Scholar {
   }
 
   /// 依据专业名称从教务网培养方案管理系统（pyfagl）拉取官方培养方案与学分要求
-  Future<TrainingPlanInfo?> fetchTrainingPlan(String majorName,
-      {String? grade}) async {
+  Future<TrainingPlanInfo?> fetchTrainingPlan(
+    String majorName, {
+    String? grade,
+  }) async {
     final ok = await ensureSession();
     if (!ok) return null;
     if (_spider is UgrsSpider) {
@@ -908,8 +952,9 @@ class Scholar {
       final cached = _db?.getCachedWebPage('zdbk_student_info');
       if (cached != null && cached.trim().startsWith('{')) {
         try {
-          final parsed =
-              StudentProfile.fromJson(jsonDecode(cached) as Map<String, dynamic>);
+          final parsed = StudentProfile.fromJson(
+            jsonDecode(cached) as Map<String, dynamic>,
+          );
           if (!parsed.isEmpty) return parsed;
         } catch (_) {}
       }
@@ -990,7 +1035,10 @@ class Scholar {
         );
         final rawList = res.item2;
         if (rawList.isNotEmpty) {
-          return Tuple(null, rawList.map((m) => PlanSummary.fromJson(m)).toList());
+          return Tuple(
+            null,
+            rawList.map((m) => PlanSummary.fromJson(m)).toList(),
+          );
         }
         final cached = parseCachedCatalog();
         final errText = res.item1 != null
@@ -1040,7 +1088,9 @@ class Scholar {
   }
 
   /// 获取培养方案课程明细（best-effort）
-  Future<List<Map<String, dynamic>>> fetchPlanCourseTable(PlanSummary plan) async {
+  Future<List<Map<String, dynamic>>> fetchPlanCourseTable(
+    PlanSummary plan,
+  ) async {
     final ok = await ensureSession();
     if (!ok || _spider is! UgrsSpider) return const [];
     final spider = _spider as UgrsSpider;
@@ -1081,4 +1131,3 @@ class Scholar {
     return summary != null || snapshot.detailsAvailable;
   }
 }
-

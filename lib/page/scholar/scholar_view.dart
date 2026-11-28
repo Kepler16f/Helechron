@@ -12,7 +12,7 @@ import 'package:celechron/design/rolling_shimmer_text.dart';
 import 'package:celechron/design/theme/ael_theme.dart';
 import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/http/zjuServices/exceptions.dart';
-import 'package:celechron/page/option/option_controller.dart';
+import 'package:celechron/model/option.dart';
 import 'package:celechron/page/scholar/todo/todo_card.dart';
 import 'package:celechron/page/search/search_view.dart';
 import 'package:celechron/utils/platform_features.dart';
@@ -119,13 +119,13 @@ class ScholarPage extends StatelessWidget {
 
   Widget _buildGradeBrief(BuildContext context) {
     final colors = AelTheme.colorsOf(context);
-    final optionController = Get.find<OptionController>(
-      tag: 'optionController',
-    );
+    final option = Get.isRegistered<Option>(tag: 'option')
+        ? Get.find<Option>(tag: 'option')
+        : null;
 
     String maskGPA(String s) {
       // 绩点隐藏功能
-      if (!optionController.hideHomeGpa) return s;
+      if (!(option?.hideHomeGpa.value ?? false)) return s;
       return s.replaceAll('.', '').replaceAll(RegExp(r'[\d.]'), '*');
     }
 

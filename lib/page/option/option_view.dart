@@ -33,10 +33,10 @@ class OptionPage extends StatefulWidget {
 }
 
 class _OptionPageState extends State<OptionPage> {
-  final _optionController = Get.put(
-    OptionController(),
-    tag: 'optionController',
-  );
+  final _optionController =
+      Get.isRegistered<OptionController>(tag: 'optionController')
+      ? Get.find<OptionController>(tag: 'optionController')
+      : Get.put(OptionController(), tag: 'optionController');
   int _selectedCategory = 0;
   WidgetBuilder? _subPageBuilder;
   int _subPageVersion = 0;

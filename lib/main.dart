@@ -15,6 +15,7 @@ import 'package:celechron/model/option.dart';
 import 'package:celechron/page/consent_page.dart';
 import 'package:celechron/page/home_page.dart';
 import 'package:celechron/page/option/ecard_pay_page.dart';
+import 'package:celechron/page/option/option_controller.dart';
 import 'package:celechron/services/consent_store.dart';
 import 'package:celechron/services/diagnostic_log_service.dart';
 import 'package:celechron/services/refresh_coordinator.dart';
@@ -85,6 +86,7 @@ Future<void> _bootstrap() async {
   }
 
   Get.put(db.getFuse().obs, tag: 'fuse');
+  Get.put(OptionController(), tag: 'optionController');
 
   runApp(const CelechronApp());
 

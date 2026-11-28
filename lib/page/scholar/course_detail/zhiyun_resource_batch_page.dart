@@ -613,7 +613,7 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
       lesson,
       targetDir: pickedDir,
       customFileName: target.fileName,
-      showToast: true,
+      showToast: !share,
     );
     if (!mounted || result == null || !result.isSuccess) return;
 

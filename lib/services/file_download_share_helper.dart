@@ -88,15 +88,18 @@ class FileDownloadShareHelper {
     }
     if (lower.endsWith('.zip')) return 'application/zip';
     if (lower.endsWith('.pdf')) return 'application/pdf';
-    if (lower.endsWith('.ppt') || lower.endsWith('.pptx')) {
-      return 'application/vnd.ms-powerpoint';
+    if (lower.endsWith('.pptx')) {
+      return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
     }
-    if (lower.endsWith('.doc') || lower.endsWith('.docx')) {
-      return 'application/msword';
+    if (lower.endsWith('.ppt')) return 'application/vnd.ms-powerpoint';
+    if (lower.endsWith('.docx')) {
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
     }
-    if (lower.endsWith('.xls') || lower.endsWith('.xlsx')) {
-      return 'application/vnd.ms-excel';
+    if (lower.endsWith('.doc')) return 'application/msword';
+    if (lower.endsWith('.xlsx')) {
+      return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     }
+    if (lower.endsWith('.xls')) return 'application/vnd.ms-excel';
     if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
       return 'image/jpeg';
     }
@@ -171,6 +174,7 @@ class FileDownloadShareHelper {
     String? description,
     String fileNamePlaceholder = '请输入文件名',
     bool preserveExtension = true,
+    bool allowEmptyFileName = false,
     String? confirmHint,
   }) async {
     final fallbackDir = (currentDir != null && currentDir.trim().isNotEmpty)
@@ -178,7 +182,9 @@ class FileDownloadShareHelper {
         : await resolveDefaultSaveDir();
     if (!context.mounted) return null;
 
-    final safeDefault = sanitizeFileName(defaultFileName);
+    final safeDefault = (allowEmptyFileName && defaultFileName.trim().isEmpty)
+        ? ''
+        : sanitizeFileName(defaultFileName);
     final nameCtrl = TextEditingController(text: safeDefault);
 
     final choice = await showAelDialog<String>(
@@ -225,11 +231,13 @@ class FileDownloadShareHelper {
       ],
     );
 
-    final finalFileName = resolveFinalFileName(
-      nameCtrl.text,
-      defaultFileName: safeDefault,
-      preserveExtension: preserveExtension,
-    );
+    final finalFileName = (allowEmptyFileName && nameCtrl.text.trim().isEmpty)
+        ? ''
+        : resolveFinalFileName(
+            nameCtrl.text,
+            defaultFileName: safeDefault,
+            preserveExtension: preserveExtension,
+          );
     Future<void>.delayed(const Duration(milliseconds: 400), nameCtrl.dispose);
 
     if (choice == null) return null;
@@ -279,6 +287,9 @@ class FileDownloadShareHelper {
       await _pruneOldShareFiles(shareDir);
       final target = File('${shareDir.path}/$safeName');
       if (sourceFile != null && await sourceFile.exists()) {
+        if (sourceFile.absolute.path == target.absolute.path) {
+          return target;
+        }
         await sourceFile.copy(target.path);
         return target;
       }
@@ -554,6 +565,23 @@ class FileDownloadShareHelper {
     }
   }
 
+  static Rect? _resolveShareOrigin() {
+    try {
+      final ctx = Get.context;
+      if (ctx != null) {
+        final size = MediaQuery.maybeSizeOf(ctx);
+        if (size != null && size.width > 0 && size.height > 0) {
+          return Rect.fromCenter(
+            center: Offset(size.width / 2, size.height / 2),
+            width: 2,
+            height: 2,
+          );
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
   /// 调用系统原生分享（单文件或多文件）
   static Future<bool> shareFiles(
     List<File> files, {
@@ -561,6 +589,8 @@ class FileDownloadShareHelper {
     String? subject,
     String? text,
   }) async {
+    final existingFiles = <File>[];
+    final existingMimes = <String>[];
     final existing = <XFile>[];
     for (var i = 0; i < files.length; i++) {
       final f = files[i];
@@ -568,6 +598,8 @@ class FileDownloadShareHelper {
         final mime = (mimeTypes != null && i < mimeTypes.length)
             ? mimeTypes[i]
             : inferMimeType(f.path);
+        existingFiles.add(f);
+        existingMimes.add(mime);
         existing.add(XFile(f.path, mimeType: mime));
       }
     }
@@ -576,14 +608,59 @@ class FileDownloadShareHelper {
       return false;
     }
 
-    try {
-      await Share.shareXFiles(existing, subject: subject, text: text);
+    final normalizedSubject = (subject != null && subject.trim().isNotEmpty)
+        ? subject.trim()
+        : null;
+    final normalizedText = (text != null && text.trim().isNotEmpty)
+        ? text.trim()
+        : null;
+
+    // Android / HarmonyOS 优先使用原生 FileProvider+ClipData / @kit.ShareKit 分享通道，
+    // 解决 share_plus 在部分机型及二进制课件 MIME 下未拉起系统分享面板的问题。
+    final nativeShared = await OhosNativeService.instance.shareFiles(
+      existingFiles.map((f) => f.path).toList(),
+      mimeTypes: existingMimes,
+      subject: normalizedSubject,
+      text: normalizedText,
+    );
+    if (nativeShared) {
       return true;
+    }
+
+    try {
+      final res = await Share.shareXFiles(
+        existing,
+        subject: normalizedSubject,
+        text: normalizedText,
+        sharePositionOrigin: _resolveShareOrigin(),
+      );
+      if (res.status != ShareResultStatus.unavailable) {
+        return true;
+      }
     } catch (e) {
       debugPrint('[FileDownloadShareHelper] shareFiles error: $e');
+      if (existingFiles.length == 1) {
+        final opened = await OhosNativeService.instance.openFileWithSystem(
+          existingFiles.first.path,
+          mimeType: existingMimes.first,
+          title: normalizedSubject ?? '选择打开或分享方式',
+        );
+        if (opened) return true;
+      }
       AppNotification.error('分享失败', '$e');
       return false;
     }
+
+    if (existingFiles.length == 1) {
+      final opened = await OhosNativeService.instance.openFileWithSystem(
+        existingFiles.first.path,
+        mimeType: existingMimes.first,
+        title: normalizedSubject ?? '选择打开或分享方式',
+      );
+      if (opened) return true;
+    }
+    AppNotification.info('分享提示', '当前设备暂未能拉起系统分享面板，文件已保存至本地目录');
+    return false;
   }
 
   /// 分享已保存的文件（优先查沙盒缓存与直接路径，若遇外部只读 URI 则自动触发回调重新准备后分享）
