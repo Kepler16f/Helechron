@@ -39,8 +39,8 @@ class _ManagedCoursewareEntry {
 ///
 /// 页面结构与交互同 [ZhiyunResourceBatchPage] 保持完全一致：
 /// - 顶部返回/标题/刷新栏 + 课程概览与全选/选未下载/反选/正倒序工具栏
-/// - 多选列表卡片：单选勾选、章节/大小/来源/已下载标签、单条下载与分享胶囊按钮
-/// - 底部固定操作栏：自定义保存目录、批量下载进度与停止控制、「仅下载 / 分享」双操作按钮
+/// - 多选列表卡片：单选勾选、章节/大小/来源/已下载标签、已下载项快捷打开
+/// - 底部固定操作栏：自定义保存目录、批量下载进度与停止控制、「仅下载 / 分享」统一操作按钮
 class CoursewareBatchPage extends StatefulWidget {
   final Course course;
   final String? semesterName;
@@ -129,10 +129,23 @@ class _CoursewareBatchPageState extends State<CoursewareBatchPage> {
   }
 
   Future<String?> _findLocalFile(_ManagedCoursewareEntry entry) async {
+    if (widget.itemsLoader == null || _saveDir.isNotEmpty) {
+      try {
+        final rec = await FileDownloadShareHelper.getDownloadRecord(
+          _recordKey(entry.key),
+        );
+        if (rec != null) {
+          entry.customFileName = rec.fileName;
+          return rec.savedPath;
+        }
+      } catch (_) {}
+    }
     if (_saveDir.isNotEmpty &&
         !_saveDir.startsWith('content://') &&
         !_saveDir.startsWith('file://')) {
-      final safeName = entry.item.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final safeName = FileDownloadShareHelper.sanitizeFileName(
+        entry.item.name,
+      );
       final file = File('$_saveDir/$safeName');
       try {
         if (await file.exists() && await file.length() > 0) {
@@ -140,18 +153,6 @@ class _CoursewareBatchPageState extends State<CoursewareBatchPage> {
         }
       } catch (_) {}
     }
-    if (widget.itemsLoader != null && _saveDir.isEmpty) {
-      return null;
-    }
-    try {
-      final rec = await FileDownloadShareHelper.getDownloadRecord(
-        _recordKey(entry.key),
-      );
-      if (rec != null) {
-        entry.customFileName = rec.fileName;
-        return rec.savedPath;
-      }
-    } catch (_) {}
     return null;
   }
 
@@ -315,6 +316,7 @@ class _CoursewareBatchPageState extends State<CoursewareBatchPage> {
       _saveDir = picked;
       _isCustomSaveDir = true;
     });
+    await FileDownloadShareHelper.persistDownloadPath(picked);
     await _refreshLocalStatuses();
     AppNotification.success('目录已更新', '保存路径：$picked');
   }
@@ -398,122 +400,38 @@ class _CoursewareBatchPageState extends State<CoursewareBatchPage> {
 
   Future<File?> _resolveExistingShareFile(_ManagedCoursewareEntry entry) async {
     final fileName = entry.customFileName ?? entry.item.name;
-    final cached = await FileDownloadShareHelper.findShareCacheFile(fileName);
-    if (cached != null) return cached;
-    final path = entry.localFilePath;
-    if (path != null &&
-        path.isNotEmpty &&
-        !path.startsWith('content://') &&
-        !path.startsWith('file://')) {
-      final f = File(path);
-      if (await f.exists() && await f.length() > 0) {
-        return FileDownloadShareHelper.prepareShareCacheFile(
-          fileName,
-          sourceFile: f,
-        );
-      }
-    }
-    return null;
-  }
-
-  Future<void> _handleShareAlreadyDownloaded(
-    _ManagedCoursewareEntry entry,
-  ) async {
-    final effectiveName = entry.customFileName ?? entry.item.name;
-    await FileDownloadShareHelper.shareSavedOrPrepare(
+    return FileDownloadShareHelper.recoverShareFileFromSavedPath(
       savedPath: entry.localFilePath,
-      fileName: effectiveName,
-      mimeType: FileDownloadShareHelper.inferMimeType(effectiveName),
-      subject: effectiveName,
-      onPrepareShareFile: () async {
-        final client = HttpClient();
-        applyZjuNetworkDefense(client);
-        try {
-          final tempDir = await getTemporaryDirectory();
-          final dlDir = Directory('${tempDir.path}/celechron_share_dl');
-          if (!await dlDir.exists()) {
-            await dlDir.create(recursive: true);
-          }
-          final result =
-              await FileDownloadShareHelper.downloadCoursewareAndPrepareShare(
-                client,
-                item: entry.item,
-                saveDir: dlDir.path,
-                customFileName: effectiveName,
-              );
-          return result.shareFile;
-        } finally {
-          client.close(force: true);
-        }
-      },
+      fileName: fileName,
     );
   }
 
-  Future<void> _handleSingleDownloadOrShare(
-    _ManagedCoursewareEntry entry, {
-    required bool share,
-  }) async {
+  Future<void> _openDownloadedEntry(_ManagedCoursewareEntry entry) async {
     if (_isBatchProcessing ||
         entry.status == _CoursewareDownloadStatus.downloading) {
       return;
     }
-    if (share && entry.localFilePath != null) {
-      await _handleShareAlreadyDownloaded(entry);
-      return;
-    }
-    if (share) {
-      final rec = await FileDownloadShareHelper.getDownloadRecord(
-        _recordKey(entry.key),
+    final fileName = entry.customFileName ?? entry.item.name;
+    final mime = FileDownloadShareHelper.inferMimeType(fileName);
+    final savedPath = entry.localFilePath;
+    if (savedPath != null && savedPath.isNotEmpty) {
+      final opened = await OhosNativeService.instance.openFileWithSystem(
+        savedPath,
+        mimeType: mime,
+        title: fileName,
       );
-      if (rec != null) {
-        entry.localFilePath = rec.savedPath;
-        entry.customFileName = rec.fileName;
-        await _handleShareAlreadyDownloaded(entry);
-        return;
-      }
+      if (opened) return;
     }
-
-    if (_saveDir.isEmpty) {
-      await _initSaveDir();
+    final fallbackFile = await _resolveExistingShareFile(entry);
+    if (fallbackFile != null) {
+      final opened = await OhosNativeService.instance.openFileWithSystem(
+        fallbackFile.path,
+        mimeType: mime,
+        title: fileName,
+      );
+      if (opened) return;
     }
-    if (!mounted) return;
-    final target = await FileDownloadShareHelper.chooseSaveTarget(
-      context,
-      defaultFileName: entry.customFileName ?? entry.item.name,
-      currentDir: _saveDir,
-      title: share ? '下载并分享课件' : '下载课件',
-      confirmHint: share ? null : '仅下载保存，不会触发分享：',
-    );
-    if (target == null || !mounted) return;
-    final pickedDir = target.directory;
-    if (pickedDir != _saveDir) {
-      setState(() {
-        _saveDir = pickedDir;
-        _isCustomSaveDir = true;
-      });
-    }
-
-    final result = await _downloadSingleEntry(
-      entry,
-      targetDir: pickedDir,
-      customFileName: target.fileName,
-      showToast: !share,
-    );
-    if (!mounted || result == null || !result.isSuccess) return;
-
-    if (share) {
-      File? shareTarget = result.shareFile;
-      shareTarget ??= await _resolveExistingShareFile(entry);
-      if (shareTarget != null) {
-        await FileDownloadShareHelper.shareFiles(
-          [shareTarget],
-          mimeTypes: [result.mimeType],
-          subject: result.fileName,
-        );
-      } else {
-        AppNotification.info('分享提示', '文件已保存，暂未能生成系统分享副本');
-      }
-    }
+    AppNotification.info('打开失败', '未能打开本地文件，可勾选后重新下载');
   }
 
   String _prefixedFileName(String originalName, String prefix) {
@@ -549,10 +467,14 @@ class _CoursewareBatchPageState extends State<CoursewareBatchPage> {
         }
       }
       if (pendingDownload.isEmpty) {
-        await FileDownloadShareHelper.shareFiles(
+        if (!mounted) return;
+        await FileDownloadShareHelper.shareFilesWithBatchOption(
+          context,
           shareFiles,
           mimeTypes: shareMimes,
-          subject: '${widget.course.name}_课程课件',
+          subject: shareFiles.length == 1
+              ? (targets.first.customFileName ?? targets.first.item.name)
+              : '${widget.course.name}_课程课件',
         );
         return;
       }
@@ -592,6 +514,7 @@ class _CoursewareBatchPageState extends State<CoursewareBatchPage> {
         _saveDir = targetDir;
         _isCustomSaveDir = true;
       });
+      await FileDownloadShareHelper.persistDownloadPath(targetDir);
     }
 
     setState(() {
@@ -604,6 +527,10 @@ class _CoursewareBatchPageState extends State<CoursewareBatchPage> {
 
     var successCount = 0;
     var failedCount = 0;
+    final usedBatchNames = <String>{
+      for (final f in shareFiles)
+        f.path.split(Platform.pathSeparator).last.split('/').last.toLowerCase(),
+    };
 
     try {
       for (final entry in pendingDownload) {
@@ -611,11 +538,15 @@ class _CoursewareBatchPageState extends State<CoursewareBatchPage> {
         setState(() {
           _batchCurrentLabel = entry.item.name;
         });
-        final customName = isSingleTarget
+        final rawCustomName = isSingleTarget
             ? saveChoice.fileName
             : (saveChoice.fileName.trim().isEmpty
                   ? entry.item.name
                   : _prefixedFileName(entry.item.name, saveChoice.fileName));
+        final customName = FileDownloadShareHelper.disambiguateFileName(
+          rawCustomName,
+          usedBatchNames,
+        );
         final result = await _downloadSingleEntry(
           entry,
           targetDir: targetDir,
@@ -665,13 +596,16 @@ class _CoursewareBatchPageState extends State<CoursewareBatchPage> {
 
       if (shareAfter) {
         if (shareFiles.isNotEmpty) {
-          await FileDownloadShareHelper.shareFiles(
+          await FileDownloadShareHelper.shareFilesWithBatchOption(
+            context,
             shareFiles,
             mimeTypes: shareMimes,
-            subject: '${widget.course.name}_课程课件',
+            subject: shareFiles.length == 1
+                ? (targets.first.customFileName ?? targets.first.item.name)
+                : '${widget.course.name}_课程课件',
           );
         } else if (!_cancelRequested && failedCount == 0) {
-          AppNotification.info('分享提示', '课件已保存，但未能准备系统分享副本，请点击单条「分享」重试');
+          AppNotification.info('分享提示', '课件已保存，但未能准备系统分享副本，请勾选后重新点击分享');
         }
       }
     } finally {
@@ -1034,48 +968,24 @@ class _CoursewareBatchPageState extends State<CoursewareBatchPage> {
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                if (isBusy)
+                if (isBusy) ...[
+                  const SizedBox(width: 8),
                   const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8),
+                    padding: EdgeInsets.symmetric(horizontal: 6),
                     child: CupertinoActivityIndicator(radius: 8),
-                  )
-                else
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      _actionPill(
-                        icon: isDownloaded ? AelIcons.check : AelIcons.download,
-                        label: isDownloaded ? '已下载' : '下载',
-                        bg: isDownloaded
-                            ? colors.successContainer
-                            : colors.primaryContainer,
-                        fg: isDownloaded
-                            ? colors.onSuccessContainer
-                            : colors.onPrimaryContainer,
-                        onTap: _isBatchProcessing
-                            ? null
-                            : () => _handleSingleDownloadOrShare(
-                                entry,
-                                share: false,
-                              ),
-                      ),
-                      const SizedBox(height: 5),
-                      _actionPill(
-                        icon: AelIcons.share,
-                        label: '分享',
-                        bg: colors.tonalTileBg,
-                        fg: colors.textPrimary,
-                        onTap: _isBatchProcessing
-                            ? null
-                            : () => _handleSingleDownloadOrShare(
-                                entry,
-                                share: true,
-                              ),
-                      ),
-                    ],
                   ),
+                ] else if (isDownloaded) ...[
+                  const SizedBox(width: 8),
+                  _actionPill(
+                    icon: AelIcons.externalLink,
+                    label: '打开',
+                    bg: colors.successContainer,
+                    fg: colors.onSuccessContainer,
+                    onTap: _isBatchProcessing
+                        ? null
+                        : () => _openDownloadedEntry(entry),
+                  ),
+                ],
               ],
             ),
           ),

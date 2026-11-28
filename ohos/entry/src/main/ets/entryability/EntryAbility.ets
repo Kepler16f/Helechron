@@ -697,7 +697,7 @@ export default class EntryAbility extends FlutterAbility {
         let utdTypeId: string = utd.UniformDataType.FILE;
         if (ext.length > 1) {
           try {
-            const detected = utd.getUniformDataTypeByFilenameExtension(ext);
+            const detected = utd.getUniformDataTypeByFilenameExtension(ext, utd.UniformDataType.FILE);
             if (detected && detected.length > 0 && detected.indexOf('flex.') !== 0) {
               utdTypeId = detected;
             }
@@ -731,11 +731,62 @@ export default class EntryAbility extends FlutterAbility {
         selectionMode: recordCount > 1
           ? systemShare.SelectionMode.BATCH
           : systemShare.SelectionMode.SINGLE,
-        previewMode: systemShare.SharePreviewMode.DETAIL
+        previewMode: recordCount > 1
+          ? systemShare.SharePreviewMode.DEFAULT
+          : systemShare.SharePreviewMode.DETAIL
       });
       result.success(true);
     } catch (err) {
       hilog.error(DOMAIN, TAG, `shareFiles failed: ${JSON.stringify(err)}`);
+      result.success(false);
+    }
+  }
+
+  /// 检查已保存文件是否仍然存在：确认存在返回 true，确认已删除返回 false，无法因沙箱权限判定返回 null
+  private async checkSavedFileExists(call: MethodCall, result: MethodResult): Promise<void> {
+    const filePath = ((call.argument('filePath') as string) || '').trim();
+    if (filePath.length === 0) {
+      result.success(false);
+      return;
+    }
+    let target = filePath;
+    if (filePath.indexOf('/storage/Users/') === 0) {
+      target = `file://docs${filePath}`;
+    }
+    try {
+      const f = await fileIo.open(target, fileIo.OpenMode.READ_ONLY);
+      try {
+        const st = await fileIo.stat(f.fd);
+        result.success(st.size > 0);
+      } finally {
+        await fileIo.close(f);
+      }
+    } catch (err) {
+      const be = err as BusinessError;
+      if (be && be.code === 13900002) {
+        result.success(false);
+      } else {
+        result.success(null);
+      }
+    }
+  }
+
+  private async copySavedFileToCache(call: MethodCall, result: MethodResult): Promise<void> {
+    const filePath = ((call.argument('filePath') as string) || '').trim();
+    const destPath = ((call.argument('destPath') as string) || '').trim();
+    if (filePath.length === 0 || destPath.length === 0) {
+      result.success(false);
+      return;
+    }
+    let srcTarget = filePath;
+    if (filePath.indexOf('/storage/Users/') === 0) {
+      srcTarget = `file://docs${filePath}`;
+    }
+    try {
+      await this.streamCopyFile(srcTarget, destPath);
+      result.success(true);
+    } catch (err) {
+      hilog.warn(DOMAIN, TAG, `copySavedFileToCache failed: ${JSON.stringify(err)}`);
       result.success(false);
     }
   }
@@ -924,6 +975,12 @@ export default class EntryAbility extends FlutterAbility {
         break;
       case 'shareFiles':
         this.shareFiles(call, result);
+        break;
+      case 'checkSavedFileExists':
+        this.checkSavedFileExists(call, result);
+        break;
+      case 'copySavedFileToCache':
+        this.copySavedFileToCache(call, result);
         break;
       case 'openInAppVideoPlayer':
         this.openInAppVideoPlayer(call, result);

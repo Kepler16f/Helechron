@@ -639,6 +639,45 @@ class OhosNativeService {
     }
   }
 
+  /// 检查已保存文件是否存在（true=存在，false=明确已删除，null=外部受限目录无法判定）
+  Future<bool?> checkSavedFileExists(String filePath) async {
+    if (filePath.isEmpty) return false;
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.checkSavedFileExists(filePath);
+    }
+    try {
+      return await _channel.invokeMethod<bool?>('checkSavedFileExists', {
+        'filePath': filePath,
+      });
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
+  /// 通过原生文件通道把外部已保存文件复制到分享缓存路径
+  Future<bool> copySavedFileToCache(String filePath, String destPath) async {
+    if (filePath.isEmpty || destPath.isEmpty) return false;
+    if (PlatformFeatures.usesFlutterPlugins) {
+      return MobileNativeService.instance.copySavedFileToCache(
+        filePath,
+        destPath,
+      );
+    }
+    try {
+      final ok = await _channel.invokeMethod<bool>('copySavedFileToCache', {
+        'filePath': filePath,
+        'destPath': destPath,
+      });
+      return ok ?? false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
   /// 在应用内打开原生视频/直播播放器浮层（或鸿蒙内联上方卡片槽位）
   Future<bool> openInAppVideoPlayer({
     required String url,

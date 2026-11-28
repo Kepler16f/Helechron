@@ -475,6 +475,38 @@ class MobileNativeService {
     }
   }
 
+  /// 检查已保存文件是否存在（true=存在，false=明确不存在，null=外部存储受限无法直接探测）
+  Future<bool?> checkSavedFileExists(String filePath) async {
+    if (!Platform.isAndroid || filePath.isEmpty) return null;
+    try {
+      return await _widgetChannel.invokeMethod<bool?>('checkSavedFileExists', {
+        'filePath': filePath,
+      });
+    } on MissingPluginException {
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 通过原生 SAF/URI 通道把已保存文件复制到应用分享缓存路径，避免重新网络下载
+  Future<bool> copySavedFileToCache(String filePath, String destPath) async {
+    if (!Platform.isAndroid || filePath.isEmpty || destPath.isEmpty) {
+      return false;
+    }
+    try {
+      final ok = await _widgetChannel.invokeMethod<bool>(
+        'copySavedFileToCache',
+        {'filePath': filePath, 'destPath': destPath},
+      );
+      return ok ?? false;
+    } on MissingPluginException {
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<bool> openInAppVideoPlayer({
     required String url,
     required String title,

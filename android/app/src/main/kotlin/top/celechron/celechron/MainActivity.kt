@@ -2,6 +2,7 @@ package top.celechron.celechron
 
 import android.app.Activity
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -119,6 +120,15 @@ class MainActivity : FlutterActivity() {
                     val subject = call.argument<String>("subject") ?: ""
                     val text = call.argument<String>("text") ?: ""
                     result.success(shareFilesNative(paths, mimes, subject, text))
+                }
+                "checkSavedFileExists" -> {
+                    val filePath = call.argument<String>("filePath") ?: ""
+                    result.success(checkSavedFileExists(filePath))
+                }
+                "copySavedFileToCache" -> {
+                    val filePath = call.argument<String>("filePath") ?: ""
+                    val destPath = call.argument<String>("destPath") ?: ""
+                    copySavedFileToCache(filePath, destPath, result)
                 }
                 "openInAppVideoPlayer" -> {
                     val url = call.argument<String>("url") ?: ""
@@ -513,6 +523,88 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun checkSavedFileExists(filePath: String): Boolean? {
+        if (filePath.isBlank()) return false
+        return try {
+            val fileUriMap = loadJsonStringMap(PREF_FILE_URI_MAP)
+            val mapped = if (fileUriMap.has(filePath)) fileUriMap.optString(filePath, "") else ""
+            val uriStr = when {
+                filePath.startsWith("content://") -> filePath
+                mapped.startsWith("content://") -> mapped
+                else -> ""
+            }
+            if (uriStr.isNotEmpty()) {
+                val uri = Uri.parse(uriStr)
+                return try {
+                    contentResolver.openAssetFileDescriptor(uri, "r")?.use { afd ->
+                        afd.length != 0L
+                    } ?: false
+                } catch (_: SecurityException) {
+                    null
+                } catch (_: java.io.FileNotFoundException) {
+                    false
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            val f = File(filePath)
+            if (f.exists() && f.length() > 0) return true
+            val appDataRoot = context.filesDir.parentFile?.absolutePath ?: ""
+            val cacheRoot = context.cacheDir.absolutePath
+            val extAppRoot = context.getExternalFilesDir(null)?.parentFile?.absolutePath ?: ""
+            val inAppSandbox = (appDataRoot.isNotEmpty() && filePath.startsWith(appDataRoot)) ||
+                filePath.startsWith(cacheRoot) ||
+                (extAppRoot.isNotEmpty() && filePath.startsWith(extAppRoot))
+            if (inAppSandbox) false else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun copySavedFileToCache(
+        filePath: String,
+        destPath: String,
+        result: MethodChannel.Result
+    ) {
+        if (filePath.isBlank() || destPath.isBlank()) {
+            result.success(false)
+            return
+        }
+        Thread {
+            val ok = try {
+                val destFile = File(destPath)
+                destFile.parentFile?.let { if (!it.exists()) it.mkdirs() }
+                val fileUriMap = loadJsonStringMap(PREF_FILE_URI_MAP)
+                val mapped = if (fileUriMap.has(filePath)) fileUriMap.optString(filePath, "") else ""
+                val uriStr = when {
+                    filePath.startsWith("content://") -> filePath
+                    mapped.startsWith("content://") -> mapped
+                    else -> ""
+                }
+                if (uriStr.isNotEmpty()) {
+                    val uri = Uri.parse(uriStr)
+                    contentResolver.openInputStream(uri)?.use { inp ->
+                        destFile.outputStream().use { out -> inp.copyTo(out) }
+                    } ?: throw IllegalStateException("openInputStream returned null")
+                    destFile.exists() && destFile.length() > 0
+                } else {
+                    val src = File(filePath)
+                    if (src.exists() && src.length() > 0) {
+                        if (src.canonicalPath != destFile.canonicalPath) {
+                            src.copyTo(destFile, overwrite = true)
+                        }
+                        destFile.exists() && destFile.length() > 0
+                    } else {
+                        false
+                    }
+                }
+            } catch (_: Exception) {
+                false
+            }
+            mainHandler.post { result.success(ok) }
+        }.start()
+    }
+
     private fun shareFilesNative(
         paths: List<String>,
         rawMimes: List<String>,
@@ -544,28 +636,40 @@ class MainActivity : FlutterActivity() {
             }
             if (uris.isEmpty()) return false
 
+            val resolvedType = if (uris.size == 1) {
+                resolvedMimes.firstOrNull() ?: "*/*"
+            } else {
+                reduceShareMimeType(resolvedMimes)
+            }
+
             val shareIntent = if (uris.size == 1) {
                 Intent(Intent.ACTION_SEND).apply {
-                    type = resolvedMimes.firstOrNull() ?: "*/*"
+                    type = resolvedType
                     putExtra(Intent.EXTRA_STREAM, uris.first())
-                    clipData = ClipData.newRawUri(subject.ifEmpty { "file" }, uris.first())
                 }
             } else {
                 Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-                    type = reduceShareMimeType(resolvedMimes)
+                    type = resolvedType
                     putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
-                    val clip = ClipData.newRawUri(subject.ifEmpty { "files" }, uris.first())
-                    for (i in 1 until uris.size) {
-                        clip.addItem(ClipData.Item(uris[i]))
-                    }
-                    clipData = clip
                 }
             }
+
+            val clipMimes = resolvedMimes.distinct().ifEmpty { listOf(resolvedType) }.toTypedArray()
+            val clip = ClipData(
+                ClipDescription(subject.ifBlank { "shared_files" }, clipMimes),
+                ClipData.Item(uris.first())
+            )
+            for (i in 1 until uris.size) {
+                clip.addItem(ClipData.Item(uris[i]))
+            }
+            shareIntent.clipData = clip
 
             shareIntent.apply {
                 if (subject.isNotBlank()) {
                     putExtra(Intent.EXTRA_SUBJECT, subject)
-                    putExtra(Intent.EXTRA_TITLE, subject)
+                    if (uris.size == 1) {
+                        putExtra(Intent.EXTRA_TITLE, subject)
+                    }
                 }
                 if (text.isNotBlank()) {
                     putExtra(Intent.EXTRA_TEXT, text)
@@ -577,13 +681,16 @@ class MainActivity : FlutterActivity() {
                 shareIntent,
                 subject.ifBlank { "分享文件" }
             ).apply {
+                clipData = clip
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
 
-            val resInfoList = packageManager.queryIntentActivities(
-                shareIntent,
+            val queryFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PackageManager.MATCH_DEFAULT_ONLY or PackageManager.MATCH_ALL
+            } else {
                 PackageManager.MATCH_DEFAULT_ONLY
-            )
+            }
+            val resInfoList = packageManager.queryIntentActivities(shareIntent, queryFlags)
             resInfoList.forEach { info ->
                 val pkg = info.activityInfo.packageName
                 uris.forEach { uri ->

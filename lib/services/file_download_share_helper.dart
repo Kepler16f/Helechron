@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
+import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/design/app_notification.dart';
 import 'package:celechron/design/components/ael_components.dart';
 import 'package:celechron/design/theme/ael_theme.dart';
@@ -106,6 +108,45 @@ class FileDownloadShareHelper {
     if (lower.endsWith('.png')) return 'image/png';
     if (lower.endsWith('.mp4')) return 'video/mp4';
     return 'application/octet-stream';
+  }
+
+  /// 在同批次下载/打包出现重名文件时自动附加编号避免互相覆盖
+  static String disambiguateFileName(
+    String rawName,
+    Set<String> usedLowerNames,
+  ) {
+    final cleaned = sanitizeFileName(rawName);
+    if (usedLowerNames.add(cleaned.toLowerCase())) {
+      return cleaned;
+    }
+    final dotIdx = cleaned.lastIndexOf('.');
+    final hasExt = dotIdx > 0 && dotIdx < cleaned.length - 1;
+    final stem = hasExt ? cleaned.substring(0, dotIdx) : cleaned;
+    final ext = hasExt ? cleaned.substring(dotIdx) : '';
+    var seq = 2;
+    while (true) {
+      final candidate = '$stem ($seq)$ext';
+      if (usedLowerNames.add(candidate.toLowerCase())) {
+        return candidate;
+      }
+      seq++;
+    }
+  }
+
+  /// 将用户选择的保存目录持久化到全局设置，确保下次打开仍记住上次目录
+  static Future<void> persistDownloadPath(String dir) async {
+    final trimmed = dir.trim();
+    if (trimmed.isEmpty) return;
+    try {
+      if (Get.isRegistered<Option>(tag: 'option')) {
+        Get.find<Option>(tag: 'option').downloadPath.value = trimmed;
+      }
+      if (Get.isRegistered<DatabaseHelper>(tag: 'db')) {
+        await Get.find<DatabaseHelper>(tag: 'db').setDownloadPath(trimmed);
+      }
+    } catch (e) {
+      debugPrint('[FileDownloadShareHelper] persistDownloadPath error: $e');
+    }
   }
 
   static Future<String> resolveDefaultSaveDir() async {
@@ -263,7 +304,7 @@ class FileDownloadShareHelper {
 
   static Future<void> _pruneOldShareFiles(Directory shareDir) async {
     try {
-      final cutoff = DateTime.now().subtract(const Duration(hours: 12));
+      final cutoff = DateTime.now().subtract(const Duration(days: 7));
       await for (final entity in shareDir.list()) {
         if (entity is File) {
           final stat = await entity.stat();
@@ -423,20 +464,39 @@ class FileDownloadShareHelper {
 
   // ───────────── 下载记录（下载与分享解耦） ─────────────
 
+  static Map<String, dynamic>? _recordsCache;
+  static String? _recordsFilePathOverride;
+
+  /// 仅供单元测试覆盖记录文件路径并重置内存缓存
+  @visibleForTesting
+  static void setRecordsFilePathForTest(String? path) {
+    _recordsFilePathOverride = path;
+    _recordsCache = null;
+  }
+
   static Future<File> _recordsFile() async {
+    final override = _recordsFilePathOverride;
+    if (override != null && override.isNotEmpty) {
+      return File(override);
+    }
     final doc = await getApplicationDocumentsDirectory();
     return File('${doc.path}/download_records.json');
   }
 
   static Future<Map<String, dynamic>> _loadRecords() async {
+    if (_recordsCache != null) return _recordsCache!;
     try {
       final f = await _recordsFile();
       if (await f.exists()) {
         final decoded = jsonDecode(await f.readAsString());
-        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map<String, dynamic>) {
+          _recordsCache = Map<String, dynamic>.from(decoded);
+          return _recordsCache!;
+        }
       }
     } catch (_) {}
-    return <String, dynamic>{};
+    _recordsCache = <String, dynamic>{};
+    return _recordsCache!;
   }
 
   /// 记录一次成功下载（key 为业务唯一键，如 课程+课节+类型）
@@ -452,15 +512,37 @@ class FileDownloadShareHelper {
         'savedPath': savedPath,
         'fileName': fileName,
         'mimeType': mimeType ?? inferMimeType(fileName),
+        'savedAt': DateTime.now().millisecondsSinceEpoch,
       };
       final f = await _recordsFile();
+      if (!await f.parent.exists()) {
+        await f.parent.create(recursive: true);
+      }
       await f.writeAsString(jsonEncode(records), flush: true);
     } catch (e) {
       debugPrint('[FileDownloadShareHelper] saveDownloadRecord error: $e');
     }
   }
 
-  /// 读取并校验下载记录；文件已被删除则返回 null
+  static Future<bool> _isInsideAppPrivateDir(String savedPath) async {
+    if (savedPath.startsWith('content://') || savedPath.startsWith('file://')) {
+      return false;
+    }
+    try {
+      final doc = await getApplicationDocumentsDirectory();
+      final normSaved = savedPath.replaceAll('\\', '/');
+      final normDoc = doc.path.replaceAll('\\', '/');
+      return normSaved.startsWith(normDoc);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 读取并校验下载记录：
+  /// - 应用私有目录直接校验本地文件；
+  /// - Android SAF / 鸿蒙外部公共目录受沙箱限制无法通过 dart:io File.exists() 探测，
+  ///   先查沙盒缓存与原生存在性接口；仅在原生明确确认已删除（返回 false）时才判空，
+  ///   避免重新进入页面后丢失已下载状态记忆。
   static Future<SavedDownloadRecord?> getDownloadRecord(String key) async {
     final records = await _loadRecords();
     final raw = records[key];
@@ -468,15 +550,30 @@ class FileDownloadShareHelper {
     final savedPath = '${raw['savedPath'] ?? ''}';
     final fileName = '${raw['fileName'] ?? ''}';
     if (savedPath.isEmpty || fileName.isEmpty) return null;
+
     var exists = false;
-    if (savedPath.startsWith('content://') || savedPath.startsWith('file://')) {
-      exists = await findShareCacheFile(fileName) != null;
-    } else {
+    if (!savedPath.startsWith('content://') &&
+        !savedPath.startsWith('file://')) {
       try {
         final f = File(savedPath);
         exists = await f.exists() && await f.length() > 0;
       } catch (_) {}
-      if (!exists) exists = await findShareCacheFile(fileName) != null;
+    }
+    if (!exists) {
+      exists = await findShareCacheFile(fileName) != null;
+    }
+    if (!exists) {
+      final inPrivate = await _isInsideAppPrivateDir(savedPath);
+      if (inPrivate) {
+        return null;
+      }
+      final nativeExists = await OhosNativeService.instance
+          .checkSavedFileExists(savedPath);
+      if (nativeExists == false) {
+        return null;
+      }
+      // nativeExists == true，或 == null（外部目录因系统沙箱无法直接 stat，保留已下载记忆）
+      exists = true;
     }
     if (!exists) return null;
     return SavedDownloadRecord(
@@ -484,6 +581,39 @@ class FileDownloadShareHelper {
       fileName: fileName,
       mimeType: '${raw['mimeType'] ?? inferMimeType(fileName)}',
     );
+  }
+
+  /// 尝试从沙盒分享缓存、直接路径或原生 SAF/CoreFileKit 通道恢复可分享的本地缓存文件
+  static Future<File?> recoverShareFileFromSavedPath({
+    required String? savedPath,
+    required String fileName,
+  }) async {
+    final cached = await findShareCacheFile(fileName);
+    if (cached != null) return cached;
+
+    if (savedPath == null || savedPath.isEmpty) return null;
+    if (!savedPath.startsWith('content://') &&
+        !savedPath.startsWith('file://')) {
+      try {
+        final f = File(savedPath);
+        if (await f.exists() && await f.length() > 0) {
+          return await prepareShareCacheFile(fileName, sourceFile: f);
+        }
+      } catch (_) {}
+    }
+
+    try {
+      final shareDir = await _ensureShareCacheDir();
+      final dest = File('${shareDir.path}/${sanitizeFileName(fileName)}');
+      final copied = await OhosNativeService.instance.copySavedFileToCache(
+        savedPath,
+        dest.path,
+      );
+      if (copied && await dest.exists() && await dest.length() > 0) {
+        return dest;
+      }
+    } catch (_) {}
+    return null;
   }
 
   /// 统一的「仅下载 / 分享」流程。
@@ -663,7 +793,130 @@ class FileDownloadShareHelper {
     return false;
   }
 
-  /// 分享已保存的文件（优先查沙盒缓存与直接路径，若遇外部只读 URI 则自动触发回调重新准备后分享）
+  /// 将多个本地文件打包为单个 ZIP 压缩包（存放在沙盒分享缓存目录），
+  /// 解决微信/部分安卓系统分享面板在多文件分享时仅接收最后一个文件的问题。
+  static Future<File?> bundleFilesToZip(
+    List<File> files, {
+    required String zipBaseName,
+  }) async {
+    try {
+      final archive = Archive();
+      final usedNames = <String>{};
+      var addedCount = 0;
+      for (final f in files) {
+        if (!await f.exists() || await f.length() <= 0) continue;
+        final rawName = f.path
+            .split(Platform.pathSeparator)
+            .last
+            .split('/')
+            .last;
+        final entryName = disambiguateFileName(rawName, usedNames);
+        final bytes = await f.readAsBytes();
+        archive.addFile(ArchiveFile(entryName, bytes.length, bytes));
+        addedCount++;
+      }
+      if (addedCount == 0) return null;
+      final zipBytes = ZipEncoder().encode(archive);
+      if (zipBytes.isEmpty) return null;
+      final cleanBase = sanitizeFileName(zipBaseName);
+      final zipName = cleanBase.toLowerCase().endsWith('.zip')
+          ? cleanBase
+          : '$cleanBase.zip';
+      return await prepareShareCacheFile(zipName, bytes: zipBytes);
+    } catch (e) {
+      debugPrint('[FileDownloadShareHelper] bundleFilesToZip error: $e');
+      return null;
+    }
+  }
+
+  /// 分享单个或多个文件：
+  /// - 单文件直接唤起系统原生分享面板；
+  /// - 多文件时弹出底部选项，提供「打包为 ZIP 分享（推荐，兼容微信/QQ 完整接收全部文件）」
+  ///   与「直接多文件分享」两种方式。
+  static Future<bool> shareFilesWithBatchOption(
+    BuildContext context,
+    List<File> files, {
+    List<String>? mimeTypes,
+    required String subject,
+    String? text,
+  }) async {
+    final validFiles = <File>[];
+    final validMimes = <String>[];
+    for (var i = 0; i < files.length; i++) {
+      final f = files[i];
+      if (await f.exists() && await f.length() > 0) {
+        validFiles.add(f);
+        validMimes.add(
+          (mimeTypes != null && i < mimeTypes.length)
+              ? mimeTypes[i]
+              : inferMimeType(f.path),
+        );
+      }
+    }
+    if (validFiles.isEmpty) {
+      AppNotification.info('分享提示', '未能定位到可分享的本地文件，请重新点击分享或下载重试');
+      return false;
+    }
+    if (validFiles.length == 1) {
+      return shareFiles(
+        validFiles,
+        mimeTypes: validMimes,
+        subject: subject,
+        text: text,
+      );
+    }
+    if (!context.mounted) return false;
+    final mode = await showAelActionSheet<String>(
+      context: context,
+      title: '分享 ${validFiles.length} 个文件',
+      message: '微信等部分应用直接多文件分享可能仅接收最后一个文件；推荐打包为 ZIP 一次完整发送。',
+      actions: [
+        AelActionOption<String>(
+          label: '打包为 ZIP 分享（推荐，共 ${validFiles.length} 个）',
+          value: 'zip',
+          isDefault: true,
+        ),
+        AelActionOption<String>(
+          label: '直接多文件分享（${validFiles.length} 个文件）',
+          value: 'multi',
+        ),
+      ],
+    );
+    if (mode == null) return false;
+    if (mode == 'zip') {
+      final zipFile = await bundleFilesToZip(
+        validFiles,
+        zipBaseName: '${subject}_${validFiles.length}个文件',
+      );
+      if (zipFile == null) {
+        AppNotification.error('打包失败', '未能生成 ZIP 压缩包，已尝试直接多文件分享');
+        return shareFiles(
+          validFiles,
+          mimeTypes: validMimes,
+          subject: subject,
+          text: text,
+        );
+      }
+      return shareFiles(
+        [zipFile],
+        mimeTypes: const ['application/zip'],
+        subject: zipFile.path
+            .split(Platform.pathSeparator)
+            .last
+            .split('/')
+            .last,
+        text: text,
+      );
+    }
+    return shareFiles(
+      validFiles,
+      mimeTypes: validMimes,
+      subject: subject,
+      text: text,
+    );
+  }
+
+  /// 分享已保存的文件（优先查沙盒缓存与直接路径，若遇外部只读 URI 则先尝试原生复制再触发回调重新准备后分享）
   static Future<bool> shareSavedOrPrepare({
     required String? savedPath,
     required String fileName,
@@ -672,17 +925,10 @@ class FileDownloadShareHelper {
     String? text,
     Future<File?> Function()? onPrepareShareFile,
   }) async {
-    File? target = await findShareCacheFile(fileName);
-    if (target == null &&
-        savedPath != null &&
-        savedPath.isNotEmpty &&
-        !savedPath.startsWith('content://') &&
-        !savedPath.startsWith('file://')) {
-      final f = File(savedPath);
-      if (await f.exists() && await f.length() > 0) {
-        target = await prepareShareCacheFile(fileName, sourceFile: f);
-      }
-    }
+    File? target = await recoverShareFileFromSavedPath(
+      savedPath: savedPath,
+      fileName: fileName,
+    );
     if (target == null && onPrepareShareFile != null) {
       target = await onPrepareShareFile();
     }

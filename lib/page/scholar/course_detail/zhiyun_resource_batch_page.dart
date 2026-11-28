@@ -196,6 +196,15 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
   }
 
   Future<String?> _findLocalFile(_GeneratedLessonResource lesson) async {
+    try {
+      final rec = await FileDownloadShareHelper.getDownloadRecord(
+        _recordKey(lesson),
+      );
+      if (rec != null) {
+        lesson.customFileName = rec.fileName;
+        return rec.savedPath;
+      }
+    } catch (_) {}
     if (_saveDir.isNotEmpty &&
         !_saveDir.startsWith('content://') &&
         !_saveDir.startsWith('file://')) {
@@ -205,13 +214,6 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
           return file.path;
         }
       } catch (_) {}
-    }
-    final rec = await FileDownloadShareHelper.getDownloadRecord(
-      _recordKey(lesson),
-    );
-    if (rec != null) {
-      lesson.customFileName = rec.fileName;
-      return rec.savedPath;
     }
     return null;
   }
@@ -479,6 +481,7 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
       _saveDir = picked;
       _isCustomSaveDir = true;
     });
+    await FileDownloadShareHelper.persistDownloadPath(picked);
     await _refreshLocalStatuses();
     AppNotification.success('目录已更新', '保存路径：$picked');
   }
@@ -563,109 +566,32 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
     }
   }
 
-  Future<void> _handleSingleDownloadOrShare(
-    _GeneratedLessonResource lesson, {
-    required bool share,
-  }) async {
+  Future<void> _openDownloadedLesson(_GeneratedLessonResource lesson) async {
     if (_isBatchProcessing ||
         lesson.status == _LessonDownloadStatus.downloading) {
       return;
     }
-    if (share && lesson.localFilePath != null) {
-      await _handleShareAlreadyDownloaded(lesson);
-      return;
-    }
-    if (share) {
-      final rec = await FileDownloadShareHelper.getDownloadRecord(
-        _recordKey(lesson),
-      );
-      if (rec != null) {
-        lesson.localFilePath = rec.savedPath;
-        lesson.customFileName = rec.fileName;
-        await _handleShareAlreadyDownloaded(lesson);
-        return;
-      }
-    }
-
-    if (_saveDir.isEmpty) {
-      await _initSaveDir();
-    }
-    if (!mounted) return;
-    final target = await FileDownloadShareHelper.chooseSaveTarget(
-      context,
-      defaultFileName: lesson.customFileName ?? _buildFileName(lesson),
-      currentDir: _saveDir,
-      title: share
-          ? (_isSubtitleMode ? '下载并分享语音字幕' : '下载并分享 PPT 课件')
-          : (_isSubtitleMode ? '下载语音字幕' : '下载 PPT 课件'),
-      confirmHint: share ? null : '仅下载保存，不会触发分享：',
-    );
-    if (target == null || !mounted) return;
-    final pickedDir = target.directory;
-    if (pickedDir != _saveDir) {
-      setState(() {
-        _saveDir = pickedDir;
-        _isCustomSaveDir = true;
-      });
-    }
-
-    final result = await _downloadSingleLesson(
-      lesson,
-      targetDir: pickedDir,
-      customFileName: target.fileName,
-      showToast: !share,
-    );
-    if (!mounted || result == null || !result.isSuccess) return;
-
-    if (share && result.shareFile != null) {
-      await FileDownloadShareHelper.shareFiles(
-        [result.shareFile!],
-        mimeTypes: [result.mimeType],
-        subject: result.fileName,
-      );
-    }
-  }
-
-  Future<void> _handleShareAlreadyDownloaded(
-    _GeneratedLessonResource lesson,
-  ) async {
     final fileName = lesson.customFileName ?? _buildFileName(lesson);
-    await FileDownloadShareHelper.shareSavedOrPrepare(
-      savedPath: lesson.localFilePath,
-      fileName: fileName,
-      mimeType: _isSubtitleMode ? 'text/plain' : 'application/zip',
-      subject: fileName,
-      onPrepareShareFile: () => _prepareShareFileOnly(lesson),
-    );
-  }
-
-  Future<File?> _prepareShareFileOnly(_GeneratedLessonResource lesson) async {
-    final fileName = lesson.customFileName ?? _buildFileName(lesson);
-    try {
-      if (_isSubtitleMode) {
-        final tempFile = await _writeSubtitleTempFile(lesson);
-        try {
-          return await FileDownloadShareHelper.prepareShareCacheFile(
-            fileName,
-            sourceFile: tempFile,
-          );
-        } finally {
-          if (await tempFile.exists()) await tempFile.delete();
-        }
-      } else {
-        final tempFile = await _buildPptTempZip(lesson);
-        try {
-          return await FileDownloadShareHelper.prepareShareCacheFile(
-            fileName,
-            sourceFile: tempFile,
-          );
-        } finally {
-          if (await tempFile.exists()) await tempFile.delete();
-        }
-      }
-    } catch (_) {
-      return null;
+    final mime = _isSubtitleMode ? 'text/plain' : 'application/zip';
+    final savedPath = lesson.localFilePath;
+    if (savedPath != null && savedPath.isNotEmpty) {
+      final opened = await OhosNativeService.instance.openFileWithSystem(
+        savedPath,
+        mimeType: mime,
+        title: fileName,
+      );
+      if (opened) return;
     }
+    final fallbackFile = await _resolveExistingShareFile(lesson);
+    if (fallbackFile != null) {
+      final opened = await OhosNativeService.instance.openFileWithSystem(
+        fallbackFile.path,
+        mimeType: mime,
+        title: fileName,
+      );
+      if (opened) return;
+    }
+    AppNotification.info('打开失败', '未能打开本地文件，可勾选后重新下载');
   }
 
   Future<File> _writeSubtitleTempFile(_GeneratedLessonResource lesson) async {
@@ -844,22 +770,10 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
     _GeneratedLessonResource lesson,
   ) async {
     final fileName = lesson.customFileName ?? _buildFileName(lesson);
-    final cached = await FileDownloadShareHelper.findShareCacheFile(fileName);
-    if (cached != null) return cached;
-    final path = lesson.localFilePath;
-    if (path != null &&
-        path.isNotEmpty &&
-        !path.startsWith('content://') &&
-        !path.startsWith('file://')) {
-      final f = File(path);
-      if (await f.exists() && await f.length() > 0) {
-        return FileDownloadShareHelper.prepareShareCacheFile(
-          fileName,
-          sourceFile: f,
-        );
-      }
-    }
-    return null;
+    return FileDownloadShareHelper.recoverShareFileFromSavedPath(
+      savedPath: lesson.localFilePath,
+      fileName: fileName,
+    );
   }
 
   Future<void> _downloadSelectedLessons({required bool shareAfter}) async {
@@ -885,11 +799,14 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
         }
       }
       if (pendingDownload.isEmpty) {
-        await FileDownloadShareHelper.shareFiles(
+        if (!mounted) return;
+        await FileDownloadShareHelper.shareFilesWithBatchOption(
+          context,
           shareFiles,
           mimeTypes: shareMimes,
-          subject:
-              '${widget.course.name}_${_isSubtitleMode ? "语音字幕" : "PPT课件"}',
+          subject: shareFiles.length == 1
+              ? (targets.first.customFileName ?? _buildFileName(targets.first))
+              : '${widget.course.name}_${_isSubtitleMode ? "语音字幕" : "PPT课件"}',
         );
         return;
       }
@@ -930,6 +847,7 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
         _saveDir = targetDir;
         _isCustomSaveDir = true;
       });
+      await FileDownloadShareHelper.persistDownloadPath(targetDir);
     }
 
     setState(() {
@@ -942,6 +860,10 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
 
     var successCount = 0;
     var failedCount = 0;
+    final usedBatchNames = <String>{
+      for (final f in shareFiles)
+        f.path.split(Platform.pathSeparator).last.split('/').last.toLowerCase(),
+    };
 
     try {
       for (final lesson in pendingDownload) {
@@ -949,9 +871,13 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
         setState(() {
           _batchCurrentLabel = lesson.title;
         });
-        final customName = isSingleTarget
+        final rawCustomName = isSingleTarget
             ? saveChoice.fileName
             : _buildFileName(lesson, customPrefix: saveChoice.fileName);
+        final customName = FileDownloadShareHelper.disambiguateFileName(
+          rawCustomName,
+          usedBatchNames,
+        );
         final result = await _downloadSingleLesson(
           lesson,
           targetDir: targetDir,
@@ -960,8 +886,12 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
         );
         if (result != null && result.isSuccess) {
           successCount++;
-          if (result.shareFile != null) {
-            shareFiles.add(result.shareFile!);
+          File? shareTarget = result.shareFile;
+          if (shareAfter && shareTarget == null) {
+            shareTarget = await _resolveExistingShareFile(lesson);
+          }
+          if (shareTarget != null) {
+            shareFiles.add(shareTarget);
             shareMimes.add(result.mimeType);
           }
           if (mounted) {
@@ -982,22 +912,36 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
       if (!mounted) return;
       if (_cancelRequested) {
         AppNotification.info('批量下载已停止', '已完成 $successCount 节，其余任务已取消');
-      } else if (failedCount == 0) {
-        AppNotification.success(
-          '批量下载完成',
-          '成功保存 $successCount 节${_isSubtitleMode ? "语音字幕" : "切片课件"}',
-        );
-      } else {
-        AppNotification.info('批量下载结束', '成功 $successCount 节，失败 $failedCount 节');
+      } else if (!shareAfter) {
+        if (failedCount == 0) {
+          AppNotification.success(
+            '批量下载完成',
+            '成功保存 $successCount 节${_isSubtitleMode ? "语音字幕" : "切片课件"}',
+          );
+        } else {
+          AppNotification.info(
+            '批量下载结束',
+            '成功 $successCount 节，失败 $failedCount 节',
+          );
+        }
+      } else if (failedCount > 0 && shareFiles.isEmpty) {
+        AppNotification.error('下载失败', '所选课节下载失败（$failedCount 节），未能发起分享');
       }
 
-      if (shareAfter && shareFiles.isNotEmpty) {
-        await FileDownloadShareHelper.shareFiles(
-          shareFiles,
-          mimeTypes: shareMimes,
-          subject:
-              '${widget.course.name}_${_isSubtitleMode ? "语音字幕" : "PPT课件"}',
-        );
+      if (shareAfter) {
+        if (shareFiles.isNotEmpty) {
+          await FileDownloadShareHelper.shareFilesWithBatchOption(
+            context,
+            shareFiles,
+            mimeTypes: shareMimes,
+            subject: shareFiles.length == 1
+                ? (targets.first.customFileName ??
+                      _buildFileName(targets.first))
+                : '${widget.course.name}_${_isSubtitleMode ? "语音字幕" : "PPT课件"}',
+          );
+        } else if (!_cancelRequested && failedCount == 0) {
+          AppNotification.info('分享提示', '文件已保存，但未能准备系统分享副本，请勾选后重新点击分享');
+        }
       }
     } finally {
       if (mounted) {
@@ -1387,49 +1331,25 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                // 右侧独立「下载 / 分享」按钮
-                if (isBusy)
+                // 右侧仅在下载中或已下载时显示状态/快捷打开（避免与底部全局「仅下载 / 分享」重复）
+                if (isBusy) ...[
+                  const SizedBox(width: 8),
                   const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8),
+                    padding: EdgeInsets.symmetric(horizontal: 6),
                     child: CupertinoActivityIndicator(radius: 8),
-                  )
-                else
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      _actionPill(
-                        icon: isDownloaded ? AelIcons.check : AelIcons.download,
-                        label: isDownloaded ? '已下载' : '下载',
-                        bg: isDownloaded
-                            ? colors.successContainer
-                            : colors.primaryContainer,
-                        fg: isDownloaded
-                            ? colors.onSuccessContainer
-                            : colors.onPrimaryContainer,
-                        onTap: _isBatchProcessing
-                            ? null
-                            : () => _handleSingleDownloadOrShare(
-                                lesson,
-                                share: false,
-                              ),
-                      ),
-                      const SizedBox(height: 5),
-                      _actionPill(
-                        icon: AelIcons.share,
-                        label: '分享',
-                        bg: colors.tonalTileBg,
-                        fg: colors.textPrimary,
-                        onTap: _isBatchProcessing
-                            ? null
-                            : () => _handleSingleDownloadOrShare(
-                                lesson,
-                                share: true,
-                              ),
-                      ),
-                    ],
                   ),
+                ] else if (isDownloaded) ...[
+                  const SizedBox(width: 8),
+                  _actionPill(
+                    icon: AelIcons.externalLink,
+                    label: '打开',
+                    bg: colors.successContainer,
+                    fg: colors.onSuccessContainer,
+                    onTap: _isBatchProcessing
+                        ? null
+                        : () => _openDownloadedLesson(lesson),
+                  ),
+                ],
               ],
             ),
           ),
