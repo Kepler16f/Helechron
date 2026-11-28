@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
-import 'package:archive/archive.dart';
+import 'package:archive/archive_io.dart';
 import 'package:celechron/database/database_helper.dart';
 import 'package:celechron/design/app_notification.dart';
 import 'package:celechron/design/components/ael_components.dart';
+import 'package:celechron/design/icons/ael_icons.dart';
 import 'package:celechron/design/theme/ael_theme.dart';
 import 'package:celechron/design/tokens/ael_tokens.dart';
 import 'package:celechron/http/zjuServices/courses.dart';
@@ -793,46 +795,214 @@ class FileDownloadShareHelper {
     return false;
   }
 
-  /// 将多个本地文件打包为单个 ZIP 压缩包（存放在沙盒分享缓存目录），
-  /// 解决微信/部分安卓系统分享面板在多文件分享时仅接收最后一个文件的问题。
+  static String _baseName(String path) =>
+      path.split(Platform.pathSeparator).last.split('/').last;
+
+  static bool _isPreCompressedExt(String name) {
+    final lower = name.toLowerCase();
+    return lower.endsWith('.zip') ||
+        lower.endsWith('.rar') ||
+        lower.endsWith('.7z') ||
+        lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png') ||
+        lower.endsWith('.webp') ||
+        lower.endsWith('.mp4') ||
+        lower.endsWith('.mp3') ||
+        lower.endsWith('.m4a') ||
+        lower.endsWith('.pptx') ||
+        lower.endsWith('.docx') ||
+        lower.endsWith('.xlsx') ||
+        lower.endsWith('.pdf');
+  }
+
+  /// 将多个本地文件流式打包为单个 ZIP 压缩包（在独立 Isolate 中写入沙盒分享缓存目录），
+  /// 当 [flattenNestedZips] 为 true（如切片课件批量 ZIP）时会展开各节图片并按课节分文件夹归档，
+  /// 解决微信/QQ 仅接收 1 个文件及嵌套 ZIP 在移动端无法直接预览的问题。
   static Future<File?> bundleFilesToZip(
     List<File> files, {
     required String zipBaseName,
+    bool flattenNestedZips = false,
   }) async {
     try {
-      final archive = Archive();
-      final usedNames = <String>{};
-      var addedCount = 0;
+      final validPaths = <String>[];
       for (final f in files) {
-        if (!await f.exists() || await f.length() <= 0) continue;
-        final rawName = f.path
-            .split(Platform.pathSeparator)
-            .last
-            .split('/')
-            .last;
-        final entryName = disambiguateFileName(rawName, usedNames);
-        final bytes = await f.readAsBytes();
-        archive.addFile(ArchiveFile(entryName, bytes.length, bytes));
-        addedCount++;
+        if (await f.exists() && await f.length() > 0) {
+          validPaths.add(f.path);
+        }
       }
-      if (addedCount == 0) return null;
-      final zipBytes = ZipEncoder().encode(archive);
-      if (zipBytes.isEmpty) return null;
+      if (validPaths.isEmpty) return null;
+
       final cleanBase = sanitizeFileName(zipBaseName);
       final zipName = cleanBase.toLowerCase().endsWith('.zip')
           ? cleanBase
           : '$cleanBase.zip';
-      return await prepareShareCacheFile(zipName, bytes: zipBytes);
+      final shareDir = await _ensureShareCacheDir();
+      await _pruneOldShareFiles(shareDir);
+      final outPath = '${shareDir.path}/$zipName';
+
+      final ok = await Isolate.run(
+        () => _encodeZipInIsolate(
+          inputPaths: validPaths,
+          outputPath: outPath,
+          flattenNestedZips: flattenNestedZips,
+        ),
+      );
+      if (!ok) return null;
+      final outFile = File(outPath);
+      if (await outFile.exists() && await outFile.length() > 0) {
+        return outFile;
+      }
+      return null;
     } catch (e) {
       debugPrint('[FileDownloadShareHelper] bundleFilesToZip error: $e');
       return null;
     }
   }
 
+  static bool _encodeZipInIsolate({
+    required List<String> inputPaths,
+    required String outputPath,
+    required bool flattenNestedZips,
+  }) {
+    final tempOutPath =
+        '$outputPath.tmp_${DateTime.now().microsecondsSinceEpoch}';
+    final encoder = ZipFileEncoder();
+    var addedCount = 0;
+    try {
+      encoder.create(tempOutPath, level: ZipFileEncoder.gzip);
+      final usedRootNames = <String>{};
+      final usedFolderNames = <String>{};
+
+      for (final path in inputPaths) {
+        final f = File(path);
+        if (!f.existsSync() || f.lengthSync() <= 0) continue;
+        final rawName = _baseName(path);
+
+        if (flattenNestedZips && rawName.toLowerCase().endsWith('.zip')) {
+          var expanded = false;
+          try {
+            final bytes = f.readAsBytesSync();
+            final inner = ZipDecoder().decodeBytes(bytes);
+            final fileEntries = inner.where((e) => e.isFile).toList();
+            if (fileEntries.isNotEmpty) {
+              var folderBase = rawName.substring(0, rawName.length - 4).trim();
+              if (folderBase.isEmpty) folderBase = 'lesson';
+              final folderName = disambiguateFileName(
+                folderBase,
+                usedFolderNames,
+              );
+              final usedInnerNames = <String>{};
+              for (final entry in fileEntries) {
+                final innerLeaf = disambiguateFileName(
+                  _baseName(entry.name),
+                  usedInnerNames,
+                );
+                final entryBytes = entry.content;
+                final archiveEntryName = '$folderName/$innerLeaf';
+                final af = _isPreCompressedExt(innerLeaf)
+                    ? ArchiveFile.noCompress(
+                        archiveEntryName,
+                        entryBytes.length,
+                        entryBytes,
+                      )
+                    : ArchiveFile(
+                        archiveEntryName,
+                        entryBytes.length,
+                        entryBytes,
+                      );
+                encoder.addArchiveFile(af);
+                addedCount++;
+              }
+              expanded = true;
+            }
+          } catch (_) {}
+          if (expanded) continue;
+        }
+
+        final entryName = disambiguateFileName(rawName, usedRootNames);
+        final level = _isPreCompressedExt(entryName)
+            ? ZipFileEncoder.store
+            : ZipFileEncoder.gzip;
+        encoder.addFileSync(f, entryName, level);
+        addedCount++;
+      }
+
+      encoder.closeSync();
+      if (addedCount == 0) {
+        try {
+          File(tempOutPath).deleteSync();
+        } catch (_) {}
+        return false;
+      }
+      final dest = File(outputPath);
+      if (dest.existsSync()) {
+        dest.deleteSync();
+      }
+      File(tempOutPath).renameSync(outputPath);
+      return true;
+    } catch (_) {
+      try {
+        encoder.closeSync();
+      } catch (_) {}
+      try {
+        File(tempOutPath).deleteSync();
+      } catch (_) {}
+      return false;
+    }
+  }
+
+  /// 将多个文本文件（如多节智云语音字幕 .txt）按选择顺序合并为单个 UTF-8 文本文件，
+  /// 便于直接通过微信/QQ/系统分享发送完整全文而不会丢失其余课节。
+  static Future<File?> bundleTextFilesToMergedTxt(
+    List<File> files, {
+    required String mergedBaseName,
+  }) async {
+    try {
+      final validFiles = <File>[];
+      for (final f in files) {
+        if (await f.exists() && await f.length() > 0) {
+          validFiles.add(f);
+        }
+      }
+      if (validFiles.isEmpty) return null;
+
+      final buf = StringBuffer();
+      for (var i = 0; i < validFiles.length; i++) {
+        final f = validFiles[i];
+        final name = _baseName(f.path);
+        if (i > 0) {
+          buf.writeln();
+          buf.writeln();
+        }
+        buf.writeln('════════════════════════════════════════');
+        buf.writeln('[${i + 1}/${validFiles.length}] $name');
+        buf.writeln('════════════════════════════════════════');
+        buf.writeln();
+        final content = await f.readAsString();
+        buf.write(content.trimRight());
+        buf.writeln();
+      }
+
+      final cleanBase = sanitizeFileName(mergedBaseName);
+      final txtName = cleanBase.toLowerCase().endsWith('.txt')
+          ? cleanBase
+          : '$cleanBase.txt';
+      return await prepareShareCacheFile(
+        txtName,
+        bytes: utf8.encode(buf.toString()),
+      );
+    } catch (e) {
+      debugPrint(
+        '[FileDownloadShareHelper] bundleTextFilesToMergedTxt error: $e',
+      );
+      return null;
+    }
+  }
+
   /// 分享单个或多个文件：
   /// - 单文件直接唤起系统原生分享面板；
-  /// - 多文件时弹出底部选项，提供「打包为 ZIP 分享（推荐，兼容微信/QQ 完整接收全部文件）」
-  ///   与「直接多文件分享」两种方式。
+  /// - 多文件时根据文件类型（纯文本字幕 / 切片课件压缩包 / 通用课件附件）提供推荐的单包分享与直接多文件分享选项。
   static Future<bool> shareFilesWithBatchOption(
     BuildContext context,
     List<File> files, {
@@ -866,48 +1036,86 @@ class FileDownloadShareHelper {
       );
     }
     if (!context.mounted) return false;
-    final mode = await showAelActionSheet<String>(
-      context: context,
-      title: '分享 ${validFiles.length} 个文件',
-      message: '微信等部分应用直接多文件分享可能仅接收最后一个文件；推荐打包为 ZIP 一次完整发送。',
-      actions: [
+
+    final allTxt = validFiles.every(
+      (f) => f.path.toLowerCase().endsWith('.txt'),
+    );
+    final allZip = validFiles.every(
+      (f) => f.path.toLowerCase().endsWith('.zip'),
+    );
+    final count = validFiles.length;
+
+    final actions = <AelActionOption<String>>[
+      if (allTxt)
         AelActionOption<String>(
-          label: '打包为 ZIP 分享（推荐，共 ${validFiles.length} 个）',
-          value: 'zip',
+          icon: AelIcons.file,
+          label: '合并为单个 .txt 分享（推荐，含全部 $count 节）',
+          subtitle: '把所选语音字幕按顺序合成一篇文档，微信/QQ/AI 可完整接收与预览',
+          value: 'merge_txt',
           isDefault: true,
         ),
-        AelActionOption<String>(
-          label: '直接多文件分享（${validFiles.length} 个文件）',
-          value: 'multi',
-        ),
-      ],
+      AelActionOption<String>(
+        icon: allZip ? AelIcons.image : AelIcons.folder,
+        label: allZip
+            ? '合并为一个 ZIP 分享（推荐，含全部 $count 节）'
+            : '打包为 ZIP 分享（${allTxt ? "保留各节独立文件" : "推荐，共 $count 个"}）',
+        subtitle: allZip
+            ? '按课节分文件夹归档所有 PPT 切片，避免微信多选丢失或无法解压'
+            : '将全部 $count 个文件打成单个压缩包，微信/QQ 等可一次完整接收',
+        value: allZip ? 'zip_flatten' : 'zip',
+        isDefault: !allTxt,
+      ),
+      AelActionOption<String>(
+        icon: AelIcons.share,
+        label: '直接多文件分享（共 $count 个文件）',
+        subtitle: '适合邮箱、网盘、华为分享/隔空投送；微信/QQ 通常仅保留其中 1 个文件',
+        value: 'multi',
+      ),
+    ];
+
+    final mode = await showAelActionSheet<String>(
+      context: context,
+      title: '分享 $count 个文件',
+      message: '微信、QQ 等应用接收系统多文件分享时往往只保留 1 个文件，推荐合成单个文件或 ZIP 发送。',
+      actions: actions,
     );
     if (mode == null) return false;
-    if (mode == 'zip') {
+
+    if (mode == 'merge_txt') {
+      final merged = await bundleTextFilesToMergedTxt(
+        validFiles,
+        mergedBaseName: '${subject}_$count节合集',
+      );
+      if (merged == null) {
+        AppNotification.error('合并失败', '未能生成合并文本文件，请尝试打包 ZIP 或重试');
+        return false;
+      }
+      return shareFiles(
+        [merged],
+        mimeTypes: const ['text/plain'],
+        subject: _baseName(merged.path),
+        text: text,
+      );
+    }
+
+    if (mode == 'zip' || mode == 'zip_flatten') {
       final zipFile = await bundleFilesToZip(
         validFiles,
-        zipBaseName: '${subject}_${validFiles.length}个文件',
+        zipBaseName: '${subject}_$count个文件',
+        flattenNestedZips: mode == 'zip_flatten',
       );
       if (zipFile == null) {
-        AppNotification.error('打包失败', '未能生成 ZIP 压缩包，已尝试直接多文件分享');
-        return shareFiles(
-          validFiles,
-          mimeTypes: validMimes,
-          subject: subject,
-          text: text,
-        );
+        AppNotification.error('打包失败', '未能生成 ZIP 压缩包，请尝试减少选中数量或使用直接多文件分享');
+        return false;
       }
       return shareFiles(
         [zipFile],
         mimeTypes: const ['application/zip'],
-        subject: zipFile.path
-            .split(Platform.pathSeparator)
-            .last
-            .split('/')
-            .last,
+        subject: _baseName(zipFile.path),
         text: text,
       );
     }
+
     return shareFiles(
       validFiles,
       mimeTypes: validMimes,

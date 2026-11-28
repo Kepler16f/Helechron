@@ -601,7 +601,11 @@ class _CoursewareBatchPageState extends State<CoursewareBatchPage> {
             shareFiles,
             mimeTypes: shareMimes,
             subject: shareFiles.length == 1
-                ? (targets.first.customFileName ?? targets.first.item.name)
+                ? shareFiles.first.path
+                      .split(Platform.pathSeparator)
+                      .last
+                      .split('/')
+                      .last
                 : '${widget.course.name}_课程课件',
           );
         } else if (!_cancelRequested && failedCount == 0) {

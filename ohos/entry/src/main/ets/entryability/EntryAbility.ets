@@ -698,7 +698,8 @@ export default class EntryAbility extends FlutterAbility {
         if (ext.length > 1) {
           try {
             const detected = utd.getUniformDataTypeByFilenameExtension(ext, utd.UniformDataType.FILE);
-            if (detected && detected.length > 0 && detected.indexOf('flex.') !== 0) {
+            if (detected && detected.length > 0 && detected.indexOf('flex.') !== 0 &&
+              utd.belongsTo(detected, utd.UniformDataType.FILE)) {
               utdTypeId = detected;
             }
           } catch (utdErr) {
@@ -726,14 +727,13 @@ export default class EntryAbility extends FlutterAbility {
         return;
       }
 
+      hilog.info(DOMAIN, TAG, `shareFiles: launching ShareController with recordCount=${recordCount}`);
       const controller = new systemShare.ShareController(shareData);
       await controller.show(this.context, {
         selectionMode: recordCount > 1
           ? systemShare.SelectionMode.BATCH
           : systemShare.SelectionMode.SINGLE,
-        previewMode: recordCount > 1
-          ? systemShare.SharePreviewMode.DEFAULT
-          : systemShare.SharePreviewMode.DETAIL
+        previewMode: systemShare.SharePreviewMode.DETAIL
       });
       result.success(true);
     } catch (err) {

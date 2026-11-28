@@ -935,8 +935,11 @@ class _ZhiyunResourceBatchPageState extends State<ZhiyunResourceBatchPage> {
             shareFiles,
             mimeTypes: shareMimes,
             subject: shareFiles.length == 1
-                ? (targets.first.customFileName ??
-                      _buildFileName(targets.first))
+                ? shareFiles.first.path
+                      .split(Platform.pathSeparator)
+                      .last
+                      .split('/')
+                      .last
                 : '${widget.course.name}_${_isSubtitleMode ? "语音字幕" : "PPT课件"}',
           );
         } else if (!_cancelRequested && failedCount == 0) {

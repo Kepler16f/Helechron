@@ -309,6 +309,51 @@ void main() {
           decoded.map((e) => e.name).toSet(),
           equals({'lec1.pdf', 'lec1 (2).pdf', 'lec3.pptx'}),
         );
+
+        // 3. Flattening multiple PPT slide ZIP archives preserves all lessons & slides in one ZIP
+        final pptA = Archive()
+          ..addFile(ArchiveFile.string('PPT_001_10s.jpg', 'IMG_A1'))
+          ..addFile(ArchiveFile.string('PPT_002_20s.jpg', 'IMG_A2'));
+        final pptB = Archive()
+          ..addFile(ArchiveFile.string('PPT_001_15s.jpg', 'IMG_B1'));
+        final pptZip1 = File('${tempDir.path}/高数_01_切片课件.zip')
+          ..writeAsBytesSync(ZipEncoder().encode(pptA));
+        final pptZip2 = File('${tempDir.path}/高数_02_切片课件.zip')
+          ..writeAsBytesSync(ZipEncoder().encode(pptB));
+        final mergedPptZip = await FileDownloadShareHelper.bundleFilesToZip(
+          [pptZip1, pptZip2],
+          zipBaseName: '高数_PPT课件_2个文件',
+          flattenNestedZips: true,
+        );
+        expect(mergedPptZip, isNotNull);
+        final mergedPptDecoded = ZipDecoder().decodeBytes(
+          await mergedPptZip!.readAsBytes(),
+        );
+        expect(
+          mergedPptDecoded.map((e) => e.name).toSet(),
+          equals({
+            '高数_01_切片课件/PPT_001_10s.jpg',
+            '高数_01_切片课件/PPT_002_20s.jpg',
+            '高数_02_切片课件/PPT_001_15s.jpg',
+          }),
+        );
+
+        // 4. Merging multiple subtitle TXT files preserves every lesson in order
+        final sub1 = File('${tempDir.path}/高数_01_语音字幕.txt')
+          ..writeAsStringSync('[00:01] 第一讲内容');
+        final sub2 = File('${tempDir.path}/高数_02_语音字幕.txt')
+          ..writeAsStringSync('[00:02] 第二讲内容');
+        final mergedTxt =
+            await FileDownloadShareHelper.bundleTextFilesToMergedTxt([
+              sub1,
+              sub2,
+            ], mergedBaseName: '高数_语音字幕_2节合集');
+        expect(mergedTxt, isNotNull);
+        final mergedContent = await mergedTxt!.readAsString();
+        expect(mergedContent, contains('[1/2] 高数_01_语音字幕.txt'));
+        expect(mergedContent, contains('第一讲内容'));
+        expect(mergedContent, contains('[2/2] 高数_02_语音字幕.txt'));
+        expect(mergedContent, contains('第二讲内容'));
       } finally {
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(pathProviderChannel, null);
@@ -401,6 +446,99 @@ void main() {
         if (tempDir.existsSync()) {
           tempDir.deleteSync(recursive: true);
         }
+      }
+    },
+  );
+
+  testWidgets(
+    'shareFilesWithBatchOption offers merged .txt and ZIP for multiple subtitles and shares all',
+    (tester) async {
+      final tempDir = Directory.systemTemp.createTempSync(
+        'helechron_batch_sheet_',
+      );
+      final sub1 = File('${tempDir.path}/s1.txt')..writeAsStringSync('字幕一');
+      final sub2 = File('${tempDir.path}/s2.txt')..writeAsStringSync('字幕二');
+
+      const pathProviderChannel = MethodChannel(
+        'plugins.flutter.io/path_provider',
+      );
+      const nativeChannel = MethodChannel('top.celechron.helechron/native');
+      List<dynamic>? sharedPaths;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(pathProviderChannel, (call) async {
+            return tempDir.path;
+          });
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(nativeChannel, (call) async {
+            if (call.method == 'shareFiles') {
+              sharedPaths = (call.arguments as Map)['paths'] as List<dynamic>?;
+              return true;
+            }
+            return null;
+          });
+
+      bool? shareResult;
+      try {
+        await tester.pumpWidget(
+          _wrapApp(
+            Builder(
+              builder: (ctx) => CupertinoButton(
+                onPressed: () {
+                  FileDownloadShareHelper.shareFilesWithBatchOption(
+                    ctx,
+                    [sub1, sub2],
+                    mimeTypes: const ['text/plain', 'text/plain'],
+                    subject: '高数_语音字幕',
+                  ).then((v) => shareResult = v);
+                },
+                child: const Text('触发批量分享'),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.tap(find.text('触发批量分享'));
+        for (var i = 0; i < 15; i++) {
+          await tester.pump(const Duration(milliseconds: 40));
+          await tester.runAsync(() async {
+            await Future<void>.delayed(const Duration(milliseconds: 15));
+          });
+          if (find.text('分享 2 个文件').evaluate().isNotEmpty) break;
+        }
+        await tester.pumpAndSettle();
+
+        expect(find.text('分享 2 个文件'), findsOneWidget);
+        expect(find.text('合并为单个 .txt 分享（推荐，含全部 2 节）'), findsOneWidget);
+        expect(find.text('打包为 ZIP 分享（保留各节独立文件）'), findsOneWidget);
+        expect(find.text('直接多文件分享（共 2 个文件）'), findsOneWidget);
+
+        await tester.tap(find.text('合并为单个 .txt 分享（推荐，含全部 2 节）'));
+        await tester.pumpAndSettle();
+        for (var i = 0; i < 60; i++) {
+          await tester.pump(const Duration(milliseconds: 30));
+          await tester.runAsync(() async {
+            await Future<void>.delayed(const Duration(milliseconds: 25));
+          });
+          if (shareResult != null) break;
+        }
+        expect(shareResult, isTrue);
+        expect(sharedPaths, isNotNull);
+        expect(sharedPaths!.length, equals(1));
+        final mergedOut = File('${sharedPaths!.first}');
+        final mergedContent = mergedOut.readAsStringSync();
+        expect(mergedContent, contains('字幕一'));
+        expect(mergedContent, contains('字幕二'));
+      } finally {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(pathProviderChannel, null);
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(nativeChannel, null);
+        await tester.pumpWidget(const SizedBox.shrink());
+        try {
+          if (tempDir.existsSync()) {
+            tempDir.deleteSync(recursive: true);
+          }
+        } catch (_) {}
       }
     },
   );

@@ -489,25 +489,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun reduceShareMimeType(mimes: List<String>): String {
-        val cleaned = mimes.map { it.trim() }.filter { it.isNotEmpty() }
-        if (cleaned.isEmpty()) return "*/*"
-        if (cleaned.size == 1) return cleaned.first()
-        var common = cleaned.first()
-        for (i in 1 until cleaned.size) {
-            if (common != cleaned[i]) {
-                val baseA = common.substringBefore('/', "")
-                val baseB = cleaned[i].substringBefore('/', "")
-                if (baseA.isNotEmpty() && baseA == baseB) {
-                    common = "$baseA/*"
-                } else {
-                    return "*/*"
-                }
-            }
-        }
-        return common
-    }
-
     private fun resolveShareUriForFile(file: File): Uri {
         val authority = "${context.packageName}.fileprovider"
         return try {
@@ -639,7 +620,15 @@ class MainActivity : FlutterActivity() {
             val resolvedType = if (uris.size == 1) {
                 resolvedMimes.firstOrNull() ?: "*/*"
             } else {
-                reduceShareMimeType(resolvedMimes)
+                val baseTypes = resolvedMimes
+                    .map { it.trim().substringBefore('/', "") }
+                    .filter { it.isNotEmpty() }
+                    .toSet()
+                if (baseTypes.size == 1 && baseTypes.first() in setOf("image", "video", "audio")) {
+                    "${baseTypes.first()}/*"
+                } else {
+                    "*/*"
+                }
             }
 
             val shareIntent = if (uris.size == 1) {
@@ -648,16 +637,24 @@ class MainActivity : FlutterActivity() {
                     putExtra(Intent.EXTRA_STREAM, uris.first())
                 }
             } else {
+                val distinctMimes = resolvedMimes
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .distinct()
+                    .toTypedArray()
                 Intent(Intent.ACTION_SEND_MULTIPLE).apply {
                     type = resolvedType
+                    if (distinctMimes.isNotEmpty()) {
+                        putExtra(Intent.EXTRA_MIME_TYPES, distinctMimes)
+                    }
                     putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
                 }
             }
 
-            val clipMimes = resolvedMimes.distinct().ifEmpty { listOf(resolvedType) }.toTypedArray()
-            val clip = ClipData(
-                ClipDescription(subject.ifBlank { "shared_files" }, clipMimes),
-                ClipData.Item(uris.first())
+            val clip = ClipData.newUri(
+                contentResolver,
+                subject.ifBlank { "shared_files" },
+                uris.first()
             )
             for (i in 1 until uris.size) {
                 clip.addItem(ClipData.Item(uris[i]))
