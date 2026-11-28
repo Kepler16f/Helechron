@@ -698,8 +698,7 @@ export default class EntryAbility extends FlutterAbility {
         if (ext.length > 1) {
           try {
             const detected = utd.getUniformDataTypeByFilenameExtension(ext, utd.UniformDataType.FILE);
-            if (detected && detected.length > 0 && detected.indexOf('flex.') !== 0 &&
-              utd.belongsTo(detected, utd.UniformDataType.FILE)) {
+            if (detected && detected.length > 0 && detected.indexOf('flex.') !== 0) {
               utdTypeId = detected;
             }
           } catch (utdErr) {
